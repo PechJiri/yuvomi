@@ -599,12 +599,19 @@ export function listAccounts(includeArchived = false, filter = { clause: '', par
     WHERE ? = 1 OR a.archived = 0
     ORDER BY a.sort_order ASC, a.name COLLATE NOCASE ASC
   `).all(today, ...f.params, ...f.params, ...f.params, includeArchived ? 1 : 0);
-  return rows.map((a) => ({
-    ...a,
-    starting_balance:  cents(a.starting_balance),
-    current_balance:   cents(a.current_balance),
-    projected_balance: cents(a.projected_balance),
-  }));
+  return rows.map((a) => {
+    const currentBalance = cents(a.current_balance);
+    const availableLimit = a.type === 'credit' && a.credit_limit != null
+      ? Math.max(0, cents(a.credit_limit) - Math.max(0, -currentBalance))
+      : null;
+    return {
+      ...a,
+      starting_balance:  cents(a.starting_balance),
+      current_balance:   currentBalance,
+      projected_balance: cents(a.projected_balance),
+      available_limit:   availableLimit,
+    };
+  });
 }
 
 export function nextAccountSortOrder() {

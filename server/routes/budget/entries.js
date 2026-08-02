@@ -224,7 +224,12 @@ router.post('/', (req, res) => {
     const vDate   = validateDate(req.body.date,   'Datum',  true);
     const vRrule  = rrule(req.body.recurrence_rule, 'Wiederholung');
     const vInterval = oneOf(req.body.recurrence_interval || 'monthly', RECURRENCE_INTERVAL_KEYS, 'Intervall');
-    const errors  = collectErrors([vTitle, vAmount, vCat, vDate, vRrule, vInterval]);
+    const vInvoiceStatus = req.body.invoice_status === undefined ? { value: null } : oneOf(req.body.invoice_status, ['open', 'paid', 'partial'], 'Fakturastatus');
+    const vInstallments = req.body.invoice_installments === undefined ? { value: null } : num(req.body.invoice_installments, 'Anzahl Raten', { required: false });
+    const vPaidInstallments = req.body.invoice_paid_installments === undefined ? { value: null } : num(req.body.invoice_paid_installments, 'Zahlte Raten', { required: false });
+    const vDueDay = req.body.invoice_due_day === undefined ? { value: null } : num(req.body.invoice_due_day, 'Fälligkeitstag', { required: false });
+    const vClosingDay = req.body.invoice_closing_day === undefined ? { value: null } : num(req.body.invoice_closing_day, 'Schlusselungstag', { required: false });
+    const errors  = collectErrors([vTitle, vAmount, vCat, vDate, vRrule, vInterval, vInvoiceStatus, vInstallments, vPaidInstallments, vDueDay, vClosingDay]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     const subcategory = validateSubcategory(vCat.value, req.body.subcategory);
     if (subcategory === null) {
@@ -233,6 +238,24 @@ router.post('/', (req, res) => {
 
     const accountRef = validateAccountRef(req.body.account_id);
     if (accountRef.error) return res.status(400).json({ error: accountRef.error, code: 400 });
+
+    const invoiceStatus = vInvoiceStatus.value;
+    const invoiceInstallments = vInstallments.value == null ? null : Math.trunc(Number(vInstallments.value));
+    const invoicePaidInstallments = vPaidInstallments.value == null ? 0 : Math.trunc(Number(vPaidInstallments.value));
+    const invoiceDueDay = vDueDay.value == null ? null : Math.trunc(Number(vDueDay.value));
+    const invoiceClosingDay = vClosingDay.value == null ? null : Math.trunc(Number(vClosingDay.value));
+    if (invoiceInstallments !== null && (!Number.isInteger(invoiceInstallments) || invoiceInstallments < 1 || invoiceInstallments > 360)) {
+      return res.status(400).json({ error: 'Anzahl Raten muss zwischen 1 und 360 liegen.', code: 400 });
+    }
+    if (invoicePaidInstallments !== null && (!Number.isInteger(invoicePaidInstallments) || invoicePaidInstallments < 0 || invoicePaidInstallments > (invoiceInstallments ?? 360))) {
+      return res.status(400).json({ error: 'Zahlte Raten ist ungültig.', code: 400 });
+    }
+    if (invoiceDueDay !== null && (!Number.isInteger(invoiceDueDay) || invoiceDueDay < 1 || invoiceDueDay > 31)) {
+      return res.status(400).json({ error: 'Fälligkeitstag muss zwischen 1 und 31 liegen.', code: 400 });
+    }
+    if (invoiceClosingDay !== null && (!Number.isInteger(invoiceClosingDay) || invoiceClosingDay < 1 || invoiceClosingDay > 31)) {
+      return res.status(400).json({ error: 'Schlusselungstag muss zwischen 1 und 31 liegen.', code: 400 });
+    }
 
     // Intervall + virtuelles Budget nur für wiederkehrende Einträge.
     const isRecurring = req.body.is_recurring ? 1 : 0;
@@ -250,25 +273,90 @@ router.post('/', (req, res) => {
       getBudgetMode() === 'personal' ? 'private' : 'shared'
     );
 
-    const result = db.get().prepare(`
+    const addMonthsToDate = (dateKey, months) => {
+      const [year, month, day] = dateKey.split('-').map((part) => Number(part));
+      const next = new Date(year, month - 1 + months, day);
+      return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+    };
+    const installmentInsert = db.get().prepare(`
       INSERT INTO budget_entries
         (title, amount, category, subcategory, date, is_recurring, recurrence_rule,
          recurrence_interval, recurrence_virtual, recurrence_full_amount, account_id, created_by,
-         owner_id, visibility)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      vTitle.value, storeAmount, vCat.value || fallbackCategory, subcategory, vDate.value,
-      isRecurring, vRrule.value,
-      interval, isVirtual, fullAmount, accountRef.value,
-      me, me, visibility
+         owner_id, visibility, invoice_status, invoice_installments, invoice_paid_installments,
+         invoice_due_day, invoice_closing_day, invoice_series_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const originalTotalAmount = Number(vAmount.value) || 0;
+    const installmentAmount = invoiceInstallments && invoiceInstallments > 1
+      ? Number((originalTotalAmount / invoiceInstallments).toFixed(2))
+      : originalTotalAmount;
+    const installmentBase = Math.abs(installmentAmount);
+    const installmentRemainder = invoiceInstallments && invoiceInstallments > 1
+      ? Math.abs(originalTotalAmount) - (installmentBase * invoiceInstallments)
+      : 0;
+
+    const installmentLabel = (number, total) => total > 1 ? `${vTitle.value} (${number}/${total})` : vTitle.value;
+    const currentInstallmentLabel = installmentLabel(1, invoiceInstallments || 1);
+    const invoiceSeriesId = invoiceInstallments && invoiceInstallments > 1
+      ? `invoice-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      : null;
+
+    // Ein Ratenkauf ist keine Wiederholung: die Raten liegen als eigene Zeilen
+    // in der Zukunft, nicht als Serie mit Regel. Deshalb die Wiederholungsfelder
+    // NUR bei Raten neutralisieren - eine normale Buchung behält isRecurring,
+    // interval, isVirtual und den geglätteten storeAmount, sonst verlieren alle
+    // neuen wiederkehrenden Buchungen ihre Wiederholung.
+    const isInstallment = Boolean(invoiceInstallments && invoiceInstallments > 1);
+    const result = installmentInsert.run(
+      currentInstallmentLabel,
+      isInstallment ? installmentAmount : storeAmount,
+      vCat.value || fallbackCategory, subcategory, vDate.value,
+      isInstallment ? 0 : isRecurring, vRrule.value,
+      isInstallment ? 'monthly' : interval,
+      isInstallment ? 0 : isVirtual,
+      isInstallment ? null : fullAmount,
+      accountRef.value,
+      me, me, visibility, invoiceStatus, invoiceInstallments, invoicePaidInstallments,
+      invoiceDueDay, invoiceClosingDay, invoiceSeriesId
     );
+
+    if (invoiceInstallments && invoiceInstallments > 1) {
+      const signedStartAmount = Math.sign(originalTotalAmount) || -1;
+      for (let i = 1; i < invoiceInstallments; i += 1) {
+        const futureDate = addMonthsToDate(vDate.value, i);
+        const futureAmount = Math.abs(installmentAmount) + (i === invoiceInstallments - 1 ? installmentRemainder : 0);
+        const signedAmount = signedStartAmount * futureAmount;
+        installmentInsert.run(
+          installmentLabel(i + 1, invoiceInstallments),
+          signedAmount,
+          vCat.value || fallbackCategory,
+          subcategory,
+          futureDate,
+          0,
+          vRrule.value,
+          'monthly',
+          0,
+          null,
+          accountRef.value,
+          me,
+          me,
+          visibility,
+          'open',
+          invoiceInstallments,
+          0,
+          invoiceDueDay,
+          invoiceClosingDay,
+          invoiceSeriesId
+        );
+      }
+    }
 
     // Belege (#583): optional, deshalb erst nach dem Insert - der Eintrag steht
     // auch ohne sie, ein unbekanntes Dokument darf ihn nicht scheitern lassen.
     replaceAttachments(result.lastInsertRowid, req.body.attachment_document_ids, me);
 
     const entry = entryWithLoanMeta(result.lastInsertRowid);
-
     res.status(201).json({ data: { ...entry, attachments: attachmentsFor(entry.id, me) } });
   } catch (err) {
     log.error('', err);
@@ -377,6 +465,86 @@ router.put('/:id/series', (req, res) => {
   }
 });
 
+/** Atualiza uma compra parcelada inteira ou a parcela atual e as seguintes. */
+router.put('/:id/installments', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const entry = db.get().prepare('SELECT * FROM budget_entries WHERE id = ?').get(id);
+    if (!entry) return res.status(404).json({ error: 'Entry not found', code: 404 });
+    if (!mayEdit(req, entry)) return res.status(403).json({ error: 'You cannot modify this entry.', code: 403 });
+    if (!entry.invoice_series_id) return res.status(400).json({ error: 'Not an installment purchase.', code: 400 });
+    if (!['all', 'future'].includes(req.body.scope)) return res.status(400).json({ error: 'Invalid installment scope.', code: 400 });
+
+    const checks = [];
+    if (req.body.title !== undefined) checks.push(str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }));
+    if (req.body.amount !== undefined) checks.push(num(req.body.amount, 'Betrag'));
+    if (req.body.category !== undefined) checks.push(oneOf(req.body.category, validCategoryKeys(), 'Kategorie'));
+    const errors = collectErrors(checks);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+    const category = req.body.category ?? entry.category;
+    const subcategory = req.body.subcategory !== undefined
+      ? validateSubcategory(category, req.body.subcategory)
+      : entry.subcategory;
+    if (subcategory === null) return res.status(400).json({ error: 'Invalid subcategory.', code: 400 });
+
+    const accountProvided = req.body.account_id !== undefined;
+    const accountRef = accountProvided ? validateAccountRef(req.body.account_id) : { value: null };
+    if (accountRef.error) return res.status(400).json({ error: accountRef.error, code: 400 });
+    // O sufixo "(n/total)" identifica cada linha da série e não faz parte do
+    // título base. A interface antiga enviava o título completo ao editar,
+    // o que produzia, por exemplo, "Compra (1/3) (1/3)".
+    const baseTitle = req.body.title === undefined
+      ? null
+      : req.body.title.trim().replace(/\s\(\d+\/\d+\)$/, '');
+    const isAll = req.body.scope === 'all';
+    const targets = db.get().prepare(`
+      SELECT id, title FROM budget_entries
+      WHERE invoice_series_id = ? AND (? = 1 OR date >= ?)
+    `).all(entry.invoice_series_id, isAll ? 1 : 0, entry.date);
+    const update = db.get().prepare(`
+      UPDATE budget_entries SET
+        title = COALESCE(?, title), amount = COALESCE(?, amount), category = COALESCE(?, category),
+        subcategory = COALESCE(?, subcategory), account_id = CASE WHEN ? = 1 THEN ? ELSE account_id END
+      WHERE id = ?
+    `);
+    for (const target of targets) {
+      const installmentSuffix = target.title.match(/\s\(\d+\/\d+\)$/)?.[0] || '';
+      update.run(
+        baseTitle !== null ? `${baseTitle}${installmentSuffix}` : null,
+        req.body.amount !== undefined ? cents(req.body.amount) : null,
+        req.body.category ?? null,
+        subcategory,
+        accountProvided ? 1 : 0,
+        accountRef.value,
+        target.id
+      );
+    }
+    const me = req.authUserId || req.session.userId;
+    const updated = entryWithLoanMeta(id);
+    res.json({ data: { ...updated, attachments: attachmentsFor(id, me) } });
+  } catch (err) {
+    log.error('', err);
+    res.status(500).json({ error: 'Internal error', code: 500 });
+  }
+});
+
+router.delete('/:id/installments', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const entry = db.get().prepare('SELECT * FROM budget_entries WHERE id = ?').get(id);
+    if (!entry) return res.status(404).json({ error: 'Entry not found', code: 404 });
+    if (!mayEdit(req, entry)) return res.status(403).json({ error: 'You cannot modify this entry.', code: 403 });
+    if (!entry.invoice_series_id || !['all', 'future'].includes(req.query.scope)) return res.status(400).json({ error: 'Invalid installment scope.', code: 400 });
+    db.get().prepare(`
+      DELETE FROM budget_entries WHERE invoice_series_id = ? AND (? = 'all' OR date >= ?)
+    `).run(entry.invoice_series_id, req.query.scope, entry.date);
+    res.status(204).end();
+  } catch (err) {
+    log.error('', err);
+    res.status(500).json({ error: 'Internal error', code: 500 });
+  }
+});
+
 /**
  * DELETE /api/v1/budget/:id/series
  * Löscht das Serien-Original und alle zugehörigen Instanzen.
@@ -424,9 +592,17 @@ router.put('/:id', (req, res) => {
     if (req.body.date     !== undefined) checks.push(validateDate(req.body.date,    'Datum'));
     if (req.body.recurrence_rule !== undefined) checks.push(rrule(req.body.recurrence_rule, 'Wiederholung'));
     if (req.body.recurrence_interval !== undefined) checks.push(oneOf(req.body.recurrence_interval, RECURRENCE_INTERVAL_KEYS, 'Intervall'));
+    if (req.body.invoice_status !== undefined) checks.push(oneOf(req.body.invoice_status, ['open', 'paid', 'partial'], 'Fakturastatus'));
+    if (req.body.invoice_installments !== undefined) checks.push(num(req.body.invoice_installments, 'Anzahl Raten', { required: false }));
+    if (req.body.invoice_paid_installments !== undefined) checks.push(num(req.body.invoice_paid_installments, 'Zahlte Raten', { required: false }));
+    if (req.body.invoice_due_day !== undefined) checks.push(num(req.body.invoice_due_day, 'Fälligkeitstag', { required: false }));
+    if (req.body.invoice_closing_day !== undefined) checks.push(num(req.body.invoice_closing_day, 'Schlusselungstag', { required: false }));
     const errors = collectErrors(checks);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     const { title, amount, category, subcategory: requestedSubcategory, date, is_recurring, recurrence_rule } = req.body;
+    const normalizedTitle = title !== undefined && entry.invoice_series_id
+      ? `${title.trim().replace(/\s\(\d+\/\d+\)$/, '')}${entry.title.match(/\s\(\d+\/\d+\)$/)?.[0] || ''}`
+      : title?.trim();
     const linkedPayment = db.get().prepare(`
       SELECT * FROM budget_loan_payments WHERE budget_entry_id = ?
     `).get(id);
@@ -460,6 +636,28 @@ router.put('/:id', (req, res) => {
     if (subcategory === null) {
       return res.status(400).json({ error: 'Invalid subcategory.', code: 400 });
     }
+
+    const invoiceInstallmentsProvided = req.body.invoice_installments !== undefined;
+    const invoicePaidInstallmentsProvided = req.body.invoice_paid_installments !== undefined;
+    const invoiceDueDayProvided = req.body.invoice_due_day !== undefined;
+    const invoiceClosingDayProvided = req.body.invoice_closing_day !== undefined;
+    const nextInvoiceInstallments = invoiceInstallmentsProvided ? Math.trunc(Number(req.body.invoice_installments)) : entry.invoice_installments;
+    const nextInvoicePaidInstallments = invoicePaidInstallmentsProvided ? Math.trunc(Number(req.body.invoice_paid_installments)) : (entry.invoice_paid_installments ?? 0);
+    const nextInvoiceDueDay = invoiceDueDayProvided ? Math.trunc(Number(req.body.invoice_due_day)) : entry.invoice_due_day;
+    const nextInvoiceClosingDay = invoiceClosingDayProvided ? Math.trunc(Number(req.body.invoice_closing_day)) : entry.invoice_closing_day;
+    if (invoiceInstallmentsProvided && (!Number.isInteger(nextInvoiceInstallments) || nextInvoiceInstallments < 1 || nextInvoiceInstallments > 360)) {
+      return res.status(400).json({ error: 'Anzahl Raten muss zwischen 1 und 360 liegen.', code: 400 });
+    }
+    if (invoicePaidInstallmentsProvided && (!Number.isInteger(nextInvoicePaidInstallments) || nextInvoicePaidInstallments < 0 || nextInvoicePaidInstallments > (nextInvoiceInstallments ?? 360))) {
+      return res.status(400).json({ error: 'Zahlte Raten ist ungültig.', code: 400 });
+    }
+    if (invoiceDueDayProvided && (!Number.isInteger(nextInvoiceDueDay) || nextInvoiceDueDay < 1 || nextInvoiceDueDay > 31)) {
+      return res.status(400).json({ error: 'Fälligkeitstag muss zwischen 1 und 31 liegen.', code: 400 });
+    }
+    if (invoiceClosingDayProvided && (!Number.isInteger(nextInvoiceClosingDay) || nextInvoiceClosingDay < 1 || nextInvoiceClosingDay > 31)) {
+      return res.status(400).json({ error: 'Schlusselungstag muss zwischen 1 und 31 liegen.', code: 400 });
+    }
+    const nextInvoiceStatus = req.body.invoice_status !== undefined ? req.body.invoice_status : entry.invoice_status;
 
     // Konto-Zuordnung: undefined ⇒ unverändert; null/'' ⇒ Zuordnung entfernen; id ⇒ setzen.
     const accountProvided = req.body.account_id !== undefined;
@@ -505,10 +703,15 @@ router.put('/:id', (req, res) => {
             recurrence_virtual     = ?,
             recurrence_full_amount = ?,
             visibility             = COALESCE(?, visibility),
+            invoice_status         = COALESCE(?, invoice_status),
+            invoice_installments   = CASE WHEN ? = 1 THEN ? ELSE invoice_installments END,
+            invoice_paid_installments = CASE WHEN ? = 1 THEN ? ELSE invoice_paid_installments END,
+            invoice_due_day        = CASE WHEN ? = 1 THEN ? ELSE invoice_due_day END,
+            invoice_closing_day    = CASE WHEN ? = 1 THEN ? ELSE invoice_closing_day END,
             account_id             = CASE WHEN ? = 1 THEN ? ELSE account_id END
         WHERE id = ?
       `).run(
-        title?.trim() ?? null,
+        normalizedTitle ?? null,
         nextAmount,
         category ?? null,
         subcategory !== undefined ? subcategory : null,
@@ -519,6 +722,15 @@ router.put('/:id', (req, res) => {
         finalVirtual,
         nextFull,
         nextVisibility,
+        nextInvoiceStatus,
+        invoiceInstallmentsProvided ? 1 : 0,
+        nextInvoiceInstallments,
+        invoicePaidInstallmentsProvided ? 1 : 0,
+        nextInvoicePaidInstallments,
+        invoiceDueDayProvided ? 1 : 0,
+        nextInvoiceDueDay,
+        invoiceClosingDayProvided ? 1 : 0,
+        nextInvoiceClosingDay,
         accountProvided ? 1 : 0,
         accountValue,
         id
@@ -572,8 +784,27 @@ router.delete('/:id', (req, res) => {
     const linkedPayment = db.get().prepare(`
       SELECT * FROM budget_loan_payments WHERE budget_entry_id = ?
     `).get(id);
+    const invoicePayment = db.get().prepare(`
+      SELECT * FROM budget_account_invoice_payments
+      WHERE (debit_entry_id = ? OR credit_entry_id = ?) AND reversed_at IS NULL
+    `).get(id, id);
 
     const tx = db.get().transaction(() => {
+      if (invoicePayment) {
+        // Os dois lançamentos formam uma transferência inseparável. Excluir um
+        // deles desfaz o pagamento inteiro, inclusive o estado da fatura.
+        if (invoicePayment.debit_entry_id) db.get().prepare('DELETE FROM budget_entries WHERE id = ?').run(invoicePayment.debit_entry_id);
+        if (invoicePayment.credit_entry_id) db.get().prepare('DELETE FROM budget_entries WHERE id = ?').run(invoicePayment.credit_entry_id);
+        db.get().prepare(`UPDATE budget_account_invoice_payments SET reversed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`).run(invoicePayment.id);
+        db.get().prepare(`
+          UPDATE budget_account_invoices
+          SET paid_amount = MAX(0, paid_amount - ?),
+              status = CASE WHEN paid_amount - ? <= 0.005 THEN 'closed' WHEN paid_amount - ? >= amount - 0.005 THEN 'paid' ELSE 'partial' END,
+              paid_at = CASE WHEN paid_amount - ? >= amount - 0.005 THEN paid_at ELSE NULL END
+          WHERE account_id = ? AND statement_month = ?
+        `).run(invoicePayment.amount, invoicePayment.amount, invoicePayment.amount, invoicePayment.amount, invoicePayment.account_id, invoicePayment.statement_month);
+        return;
+      }
       if (linkedPayment) {
         db.get().prepare('DELETE FROM budget_loan_payments WHERE id = ?').run(linkedPayment.id);
       }

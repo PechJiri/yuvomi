@@ -238,6 +238,242 @@ test('DELETE /accounts/:id: Einträge bleiben erhalten, account_id → NULL', as
   } finally { await h.close(); }
 });
 
+test('POST /accounts akzeptiert Kreditkarten-Metadaten und meldet verfügbare Limit-Reserve', async () => {
+  cleanup();
+  const h = createHarness();
+  try {
+    const res = await h.call('POST', '/accounts', {
+      name: 'Visa',
+      type: 'credit',
+      starting_balance: -150,
+      credit_bank: 'ING',
+      credit_limit: 1000,
+      closing_day: 25,
+      due_day: 10,
+    });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.credit_bank, 'ING');
+    assert.equal(res.body.data.credit_limit, 1000);
+    assert.equal(res.body.data.closing_day, 25);
+    assert.equal(res.body.data.due_day, 10);
+    assert.equal(res.body.data.current_balance, -150);
+    assert.equal(res.body.data.available_limit, 850);
+
+    const list = (await h.call('GET', '/accounts')).body.data;
+    const card = list.accounts.find((a) => a.id === res.body.data.id);
+    assert.ok(card);
+    assert.equal(card.credit_bank, 'ING');
+    assert.equal(card.available_limit, 850);
+  } finally { await h.close(); }
+});
+
+test('PUT /accounts/:id aktualisiert Kreditkarten-Metadaten', async () => {
+  cleanup();
+  const h = createHarness();
+  try {
+    const acc = (await h.call('POST', '/accounts', { name: 'Kredit', type: 'credit', starting_balance: -50 })).body.data;
+    const res = await h.call('PUT', `/accounts/${acc.id}`, {
+      credit_bank: 'Sparkasse',
+      credit_limit: 1500,
+      closing_day: 28,
+      due_day: 12,
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.credit_bank, 'Sparkasse');
+    assert.equal(res.body.data.credit_limit, 1500);
+    assert.equal(res.body.data.closing_day, 28);
+    assert.equal(res.body.data.due_day, 12);
+  } finally { await h.close(); }
+});
+
+test('POST /budget akzeptiert Kreditkarten-Rechnungsmetadaten und schreibt sie persistiert', async () => {
+  cleanup();
+  const h = createHarness();
+  try {
+    const acc = (await h.call('POST', '/accounts', {
+      name: 'Visa',
+      type: 'credit',
+      starting_balance: -100,
+      credit_bank: 'ING',
+      credit_limit: 1000,
+      closing_day: 25,
+      due_day: 10,
+    })).body.data;
+
+    const res = await h.call('POST', '', {
+      title: 'Kartenzahlung',
+      amount: -79.9,
+      category: EXPENSE_CAT,
+      date: PAST,
+      account_id: acc.id,
+      invoice_status: 'partial',
+      invoice_installments: 6,
+      invoice_paid_installments: 2,
+      invoice_due_day: 11,
+      invoice_closing_day: 26,
+    });
+
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.invoice_status, 'partial');
+    assert.equal(res.body.data.invoice_installments, 6);
+    assert.equal(res.body.data.invoice_paid_installments, 2);
+    assert.equal(res.body.data.invoice_due_day, 11);
+    assert.equal(res.body.data.invoice_closing_day, 26);
+
+    const row = suiteDatabase.prepare('SELECT invoice_status, invoice_installments, invoice_paid_installments, invoice_due_day, invoice_closing_day FROM budget_entries WHERE id = ?').get(res.body.data.id);
+    assert.ok(row);
+    assert.equal(row.invoice_status, 'partial');
+    assert.equal(row.invoice_installments, 6);
+    assert.equal(row.invoice_paid_installments, 2);
+    assert.equal(row.invoice_due_day, 11);
+    assert.equal(row.invoice_closing_day, 26);
+  } finally { await h.close(); }
+});
+
+test('POST /budget cria parcelas futuras para o cartão de crédito conforme o número de parcelas', async () => {
+  cleanup();
+  const h = createHarness();
+  try {
+    const acc = (await h.call('POST', '/accounts', {
+      name: 'Visa',
+      type: 'credit',
+      starting_balance: 0,
+      credit_bank: 'ING',
+      credit_limit: 1000,
+      closing_day: 25,
+      due_day: 10,
+    })).body.data;
+
+    const res = await h.call('POST', '', {
+      title: 'Compra parcelada',
+      amount: -300,
+      category: EXPENSE_CAT,
+      date: PAST,
+      account_id: acc.id,
+      invoice_status: 'open',
+      invoice_installments: 3,
+      invoice_paid_installments: 1,
+    });
+
+    assert.equal(res.status, 201);
+
+    const june = await h.call('GET', `/?month=2020-06`);
+    const july = await h.call('GET', `/?month=2020-07`);
+    const august = await h.call('GET', `/?month=2020-08`);
+
+    assert.equal(june.body.data.length, 1, 'mês de criação recebe a primeira parcela');
+    assert.equal(july.body.data.length, 1, 'mês seguinte recebe a segunda parcela');
+    assert.equal(august.body.data.length, 1, 'terceiro mês recebe a última parcela');
+    assert.equal(june.body.data[0].amount, -100);
+    assert.equal(july.body.data[0].amount, -100);
+    assert.equal(august.body.data[0].amount, -100);
+  } finally { await h.close(); }
+});
+
+test('PUT /budget/:id/installments altera todas ou apenas as parcelas futuras', async () => {
+  cleanup();
+  const h = createHarness();
+  try {
+    const acc = (await h.call('POST', '/accounts', { name: 'Visa', type: 'credit' })).body.data;
+    const paymentAccount = (await h.call('POST', '/accounts', { name: 'Conta', type: 'checking' })).body.data;
+    const created = await h.call('POST', '', {
+      title: 'Notebook', amount: -300, category: EXPENSE_CAT, date: PAST,
+      account_id: acc.id, invoice_installments: 3,
+    });
+    const first = created.body.data;
+    assert.ok(first.invoice_series_id, 'a compra parcelada recebe uma série');
+
+    const future = await h.call('PUT', `/${first.id}/installments`, {
+      scope: 'future', title: 'Notebook corrigido', amount: -110,
+    });
+    assert.equal(future.status, 200);
+    const rowsAfterFuture = suiteDatabase.prepare(`
+      SELECT title, amount FROM budget_entries WHERE invoice_series_id = ? ORDER BY date
+    `).all(first.invoice_series_id);
+    assert.deepEqual(rowsAfterFuture.map((row) => row.title), ['Notebook corrigido (1/3)', 'Notebook corrigido (2/3)', 'Notebook corrigido (3/3)']);
+    assert.deepEqual(rowsAfterFuture.map((row) => row.amount), [-110, -110, -110]);
+
+    const thisOnly = await h.call('PUT', `/${first.id}`, { title: 'Notebook corrigido (1/3)' });
+    assert.equal(thisOnly.status, 200);
+    assert.equal(thisOnly.body.data.title, 'Notebook corrigido (1/3)');
+
+    const second = suiteDatabase.prepare(`
+      SELECT id FROM budget_entries WHERE invoice_series_id = ? ORDER BY date LIMIT 1 OFFSET 1
+    `).get(first.invoice_series_id);
+    const all = await h.call('PUT', `/${second.id}/installments`, { scope: 'all', title: 'Notebook final' });
+    assert.equal(all.status, 200);
+    assert.equal(suiteDatabase.prepare(`SELECT COUNT(*) AS count FROM budget_entries WHERE invoice_series_id = ? AND title LIKE 'Notebook final%'`).get(first.invoice_series_id).count, 3);
+  } finally { await h.close(); }
+});
+
+test('PUT /budget atualiza o status e as parcelas da fatura', async () => {
+  cleanup();
+  const h = createHarness();
+  try {
+    const acc = (await h.call('POST', '/accounts', { name: 'Visa', type: 'credit' })).body.data;
+    const created = await h.call('POST', '', {
+      title: 'Compra no cartão', amount: -120, category: EXPENSE_CAT, date: PAST,
+      account_id: acc.id, invoice_status: 'open', invoice_installments: 3,
+      invoice_paid_installments: 0,
+    });
+    assert.equal(created.status, 201);
+
+    const paid = await h.call('PUT', `/${created.body.data.id}`, {
+      invoice_status: 'partial', invoice_paid_installments: 1,
+    });
+    assert.equal(paid.status, 200);
+    assert.equal(paid.body.data.invoice_status, 'partial');
+    assert.equal(paid.body.data.invoice_paid_installments, 1);
+
+    const closed = await h.call('PUT', `/${created.body.data.id}`, {
+      invoice_status: 'paid', invoice_paid_installments: 3,
+    });
+    assert.equal(closed.status, 200);
+    assert.equal(closed.body.data.invoice_status, 'paid');
+    assert.equal(closed.body.data.invoice_paid_installments, 3);
+  } finally { await h.close(); }
+});
+
+test('fatura mensal do cartão fecha e paga uma única vez por cartão', async () => {
+  cleanup();
+  const h = createHarness();
+  try {
+    const acc = (await h.call('POST', '/accounts', { name: 'Visa', type: 'credit' })).body.data;
+    const paymentAccount = (await h.call('POST', '/accounts', { name: 'Conta', type: 'checking' })).body.data;
+    await h.call('POST', '', { title: 'Mercado', amount: -80, category: EXPENSE_CAT, date: PAST, account_id: acc.id });
+    await h.call('POST', '', { title: 'Estorno', amount: 10, category: INCOME_CAT, date: PAST, account_id: acc.id });
+    const month = PAST.slice(0, 7);
+
+    const listed = await h.call('GET', `/accounts/invoices?month=${month}`);
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.data[0].amount, 70);
+    assert.equal(listed.body.data[0].status, 'open');
+
+    const history = await h.call('GET', `/accounts/${acc.id}/invoices/history`);
+    assert.equal(history.status, 200);
+    assert.equal(history.body.data[0].statement_month, month);
+    assert.equal(history.body.data[0].amount, 70);
+
+    const closed = await h.call('POST', `/accounts/${acc.id}/invoice/close`, { month });
+    assert.equal(closed.status, 200);
+    assert.equal(closed.body.data.status, 'closed');
+    assert.equal(closed.body.data.amount, 70);
+
+    const partial = await h.call('POST', `/accounts/${acc.id}/invoice/pay`, { month, payment_account_id: paymentAccount.id, payment_amount: 20 });
+    assert.equal(partial.status, 200);
+    assert.equal(partial.body.data.status, 'partial');
+    assert.equal(partial.body.data.paid_amount, 20);
+    const paid = await h.call('POST', `/accounts/${acc.id}/invoice/pay`, { month, payment_account_id: paymentAccount.id, payment_amount: 50 });
+    assert.equal(paid.status, 200);
+    assert.equal(paid.body.data.status, 'paid');
+    assert.equal((await h.call('POST', `/accounts/${acc.id}/invoice/pay`, { month, payment_account_id: paymentAccount.id })).status, 409);
+
+    const reversed = await h.call('POST', `/accounts/${acc.id}/invoice/payments/${paid.body.data.payments[0].id}/reverse`, { month });
+    assert.equal(reversed.status, 200);
+    assert.equal(reversed.body.data.status, 'partial');
+  } finally { await h.close(); }
+});
+
 test('POST /accounts validiert Name und Typ', async () => {
   cleanup();
   const h = createHarness();

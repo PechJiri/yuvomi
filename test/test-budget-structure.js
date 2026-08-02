@@ -60,6 +60,8 @@ const EXPECTED = [
   'POST /',
   'PUT /:id/series',
   'DELETE /:id/series',
+  'PUT /:id/installments',
+  'DELETE /:id/installments',
   'PUT /:id',
   'DELETE /:id',
   // categories
@@ -87,6 +89,12 @@ const EXPECTED = [
   'POST /accounts',
   'PUT /accounts/:id',
   'DELETE /accounts/:id',
+  // accounts: Kreditkartenabrechnungen
+  'GET /accounts/invoices',
+  'GET /accounts/:id/invoices/history',
+  'POST /accounts/:id/invoice/:action',
+  'POST /accounts/:id/invoice/payments/:paymentId/reverse',
+  'POST /accounts/:id/invoice/reopen/paid',
   // plans
   'GET /plans',
   'PUT /plans/:category',
@@ -95,10 +103,10 @@ const EXPECTED = [
   'GET /stats',
 ];
 
-test('Orchestrator ergibt exakt die erwartete Routentabelle (34 Routen)', () => {
+test('Orchestrator ergibt exakt die erwartete Routentabelle (41 Routen)', () => {
   const actual = collectRoutes(budgetRouter).sort();
   assert.deepEqual(actual, [...EXPECTED].sort());
-  assert.equal(actual.length, 34);
+  assert.equal(actual.length, 41);
 });
 
 test('die Cluster-Router zusammen ergeben genau die Orchestrator-Routen (keine verlorene/doppelte Route)', () => {

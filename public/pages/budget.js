@@ -192,6 +192,8 @@ let state = {
   range:        'month',      // 'week' | 'month' | 'year'
   reportAnchor: toLocalDateKey(new Date()),
   reportPeriod: '',           // vom Server gemeldeter Zeitraum (nur für 'week' im Label)
+  activeInvoiceAccountId: null,
+  invoices: null,
 };
 let _container = null;
 let _user = null;
@@ -217,6 +219,7 @@ const TAB_CAPS = {
   'budget':         { month: true,  add: 'budget.newEntryFabLabel' },
   'plan':           { month: true,  add: 'budget.planAddBudget' },
   'accounts':       { month: false, note: 'budget.periodNoteAccounts',      add: 'budget.addAccount' },
+  'invoices':       { month: true,  note: 'budget.periodNoteInvoices',      add: 'budget.newEntryFabLabel' },
   'subscriptions':  { month: false, note: 'budget.periodNoteSubscriptions', add: 'subscriptions.add' },
   'loans':          { month: false, note: 'budget.periodNoteLoans',         add: 'budget.newLoan' },
   'reports':        { month: true,  range: true, add: null },
@@ -332,6 +335,7 @@ async function loadMonth(month) {
     state.summary     = summaryRes.data;
     state.prevSummary = prevSummaryRes.data;
     state.loans       = loansRes.data;
+    state.invoices    = null;
   } catch (err) {
     console.error('[Budget] loadMonth Fehler:', err);
     state.month       = month;
@@ -339,6 +343,18 @@ async function loadMonth(month) {
     state.summary     = { income: 0, expenses: 0, balance: 0, byCategory: [] };
     state.prevSummary = null;
     state.loans       = { loans: [], summary: { active_count: 0, remaining_amount: 0, remaining_installments: 0 } };
+    window.yuvomi?.showToast(t('budget.loadError'), 'danger');
+  }
+}
+
+async function loadInvoices() {
+  try {
+    const scopeQuery = state.budgetMode === 'personal' ? `&scope=${state.scope}` : '';
+    const res = await api.get(`/budget/accounts/invoices?month=${state.month}${scopeQuery}`);
+    state.invoices = res.data ?? [];
+  } catch (err) {
+    console.error('[Budget] loadInvoices error:', err);
+    state.invoices = [];
     window.yuvomi?.showToast(t('budget.loadError'), 'danger');
   }
 }
@@ -436,6 +452,7 @@ export async function render(container, { user }) {
               ...(user?.access_scope === 'split_guest' ? [] : [
                 ['budget',        t('budget.budgetTab')],
                 ['accounts',      t('budget.accountsTab')],
+                ['invoices',      t('budget.invoicesTab')],
                 ['plan',          t('budget.planTab')],
                 ['subscriptions', t('subscriptions.tabLabel')],
                 ['loans',         t('budget.loansTab')],
@@ -639,6 +656,17 @@ function renderBody() {
     paint(); // sofort aus dem State (beim Mount geladen)
     // Salden nach zwischenzeitlichen Einträgen frisch ziehen, ohne den Wechsel zu blockieren.
     loadAccounts().then(() => { if (state.activeTab === 'accounts') paint(); });
+    return;
+  }
+  if (state.activeTab === 'invoices') {
+    if (state.invoices === null) {
+      setHtml(body, '<div class="budget-tab-panel budget-tab-panel--invoices"><div class="skeleton-list"><div class="skeleton-row"></div><div class="skeleton-row"></div></div></div>');
+      loadInvoices().then(() => { if (state.activeTab === 'invoices') renderBody(); });
+    } else {
+      setHtml(body, renderInvoicesPage());
+      wireInvoicesPage();
+      if (window.lucide) lucide.createIcons({ el: body });
+    }
     return;
   }
   if (state.activeTab === 'subscriptions') {
@@ -1007,7 +1035,10 @@ function renderAccountsPage() {
     const archivedBadge = a.archived
       ? `<span class="budget-account__badge">${t('budget.archivedBadge')}</span>`
       : '';
-    return `
+    const cardMeta = a.type === 'credit'
+      ? `<span class="budget-account__meta">${a.credit_bank ? `${esc(a.credit_bank)} · ` : ''}${t('budget.availableLimitShort')} ${formatAmount(a.available_limit ?? 0)}</span>`
+      : '';
+    return { type: a.type, markup: `
       <div class="budget-account ${a.archived ? 'budget-account--archived' : ''}" style="--account-accent:${accountAccent(a.color)}">
         <button class="budget-account__main" type="button" data-drill="${a.id}"
                 aria-label="${t('budget.viewAccountTransactions', { name: a.name })} · ${t('budget.currentBalance')} ${formatAmount(a.current_balance)}">
@@ -1015,6 +1046,7 @@ function renderAccountsPage() {
           <span class="budget-account__body">
             <span class="budget-account__name"><span class="budget-account__name-text">${esc(a.name)}</span>${archivedBadge}</span>
             <span class="budget-account__type">${esc(accountTypeLabel(a.type))}</span>
+            ${cardMeta}
           </span>
           <span class="budget-account__figures">
             <span class="budget-account__balance ${balClass}">${formatAmount(a.current_balance)}</span>
@@ -1025,14 +1057,301 @@ function renderAccountsPage() {
         <button class="budget-account__edit" type="button" data-edit="${a.id}" aria-label="${t('budget.editAccount')}">
           <i data-lucide="pencil" class="icon-sm" aria-hidden="true"></i>
         </button>
-      </div>`;
+        ${a.type === 'credit' ? `<button class="budget-account__edit" type="button" data-invoice-report="${a.id}" aria-label="Relatório de faturas" title="Relatório de faturas">
+          <i data-lucide="file-text" class="icon-sm" aria-hidden="true"></i>
+        </button>` : ''}
+      </div>` };
+  });
+  const groupedCards = ACCOUNT_TYPES.map((type) => {
+    const group = cards.filter((card) => card.type === type);
+    if (!group.length) return '';
+    return `<section class="budget-account-group"><h3 class="budget-account-group__title">${esc(accountTypeLabel(type))}</h3><div class="budget-accounts__list">${group.map((card) => card.markup).join('')}</div></section>`;
   }).join('');
 
   return `
     <div class="budget-tab-panel budget-tab-panel--accounts">
       ${header}
-      <div class="budget-accounts__list">${cards}</div>
+      ${groupedCards}
     </div>`;
+}
+
+function renderInvoicesPage() {
+  const invoiceRecords = state.invoices ?? [];
+  const invoiceEntries = invoiceRecords.flatMap((invoice) => invoice.entries.map((entry) => ({ ...entry, invoice })));
+  const creditAccounts = invoiceRecords.map((invoice) => invoice.account);
+  const header = `
+    <div class="budget-panel-head">
+      <span class="budget-panel-head__title">${t('budget.invoicesTab')}</span>
+      <div class="budget-panel-head__actions">
+        <button class="btn btn--secondary" id="budget-open-invoice-entry" type="button">
+          <i data-lucide="plus" class="icon-sm" aria-hidden="true"></i>${t('budget.newEntryFabLabel')}
+        </button>
+      </div>
+    </div>`;
+
+  const selectedInvoice = invoiceRecords.find((invoice) => invoice.account_id === state.activeInvoiceAccountId);
+  if (selectedInvoice) return renderInvoiceStatement(selectedInvoice);
+
+  if (!creditAccounts.length) {
+    return `<div class="budget-tab-panel budget-tab-panel--invoices">${header}<div class="empty-state"><div class="empty-state__title">${t('budget.invoicesEmptyTitle')}</div><div class="empty-state__description">${t('budget.invoicesEmptyDescription')}</div></div></div>`;
+  }
+
+  const totalAmount = invoiceRecords.reduce((sum, invoice) => sum + Number(invoice.amount ?? 0), 0);
+  // Cada cartão tem uma fatura por mês. As parcelas que vencem nos próximos
+  // meses não entram no resumo da competência atualmente selecionada.
+  const paidInvoices = invoiceRecords.filter((invoice) => invoicePresentationStatus(invoice) === 'paid').length;
+  const openInvoices = invoiceRecords.length - paidInvoices;
+  const summary = `
+    <div class="budget-invoice-summary">
+      <div class="budget-invoice-summary__item">
+        <span class="budget-invoice-summary__label">${t('budget.invoiceStatementLabel')}</span>
+        <strong>${invoiceEntries.length} ${t('budget.invoiceEntriesLabel')}</strong>
+      </div>
+      <div class="budget-invoice-summary__item">
+        <span class="budget-invoice-summary__label">${t('budget.invoiceTotalLabel')}</span>
+        <strong>${formatAmount(totalAmount)}</strong>
+      </div>
+      <div class="budget-invoice-summary__item">
+        <span class="budget-invoice-summary__label">${t('budget.invoicePaidLabel')}</span>
+        <strong>${paidInvoices} ${t('budget.invoiceInstallmentsShort')}</strong>
+      </div>
+      <div class="budget-invoice-summary__item">
+        <span class="budget-invoice-summary__label">${t('budget.invoiceRemainingLabel')}</span>
+        <strong>${openInvoices} ${t('budget.invoiceInstallmentsShort')}</strong>
+      </div>
+    </div>`;
+
+  const cards = creditAccounts.map((account) => {
+    const invoice = invoiceRecords.find((item) => item.account_id === account.id);
+    const accountEntries = invoice?.entries ?? [];
+    const status = invoicePresentationStatus(invoice);
+    const accountTotal = Number(invoice?.amount ?? 0);
+    const accountPaidInstallments = status === 'paid' ? 1 : 0;
+    const accountRemaining = status === 'paid' ? 0 : 1;
+    const accountSpent = Math.max(0, Math.min(Number(account.credit_limit ?? 0), Math.max(0, -Number(account.current_balance ?? 0))));
+    const accountLimitRemaining = Math.max(0, Number(account.credit_limit ?? 0) - accountSpent);
+    const isOpen = state.activeInvoiceAccountId === account.id;
+    const detailRows = accountEntries.map((entry) => {
+      const dueDay = entry.invoice_due_day ?? entry.account?.due_day ?? '';
+      const closingDay = entry.invoice_closing_day ?? entry.account?.closing_day ?? '';
+      const rowStatus = entry.invoice_status || 'open';
+      const rowStatusLabel = rowStatus === 'paid' ? t('budget.invoiceStatusPaid') : rowStatus === 'partial' ? t('budget.invoiceStatusPartial') : t('budget.invoiceStatusOpen');
+      const totalInstallments = Number(entry.invoice_installments ?? 0) || 1;
+      const paidInstallments = Number(entry.invoice_paid_installments ?? 0) || 0;
+      const installmentView = `${Math.min(paidInstallments + 1, totalInstallments)}/${totalInstallments}`;
+      const isPaid = rowStatus === 'paid';
+      return `
+        <div class="budget-invoice-detail__row">
+          <div class="budget-invoice-detail__meta">
+            <strong>${esc(entry.title)}</strong>
+            <span>${formatDate(entry.date)} · ${rowStatusLabel}</span>
+          </div>
+          <div class="budget-invoice-detail__figures">
+            <span>${formatAmount(entry.amount)}</span>
+            <small>${installmentView} ${t('budget.invoiceInstallmentsShort')} · ${t('budget.closingDayLabel')}: ${closingDay || '—'} · ${t('budget.dueDayLabel')}: ${dueDay || '—'}</small>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="budget-account budget-account--invoice">
+        <button class="budget-account__main budget-account__main--invoice" type="button" data-invoice-account="${account.id}">
+          <span class="budget-account__icon"><i data-lucide="credit-card" class="icon-md" aria-hidden="true"></i></span>
+          <span class="budget-account__body">
+            <span class="budget-account__name"><span class="budget-account__name-text">${esc(account.name)}</span></span>
+            <span class="budget-account__type budget-account__type--invoice-${status}">${status === 'paid' ? t('budget.invoiceStatusPaid') : status === 'partial' ? t('budget.invoiceStatusPartial') : status === 'overdue' ? t('budget.invoiceStatusOverdue') : status === 'closed' ? t('budget.invoiceStatusClosed') : t('budget.invoiceStatusOpen')}</span>
+            <span class="budget-account__meta">${esc(account.credit_bank || t('budget.creditBankUnknown'))} · ${t('budget.creditLimitLabel')}: ${formatAmount(Number(account.credit_limit ?? 0))} · ${t('budget.invoiceSpentLabel')}: ${formatAmount(accountSpent)} · ${t('budget.availableLimitShort')} ${formatAmount(accountLimitRemaining)}</span>
+          </span>
+          <span class="budget-account__figures">
+            <span class="budget-account__balance ${accountTotal >= 0 ? 'budget-account__balance--positive' : 'budget-account__balance--negative'}">${formatAmount(accountTotal)}</span>
+            <span class="budget-account__starting">${accountPaidInstallments}/${accountRemaining + accountPaidInstallments} ${t('budget.invoiceInstallmentsShort')}</span>
+          </span>
+          <i data-lucide="${isOpen ? 'chevron-up' : 'chevron-down'}" class="budget-account__chevron icon-sm" aria-hidden="true"></i>
+        </button>
+        ${isOpen ? `<div class="budget-invoice-detail budget-invoice-detail--statement">
+          <div class="budget-summary">
+            <div class="budget-summary-card"><div class="budget-summary-card__label">${t('budget.invoiceTotalLabel')}</div><div class="budget-summary-card__amount">${formatAmount(accountTotal)}</div></div>
+            <div class="budget-summary-card"><div class="budget-summary-card__label">${t('budget.closingDayLabel')}</div><div class="budget-summary-card__amount">${account.closing_day ?? '—'}</div></div>
+            <div class="budget-summary-card"><div class="budget-summary-card__label">${t('budget.dueDayLabel')}</div><div class="budget-summary-card__amount">${account.due_day ?? '—'}</div></div>
+          </div>
+          <div class="budget-invoice-detail__actions">
+            ${status === 'open' ? `<button class="btn btn--primary" type="button" data-invoice-close="${account.id}">${t('budget.invoiceCloseButton')}</button>` : ''}
+            ${status === 'closed' ? `<button class="btn btn--primary" type="button" data-invoice-pay="${account.id}">${t('budget.invoicePayButton')}</button>` : ''}
+          </div>
+          <div class="budget-chart-section"><div class="budget-chart-section__title">${t('budget.invoiceStatementLabel')}</div>${detailRows}</div>
+        </div>` : ''}
+      </div>`;
+  }).join('');
+
+  return `<div class="budget-tab-panel budget-tab-panel--invoices">${header}${summary}<div class="budget-accounts__list">${cards}</div></div>`;
+}
+
+function renderInvoiceStatement(invoice) {
+  const { account } = invoice;
+  const entries = invoice.entries ?? [];
+  const isEmpty = entries.length === 0;
+  const status = invoicePresentationStatus(invoice);
+  const statusLabel = status === 'paid'
+    ? t('budget.invoiceStatusPaid')
+    : status === 'partial'
+      ? t('budget.invoiceStatusPartial')
+    : status === 'overdue'
+      ? t('budget.invoiceStatusOverdue')
+    : status === 'closed'
+      ? t('budget.invoiceStatusClosed')
+      : t('budget.invoiceStatusOpen');
+  const charges = entries.filter((entry) => Number(entry.amount) < 0)
+    .reduce((sum, entry) => sum + Math.abs(Number(entry.amount)), 0);
+  const credits = entries.filter((entry) => Number(entry.amount) > 0)
+    .reduce((sum, entry) => sum + Number(entry.amount), 0);
+  const lifecycle = status === 'paid' ? 3 : status === 'closed' || status === 'overdue' || status === 'partial' ? 2 : 1;
+  const rows = entries.map((entry) => {
+    const isCredit = Number(entry.amount) > 0;
+    return `<div class="invoice-statement__entry">
+      <div class="invoice-statement__entry-icon ${isCredit ? 'invoice-statement__entry-icon--credit' : ''}">
+        <i data-lucide="${isCredit ? 'corner-up-left' : 'shopping-bag'}" class="icon-sm" aria-hidden="true"></i>
+      </div>
+      <div class="invoice-statement__entry-copy">
+        <strong>${esc(entry.title)}</strong>
+        <span>${formatDate(entry.date)} · ${esc(categoryLabel(entry.category))}</span>
+      </div>
+      <strong class="invoice-statement__entry-amount ${isCredit ? 'invoice-statement__entry-amount--credit' : ''}">${formatAmount(entry.amount)}</strong>
+    </div>`;
+  }).join('');
+
+  return `<div class="budget-tab-panel budget-tab-panel--invoices invoice-statement">
+    <div class="invoice-statement__topbar">
+      <button class="btn btn--secondary btn--sm" type="button" id="invoice-back">
+        <i data-lucide="arrow-left" class="icon-sm" aria-hidden="true"></i>${t('common.back')}
+      </button>
+      <span>${formatMonthLabel(invoice.statement_month)}</span>
+    </div>
+    <section class="invoice-statement__hero" style="--invoice-accent:${accountAccent(account.color)}">
+      <div>
+        <div class="invoice-statement__eyebrow"><i data-lucide="credit-card" class="icon-sm" aria-hidden="true"></i>${account.credit_bank ? esc(account.credit_bank) : esc(accountTypeLabel('credit'))}</div>
+        <h2>${esc(account.name)}</h2>
+        <p>${t('budget.invoiceStatementLabel')} · ${entries.length} ${t('budget.invoiceEntriesLabel')}</p>
+      </div>
+      <div class="invoice-statement__hero-total">
+        <span>${isEmpty ? t('budget.invoiceNoEntries') : t('budget.invoiceTotalLabel')}</span>
+        <strong>${isEmpty ? '—' : formatAmount(invoice.amount)}</strong>
+        <em class="invoice-statement__status invoice-statement__status--${status}">${statusLabel}</em>
+      </div>
+    </section>
+    <div class="invoice-statement__metrics">
+      <div><span>${t('budget.invoiceTotalLabel')}</span><strong>${formatAmount(charges)}</strong></div>
+      <div><span>${t('budget.statsIncome')}</span><strong>${formatAmount(credits)}</strong></div>
+      <div><span>${t('budget.dueDayLabel')}</span><strong>${account.due_day ?? '—'}</strong></div>
+    </div>
+    <section class="invoice-statement__cycle" aria-label="Invoice cycle">
+      <div class="invoice-statement__cycle-step ${lifecycle >= 1 ? 'is-active' : ''}"><i data-lucide="receipt" class="icon-sm" aria-hidden="true"></i><span>${t('budget.invoiceStatusOpen')}</span></div>
+      <span class="invoice-statement__cycle-line ${lifecycle >= 2 ? 'is-active' : ''}"></span>
+      <div class="invoice-statement__cycle-step ${lifecycle >= 2 ? 'is-active' : ''}"><i data-lucide="lock" class="icon-sm" aria-hidden="true"></i><span>${t('budget.invoiceCloseButton')}</span></div>
+      <span class="invoice-statement__cycle-line ${lifecycle >= 3 ? 'is-active' : ''}"></span>
+      <div class="invoice-statement__cycle-step ${lifecycle >= 3 ? 'is-active' : ''}"><i data-lucide="check" class="icon-sm" aria-hidden="true"></i><span>${t('budget.invoicePayButton')}</span></div>
+    </section>
+    <div class="invoice-statement__actions">
+      ${status === 'open' ? `<button class="btn btn--primary" type="button" data-invoice-close="${account.id}">${t('budget.invoiceCloseButton')}</button>` : ''}
+      ${status === 'closed' || status === 'overdue' || status === 'partial' ? `<button class="btn btn--primary" type="button" data-invoice-pay="${account.id}">${t('budget.invoicePayButton')}</button>` : ''}
+      ${status === 'paid' && invoice.payments?.[0] ? `<button class="btn btn--secondary" type="button" data-invoice-payment-reverse="${invoice.payments[0].id}" data-invoice-payment-account="${account.id}">Estornar último pagamento</button>` : ''}
+      ${status === 'paid' ? `<button class="btn btn--secondary" type="button" data-invoice-reopen="${account.id}">Reabrir fatura</button>` : ''}
+    </div>
+    ${(invoice.payments ?? []).length ? `<section class="invoice-statement__payments"><div class="invoice-statement__ledger-head"><h3>Pagamentos</h3><span>${formatAmount(invoice.paid_amount)}</span></div>${invoice.payments.map((payment) => `<div class="invoice-statement__entry"><div class="invoice-statement__entry-icon invoice-statement__entry-icon--credit"><i data-lucide="check" class="icon-sm" aria-hidden="true"></i></div><div class="invoice-statement__entry-copy"><strong>Pagamento realizado</strong><span>${formatDate(payment.created_at.slice(0, 10))}</span></div><strong class="invoice-statement__entry-amount invoice-statement__entry-amount--credit">${formatAmount(payment.amount)}</strong><button class="btn btn--secondary btn--sm" type="button" data-invoice-payment-reverse="${payment.id}" data-invoice-payment-account="${account.id}">Estornar</button></div>`).join('')}</section>` : ''}
+    <section class="invoice-statement__ledger">
+      <div class="invoice-statement__ledger-head"><h3>${t('budget.invoiceStatementLabel')}</h3><span>${entries.length} ${t('budget.invoiceEntriesLabel')}</span></div>
+      ${rows || `<div class="budget-loans__empty">${t('budget.statsEmptyTitle')}</div>`}
+    </section>
+  </div>`;
+}
+
+function invoicePresentationStatus(invoice) {
+  if (invoice.status !== 'closed') return invoice.status || 'open';
+  const dueDay = Number(invoice.account?.due_day || 0);
+  const dueDate = dueDay ? `${invoice.statement_month}-${String(dueDay).padStart(2, '0')}` : null;
+  return dueDate && dueDate < toLocalDateKey(new Date()) ? 'overdue' : 'closed';
+}
+
+function invoicePaymentAccountModal(invoice) {
+  return new Promise((resolve) => {
+    const accounts = (state.accounts ?? []).filter((account) => !account.archived && account.type !== 'credit');
+    if (!accounts.length) { window.yuvomi?.showToast('Adicione uma conta para efetuar o pagamento.', 'danger'); resolve(null); return; }
+    let resolved = false;
+    const finish = (value) => {
+      if (resolved) return;
+      resolved = true;
+      closeModal({ force: true });
+      resolve(value);
+    };
+    openSharedModal({
+      title: 'Pagar fatura',
+      size: 'sm',
+      content: `<div class="form-group"><label class="form-label" for="invoice-payment-account">Conta de débito</label>
+        <select class="form-input" id="invoice-payment-account">${accounts.map((account) => `<option value="${account.id}">${esc(account.name)}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label" for="invoice-payment-amount">Valor do pagamento</label><input class="form-input" id="invoice-payment-amount" type="number" min="0.01" step="0.01" value="${Math.max(0, Number(invoice?.amount || 0) - Number(invoice?.paid_amount || 0)).toFixed(2)}"></div>
+        <div class="modal-panel__footer modal-panel__footer--plain"><button class="btn btn--secondary" id="invoice-payment-cancel">${t('common.cancel')}</button><button class="btn btn--primary" id="invoice-payment-confirm">${t('budget.invoicePayButton')}</button></div>`,
+      onClose: () => finish(null),
+      onSave(panel) {
+        panel.querySelector('#invoice-payment-cancel')?.addEventListener('click', () => finish(null));
+        panel.querySelector('#invoice-payment-confirm')?.addEventListener('click', () => finish({ accountId: Number(panel.querySelector('#invoice-payment-account').value), amount: Number(panel.querySelector('#invoice-payment-amount').value) }));
+      },
+    });
+  });
+}
+
+function wireInvoicesPage() {
+  _container.querySelector('#budget-open-invoice-entry')?.addEventListener('click', () => openBudgetModal({ mode: 'create' }));
+  _container.querySelector('#invoice-back')?.addEventListener('click', () => {
+    state.activeInvoiceAccountId = null;
+    renderBody();
+  });
+  _container.querySelectorAll('[data-invoice-account]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const accountId = Number(btn.dataset.invoiceAccount);
+      state.activeInvoiceAccountId = state.activeInvoiceAccountId === accountId ? null : accountId;
+      renderBody();
+    });
+  });
+  _container.querySelectorAll('[data-invoice-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const entry = state.entries.find((item) => item.id === Number(btn.dataset.invoiceEdit));
+      if (entry) openBudgetModal({ mode: 'edit', entry });
+    });
+  });
+  _container.querySelectorAll('[data-invoice-pay]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const invoice = (state.invoices ?? []).find((item) => item.account_id === Number(btn.dataset.invoicePay));
+      const payment = await invoicePaymentAccountModal(invoice);
+      if (!payment) return;
+      await api.post(`/budget/accounts/${btn.dataset.invoicePay}/invoice/pay`, {
+        month: state.month,
+        payment_account_id: payment.accountId,
+        payment_amount: payment.amount,
+      });
+      await loadInvoices();
+      renderBody();
+    });
+  });
+  _container.querySelectorAll('[data-invoice-close]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      await api.post(`/budget/accounts/${btn.dataset.invoiceClose}/invoice/close`, { month: state.month });
+      await loadInvoices();
+      renderBody();
+    });
+  });
+  _container.querySelectorAll('[data-invoice-payment-reverse]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      await api.post(`/budget/accounts/${btn.dataset.invoicePaymentAccount}/invoice/payments/${btn.dataset.invoicePaymentReverse}/reverse`, { month: state.month });
+      await loadInvoices();
+      renderBody();
+    });
+  });
+  _container.querySelectorAll('[data-invoice-reopen]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      await api.post(`/budget/accounts/${btn.dataset.invoiceReopen}/invoice/reopen/paid`, { month: state.month });
+      await loadInvoices();
+      renderBody();
+    });
+  });
 }
 
 function wireAccountsPage() {
@@ -1064,6 +1383,19 @@ function wireAccountsPage() {
       if (account) openAccountModal(account);
     });
   });
+  _container.querySelectorAll('[data-invoice-report]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const account = state.accounts.find((item) => item.id === Number(btn.dataset.invoiceReport));
+      if (!account) return;
+      const res = await api.get(`/budget/accounts/${account.id}/invoices/history`);
+      const rows = (res.data ?? []).map((invoice) => {
+        const status = invoicePresentationStatus(invoice);
+        const label = status === 'paid' ? t('budget.invoiceStatusPaid') : status === 'partial' ? t('budget.invoiceStatusPartial') : status === 'overdue' ? t('budget.invoiceStatusOverdue') : status === 'closed' ? t('budget.invoiceStatusClosed') : t('budget.invoiceStatusOpen');
+        return `<div class="invoice-statement__entry"><div class="invoice-statement__entry-copy"><strong>${formatMonthLabel(invoice.statement_month)}</strong><span>${label} · ${invoice.entries.length} ${t('budget.invoiceEntriesLabel')}</span></div><strong class="invoice-statement__entry-amount">${formatAmount(invoice.amount)}</strong></div>`;
+      }).join('') || `<div class="budget-loans__empty">${t('budget.statsEmptyTitle')}</div>`;
+      openSharedModal({ title: `Relatório de faturas · ${esc(account.name)}`, size: 'md', content: `<div class="invoice-statement__ledger">${rows}</div><div class="modal-panel__footer modal-panel__footer--plain"><div></div><button class="btn btn--primary" id="invoice-report-close">${t('common.close')}</button></div>`, onSave(panel) { panel.querySelector('#invoice-report-close')?.addEventListener('click', closeModal); } });
+    });
+  });
 }
 
 function openAccountModal(account = null) {
@@ -1071,7 +1403,7 @@ function openAccountModal(account = null) {
   const typeOpts = ACCOUNT_TYPES.map((key) =>
     `<option value="${key}" ${isEdit && account.type === key ? 'selected' : ''}>${esc(accountTypeLabel(key))}</option>`
   ).join('');
-
+  const activeType = isEdit ? (account.type || 'checking') : 'checking';
   const currentColor = isEdit ? (account.color || '') : '';
   // Einfachauswahl wie die Filterleisten des Moduls: role="radiogroup" und die
   // geteilte Verhaltensschicht statt role="group" mit eigenem Klick-Handler.
@@ -1101,6 +1433,28 @@ function openAccountModal(account = null) {
       <input type="number" class="form-input" id="am-balance" step="0.01" inputmode="decimal"
              placeholder="0.00" value="${isEdit ? account.starting_balance : ''}">
       <p class="form-hint">${t('budget.startingBalanceHint')}</p>
+    </div>
+    <div id="am-credit-fields" ${activeType === 'credit' ? '' : 'hidden'}>
+      <div class="form-group">
+        <label class="form-label" for="am-credit-bank">${t('budget.creditBankLabel')}</label>
+        <input type="text" class="form-input" id="am-credit-bank" maxlength="100"
+               placeholder="${t('budget.creditBankPlaceholder')}" value="${esc(isEdit ? (account.credit_bank || '') : '')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="am-credit-limit">${t('budget.creditLimitLabel')}</label>
+        <input type="number" class="form-input" id="am-credit-limit" step="0.01" inputmode="decimal"
+               placeholder="0.00" value="${isEdit ? (account.credit_limit ?? '') : ''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="am-closing-day">${t('budget.closingDayLabel')}</label>
+        <input type="number" class="form-input" id="am-closing-day" min="1" max="31" inputmode="numeric"
+               placeholder="25" value="${isEdit ? (account.closing_day ?? '') : ''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="am-due-day">${t('budget.dueDayLabel')}</label>
+        <input type="number" class="form-input" id="am-due-day" min="1" max="31" inputmode="numeric"
+               placeholder="10" value="${isEdit ? (account.due_day ?? '') : ''}">
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">${t('budget.accountColorLabel')}</label>
@@ -1136,6 +1490,15 @@ function openAccountModal(account = null) {
         mode: 'select',
         onChange: (id) => { selectedColor = id === DEFAULT_COLOR_ID ? '' : id; },
       });
+
+      const typeSelect = panel.querySelector('#am-type');
+      const creditFields = panel.querySelector('#am-credit-fields');
+      const syncCreditFieldsVisibility = () => {
+        if (!creditFields) return;
+        creditFields.hidden = typeSelect.value !== 'credit';
+      };
+      typeSelect?.addEventListener('change', syncCreditFieldsVisibility);
+      syncCreditFieldsVisibility();
 
       panel.querySelector('#am-cancel').addEventListener('click', closeModal);
 
@@ -1177,6 +1540,10 @@ function openAccountModal(account = null) {
         const type    = panel.querySelector('#am-type').value;
         const rawBal  = panel.querySelector('#am-balance').value;
         const startingBalance = rawBal === '' ? 0 : parseFloat(rawBal);
+        const creditBank = panel.querySelector('#am-credit-bank')?.value.trim() || null;
+        const creditLimit = panel.querySelector('#am-credit-limit')?.value;
+        const closingDay = panel.querySelector('#am-closing-day')?.value;
+        const dueDay = panel.querySelector('#am-due-day')?.value;
 
         if (!name) {
           reportFieldError(panel.querySelector('#am-name'), t('common.titleRequired'));
@@ -1190,7 +1557,18 @@ function openAccountModal(account = null) {
         saveBtn.disabled = true;
         saveBtn.textContent = '…';
         try {
-          const body = { name, type, starting_balance: startingBalance, color: selectedColor || null };
+          const body = {
+            name,
+            type,
+            starting_balance: startingBalance,
+            color: selectedColor || null,
+            ...(type === 'credit' ? {
+              credit_bank: creditBank,
+              credit_limit: creditLimit === '' ? null : Number(creditLimit),
+              closing_day: closingDay === '' ? null : Number(closingDay),
+              due_day: dueDay === '' ? null : Number(dueDay),
+            } : {}),
+          };
           if (isEdit) {
             await api.put(`/budget/accounts/${account.id}`, body);
           } else {
@@ -1679,6 +2057,12 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
   const defaultDate = state.month === todayMonth ? today : `${state.month}-01`;
 
   const isExpense  = isEdit ? entry.amount < 0 : true;
+  // Compras parceladas guardam o identificador da parcela no título para o
+  // extrato. Ele não é parte do nome editável da compra e, se voltasse ao
+  // formulário, seria acrescentado novamente ao atualizar a série.
+  const editableTitle = isEdit && entry.invoice_series_id
+    ? entry.title.replace(/\s\(\d+\/\d+\)$/, '')
+    : (isEdit ? entry.title : '');
   // Bei virtuellen Serien hält amount nur den Monatsanteil; im Formular den eingegebenen Periodenbetrag zeigen.
   const editAmount = isEdit && entry.recurrence_virtual && entry.recurrence_full_amount != null
     ? entry.recurrence_full_amount
@@ -1721,7 +2105,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
     <div class="form-group js-entry-field">
       <label class="form-label" for="bm-title">${t('budget.titleLabel')}<span class="required-marker" aria-hidden="true"> *</span></label>
       <input type="text" class="form-input" id="bm-title"
-             placeholder="${t('budget.titlePlaceholder')}" value="${esc(isEdit ? entry.title : '')}">
+             placeholder="${t('budget.titlePlaceholder')}" value="${esc(editableTitle)}">
     </div>
 
     <div class="form-group js-entry-field">
@@ -1789,6 +2173,13 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
           <p style="color:var(--color-text-secondary);font-size:var(--text-sm);margin-top:var(--space-1)">${t('budget.virtualBudgetHint')}</p>
         </div>
 
+        <div class="form-grid-2" id="bm-invoice-fields" hidden>
+          <div class="form-group">
+            <label class="form-label" for="bm-invoice-installments">${t('budget.invoiceInstallmentsLabel')}</label>
+            <input type="number" class="form-input" id="bm-invoice-installments" min="1" max="360" step="1" inputmode="numeric" placeholder="6">
+          </div>
+        </div>
+
         ${renderDocumentAttachField({
           attachments: isEdit ? (entry.attachments || []) : [],
           label: t('budget.receiptsLabel'),
@@ -1848,6 +2239,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
     size: 'sm',
     onSave(panel) {
       let currentType = !isEdit && initialType === 'loan' ? 'loan' : (isExpense ? 'expense' : 'income');
+      const accountSel = panel.querySelector('#bm-account');
 
       const setType = (type) => {
         currentType = type;
@@ -1863,7 +2255,10 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
         panel.querySelector('#bm-save').textContent = type === 'loan'
           ? t('budget.createLoan')
           : (isEdit ? t('common.save') : t('common.add'));
-        if (type !== 'loan') updateCategoryOptions();
+        if (type !== 'loan') {
+          updateCategoryOptions();
+          syncInvoiceVisibility();
+        }
       };
 
       const updateCategoryOptions = (preferredCategory = '') => {
@@ -1901,6 +2296,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
         if (subcategories.length && !subcategories.some((s) => s.key === subcatSelect.value)) {
           subcatSelect.value = subcategories[0].key;
         }
+        panel.querySelector('#bm-invoice-fields').hidden = currentType !== 'expense';
       };
 
       const addCategory = async () => {
@@ -1962,6 +2358,20 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
           date: formatDate(panel.querySelector('#bm-date').value),
         }),
       });
+      const invoiceFields = panel.querySelector('#bm-invoice-fields');
+      const syncInvoiceVisibility = () => {
+        const selectedAccountId = Number(accountSel?.value || 0);
+        const selectedAccount = (state.accounts ?? []).find((a) => a.id === selectedAccountId);
+        const isCreditAccount = selectedAccount?.type === 'credit';
+        const shouldShowInvoiceFields = currentType === 'expense' && isCreditAccount;
+        invoiceFields.hidden = !shouldShowInvoiceFields;
+        if (!shouldShowInvoiceFields) {
+          panel.querySelector('#bm-invoice-installments').value = '';
+        }
+      };
+
+      accountSel?.addEventListener('change', syncInvoiceVisibility);
+      syncInvoiceVisibility();
       panel.querySelector('#bm-category').addEventListener('change', () => updateSubcategoryOptions());
       panel.querySelector('#bm-recurring').addEventListener('change', (e) => {
         panel.querySelector('#bm-recurrence-options').hidden = !e.target.checked;
@@ -1990,7 +2400,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
         const recurring  = panel.querySelector('#bm-recurring').checked ? 1 : 0;
         const interval   = panel.querySelector('#bm-interval').value;
         const virtual    = recurring && panel.querySelector('#bm-virtual').checked ? 1 : 0;
-        const accountSel = panel.querySelector('#bm-account');
+        const invoiceInstallments = panel.querySelector('#bm-invoice-installments')?.value;
         // Konto-Feld erscheint nur, wenn Konten existieren. Fehlt es, bleibt die
         // Zuordnung beim Bearbeiten unverändert (account_id nicht mitsenden).
         const accountId  = accountSel ? (accountSel.value === '' ? null : parseInt(accountSel.value, 10)) : undefined;
@@ -2014,7 +2424,17 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
         saveBtn.textContent = '…';
 
         try {
-          const body = { title, amount, category, subcategory, date, is_recurring: recurring, recurrence_interval: interval, recurrence_virtual: virtual };
+          const body = {
+            title,
+            amount,
+            category,
+            subcategory,
+            date,
+            is_recurring: recurring,
+            recurrence_interval: interval,
+            recurrence_virtual: virtual,
+            ...(invoiceInstallments !== '' ? { invoice_installments: Number(invoiceInstallments) } : {}),
+          };
           if (accountId !== undefined) body.account_id = accountId;
           // Sichtbarkeit nur im personal-Modus mitsenden (#476/#505).
           const sharedEl = panel.querySelector('#bm-shared');
@@ -2033,6 +2453,19 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
             closeModal({ force: true });
             renderBody();
             window.yuvomi?.showToast(t('budget.addedToast'), 'success');
+          } else if (entry.invoice_series_id) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = t('common.save');
+            closeModal({ force: true });
+            const scope = await installmentChoiceModal();
+            if (scope === null) { openBudgetModal({ mode: 'edit', entry }); return; }
+            if (scope === 'this') {
+              await api.put(`/budget/${entry.id}`, await withReceipts());
+            } else {
+              await api.put(`/budget/${entry.id}/installments`, { ...body, scope });
+            }
+            await loadMonth(state.month);
+            renderBody();
           } else if (entry.recurrence_parent_id) {
             // Kind-Instanz: Nutzer fragen, ob nur dieser oder alle zukünftigen
             saveBtn.disabled = false;
@@ -2567,8 +3000,14 @@ async function deleteLoanPayment(loanId, paymentId) {
 
 async function deleteEntry(id) {
   const entry = state.entries.find((e) => e.id === id);
+  let installmentScope = null;
 
-  if (entry && (entry.is_recurring || entry.recurrence_parent_id)) {
+  if (entry?.invoice_series_id) {
+    installmentScope = await installmentDeleteChoiceModal();
+    if (installmentScope === null) return;
+  }
+
+  if (!installmentScope && entry && (entry.is_recurring || entry.recurrence_parent_id)) {
     const scope = await recurringChoiceModal({
       title: t('budget.recurringSeriesScope'),
       thisLabel: t('budget.recurringThisOnly'),
@@ -2579,14 +3018,21 @@ async function deleteEntry(id) {
     if (scope === 'series') { await deleteEntrySeries(id); return; }
   }
 
-  state.entries = state.entries.filter((e) => e.id !== id);
+  state.entries = state.entries.filter((e) => {
+    if (installmentScope === 'all') return e.invoice_series_id !== entry.invoice_series_id;
+    if (installmentScope === 'future') return e.invoice_series_id !== entry.invoice_series_id || e.date < entry.date;
+    return e.id !== id;
+  });
   renderBody();
   vibrate([30, 50, 30]);
 
   scheduleUndoableDelete({
     message: t('budget.deletedToast'),
     commit: async ({ keepalive }) => {
-      await api.delete(`/budget/${id}`, { keepalive });
+      const url = installmentScope && installmentScope !== 'this'
+        ? `/budget/${id}/installments?scope=${installmentScope}`
+        : `/budget/${id}`;
+      await api.delete(url, { keepalive });
       if (keepalive) return; // Seite verschwindet — kein UI-Refresh mehr
       await loadMonth(state.month);
       renderBody();
@@ -2632,6 +3078,64 @@ function recurringChoiceModal({ title, thisLabel, seriesLabel, seriesDanger = fa
         panel.querySelector('#rcs-this')?.addEventListener('click', () => finish('this'));
         panel.querySelector('#rcs-series')?.addEventListener('click', () => finish('series'));
         panel.querySelector('#rcs-cancel')?.addEventListener('click', () => finish(null));
+      },
+    });
+  });
+}
+
+function installmentDeleteChoiceModal() {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (value) => {
+      if (resolved) return;
+      resolved = true;
+      closeModal({ force: true });
+      resolve(value);
+    };
+    openSharedModal({
+      title: 'Excluir compra parcelada',
+      size: 'sm',
+      content: `<div class="modal-actions modal-actions--stack">
+        <button type="button" class="btn btn--secondary" id="ids-this">Somente esta parcela</button>
+        <button type="button" class="btn btn--secondary" id="ids-future">Esta e as próximas parcelas</button>
+        <button type="button" class="btn btn--danger" id="ids-all">Todas as parcelas</button>
+        <button type="button" class="btn btn--ghost" id="ids-cancel">${t('common.cancel')}</button>
+      </div>`,
+      onClose: () => finish(null),
+      onSave(panel) {
+        panel.querySelector('#ids-this')?.addEventListener('click', () => finish('this'));
+        panel.querySelector('#ids-future')?.addEventListener('click', () => finish('future'));
+        panel.querySelector('#ids-all')?.addEventListener('click', () => finish('all'));
+        panel.querySelector('#ids-cancel')?.addEventListener('click', () => finish(null));
+      },
+    });
+  });
+}
+
+function installmentChoiceModal() {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (value) => {
+      if (resolved) return;
+      resolved = true;
+      closeModal({ force: true });
+      resolve(value);
+    };
+    openSharedModal({
+      title: 'Alterar compra parcelada',
+      size: 'sm',
+      content: `<div class="modal-actions modal-actions--stack">
+        <button type="button" class="btn btn--secondary" id="ics-this">Somente esta parcela</button>
+        <button type="button" class="btn btn--secondary" id="ics-future">Esta e as próximas parcelas</button>
+        <button type="button" class="btn btn--primary" id="ics-all">Todas as parcelas</button>
+        <button type="button" class="btn btn--ghost" id="ics-cancel">${t('common.cancel')}</button>
+      </div>`,
+      onClose: () => finish(null),
+      onSave(panel) {
+        panel.querySelector('#ics-this')?.addEventListener('click', () => finish('this'));
+        panel.querySelector('#ics-future')?.addEventListener('click', () => finish('future'));
+        panel.querySelector('#ics-all')?.addEventListener('click', () => finish('all'));
+        panel.querySelector('#ics-cancel')?.addEventListener('click', () => finish(null));
       },
     });
   });

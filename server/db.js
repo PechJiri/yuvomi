@@ -4569,6 +4569,70 @@ const MIGRATIONS = [
       ALTER TABLE recipes ADD COLUMN mealie_has_image INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 121,
+    description: 'Budget credit-card account metadata for bank, limit, and payment calendar',
+    up: `
+      ALTER TABLE budget_accounts ADD COLUMN credit_bank TEXT;
+      ALTER TABLE budget_accounts ADD COLUMN credit_limit REAL;
+      ALTER TABLE budget_accounts ADD COLUMN closing_day INTEGER;
+      ALTER TABLE budget_accounts ADD COLUMN due_day INTEGER;
+    `,
+  },
+  {
+    version: 122,
+    description: 'Budget card invoices: installment tracking and billing metadata on entries',
+    up: `
+      ALTER TABLE budget_entries ADD COLUMN invoice_status TEXT;
+      ALTER TABLE budget_entries ADD COLUMN invoice_installments INTEGER;
+      ALTER TABLE budget_entries ADD COLUMN invoice_paid_installments INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE budget_entries ADD COLUMN invoice_due_day INTEGER;
+      ALTER TABLE budget_entries ADD COLUMN invoice_closing_day INTEGER;
+      -- Verkettet die Raten eines Ratenkaufs, damit "alle" bzw. "diese und
+      -- folgende" als eine Serie bearbeitbar sind.
+      ALTER TABLE budget_entries ADD COLUMN invoice_series_id TEXT;
+      CREATE INDEX idx_budget_entries_invoice_series ON budget_entries(invoice_series_id, date);
+    `,
+  },
+  {
+    version: 123,
+    description: 'Budget credit-card statements: one close and payment per account and month',
+    up: `
+      CREATE TABLE budget_account_invoices (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id      INTEGER NOT NULL REFERENCES budget_accounts(id) ON DELETE CASCADE,
+        statement_month TEXT NOT NULL,
+        status          TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed', 'partial', 'paid')),
+        amount          REAL NOT NULL DEFAULT 0,
+        paid_amount     REAL NOT NULL DEFAULT 0,
+        closed_at       TEXT,
+        paid_at         TEXT,
+        created_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        UNIQUE(account_id, statement_month)
+      );
+      CREATE INDEX idx_budget_account_invoices_month
+        ON budget_account_invoices(statement_month, account_id);
+    `,
+  },
+  {
+    version: 124,
+    description: 'Record and reverse individual credit-card invoice payments',
+    up: `
+      CREATE TABLE budget_account_invoice_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL REFERENCES budget_accounts(id) ON DELETE CASCADE,
+        statement_month TEXT NOT NULL,
+        amount REAL NOT NULL,
+        debit_entry_id INTEGER REFERENCES budget_entries(id) ON DELETE SET NULL,
+        credit_entry_id INTEGER REFERENCES budget_entries(id) ON DELETE SET NULL,
+        reversed_at TEXT,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+      );
+      CREATE INDEX idx_budget_invoice_payments_statement
+        ON budget_account_invoice_payments(account_id, statement_month);
+    `,
+  },
 ];
 
 /**
