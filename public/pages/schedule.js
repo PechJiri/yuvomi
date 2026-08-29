@@ -282,8 +282,8 @@ function patternCard(pattern) {
  * Tag fuer Tag bearbeiten oder loeschen - genau die Muehe, die `overrides/fill`
  * beim Anlegen schon abgenommen hatte (Nutzer-Feedback nach dem Live-Test).
  */
-function overrideGroups() {
-  const sorted = [...state.overrides].sort((a, b) =>
+function overrideGroups(overrides = state.overrides) {
+  const sorted = [...overrides].sort((a, b) =>
     Number(a.user_id) - Number(b.user_id) || a.date_key.localeCompare(b.date_key));
   const groups = [];
   for (const row of sorted) {
@@ -819,3 +819,9 @@ export async function render(container, { user } = {}) {
   renderPage();
   window.lucide?.createIcons({ el: root });
 }
+
+// Reines Verhalten statt Text-Muster (PR #930 review): beide Funktionen sind
+// bereits pur bzw. nehmen ihre Eingabe jetzt als Parameter statt sie fest aus
+// `state` zu lesen - ein Test kann so echte Tage hineingeben und das Ergebnis
+// pruefen, statt nur zu belegen, dass der Funktionsname im Quelltext steht.
+export const __test = { overrideGroups, rangeDifference };

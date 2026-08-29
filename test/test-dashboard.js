@@ -2061,7 +2061,7 @@ test('Kennzahlreihe wiederholt nicht, was ein sichtbares Widget schon sagt', asy
 test('das Schedule-Widget ist an beiden Refresh-Stellen verdrahtet, an denen cycle es auch ist', () => {
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   assert(/schedule:\s*'schedule'/.test(src), 'MODULE_FOR_WIDGET kennt das Modul hinter dem Widget nicht');
-  assert(/schedule:\s*\(\)\s*=>\s*renderScheduleWidget/.test(src), 'widgetById hat keinen Eintrag fuer schedule');
+  assert(/schedule:\s*\(size\)\s*=>\s*renderScheduleWidget/.test(src), 'widgetById hat keinen Eintrag fuer schedule, oder er reicht die Groesse nicht durch (PR #930 review)');
   const carryOvers = [...src.matchAll(/fresh\.schedule\s*=\s*data\.schedule;/g)];
   assert(carryOvers.length === 2,
     'fresh.schedule = data.schedule; muss an beiden Refresh-Stellen stehen (reloadIfQueryChanged UND '
@@ -2074,6 +2074,48 @@ test('das Schedule-Widget ist in der Anpassen-Standardliste als Opt-in eingetrag
   assert(widgets.WIDGET_IDS.includes('schedule'), 'WIDGET_IDS fehlt schedule');
   assert(widgets.DEFAULT_HIDDEN_WIDGETS.has('schedule'),
     'schedule muss wie rewards/health/housekeeping erst im Anpassen-Tray auftauchen, nicht ab Werk sichtbar sein');
+});
+
+// --------------------------------------------------------
+// Schedule-Widget: Groessenklasse und Zeilendeckel (PR #930 review)
+// ANLASS: `schedule` fiel durch defaultWidgetSize() auf 1x1, obwohl die
+// Kachel eine Mitglieder-Liste ist (Avatar, Name, Schicht) wie `family` -
+// gemessen rendert 1x1 218px, die Kachel selbst 318px, und zieht eine
+// benachbarte Kachel in derselben Rasterzeile mit hoch. Zweiter Teil: der
+// Renderer kannte gar keinen Zeilendeckel, `listRowCap` war die einzige
+// Listenkachel ohne ihn - dieselbe Luecke, die #928 bei den Notizen schon
+// hatte (renderPinnedNotes ist hier das Vorbild).
+// --------------------------------------------------------
+
+test('die Schedule-Kachel defaultet auf 1x2 wie family, nicht auf 1x1', async () => {
+  const widgets = await import('../public/utils/dashboard-widgets.js');
+  nodeAssert.equal(widgets.defaultWidgetSize('schedule'), '1x2',
+    'eine Mitglieder-Liste braucht Hoehe, nicht Breite (PR #930 review)');
+});
+
+test('Schedule-Widget: die Zeilenzahl kommt aus der Kachelgroesse, nicht aus der vollen Eintragsliste', async () => {
+  const { __test } = await import('../public/pages/dashboard.js');
+  const users = ['Anna', 'Ben', 'Cara', 'Dax', 'Emi', 'Finn'].map((name, i) => ({ id: i + 1, display_name: name }));
+  const type = { id: 1, name: 'Früh', short_code: 'F', color: '#6C3AED' };
+  const schedule = {
+    hasTypes: true,
+    entries: users.map((u) => ({ user_id: u.id, shift_type: type })),
+  };
+  const zeilen = (html) => (html.match(/class="schedule-widget-row"/g) || []).length;
+
+  // Die hohe Kachel (1x2, ihr eigener Standard) zeigt fuenf von sechs Zeilen -
+  // genau hier stand der Fehler: ohne Deckel waeren es alle sechs gewesen.
+  nodeAssert.equal(zeilen(__test.renderScheduleWidget(schedule, users, '1x2')), 5,
+    'die hohe Kachel muss bei fuenf Zeilen deckeln, nicht alle sechs zeigen');
+  // Gegenprobe: die flache Kachel deckelt enger.
+  nodeAssert.equal(zeilen(__test.renderScheduleWidget(schedule, users, '1x1')), 3,
+    'die flache Kachel muss bei drei Zeilen deckeln');
+
+  // Der Header zaehlt trotzdem ueber ALLE sechs - die ehrliche Zahl, unabhaengig
+  // vom Zeilendeckel darunter (die Review nannte das ausdruecklich als
+  // Bedingung: der Header darf nicht mitschneiden).
+  const html = __test.renderScheduleWidget(schedule, users, '1x1');
+  nodeAssert.match(html, /class="widget__badge">6</, 'der Header muss die volle Anzahl "on shift" zeigen, nicht die gedeckelte Zeilenzahl');
 });
 
 test('Kennzahlreihe fuehrt mit den Modulen, die sonst kein Widget zeigen', async () => {

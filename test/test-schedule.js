@@ -4,10 +4,15 @@ process.env.DB_PATH = ':memory:';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { register } from 'node:module';
 import express from 'express';
 import { get } from '../server/db.js';
 import scheduleRouter, { isStillReferenced } from '../server/routes/schedule.js';
 import { cyclePosition, resolveEntries } from '../server/services/schedule.js';
+
+// Fuer die Verhaltenstests von overrideGroups()/rangeDifference() unten - laedt
+// public/pages/schedule.js als echtes Modul statt nur seinen Quelltext zu lesen.
+register('./test-browser-loader.mjs', import.meta.url);
 
 const database = get();
 database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('schedule-alice', 'Alice', 'x', 'member')").run();
@@ -305,7 +310,7 @@ test('overlapping patterns return a warning and the newer valid_from pattern win
 // that can forget to ask before deleting many days at once).
 test('the Overrides tab groups consecutive same-type days and edits/deletes them as a range', () => {
   const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
-  assert.match(schedulePage, /function overrideGroups\(\)/);
+  assert.match(schedulePage, /function overrideGroups\(overrides = state\.overrides\)/);
   assert.match(schedulePage, /function rangeDifference\(oldFrom, oldTo, newFrom, newTo\)/);
   assert.match(schedulePage, /data-form="override-edit"/);
   assert.match(schedulePage, /data-action="delete-override-range"/);
@@ -315,6 +320,54 @@ test('the Overrides tab groups consecutive same-type days and edits/deletes them
   assert.match(editBranch, /rangeDifference\(/, 'shrinking a range removes what fell outside it, not just fills the new span');
   const deleteBranch = schedulePage.slice(schedulePage.indexOf("'delete-override-range'"), schedulePage.indexOf("'save-days'"));
   assert.match(deleteBranch, /confirmModal\(/, 'deleting a range confirms first, unlike the old single-day delete');
+});
+
+// Real behaviour instead of a name-in-source check (PR #930 review): a text
+// guard stays green if overrideGroups() is renamed or gutted to return [].
+// Both functions now take their input as a parameter (overrideGroups(overrides),
+// already pure for rangeDifference), so a test can hand them real days and
+// check the actual grouping/diff instead of asserting on the identifier.
+test('overrideGroups() merges consecutive same-series days and splits on a gap or a change', async () => {
+  const { __test } = await import('../public/pages/schedule.js');
+  const row = (id, date_key, overrides = {}) => ({ id, user_id: 1, date_key, shift_type_id: typeId, note: null, ...overrides });
+
+  // Drei aufeinanderfolgende Tage derselben Person/Schicht -> eine Gruppe.
+  const consecutive = __test.overrideGroups([row(1, '2027-03-01'), row(2, '2027-03-02'), row(3, '2027-03-03')]);
+  assert.equal(consecutive.length, 1, 'three consecutive days of the same type must merge into one group');
+  assert.deepEqual([consecutive[0].from, consecutive[0].to], ['2027-03-01', '2027-03-03']);
+  assert.deepEqual(consecutive[0].ids, [1, 2, 3]);
+
+  // Eine Luecke (04. fehlt) -> zwei Gruppen, nicht eine ueberspannende.
+  const withGap = __test.overrideGroups([row(1, '2027-03-01'), row(2, '2027-03-02'), row(3, '2027-03-05')]);
+  assert.equal(withGap.length, 2, 'a gap in the dates must split into two groups');
+  assert.deepEqual([withGap[0].from, withGap[0].to], ['2027-03-01', '2027-03-02']);
+  assert.deepEqual([withGap[1].from, withGap[1].to], ['2027-03-05', '2027-03-05']);
+
+  // Ein Wechsel der Schichtart mitten in der Reihe splittet ebenso, obwohl die
+  // Tage selbst luckenlos sind.
+  const otherTypeId = typeId + 1;
+  const typeChange = __test.overrideGroups([row(1, '2027-03-01'), row(2, '2027-03-02', { shift_type_id: otherTypeId })]);
+  assert.equal(typeChange.length, 2, 'a different shift_type_id must not merge with its neighbour');
+});
+
+test('rangeDifference() finds exactly what fell outside a shrunk range, and nothing when it only grew', async () => {
+  const { __test } = await import('../public/pages/schedule.js');
+
+  // Verkuerzt an BEIDEN Enden: zwei Reststuecke.
+  assert.deepEqual(
+    __test.rangeDifference('2027-04-01', '2027-04-10', '2027-04-03', '2027-04-07'),
+    [{ from: '2027-04-01', to: '2027-04-02' }, { from: '2027-04-08', to: '2027-04-10' }],
+  );
+
+  // Verkuerzt nur am Ende: ein Reststueck.
+  assert.deepEqual(
+    __test.rangeDifference('2027-04-01', '2027-04-10', '2027-04-01', '2027-04-07'),
+    [{ from: '2027-04-08', to: '2027-04-10' }],
+  );
+
+  // Nur erweitert, nicht verkuerzt: keine Reststuecke - eine Erweiterung darf
+  // nichts loeschen, das ist der Unterschied zwischen "editieren" und "fuellen".
+  assert.deepEqual(__test.rangeDifference('2027-04-03', '2027-04-07', '2027-04-01', '2027-04-10'), []);
 });
 
 // The three library tabs (shift types, patterns, overrides) are one module,

@@ -2030,7 +2030,7 @@ function renderCycleWidget(cycle) {
  * „Heute"-Karte fuellt (renderToday() in schedule.js). Alle Mitglieder
  * aufzulisten wuerde hier etwas zeigen, das die Seite selbst nicht zeigt.
  */
-function renderScheduleWidget(schedule, users) {
+function renderScheduleWidget(schedule, users, size) {
   const entries = schedule?.entries ?? [];
   const hasTypes = Boolean(schedule?.hasTypes);
 
@@ -2052,8 +2052,14 @@ function renderScheduleWidget(schedule, users) {
     </div>`;
   }
 
+  // Der Header zaehlt ueber ALLE Eintraege (die ehrliche Zahl), das Raster
+  // darunter nur so viele Zeilen, wie die Kachelgroesse traegt - wie jede
+  // andere Listenkachel (`listRowCap`, PR #930 review). Ohne den Deckel waere
+  // 1x2 nur der Punkt, an dem der Ueberlauf von fuenf Mitgliedern auf sechs
+  // verschoben wird, nicht behoben - genau der Fehler, den #928 bei den
+  // Notizen schon hatte (renderPinnedNotes ist das Vorbild hier).
   const onShift = entries.filter((entry) => entry.shift_type).length;
-  const rows = entries.map((entry) => {
+  const rows = entries.slice(0, listRowCap(size)).map((entry) => {
     const user = users.find((item) => Number(item.id) === Number(entry.user_id));
     const type = entry.shift_type;
     const accent = user?.avatar_color || AVATAR_FALLBACK_COLOR;
@@ -2790,7 +2796,7 @@ function renderDashboardLayout(cfg, data, weather, currency, { editing = false, 
     health: () => renderHealthWidget(data.health ?? {}),
     cycle: () => renderCycleWidget(data.cycle),
     housekeeping: () => renderHousekeepingWidget(data.housekeeping ?? {}, currency),
-    schedule: () => renderScheduleWidget(data.schedule, data.users ?? []),
+    schedule: (size) => renderScheduleWidget(data.schedule, data.users ?? [], size),
     family: () => renderFamilyWidget(data.users ?? [], data),
     meals: () => renderTodayMeals(data.todayMeals ?? [], visibleMealTypes),
     notes: (size) => renderPinnedNotes(data.pinnedNotes ?? [], size),
@@ -4687,7 +4693,7 @@ export async function render(container, { user }) {
   }
 }
 
-export const __test = { buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, renderDashboardOverview, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWallWeather, relativeDateLabel };
+export const __test = { buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderScheduleWidget, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, renderDashboardOverview, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWallWeather, relativeDateLabel };
 
 function wireWeatherRefresh(container, onUpdated = null) {
   const refreshBtn = container.querySelector('#weather-refresh-btn');

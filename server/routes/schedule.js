@@ -268,6 +268,13 @@ router.post('/overrides/fill', (req, res) => {
     return fail(res, 400, `The range must not exceed ${MAX_FILL_DAYS} days.`);
   }
   const keys = dateKeysInRange(from.value, to.value);
+  // `note = excluded.note` REPLACES an existing note on every day in the
+  // range, including one the caller didn't type themselves - a fill sends one
+  // note (or none) for the whole span, and a day inside it keeps whatever it
+  // had otherwise. Deliberate: the client's confirm dialog already says
+  // "replacing any existing entries in that range", and a fill is meant to
+  // read as one action overwriting a span, not a merge that could leave a
+  // stale note from before the range was last edited (PR #930 review).
   const upsert = db.get().prepare(`INSERT INTO schedule_overrides (user_id, date_key, shift_type_id, note)
     VALUES (?, ?, ?, ?) ON CONFLICT(user_id, date_key) DO UPDATE SET shift_type_id = excluded.shift_type_id, note = excluded.note`);
   db.get().transaction(() => { for (const key of keys) upsert.run(user.value, key, typeId?.value ?? null, note.value); })();

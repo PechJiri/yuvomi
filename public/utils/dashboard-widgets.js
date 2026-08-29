@@ -95,7 +95,11 @@ export function defaultWidgetSize(id) {
   // nach Nähe sortierte Liste aus Name und „noch so lange". Es ist zugleich das
   // einzige Widget, das erst existiert, sobald jemand etwas markiert hat -
   // siehe die Verfügbarkeitsregel in pages/dashboard.js.
-  if (['tasks', 'calendar', 'rewards', 'budget', 'family', 'notes', 'birthdays', 'countdown'].includes(id)) return '1x2';
+  // `schedule` joins `family` for the same reason: it too is a member list -
+  // avatar, name, shift - and left at the 1x1 default it rendered 318px against
+  // the 218px the size class promised, stretching whatever shared its grid row
+  // (PR #930 review).
+  if (['tasks', 'calendar', 'rewards', 'budget', 'family', 'notes', 'birthdays', 'countdown', 'schedule'].includes(id)) return '1x2';
   // Die Uhr startet breit statt quadratisch: Uhrzeit und darunter der ausgeschriebene
   // Wochentag brauchen Zeile, nicht Höhe - auf 1x1 bräche das Datum um (#651).
   // `quicklinks` steht bei der Uhr und nicht bei den Listen: es ist eine ZEILE
