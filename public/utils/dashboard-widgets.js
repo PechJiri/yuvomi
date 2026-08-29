@@ -39,7 +39,7 @@
  * „Bestandslayout ohne genau eine Id liest sich nicht als umsortiert", über
  * JEDE Id dieser Liste. Wer hier umsortiert, prüft ihn - er ist der Ort, an dem
  * ein Fehler auffällt. */
-export const WIDGET_IDS = ['tasks', 'calendar', 'meals', 'shopping', 'birthdays', 'countdown', 'budget', 'rewards', 'health', 'cycle', 'housekeeping', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks'];
+export const WIDGET_IDS = ['tasks', 'calendar', 'meals', 'shopping', 'birthdays', 'countdown', 'budget', 'rewards', 'health', 'cycle', 'housekeeping', 'schedule', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks'];
 
 // Vier kuratierte Formen statt sechs: über vier Auswahlmöglichkeiten pro Widget
 // (× bis zu 12 Widgets) kippt der Anpassen-Modus in Mikro-Entscheidungs-Overhead
@@ -141,7 +141,7 @@ export const COCKPIT_COVERED_WIDGETS = new Set(['tasks', 'calendar', 'shopping',
 // haette jeder Haushalt - auch jeder bestehende, denn eine neu bekannte Id erbt
 // diesen Default - eine Kachel bekommen, die nichts zeigt und um Einrichtung
 // bittet. Sie steht im Anpassen-Tray und kommt, wenn jemand sie holt.
-export const DEFAULT_HIDDEN_WIDGETS = new Set([...COCKPIT_COVERED_WIDGETS, 'rewards', 'health', 'cycle', 'housekeeping', 'clock', 'weather', 'quicklinks']);
+export const DEFAULT_HIDDEN_WIDGETS = new Set([...COCKPIT_COVERED_WIDGETS, 'rewards', 'health', 'cycle', 'housekeeping', 'schedule', 'clock', 'weather', 'quicklinks']);
 
 export function defaultWidgetVisible(id) {
   return !DEFAULT_HIDDEN_WIDGETS.has(id);

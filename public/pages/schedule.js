@@ -1,7 +1,7 @@
 import { api } from '/api.js';
 import { t, formatDate } from '/i18n.js';
 import { esc } from '/utils/html.js';
-import { todayKey } from '/utils/date.js';
+import { todayKey, addLocalDays } from '/utils/date.js';
 import { openModal, closeModal, confirmModal } from '/components/modal.js';
 import { createPageFab, setPageFabAction } from '/utils/fab.js';
 import { emptyStateHTML } from '/utils/empty-state.js';
@@ -261,17 +261,67 @@ function patternCard(pattern) {
   </details>`;
 }
 
+/**
+ * Fasst zusammenhaengende Tage derselben Person mit derselben Schichtart/Notiz
+ * zu EINER Zeile zusammen - reine Anzeige- und Sammelaktions-Ebene, die
+ * Tabelle bleibt unveraendert ein Eintrag pro Tag. Ohne das zeigte ein
+ * zweiwoechiger "frei"-Bereich vierzehn identische Zeilen und liess sich nur
+ * Tag fuer Tag bearbeiten oder loeschen - genau die Muehe, die `overrides/fill`
+ * beim Anlegen schon abgenommen hatte (Nutzer-Feedback nach dem Live-Test).
+ */
+function overrideGroups() {
+  const sorted = [...state.overrides].sort((a, b) =>
+    Number(a.user_id) - Number(b.user_id) || a.date_key.localeCompare(b.date_key));
+  const groups = [];
+  for (const row of sorted) {
+    const last = groups[groups.length - 1];
+    const sameSeries = last
+      && Number(last.user_id) === Number(row.user_id)
+      && ((last.shift_type_id == null && row.shift_type_id == null) || Number(last.shift_type_id) === Number(row.shift_type_id));
+    const consecutive = sameSeries && (last.note ?? '') === (row.note ?? '') && addLocalDays(last.to, 1) === row.date_key;
+    if (consecutive) {
+      last.to = row.date_key;
+      last.ids.push(row.id);
+    } else {
+      groups.push({ user_id: row.user_id, shift_type_id: row.shift_type_id, note: row.note, from: row.date_key, to: row.date_key, ids: [row.id] });
+    }
+  }
+  return groups;
+}
+
+/**
+ * Was von der ALTEN Spanne ausserhalb der NEUEN liegt - 0 bis 2 Reststuecke
+ * (verkuerzt sie an einem Ende, an beiden, oder erweitert sie nur, dann keins).
+ * String-Vergleich reicht: YYYY-MM-DD sortiert lexikographisch identisch zur
+ * Kalenderordnung, dieselbe Eigenschaft, auf der `date_key >= ?` in den Routen
+ * schon beruht.
+ */
+function rangeDifference(oldFrom, oldTo, newFrom, newTo) {
+  const spans = [];
+  if (oldFrom < newFrom) {
+    const end = addLocalDays(newFrom, -1) < oldTo ? addLocalDays(newFrom, -1) : oldTo;
+    if (oldFrom <= end) spans.push({ from: oldFrom, to: end });
+  }
+  if (oldTo > newTo) {
+    const start = addLocalDays(newTo, 1) > oldFrom ? addLocalDays(newTo, 1) : oldFrom;
+    if (start <= oldTo) spans.push({ from: start, to: oldTo });
+  }
+  return spans;
+}
+
 function overrideRows() {
-  if (!state.overrides.length) return '<p>' + esc(t('schedule.empty')) + '</p>';
-  return '<div class="list-rows">' + state.overrides.map((override) => {
-    const type = state.types.find((item) => Number(item.id) === Number(override.shift_type_id));
+  const groups = overrideGroups();
+  if (!groups.length) return '<p>' + esc(t('schedule.empty')) + '</p>';
+  return '<div class="list-rows">' + groups.map((group) => {
+    const type = state.types.find((item) => Number(item.id) === Number(group.shift_type_id));
     const swatchColor = type ? type.color : 'var(--color-border)';
     const typeLabel = type ? (type.short_code ? `${type.short_code} · ${type.name}` : type.name) : t('schedule.freeDay');
-    const meta = [userName(override.user_id), typeLabel, override.note].filter(Boolean).join(' · ');
-    const actions = canWrite(override.user_id)
-      ? '<span class="schedule-override-actions"><button type="button" class="btn btn--secondary" data-action="edit-override" data-date="' + esc(override.date_key) + '" data-user-id="' + override.user_id + '">' + esc(t('common.edit')) + '</button><button type="button" class="btn btn--danger" data-action="delete-override" data-date="' + esc(override.date_key) + '" data-user-id="' + override.user_id + '">' + esc(t('schedule.delete')) + '</button></span>'
+    const meta = [userName(group.user_id), typeLabel, group.note].filter(Boolean).join(' · ');
+    const label = group.from === group.to ? formatDate(group.from) : `${formatDate(group.from)} – ${formatDate(group.to)}`;
+    const actions = canWrite(group.user_id)
+      ? '<span class="schedule-override-actions"><button type="button" class="btn btn--secondary" data-action="edit-override" data-from="' + esc(group.from) + '" data-user-id="' + group.user_id + '">' + esc(t('common.edit')) + '</button><button type="button" class="btn btn--danger" data-action="delete-override-range" data-from="' + esc(group.from) + '" data-to="' + esc(group.to) + '" data-user-id="' + group.user_id + '">' + esc(t('schedule.delete')) + '</button></span>'
       : '';
-    return '<div class="list-row schedule-override"><span class="schedule-swatch" style="--schedule-color:' + esc(swatchColor) + '"></span><div class="list-row__main"><span class="list-row__name">' + esc(formatDate(override.date_key)) + '</span><span class="list-row__meta">' + esc(meta) + '</span></div>' + actions + '</div>';
+    return '<div class="list-row schedule-override"><span class="schedule-swatch" style="--schedule-color:' + esc(swatchColor) + '"></span><div class="list-row__main"><span class="list-row__name">' + esc(label) + '</span><span class="list-row__meta">' + esc(meta) + '</span></div>' + actions + '</div>';
   }).join('') + '</div>';
 }
 
@@ -323,6 +373,24 @@ function emptyPatternState() {
     title: t('schedule.emptyPatternsTitle'),
     description: t('schedule.emptyPatternsDescription'),
     action: { label: t('schedule.addPattern'), icon: 'plus', attrs: { 'data-action': 'open-create', 'data-view': 'patterns' } },
+  });
+}
+
+// Eine leere Typenliste zwingt sonst dazu, jeden der fuenf Presets einzeln ueber
+// das Anlegen-Formular durchzuklicken, obwohl der Waehler dort (shiftPresetOptions)
+// genau diese fuenf Werte schon kennt - der Reibungspunkt war die Wiederholung,
+// nicht das Fehlen der Presets selbst. „Schnellstart" bleibt zweite Wahl neben
+// dem manuellen Anlegen (Grammatik-Praezedenz: zwei CTAs wie bei einer leeren
+// Dokumentensuche), fuer wer lieber sofort einen eigenen Typ benennt.
+function emptyShiftTypesState() {
+  return emptyStateHTML({
+    icon: 'calendar-clock',
+    title: t('schedule.emptyShiftTypesTitle'),
+    description: t('schedule.emptyShiftTypesDescription'),
+    actions: [
+      { label: t('schedule.quickStartShiftTypes'), icon: 'sparkles', attrs: { 'data-action': 'quick-start-shifts' } },
+      { label: t('schedule.createShiftType'), icon: 'plus', tone: 'secondary', attrs: { 'data-action': 'open-create', 'data-view': 'shifts' } },
+    ],
   });
 }
 
@@ -384,7 +452,7 @@ function renderPage() {
     button.setAttribute('aria-selected', String(isActive));
   });
   const panel = activeView === 'shifts'
-    ? '<section class="schedule-library schedule-library--shifts"><h2 class="u-section-title">' + esc(t('schedule.shiftTypes')) + '</h2>' + (state.types.length ? state.types.map(shiftTypeCard).join('') : '<p>' + esc(t('schedule.empty')) + '</p>') + '</section>'
+    ? '<section class="schedule-library schedule-library--shifts"><h2 class="u-section-title">' + esc(t('schedule.shiftTypes')) + '</h2>' + (state.types.length ? state.types.map(shiftTypeCard).join('') : emptyShiftTypesState()) + '</section>'
     : activeView === 'patterns'
       ? '<section class="schedule-library schedule-library--patterns"><h2 class="u-section-title">' + esc(t('schedule.patterns')) + '</h2>' + (state.patterns.length ? state.patterns.map(patternCard).join('') : emptyPatternState()) + '</section>'
       : activeView === 'overrides'
@@ -425,15 +493,26 @@ function updateScheduleFab() {
   });
 }
 
-function openOverrideEditModal(override) {
-  const type = state.types.find((item) => Number(item.id) === Number(override.shift_type_id));
-  const content = '<form id="schedule-create-form" class="form-stack schedule-modal-form" data-form="override-create">'
-    + '<input type="hidden" name="user_id" value="' + esc(String(override.user_id)) + '">'
-    + '<input type="hidden" name="date_key" value="' + esc(override.date_key) + '">'
-    + formField(t('schedule.owner'), '<input class="input" readonly value="' + esc(userName(override.user_id)) + '">')
-    + formField(t('schedule.date'), '<input class="input" readonly value="' + esc(override.date_key) + '">')
+/**
+ * Bearbeitet eine ganze Gruppe (siehe overrideGroups()) statt eines einzelnen
+ * Tages - auch ein Einzeltag ist nur eine Gruppe der Groesse 1. Von/Bis sind
+ * bewusst EDITIERBAR (anders als frueher, wo nur das Datum stand): die Reihe
+ * so anzupassen, wie man sie angelegt hat, statt sie erst zu loeschen und neu
+ * zu fuellen, ist genau die Bedienung, die das Nutzer-Feedback nach dem
+ * Live-Test verlangt hat. `saveCreatedSchedule()` gleicht Erweiterung und
+ * Verkuerzung der Spanne beim Speichern automatisch ab (fill + Rest-Deltas).
+ */
+function openOverrideEditModal(group) {
+  const type = state.types.find((item) => Number(item.id) === Number(group.shift_type_id));
+  const content = '<form id="schedule-create-form" class="form-stack schedule-modal-form" data-form="override-edit">'
+    + '<input type="hidden" name="user_id" value="' + esc(String(group.user_id)) + '">'
+    + '<input type="hidden" name="original_from" value="' + esc(group.from) + '">'
+    + '<input type="hidden" name="original_to" value="' + esc(group.to) + '">'
+    + formField(t('schedule.owner'), '<input class="input" readonly value="' + esc(userName(group.user_id)) + '">')
+    + formField(t('schedule.rangeFrom'), '<yuvomi-datepicker required name="from" type="date" label="' + esc(t('schedule.rangeFrom')) + '" value="' + esc(group.from) + '"></yuvomi-datepicker>')
+    + formField(t('schedule.rangeTo'), '<yuvomi-datepicker required name="to" type="date" label="' + esc(t('schedule.rangeTo')) + '" value="' + esc(group.to) + '"></yuvomi-datepicker>')
     + formField(t('schedule.shiftTypes'), '<select class="input" name="shift_type_id">' + typeOptions(type?.id ?? null) + '</select>')
-    + formField(t('schedule.note'), '<input class="input" name="note" maxlength="5000" value="' + esc(override.note ?? '') + '">')
+    + formField(t('schedule.note'), '<input class="input" name="note" maxlength="5000" value="' + esc(group.note ?? '') + '">')
     + '<div class="modal-actions"><button type="submit" class="btn btn--primary">' + esc(t('schedule.save')) + '</button></div></form>';
   openModal({
     title: t('schedule.editOverride'),
@@ -462,7 +541,12 @@ function openScheduleCreateModal(view) {
     title = t('schedule.createOverride');
     content = '<form id="schedule-create-form" class="form-stack schedule-modal-form" data-form="override-create">'
       + formField(t('schedule.owner'), '<select class="input" required name="user_id">' + userOptions(selectedOwner()) + '</select>')
-      + formField(t('schedule.date'), '<yuvomi-datepicker required name="date_key" type="date" label="' + esc(t('schedule.date')) + '" value="' + esc(todayKey()) + '"></yuvomi-datepicker>')
+      + '<div class="form-field schedule-active-field"><span class="label">' + esc(t('schedule.fillRange')) + '</span><label class="toggle"><input name="fill_range" type="checkbox"><span class="toggle__track"></span></label></div>'
+      + '<div data-field="single-date">' + formField(t('schedule.date'), '<yuvomi-datepicker required name="date_key" type="date" label="' + esc(t('schedule.date')) + '" value="' + esc(todayKey()) + '"></yuvomi-datepicker>') + '</div>'
+      + '<div data-field="range-dates" hidden>'
+      + formField(t('schedule.rangeFrom'), '<yuvomi-datepicker name="range_from" type="date" label="' + esc(t('schedule.rangeFrom')) + '" value="' + esc(todayKey()) + '"></yuvomi-datepicker>')
+      + formField(t('schedule.rangeTo'), '<yuvomi-datepicker name="range_to" type="date" label="' + esc(t('schedule.rangeTo')) + '" value="' + esc(todayKey()) + '"></yuvomi-datepicker>')
+      + '</div>'
       + formField(t('schedule.shiftTypes'), '<select class="input" name="shift_type_id">' + typeOptions(null) + '</select>')
       + formField(t('schedule.note'), '<input class="input" name="note" maxlength="5000">')
       + '<div class="modal-actions"><button type="submit" class="btn btn--primary">' + esc(t('schedule.save')) + '</button></div></form>';
@@ -474,6 +558,17 @@ function openScheduleCreateModal(view) {
     onSave: (modal) => {
       const form = modal.querySelector('#schedule-create-form');
       form?.querySelector('[name="shift_preset"]')?.addEventListener('change', () => applyShiftPreset(form));
+      // Ein Umschalter statt zweier getrennter Formulare: beide Feldsaetze
+      // leben im selben `<form>`, damit Besitzer/Schichtart/Notiz nicht doppelt
+      // gepflegt werden muessen. `yuvomi-datepicker` kennt kein `required`
+      // (kein Eintrag in observedAttributes, keine ElementInternals-Validitaet
+      // dafuer) - das Feld ist rein optisch versteckt, die eigentliche Pflicht
+      // prueft der Server (`date(..., true)` in der jeweiligen Route).
+      form?.querySelector('[name="fill_range"]')?.addEventListener('change', (event) => {
+        const range = event.currentTarget.checked;
+        form.querySelector('[data-field="single-date"]').hidden = range;
+        form.querySelector('[data-field="range-dates"]').hidden = !range;
+      });
       form?.addEventListener('submit', saveCreatedSchedule);
     },
   });
@@ -492,11 +587,39 @@ async function saveCreatedSchedule(event) {
       await api.post('/schedule/patterns', data);
     }
     if (form.dataset.form === 'override-create') {
-      const dateKey = data.date_key;
-      delete data.date_key;
-      data.user_id = Number(data.user_id);
-      data.shift_type_id = data.shift_type_id ? Number(data.shift_type_id) : null;
-      await api.put('/schedule/overrides/' + encodeURIComponent(dateKey), data);
+      const userId = Number(data.user_id);
+      const shiftTypeId = data.shift_type_id ? Number(data.shift_type_id) : null;
+      if (form.elements.fill_range?.checked) {
+        const type = state.types.find((item) => Number(item.id) === shiftTypeId);
+        const typeLabel = type ? (type.short_code ? `${type.short_code} · ${type.name}` : type.name) : t('schedule.freeDay');
+        const confirmed = await confirmModal(
+          t('schedule.fillRangeConfirmTitle'),
+          { confirmLabel: t('schedule.fillRange'), detail: t('schedule.fillRangeConfirmDetail', { from: formatDate(data.range_from), to: formatDate(data.range_to), type: typeLabel }) },
+        );
+        if (!confirmed) return;
+        await api.post('/schedule/overrides/fill', { user_id: userId, from: data.range_from, to: data.range_to, shift_type_id: shiftTypeId, note: data.note });
+      } else {
+        await api.put('/schedule/overrides/' + encodeURIComponent(data.date_key), { user_id: userId, shift_type_id: shiftTypeId, note: data.note });
+      }
+    }
+    if (form.dataset.form === 'override-edit') {
+      const userId = Number(data.user_id);
+      const shiftTypeId = data.shift_type_id ? Number(data.shift_type_id) : null;
+      const type = state.types.find((item) => Number(item.id) === shiftTypeId);
+      const typeLabel = type ? (type.short_code ? `${type.short_code} · ${type.name}` : type.name) : t('schedule.freeDay');
+      const confirmed = await confirmModal(
+        t('schedule.fillRangeConfirmTitle'),
+        { confirmLabel: t('schedule.save'), detail: t('schedule.fillRangeConfirmDetail', { from: formatDate(data.from), to: formatDate(data.to), type: typeLabel }) },
+      );
+      if (!confirmed) return;
+      await api.post('/schedule/overrides/fill', { user_id: userId, from: data.from, to: data.to, shift_type_id: shiftTypeId, note: data.note });
+      // Was ausserhalb der neuen Spanne lag, aber zur alten gehoerte, muss weg -
+      // sonst bliebe ein verkuerztes Ende als Karteileiche stehen (fill fasst
+      // nur die neue Spanne an, nie das, was davor oder danach lag).
+      const leftovers = rangeDifference(data.original_from, data.original_to, data.from, data.to);
+      for (const span of leftovers) {
+        await api.delete(`/schedule/overrides?user_id=${userId}&from=${span.from}&to=${span.to}`);
+      }
     }
     await load();
     renderPage();
@@ -576,14 +699,40 @@ async function action(event) {
       openScheduleCreateModal(button.dataset.view || activeView);
       return;
     }
+    // `state.types.length` schuetzt vor einem Doppelklick: die Schaltflaeche
+    // bleibt bis zum naechsten renderPage() im DOM, und ein zweiter Klick vor
+    // dem ersten `load()` wuerde sonst alle fuenf Presets doppelt anlegen.
+    // `finally` statt nur dem Erfolgspfad: schlaegt ein Preset mitten in der
+    // Schleife fehl (Netzwerk, doppelter Kurzcode), sollen die bereits
+    // angelegten trotzdem sichtbar werden - sonst zeigt die Seite weiter den
+    // Leerzustand, obwohl schon Typen existieren.
+    if (button.dataset.action === 'quick-start-shifts') {
+      if (state.types.length) return;
+      try {
+        for (const preset of SHIFT_PRESETS) {
+          await api.post('/schedule/shift-types', {
+            name: shiftPresetLabel(preset.key),
+            short_code: preset.shortCode,
+            start_time: preset.startTime,
+            end_time: preset.endTime,
+            color: preset.color,
+          });
+        }
+      } finally {
+        await load();
+        renderPage();
+      }
+      window.yuvomi?.showToast(t('schedule.saved'), 'success');
+      return;
+    }
     if (button.dataset.action === 'statistics-range') {
       statistics = { ...statistics, range: button.dataset.range, entries: [], bounds: null, loading: false };
       renderPage();
       return;
     }
     if (button.dataset.action === 'edit-override') {
-      const override = state.overrides.find((item) => item.date_key === button.dataset.date && Number(item.user_id) === Number(button.dataset.userId));
-      if (override) openOverrideEditModal(override);
+      const group = overrideGroups().find((item) => item.from === button.dataset.from && Number(item.user_id) === Number(button.dataset.userId));
+      if (group) openOverrideEditModal(group);
       return;
     }
     if (button.dataset.action === 'delete-shift') await api.delete(`/schedule/shift-types/${button.dataset.id}`);
@@ -604,7 +753,19 @@ async function action(event) {
       if (!confirmed) return;
       await api.delete(`/schedule/patterns/${button.dataset.id}`);
     }
-    if (button.dataset.action === 'delete-override') await api.delete(`/schedule/overrides/${button.dataset.date}?user_id=${button.dataset.userId}`);
+    // Ein Bereich kann viele Tage tragen, darum fragt das Loeschen hier nach,
+    // anders als ein Einzeltag frueher (der jetzt selbst eine Gruppe der
+    // Groesse 1 ist und denselben Weg nimmt - eine Rueckfrage fuer einen Tag
+    // ist kein Verlust, eine fehlende fuer vierzehn waere einer).
+    if (button.dataset.action === 'delete-override-range') {
+      const { from, to, userId } = button.dataset;
+      const confirmed = await confirmModal(
+        t('schedule.deleteOverrideRangeTitle'),
+        { danger: true, confirmLabel: t('schedule.delete'), detail: t('schedule.deleteOverrideRangeDetail', { from: formatDate(from), to: formatDate(to), user: userName(userId) }) },
+      );
+      if (!confirmed) return;
+      await api.delete(`/schedule/overrides?user_id=${userId}&from=${from}&to=${to}`);
+    }
     if (button.dataset.action === 'save-days') {
       const details = button.closest('[data-pattern]');
       const days = [...details.querySelectorAll('[data-day]')].map((select) => ({

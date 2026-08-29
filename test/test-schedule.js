@@ -136,6 +136,71 @@ test('the entries range is capped, and the cap names itself', async () => {
   assert.equal(overCap.status, 400, '732 days must not');
 });
 
+// `fill` writes real rows, unlike every other range-taking route in this file
+// which only reads - its cap (MAX_FILL_DAYS) is therefore its own constant,
+// not a reuse of MAX_RANGE_DAYS, and deliberately much smaller (schedule.js
+// justifies both numbers separately).
+test('overrides can be filled across a date range, self or admin-on-behalf, capped and validated', async () => {
+  const denied = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: BOB.id, from: '2027-03-01', to: '2027-03-05', shift_type_id: null } });
+  assert.equal(denied.status, 403, 'a member cannot fill someone else\'s schedule');
+
+  const inverted = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-03-10', to: '2027-03-01', shift_type_id: null } });
+  assert.equal(inverted.status, 400);
+  assert.match(inverted.body.error, /from must be before to/);
+
+  const overCap = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-01-01', to: '2027-05-01', shift_type_id: null } });
+  assert.equal(overCap.status, 400);
+  assert.match(overCap.body.error, /100 days/);
+
+  const badType = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-03-01', to: '2027-03-02', shift_type_id: 999999 } });
+  assert.equal(badType.status, 400);
+  assert.match(badType.body.error, /shift_type_id does not exist/);
+
+  // A pre-existing override in-range must be overwritten, not duplicated -
+  // fill uses the same ON CONFLICT upsert as the single-date PUT.
+  await call('PUT', '/overrides/2027-03-02', { as: ALICE, body: { user_id: ALICE.id, shift_type_id: typeId, note: 'stale' } });
+
+  const filled = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-03-01', to: '2027-03-05', shift_type_id: null, note: 'Vacation' } });
+  assert.equal(filled.status, 200);
+  assert.equal(filled.body.data.updated, 5, 'five inclusive days, from and to both count');
+
+  const rows = database.prepare('SELECT date_key, shift_type_id, note FROM schedule_overrides WHERE user_id = ? AND date_key BETWEEN ? AND ? ORDER BY date_key').all(ALICE.id, '2027-03-01', '2027-03-05');
+  assert.equal(rows.length, 5);
+  assert.ok(rows.every((row) => row.shift_type_id === null && row.note === 'Vacation'), 'every day in range is free, including the one that was previously "stale"');
+
+  const asAdmin = await call('POST', '/overrides/fill', { as: ADMIN, body: { user_id: BOB.id, from: '2027-03-01', to: '2027-03-02', shift_type_id: typeId } });
+  assert.equal(asAdmin.status, 200, 'an admin may fill on behalf of another member');
+});
+
+// `DELETE /overrides` (collection) is `/overrides/fill`'s counterpart, for a
+// grouped range (client: overrideGroups()) that shrinks or disappears. Unlike
+// fill it is a single indexed DELETE, not a per-day write loop, so it carries
+// MAX_RANGE_DAYS (the read-side cap) rather than the smaller MAX_FILL_DAYS.
+test('a date range of overrides can be deleted in one call, self or admin-on-behalf', async () => {
+  const denied = await call('DELETE', '/overrides?user_id=' + BOB.id + '&from=2027-04-01&to=2027-04-05', { as: ALICE });
+  assert.equal(denied.status, 403, 'a member cannot clear someone else\'s schedule');
+
+  const inverted = await call('DELETE', '/overrides?user_id=' + ALICE.id + '&from=2027-04-10&to=2027-04-01', { as: ALICE });
+  assert.equal(inverted.status, 400);
+  assert.match(inverted.body.error, /from must be before to/);
+
+  await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-04-01', to: '2027-04-10', shift_type_id: null, note: 'Vacation' } });
+
+  // Deleting the middle of a ten-day range must leave exactly the two edges -
+  // this is what lets an edit shrink a grouped range from either end without
+  // touching the days it kept.
+  const deleted = await call('DELETE', '/overrides?user_id=' + ALICE.id + '&from=2027-04-04&to=2027-04-07', { as: ALICE });
+  assert.equal(deleted.status, 200);
+  assert.equal(deleted.body.data.deleted, 4);
+
+  const remaining = database.prepare('SELECT date_key FROM schedule_overrides WHERE user_id = ? AND date_key BETWEEN ? AND ? ORDER BY date_key').all(ALICE.id, '2027-04-01', '2027-04-10').map((r) => r.date_key);
+  assert.deepEqual(remaining, ['2027-04-01', '2027-04-02', '2027-04-03', '2027-04-08', '2027-04-09', '2027-04-10']);
+
+  const asAdmin = await call('DELETE', '/overrides?user_id=' + ALICE.id + '&from=2027-04-01&to=2027-04-03', { as: ADMIN });
+  assert.equal(asAdmin.status, 200, 'an admin may clear on behalf of another member');
+  assert.equal(asAdmin.body.data.deleted, 3);
+});
+
 test('a shift type may be added by anyone but only changed by its creator or an admin', async () => {
   const created = await call('POST', '/shift-types', { as: ALICE, body: { name: 'Standby', start_time: '18:00', end_time: '20:00' } });
   assert.equal(created.status, 201, 'every member may add a shift type');
@@ -228,6 +293,28 @@ test('overlapping patterns return a warning and the newer valid_from pattern win
   assert.equal(response.status, 200);
   assert.equal(response.body.data.entries[0].shift_type_id, Number(newerType));
   assert.deepEqual(response.body.data.warnings, [{ user_id: Number(carol), date_key: '2027-01-20', pattern_ids: [Number(newPattern), Number(oldPattern)] }]);
+});
+
+// The date arithmetic itself (rangeDifference) is exercised end-to-end by the
+// server test above - deleting the middle of a filled range and asserting the
+// exact remaining days IS the same computation the client runs locally before
+// calling DELETE. This test only pins the wiring: the client groups before
+// rendering, an edit reopens with editable bounds instead of a fixed date, and
+// a range delete asks first (a single day did not, until it became a group of
+// its own - one confirm dialog now covers both, so there is exactly one place
+// that can forget to ask before deleting many days at once).
+test('the Overrides tab groups consecutive same-type days and edits/deletes them as a range', () => {
+  const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
+  assert.match(schedulePage, /function overrideGroups\(\)/);
+  assert.match(schedulePage, /function rangeDifference\(oldFrom, oldTo, newFrom, newTo\)/);
+  assert.match(schedulePage, /data-form="override-edit"/);
+  assert.match(schedulePage, /data-action="delete-override-range"/);
+  assert.match(schedulePage, /overrideGroups\(\)\.find\(/);
+  const editBranch = schedulePage.slice(schedulePage.indexOf("form.dataset.form === 'override-edit'"), schedulePage.indexOf("await load();\n    renderPage();"));
+  assert.match(editBranch, /confirmModal\(/, 'saving an edited range confirms before writing and deleting');
+  assert.match(editBranch, /rangeDifference\(/, 'shrinking a range removes what fell outside it, not just fills the new span');
+  const deleteBranch = schedulePage.slice(schedulePage.indexOf("'delete-override-range'"), schedulePage.indexOf("'save-days'"));
+  assert.match(deleteBranch, /confirmModal\(/, 'deleting a range confirms first, unlike the old single-day delete');
 });
 
 test('calendar defaults to compact Schedule strips, includes their start time, and keeps 24-hour shifts in their start-day strip', () => {

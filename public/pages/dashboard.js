@@ -277,7 +277,7 @@ function maybeHintCustomize(container) {
 // Widget → Modul-Slug für die „Modul deaktiviert?"-Prüfung. Widgets ohne Eintrag
 // (family, weather) sind immer verfügbar. Modulweit, damit Grid-Filter und
 // Wieder-Einblenden-Leiste dieselbe Sichtbarkeitsregel teilen.
-const MODULE_FOR_WIDGET = { tasks: 'tasks', calendar: 'calendar', shopping: 'shopping', meals: 'meals', notes: 'notes', birthdays: 'birthdays', budget: 'budget', rewards: 'rewards', health: 'health', cycle: 'health', housekeeping: 'housekeeping' };
+const MODULE_FOR_WIDGET = { tasks: 'tasks', calendar: 'calendar', shopping: 'shopping', meals: 'meals', notes: 'notes', birthdays: 'birthdays', budget: 'budget', rewards: 'rewards', health: 'health', cycle: 'health', housekeeping: 'housekeeping', schedule: 'schedule' };
 
 const WIDGETS_WITH_OPTIONS = new Set(['calendar', 'tasks']);
 
@@ -412,6 +412,7 @@ function widgetLabel(id) {
     health:   () => t('nav.health'),
     cycle:    () => t('health.cycle.title'),
     housekeeping: () => t('nav.housekeeping'),
+    schedule: () => t('nav.schedule'),
     family:   () => t('dashboard.familyMembers'),
     clock:    () => t('dashboard.clock'),
     metrics:  () => t('dashboard.metrics'),
@@ -2015,6 +2016,76 @@ function renderCycleWidget(cycle) {
 }
 
 // --------------------------------------------------------
+// Schedule-Widget (wer heute im Dienst oder frei ist)
+// --------------------------------------------------------
+
+/**
+ * schedule: { entries, hasTypes } (haushaltsweit, kein Owner-Filter noetig -
+ * das Modul liest schon fuer den ganzen Haushalt) | null (Ladefehler) |
+ * undefined (Kachel versteckt, kein Request gelaufen).
+ *
+ * `entries`, nicht `users`: `resolveEntries()` (services/schedule.js) liefert
+ * fuer ein Mitglied ohne jedes Muster und ohne Ausnahme heute gar keinen
+ * Eintrag - genau die Regel, nach der auch die Schedule-Seite ihre eigene
+ * „Heute"-Karte fuellt (renderToday() in schedule.js). Alle Mitglieder
+ * aufzulisten wuerde hier etwas zeigen, das die Seite selbst nicht zeigt.
+ */
+function renderScheduleWidget(schedule, users) {
+  const entries = schedule?.entries ?? [];
+  const hasTypes = Boolean(schedule?.hasTypes);
+
+  if (!hasTypes) {
+    return `<div class="widget widget--schedule">
+      ${widgetHeader('schedule', t('nav.schedule'), null, '/schedule')}
+      <div class="widget__empty">
+        <i data-lucide="calendar-clock" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.scheduleEmpty')}</div>
+        ${emptyStateCta('/schedule', t('schedule.createShiftType'))}
+      </div>
+    </div>`;
+  }
+
+  if (!entries.length) {
+    return `<div class="widget widget--schedule">
+      ${widgetHeader('schedule', t('nav.schedule'), null, '/schedule')}
+      <div class="widget__body"><p class="u-meta schedule-widget-empty">${esc(t('schedule.empty'))}</p></div>
+    </div>`;
+  }
+
+  const onShift = entries.filter((entry) => entry.shift_type).length;
+  const rows = entries.map((entry) => {
+    const user = users.find((item) => Number(item.id) === Number(entry.user_id));
+    const type = entry.shift_type;
+    const accent = user?.avatar_color || AVATAR_FALLBACK_COLOR;
+    const avatarInner = user?.avatar_data
+      ? `<img src="${esc(user.avatar_data)}" alt="" loading="lazy">`
+      : esc(initials(user?.display_name ?? ''));
+    const shiftLabel = type
+      ? esc(type.short_code ? `${type.short_code} · ${type.name}` : type.name)
+      : esc(t('schedule.freeDay'));
+    const swatchColor = type ? type.color : 'var(--color-border)';
+    // Eigene Punkt-Klasse statt `.schedule-swatch` (schedule.css): router.js
+    // laedt pro Route nur das CSS des eigenen Moduls nach - auf `/` liegt
+    // dashboard.css, schedule.css nie. Ein geteilter Klassenname waere eine
+    // unsichtbare Abhaengigkeit zwischen zwei Stylesheets, die nie gemeinsam
+    // laufen wuerden.
+    return `
+      <div class="schedule-widget-row" data-route="/schedule" role="button" tabindex="0">
+        <span class="schedule-widget-row__avatar" style="background:${esc(accent)};color:${getReadableTextColor(accent)}">${avatarInner}</span>
+        <span class="schedule-widget-row__name">${esc(user?.display_name ?? '')}</span>
+        <span class="schedule-widget-row__shift"><span class="schedule-widget-row__dot" style="--schedule-color:${esc(swatchColor)}"></span>${shiftLabel}</span>
+      </div>`;
+  }).join('');
+
+  return `<div class="widget widget--schedule">
+    ${widgetHeader('schedule', t('nav.schedule'), onShift, '/schedule')}
+    <div class="widget__body">
+      <div class="schedule-widget">${rows}</div>
+    </div>
+  </div>`;
+}
+
+// --------------------------------------------------------
 // Haushaltshilfe-Widget (Anwesenheit + offene Zahlung)
 // --------------------------------------------------------
 
@@ -2719,6 +2790,7 @@ function renderDashboardLayout(cfg, data, weather, currency, { editing = false, 
     health: () => renderHealthWidget(data.health ?? {}),
     cycle: () => renderCycleWidget(data.cycle),
     housekeeping: () => renderHousekeepingWidget(data.housekeeping ?? {}, currency),
+    schedule: () => renderScheduleWidget(data.schedule, data.users ?? []),
     family: () => renderFamilyWidget(data.users ?? [], data),
     meals: () => renderTodayMeals(data.todayMeals ?? [], visibleMealTypes),
     notes: (size) => renderPinnedNotes(data.pinnedNotes ?? [], size),
@@ -4052,10 +4124,34 @@ export async function render(container, { user }) {
     }
   }
 
+  // Eigener Slice wie Zyklus, aber aus einem anderen Grund: nicht Privatsphaere,
+  // sondern weil /dashboard das Modul schlicht nicht mitfuehrt. `/schedule/entries`
+  // ohne user_id liefert schon den ganzen Haushalt (dieselbe Abfrage, die die
+  // Schedule-Seite fuer ihre eigene „Heute"-Karte nutzt); die Typenliste daneben
+  // unterscheidet „niemand hat heute Dienst" von „das Modul ist noch leer".
+  async function ensureScheduleSlice() {
+    if (data.schedule !== undefined) return;
+    if (window.yuvomi?.isModuleDisabled('schedule')) return;
+    try {
+      const day = householdToday();
+      const [entriesRes, typesRes] = await Promise.all([
+        api.get(`/schedule/entries?from=${day}&to=${day}`),
+        api.get('/schedule/shift-types'),
+      ]);
+      data.schedule = { entries: entriesRes.data?.entries ?? [], hasTypes: (typesRes.data ?? []).length > 0 };
+    } catch (err) {
+      console.error('[Dashboard] Schedule-Slice Ladefehler:', err?.message);
+      data.schedule = null;
+    }
+  }
+
   // Nur wenn die opt-in-Kachel sichtbar ist — die Mehrheit ohne aktivierte Kachel
   // löst keinen Request aus.
   if (!loadFailed && widgetConfig.some((w) => w.id === 'cycle' && w.visible)) {
     await ensureCycleSlice();
+  }
+  if (!loadFailed && widgetConfig.some((w) => w.id === 'schedule' && w.visible)) {
+    await ensureScheduleSlice();
   }
 
 
@@ -4071,6 +4167,7 @@ export async function render(container, { user }) {
         fresh.upcomingEvents = fresh.upcomingEvents.map(localizeBirthdayEvent);
       }
       fresh.cycle = data.cycle;
+      fresh.schedule = data.schedule;
       data = fresh;
       setCountdownAvailability(data?.countdowns);
       lastLoadedAt = new Date();
@@ -4093,6 +4190,7 @@ export async function render(container, { user }) {
     // Wird die Zyklus-Kachel gerade erst eingeblendet, ihren owner-only Slice
     // nachladen — sonst zeigte sie fälschlich den Empty-State bis zum Reload.
     if (widgetConfig.some((w) => w.id === 'cycle' && w.visible)) await ensureCycleSlice();
+    if (widgetConfig.some((w) => w.id === 'schedule' && w.visible)) await ensureScheduleSlice();
     await reloadIfQueryChanged(previousQuery);
     rebuildDashboard(widgetConfig);
 
@@ -4168,6 +4266,7 @@ export async function render(container, { user }) {
     rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
     isCustomizing = false;
     if (widgetConfig.some((w) => w.id === 'cycle' && w.visible)) await ensureCycleSlice();
+    if (widgetConfig.some((w) => w.id === 'schedule' && w.visible)) await ensureScheduleSlice();
     // Die Vorgabe kann andere Filter tragen als mein geloeschter Stand (#814).
     await reloadIfQueryChanged(previousQuery);
     rebuildDashboard(widgetConfig);
@@ -4500,8 +4599,11 @@ export async function render(container, { user }) {
         fresh.upcomingEvents = fresh.upcomingEvents.map(localizeBirthdayEvent);
       }
       // Der owner-only Zyklus-Slice reist mit: /dashboard liefert ihn nie,
-      // ein Refresh darf ihn nicht auf „nie geladen" zurückwerfen.
+      // ein Refresh darf ihn nicht auf „nie geladen" zurückwerfen. Der
+      // Schedule-Slice reist aus demselben Grund mit, nur ohne die
+      // Owner-Beschraenkung - /dashboard liefert auch ihn nie.
       fresh.cycle = data.cycle;
+      fresh.schedule = data.schedule;
       data = fresh;
       lastLoadedAt = new Date();
       rebuildDashboard(widgetConfig);

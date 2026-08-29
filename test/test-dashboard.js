@@ -1825,9 +1825,9 @@ test('Widget-Merge: eine fehlende Id landet an ihrer Default-Position, nicht hin
   // Die Zahl steht hier fest und wird bei jedem neuen Widget von Hand
   // nachgezogen - das ist der Zweck: ein Selektor, der aus derselben Liste
   // abgeleitet waere, koennte nie melden, dass die Liste sich geaendert hat.
-  // Zuletzt nachgezogen fuer `quicklinks` (#469).
+  // Zuletzt nachgezogen fuer `schedule` (Schedule v2).
   const geprueft = widgets.WIDGET_IDS.length;
-  assert(geprueft === 17, `Reichweite: ${geprueft} Ids geprueft, nicht die erwarteten 17`);
+  assert(geprueft === 18, `Reichweite: ${geprueft} Ids geprueft, nicht die erwarteten 18`);
   const falsch = widgets.WIDGET_IDS.filter((id) => {
     const merged = widgets.normalizeDashboardConfig(layoutOhne(id));
     return merged.map((w) => w.id).join(',') !== widgets.WIDGET_IDS.join(',');
@@ -2045,6 +2045,35 @@ test('Kennzahlreihe wiederholt nicht, was ein sichtbares Widget schon sagt', asy
     'faellt ein Kandidat weg, rueckt der naechste nach - die Reihe wird nicht kuerzer');
   assert(mit.some((id) => !ohne.includes(id)),
     'und der Nachrueckende ist einer, der vorher nicht dran war');
+});
+
+// --------------------------------------------------------
+// Schedule-Widget: Verdrahtung (Schedule v2)
+// ANLASS: der Zyklus-Slice hat zwei Stellen, an denen `data` bei einem
+// Refresh ersetzt wird (reloadIfQueryChanged, refreshDashboardData), und BEIDE
+// muessen den eigenen Slice mitnehmen - sonst blitzt die Kachel bei jedem
+// stillen 15-Minuten-Refresh kurz auf ihren Leerzustand zurueck. Der
+// Schedule-Slice teilt sich denselben Mechanismus (ein eigener Slice, den
+// /dashboard nie mitliefert, weil er - anders als bei cycle - keine
+// Owner-Beschraenkung braucht) und denselben Zweiteiler.
+// --------------------------------------------------------
+
+test('das Schedule-Widget ist an beiden Refresh-Stellen verdrahtet, an denen cycle es auch ist', () => {
+  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  assert(/schedule:\s*'schedule'/.test(src), 'MODULE_FOR_WIDGET kennt das Modul hinter dem Widget nicht');
+  assert(/schedule:\s*\(\)\s*=>\s*renderScheduleWidget/.test(src), 'widgetById hat keinen Eintrag fuer schedule');
+  const carryOvers = [...src.matchAll(/fresh\.schedule\s*=\s*data\.schedule;/g)];
+  assert(carryOvers.length === 2,
+    'fresh.schedule = data.schedule; muss an beiden Refresh-Stellen stehen (reloadIfQueryChanged UND '
+    + `refreshDashboardData), sonst faellt die Kachel bei einem stillen Refresh auf ihren Leerzustand `
+    + `zurueck - gefunden: ${carryOvers.length}`);
+});
+
+test('das Schedule-Widget ist in der Anpassen-Standardliste als Opt-in eingetragen', async () => {
+  const widgets = await import('../public/utils/dashboard-widgets.js');
+  assert(widgets.WIDGET_IDS.includes('schedule'), 'WIDGET_IDS fehlt schedule');
+  assert(widgets.DEFAULT_HIDDEN_WIDGETS.has('schedule'),
+    'schedule muss wie rewards/health/housekeeping erst im Anpassen-Tray auftauchen, nicht ab Werk sichtbar sein');
 });
 
 test('Kennzahlreihe fuehrt mit den Modulen, die sonst kein Widget zeigen', async () => {

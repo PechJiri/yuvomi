@@ -58,6 +58,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Extension locale lookup no longer throws for module ids that collide with `Object.prototype`.** `constructor` (and `toString`) pass the module-id regex; looking them up on a plain `{}` store made `t()` throw instead of returning the key.
 - **The empty options dialog for a third-party widget no longer quotes the task-categories copy.** It has its own string.
 
+### Added
+
+- **The Schedule module gained a quick-start for shift types, a range fill for overrides, grouped
+  range display and editing, and a "who's working today" dashboard widget.** A household with no
+  shift types yet can create the five common presets (Early/Late/Night/Day/24-hour) in one click
+  instead of one at a time. Marking a whole date range as free (or on a specific shift) - a
+  vacation, a temporary reassignment - now takes one action instead of one per day, capped
+  separately from the read-side range limit since a fill writes real rows rather than computing them
+  on read. The Overrides tab groups consecutive same-type days into a single row instead of one per
+  day, and editing a group's From/To reconciles the change automatically - no more deleting fourteen
+  rows one at a time to adjust a two-week range. An opt-in dashboard widget shows who has a shift or
+  is free today, off by default like the module itself.
+
 ## [2.62.0] - 2026-09-01
 
 ### Added

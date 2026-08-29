@@ -3,7 +3,7 @@ import express from 'express';
 import * as db from '../db.js';
 import { bool, color, collectErrors, date, id, num, str, time } from '../middleware/validate.js';
 import { createLogger } from '../logger.js';
-import { resolveEntries } from '../services/schedule.js';
+import { resolveEntries, dateKeysInRange } from '../services/schedule.js';
 import { daysBetweenDateKeys } from '../utils/timezone.js';
 
 const router = express.Router();
@@ -56,6 +56,16 @@ const typeColumns = 'id, name, short_code, start_time, end_time, color, created_
 // Wie MAX_ITER in calendar-events.js begrenzt das die ARBEIT und nicht die
 // Gueltigkeit der Eingabe - deshalb 400 mit Begruendung statt stiller Kuerzung.
 const MAX_RANGE_DAYS = 731;
+
+// `/overrides/fill` schreibt echte Zeilen, `/entries` liest nur - MAX_RANGE_DAYS
+// gehoert deshalb nicht hierher, so verlockend die Wiederverwendung waere. Die
+// Modul-Idee (SPEC.md, "Schedule") ist ausdruecklich "computed on read, never
+// materialised" - ein Zwei-Jahre-Fuellen wuerde Overrides zu einem zweiten Weg
+// machen, ein Muster zu bauen, nur ohne dessen Zyklus-Arithmetik. Die Grenze
+// ist deshalb eigens gesetzt, nicht geerbt: gross genug fuer eine Abwesenheit
+// (Urlaub, Elternzeit, eine Vertretung ueber ein Quartal), klein genug, dass
+// sie keine Schatten-Rotation traegt.
+const MAX_FILL_DAYS = 100;
 
 function scheduleData(from, to, userId) {
   const database = db.get();
@@ -234,6 +244,61 @@ router.get('/overrides', (req, res) => {
   const where = []; const args = []; if (user) { where.push('user_id=?'); args.push(user.value); } if (from.value) { where.push('date_key>=?'); args.push(from.value); } if (to.value) { where.push('date_key<=?'); args.push(to.value); }
   return res.json({ data: db.get().prepare(`SELECT * FROM schedule_overrides${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY user_id,date_key`).all(...args) });
 });
+/**
+ * Fuellt einen Zeitraum in einem Aufruf statt einem PUT je Tag - fuer eine
+ * Abwesenheit (Urlaub, Vertretung), nicht als Ersatz fuer ein Muster (siehe
+ * MAX_FILL_DAYS oben). `from`/`to` sind hier PFLICHT: ein unvollstaendiger
+ * Bereich soll mit 400 scheitern, nicht mit `dateKeysInRange()`s stillem
+ * leeren Array bei einem invertierten Bereich durchrutschen.
+ */
+router.post('/overrides/fill', (req, res) => {
+  const user = id(req.body?.user_id ?? actorId(req), 'user_id');
+  const from = date(req.body?.from, 'from', true);
+  const to = date(req.body?.to, 'to', true);
+  const typeId = req.body?.shift_type_id == null ? null : id(req.body.shift_type_id, 'shift_type_id');
+  const note = str(req.body?.note, 'note', { required: false, max: 5000 });
+  const errors = collectErrors([user, from, to, typeId, note].filter(Boolean));
+  if (from.value && to.value && from.value > to.value) errors.push('from must be before to.');
+  if (user.value && !userExists(user.value)) errors.push('user_id does not exist.');
+  if (typeId && !typeExists(typeId.value)) errors.push('shift_type_id does not exist.');
+  if (!mineOrAdmin(req, user.value)) errors.push('Forbidden.');
+  if (errors.length) return res.status(errors.includes('Forbidden.') ? 403 : 400).json({ error: errors.join(' '), code: errors.includes('Forbidden.') ? 403 : 400 });
+  const span = daysBetweenDateKeys(from.value, to.value);
+  if (span === null || span + 1 > MAX_FILL_DAYS) {
+    return fail(res, 400, `The range must not exceed ${MAX_FILL_DAYS} days.`);
+  }
+  const keys = dateKeysInRange(from.value, to.value);
+  const upsert = db.get().prepare(`INSERT INTO schedule_overrides (user_id, date_key, shift_type_id, note)
+    VALUES (?, ?, ?, ?) ON CONFLICT(user_id, date_key) DO UPDATE SET shift_type_id = excluded.shift_type_id, note = excluded.note`);
+  db.get().transaction(() => { for (const key of keys) upsert.run(user.value, key, typeId?.value ?? null, note.value); })();
+  res.json({ data: { updated: keys.length } });
+});
+
+/**
+ * Loescht einen Zeitraum in einem Aufruf - das Gegenstueck zu `/overrides/fill`,
+ * fuer den Fall, dass eine als Gruppe angezeigte Reihe (Client: `overrideGroups()`)
+ * ganz oder in einem Randabschnitt wieder verschwinden soll. Anders als beim
+ * Fuellen gilt hier NICHT MAX_FILL_DAYS: ein DELETE ueber `date_key BETWEEN`
+ * ist eine einzelne indizierte Anweisung, keine Schleife ueber N Zeilen - die
+ * Kosten skalieren nicht mit der Spanne, deshalb der groessere Lese-Deckel.
+ */
+router.delete('/overrides', (req, res) => {
+  const user = id(req.query.user_id ?? actorId(req), 'user_id');
+  const from = date(req.query.from, 'from', true);
+  const to = date(req.query.to, 'to', true);
+  const errors = collectErrors([user, from, to]);
+  if (from.value && to.value && from.value > to.value) errors.push('from must be before to.');
+  if (user.value && !userExists(user.value)) errors.push('user_id does not exist.');
+  if (!mineOrAdmin(req, user.value)) errors.push('Forbidden.');
+  if (errors.length) return res.status(errors.includes('Forbidden.') ? 403 : 400).json({ error: errors.join(' '), code: errors.includes('Forbidden.') ? 403 : 400 });
+  const span = daysBetweenDateKeys(from.value, to.value);
+  if (span === null || span + 1 > MAX_RANGE_DAYS) {
+    return fail(res, 400, `The range must not exceed ${MAX_RANGE_DAYS} days.`);
+  }
+  const result = db.get().prepare('DELETE FROM schedule_overrides WHERE user_id=? AND date_key BETWEEN ? AND ?').run(user.value, from.value, to.value);
+  res.json({ data: { deleted: result.changes } });
+});
+
 router.delete('/overrides/:dateKey', (req, res) => {
   const key = date(req.params.dateKey, 'date_key', true); const user = id(req.query.user_id ?? actorId(req), 'user_id'); const errors = collectErrors([key, user]);
   if (!mineOrAdmin(req, user.value)) return fail(res, 403, 'Forbidden.'); if (errors.length) return fail(res, 400, errors.join(' '));
