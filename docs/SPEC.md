@@ -3179,9 +3179,12 @@ Off by default. Four tabs (shift types, patterns, overrides, statistics) plus a 
 - **Overnight shifts** stay on their start day, so a night shift does not smear across two calendar
   days. `end_time <= start_time` is what marks one; `end == start` is a 24-hour shift.
 - **Quick-start presets:** the Shift Types tab's empty state offers a one-click "quick start" that
-  creates five common presets (Early/Late/Night/Day/24-hour) client-side, sequentially, against the
-  existing unrestricted `POST /shift-types` — reusing the same preset values that already prefill
-  the create-shift-type form, rather than a dedicated bulk-create endpoint.
+  creates seven common presets (Early/Late/Night/Day/24-hour, plus Vacation/Sick) client-side,
+  sequentially, against the existing unrestricted `POST /shift-types` — reusing the same preset
+  values that already prefill the create-shift-type form, rather than a dedicated bulk-create
+  endpoint. Vacation and Sick carry no start/end time on purpose - a shift type without times is
+  already a valid, "all day" type (`start_time`/`end_time` are nullable as a pair), so an absence
+  reason is just a shift type nobody works, not a new concept or column.
 - **Fill a date range:** `POST /overrides/fill` writes an override across an inclusive range in one
   call (e.g. a vacation), instead of one `PUT` per day — see Schedule Overrides above for its cap.
   The client always confirms before submitting, since it silently overwrites any existing overrides

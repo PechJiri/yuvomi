@@ -25,12 +25,23 @@ let statistics = { userId: null, range: 'current', monthFrom: '', monthTo: '', f
 // liest sich im Kalender als Systemzustand statt als Inhalt (Eine-Stimme-Regel;
 // Critique 2026-08-27 + Detektor design-system-color). Jetzt Magenta fuer die
 // Abendschicht, und neue Typen starten auf dem Fruehschicht-Cyan.
+// `vacation`/`sick` tragen bewusst KEINE Uhrzeiten (start_time/end_time bleiben
+// beide NULL - der CHECK der Tabelle verlangt genau das paarweise): sie sind
+// keine Arbeitsschicht, sondern ein Tages-ETIKETT ohne Dauer. Das Datenmodell
+// erlaubt das schon seit Migration 165 (ein Schichttyp ohne Zeiten rendert als
+// "ganztaegig", clockLabel() oben), nur bot bisher nichts diesen Weg an - eine
+// Ausnahme liess sich nur ueber "Freier Tag" (kein Typ) oder eine echte Schicht
+// abbilden, nichts dazwischen. Eigene Farben ausserhalb der fuenf Arbeits-Presets:
+// Blaugrau fuer Urlaub (Abwesenheit, keine Dringlichkeit), Rot fuer krank
+// (der einzige Rot-Ton unter den Presets).
 const SHIFT_PRESETS = Object.freeze([
   { key: 'early', shortCode: 'E', startTime: '06:00', endTime: '14:00', color: '#0E7490' },
   { key: 'late', shortCode: 'L', startTime: '14:00', endTime: '22:00', color: '#A21CAF' },
   { key: 'night', shortCode: 'N', startTime: '22:00', endTime: '06:00', color: '#4338CA' },
   { key: 'day', shortCode: 'D', startTime: '08:00', endTime: '16:00', color: '#15803D' },
   { key: 'fullDay', shortCode: '24', startTime: '10:00', endTime: '10:00', color: '#A16207' },
+  { key: 'vacation', shortCode: 'V', startTime: null, endTime: null, color: '#475569' },
+  { key: 'sick', shortCode: 'S', startTime: null, endTime: null, color: '#B91C1C' },
 ]);
 const SHIFT_COLOR_FALLBACK = SHIFT_PRESETS[0].color;
 
@@ -190,6 +201,8 @@ function shiftPresetLabel(key) {
     night: t('schedule.presets.night'),
     day: t('schedule.presets.day'),
     fullDay: t('schedule.presets.fullDay'),
+    vacation: t('schedule.presets.vacation'),
+    sick: t('schedule.presets.sick'),
   };
   return labels[key] ?? '';
 }
@@ -309,9 +322,21 @@ function rangeDifference(oldFrom, oldTo, newFrom, newTo) {
   return spans;
 }
 
+// Dieselbe Grammatik wie die Muster- und Schichtarten-Leerzustaende
+// (emptyStateHTML) statt eines blossen Absatzes - die drei Tabs derselben
+// Seite sollen sich wie ein Modul lesen, nicht wie drei verschiedene.
+function emptyOverrideState() {
+  return emptyStateHTML({
+    icon: 'calendar-clock',
+    title: t('schedule.emptyOverridesTitle'),
+    description: t('schedule.emptyOverridesDescription'),
+    action: { label: t('schedule.createOverride'), icon: 'plus', attrs: { 'data-action': 'open-create', 'data-view': 'overrides' } },
+  });
+}
+
 function overrideRows() {
   const groups = overrideGroups();
-  if (!groups.length) return '<p>' + esc(t('schedule.empty')) + '</p>';
+  if (!groups.length) return emptyOverrideState();
   return '<div class="list-rows">' + groups.map((group) => {
     const type = state.types.find((item) => Number(item.id) === Number(group.shift_type_id));
     const swatchColor = type ? type.color : 'var(--color-border)';
@@ -376,9 +401,9 @@ function emptyPatternState() {
   });
 }
 
-// Eine leere Typenliste zwingt sonst dazu, jeden der fuenf Presets einzeln ueber
+// Eine leere Typenliste zwingt sonst dazu, jeden der sieben Presets einzeln ueber
 // das Anlegen-Formular durchzuklicken, obwohl der Waehler dort (shiftPresetOptions)
-// genau diese fuenf Werte schon kennt - der Reibungspunkt war die Wiederholung,
+// genau diese sieben Werte schon kennt - der Reibungspunkt war die Wiederholung,
 // nicht das Fehlen der Presets selbst. „Schnellstart" bleibt zweite Wahl neben
 // dem manuellen Anlegen (Grammatik-Praezedenz: zwei CTAs wie bei einer leeren
 // Dokumentensuche), fuer wer lieber sofort einen eigenen Typ benennt.
@@ -701,7 +726,7 @@ async function action(event) {
     }
     // `state.types.length` schuetzt vor einem Doppelklick: die Schaltflaeche
     // bleibt bis zum naechsten renderPage() im DOM, und ein zweiter Klick vor
-    // dem ersten `load()` wuerde sonst alle fuenf Presets doppelt anlegen.
+    // dem ersten `load()` wuerde sonst alle sieben Presets doppelt anlegen.
     // `finally` statt nur dem Erfolgspfad: schlaegt ein Preset mitten in der
     // Schleife fehl (Netzwerk, doppelter Kurzcode), sollen die bereits
     // angelegten trotzdem sichtbar werden - sonst zeigt die Seite weiter den

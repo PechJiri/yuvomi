@@ -317,6 +317,33 @@ test('the Overrides tab groups consecutive same-type days and edits/deletes them
   assert.match(deleteBranch, /confirmModal\(/, 'deleting a range confirms first, unlike the old single-day delete');
 });
 
+// The three library tabs (shift types, patterns, overrides) are one module,
+// not three, and their empty states used to say otherwise: overrides fell back
+// to a bare paragraph while its siblings already used the shared
+// emptyStateHTML grammar (icon, title, description, CTA). Caught after a user
+// noticed the mismatch directly - the same regression an add-only PR review
+// would not catch, since a bare `<p>` still renders "something."
+test('all three Schedule library tabs share the same empty-state grammar', () => {
+  const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
+  assert.match(schedulePage, /function emptyOverrideState\(\)/);
+  const emptyOverrideBody = schedulePage.slice(schedulePage.indexOf('function emptyOverrideState'), schedulePage.indexOf('function overrideRows'));
+  assert.match(emptyOverrideBody, /emptyStateHTML\(/, 'overrides must use the shared empty-state component, like patterns and shift types');
+  assert.doesNotMatch(schedulePage, /if \(!groups\.length\) return '<p>'/, 'the old bare-paragraph empty state must not come back');
+});
+
+// Vacation/Sick are shift types without a start/end time - the schema already
+// allows this (start_time and end_time are nullable as a pair, and a type
+// without them renders as "all day"), so an absence reason needed no new
+// column or endpoint, only two more preset entries. Verified server-side too,
+// by the existing 'schedule routes reject invalid shift times' test elsewhere
+// in this file exercising the same POST /shift-types with null times.
+test('quick-start includes Vacation and Sick as timeless presets, not just work shifts', () => {
+  const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
+  const presetsBlock = schedulePage.slice(schedulePage.indexOf('const SHIFT_PRESETS'), schedulePage.indexOf(']);') + 3);
+  assert.match(presetsBlock, /key: 'vacation'.*startTime: null.*endTime: null/, 'vacation must carry no times, like a real absence rather than a shift');
+  assert.match(presetsBlock, /key: 'sick'.*startTime: null.*endTime: null/, 'sick must carry no times, like a real absence rather than a shift');
+});
+
 test('calendar defaults to compact Schedule strips, includes their start time, and keeps 24-hour shifts in their start-day strip', () => {
   const calendarPage = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
   assert.match(calendarPage, /scheduleDisplay: 'compact'/);

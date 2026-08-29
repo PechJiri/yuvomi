@@ -4557,6 +4557,8 @@
         "quickStartShiftTypes": "Schnellstart",
         "createPattern": "Schichtplan erstellen",
         "createOverride": "Ausnahme erstellen",
+        "emptyOverridesTitle": "Noch keine Ausnahmen",
+        "emptyOverridesDescription": "Markiere einen Tag - oder einen ganzen Zeitraum - als frei oder auf einer bestimmten Schicht.",
         "name": "Name",
         "shortCode": "Kurzcode",
         "color": "Farbe",
@@ -4591,7 +4593,9 @@
             "late": "Spätschicht",
             "night": "Nachtschicht",
             "day": "Tagschicht",
-            "fullDay": "24-Stunden-Schicht"
+            "fullDay": "24-Stunden-Schicht",
+            "vacation": "Urlaub",
+            "sick": "Krank"
         },
         "overlapWarning": "Überlappende Schichtpläne am {{date}} für {{user}}; der neuere Plan wird angezeigt.",
         "overlapWarningShort": "Überlappende Schichtpläne",

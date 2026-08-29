@@ -4557,6 +4557,8 @@
         "quickStartShiftTypes": "Quick start",
         "createPattern": "Create pattern",
         "createOverride": "Create override",
+        "emptyOverridesTitle": "No exceptions yet",
+        "emptyOverridesDescription": "Mark a day - or a whole range - as free or on a specific shift.",
         "name": "Name",
         "shortCode": "Short code",
         "color": "Color",
@@ -4591,7 +4593,9 @@
             "late": "Late shift",
             "night": "Night shift",
             "day": "Day shift",
-            "fullDay": "24-hour shift"
+            "fullDay": "24-hour shift",
+            "vacation": "Vacation",
+            "sick": "Sick"
         },
         "overlapWarning": "Overlapping schedules on {{date}} for {{user}}; the newer pattern is shown.",
         "overlapWarningShort": "Overlapping schedules",

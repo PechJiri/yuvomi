@@ -82,8 +82,16 @@
   grid-column: 1 / -1;
 }
 
+/* Ein fester Balken statt `width: 100%`: dieselbe Regel stretchte den nativen
+ * Farbwaehler ueber die volle Breite seiner Rasterzelle - auf dem Desktop eine
+ * hohe Flaeche neben dem Kurzcode-Feld, unterhalb des Mobil-Breakpoints (wo
+ * .schedule-form auf eine Spalte faellt) ein Balken ueber die volle
+ * Formularbreite. Feste Breite nach demselben Muster wie die anderen
+ * Farbwaehler der App (subscriptions.css: 44-52px), statt an der Breite der
+ * umgebenden Zelle zu haengen. */
 .schedule-color-field .form-input--color {
-  width: 100%;
+  width: 64px;
+  flex: 0 0 auto;
 }
 
 .schedule-active-field .toggle {

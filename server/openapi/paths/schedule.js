@@ -54,6 +54,26 @@ export function schedulePaths() {
     },
     '/api/v1/schedule/overrides': {
       get: op({ summary: 'List per-day overrides', tag: 'Schedule' }),
+      delete: op({
+        summary: 'Remove overrides across a date range',
+        description: 'The counterpart to /overrides/fill - a single indexed delete, so it carries the read-side range cap (731 days) rather than the smaller one on fill.',
+        tag: 'Schedule',
+        params: [
+          { name: 'user_id', in: 'query', required: true, description: 'Household member', schema: { type: 'integer' } },
+          { name: 'from', in: 'query', required: true, description: 'Start date (YYYY-MM-DD)', schema: { type: 'string', format: 'date' } },
+          { name: 'to', in: 'query', required: true, description: 'End date (YYYY-MM-DD), inclusive', schema: { type: 'string', format: 'date' } },
+        ],
+        stateChanging: true,
+      }),
+    },
+    '/api/v1/schedule/overrides/fill': {
+      post: op({
+        summary: 'Fill a date range of overrides in one call',
+        description: 'Upserts the same shift type (or NULL for a free day) across an inclusive range - e.g. marking a vacation - instead of one PUT per day. Writes real rows, so it is capped separately from /entries at 100 days.',
+        tag: 'Schedule',
+        stateChanging: true,
+        requestBody: jsonBody(null),
+      }),
     },
     '/api/v1/schedule/overrides/{dateKey}': {
       put: op({
