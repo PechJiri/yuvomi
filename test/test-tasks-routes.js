@@ -900,3 +900,20 @@ test('POST: status=archived legt nicht ab, sondern fällt auf den ersten Status'
   assert.equal(r.body.data.status, 'open');
   assert.equal(r.body.data.archived_at, null, 'und liegt nicht in der Ablage');
 });
+
+test('POST: ein leerer Status ist kein Status, sondern keiner (Review zu #807)', async () => {
+  // `v.oneOf` behandelt undefined, null und '' gleich - alle drei heissen "nicht
+  // angegeben" und kommen ohne Fehler durch den Validator. Die erste Fassung des
+  // Defaults sah nur `undefined`, also trug ein leeres Auswahlfeld den Wert bis
+  // ins INSERT: gegen eine NOT-NULL-Spalte mit CHECK, also 500 auf eine Eingabe,
+  // die der eigene Validator eben noch akzeptiert hat.
+  for (const leer of [null, '']) {
+    const r = await call('POST', '/', {
+      as: { id: ALICE, role: 'admin' },
+      body: { title: `leerer-status-${JSON.stringify(leer)}`, status: leer },
+    });
+    assert.equal(r.status, 201, `status: ${JSON.stringify(leer)} darf kein Fehler sein`);
+    assert.equal(r.body.data.status, 'open', 'und faellt auf den ersten Status');
+    assert.equal(r.body.data.archived_at, null);
+  }
+});

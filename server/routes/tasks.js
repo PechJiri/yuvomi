@@ -958,7 +958,13 @@ router.post('/', (req, res) => {
     // anzulegen, um sie im selben Zug wegzuraeumen, ist kein Anlegen. PUT deutet
     // den Wert fuer Bestandsclients als "ablegen"; beim Anlegen gibt es nichts,
     // was abzulegen waere.
-    const status = (req.body.status === undefined || req.body.status === ARCHIVE_STATUS)
+    //
+    // `!req.body.status` statt `=== undefined`: `v.oneOf` laesst `null` und `''`
+    // als "nicht angegeben" durch, ohne einen Fehler zu melden. Ein Client, der
+    // ein leeres Auswahlfeld mitschickt, haette den Wert damit bis ins INSERT
+    // getragen - gegen eine NOT-NULL-Spalte mit CHECK, also als 500 auf eine
+    // Eingabe, die der eigene Validator eben noch akzeptiert hat.
+    const status = (!req.body.status || req.body.status === ARCHIVE_STATUS)
       ? 'open'
       : req.body.status;
 

@@ -152,6 +152,52 @@ test('der Screensaver liest dasselbe Attribut, das der Timer setzt', () => {
   // Timer, der still hinter einem Bild ablaeuft.
   assert.match(SOURCE, /data-wall-timer/, 'der Timer setzt das Attribut');
   assert.match(screensaver, /data-wall-timer/, 'der Screensaver liest es');
-  assert.match(screensaver, /hasAttribute\('data-wall-timer'\)[\s\S]{0,40}return false/,
-    'und legt sich nicht darueber, solange es steht');
+
+  // Die REGEL, nicht die Schreibweise: im Attribut-Zweig wird nicht gestartet.
+  // Die erste Fassung verlangte `return false` unmittelbar dahinter und wurde
+  // rot, als genau dort die Neuplanung dazukam - ein Guard, der beim
+  // Richtigstellen bricht, prueft den Wortlaut statt die Sache.
+  const zweig = screensaver.slice(screensaver.indexOf("hasAttribute('data-wall-timer')"));
+  const block = zweig.slice(0, zweig.indexOf('\n  }') + 4);
+  assert.match(block, /return false/, 'solange das Attribut steht, startet er nicht');
+  assert.ok(!/overlay\s*=|appendChild/.test(block), 'und baut auch kein Overlay');
+
+  // UND ER VERBRAUCHT NICHT SEINEN EINZIGEN VERSUCH (Review zu #844). `start()`
+  // haengt an einem einmaligen Idle-Timeout; ein blosses `return false` liesse
+  // den Screensaver bis zur naechsten Geste aus - auf einem Wandtablet koennen
+  // das Stunden sein. Der Timer darf ihn verschieben, nicht abschalten.
+  assert.match(block, /idleTimer\s*=\s*setTimeout\(\s*start/,
+    'der Attribut-Zweig plant einen neuen Versuch, statt den letzten zu verbrauchen');
+});
+
+// --------------------------------------------------------
+// Was der Review zu #844 gefunden hat
+// --------------------------------------------------------
+
+test('der Audiokontext lebt ausserhalb des Renders - sonst klingelt es nie', () => {
+  // Er stand in der Closure von wireWallTimer. Der Startknopf legt ihn an und
+  // ruft sofort rerender(), das die Flaeche neu baut: der neue Aufruf besitzt
+  // den Sekundentakt und beginnt mit null, der alte hatte den Knopf und nie
+  // einen Takt. Der Wecker lief jedes Mal auf chime(null).
+  //
+  // Geprueft wird die Modulebene an der Einrueckung: eine Deklaration in einer
+  // Funktion steht eingerueckt.
+  assert.match(SOURCE, /^let audioCtx = null;$/m,
+    'audioCtx wird auf Modulebene gehalten, nicht je Render');
+  assert.ok(!/^\s+let audio(Ctx)? =/m.test(SOURCE),
+    'keine zweite, render-lokale Fassung daneben');
+  assert.match(SOURCE, /chime\(audioCtx\)/, 'und genau der wird beim Ablauf gelaeutet');
+});
+
+test('das Attribut wird auch beim Verlassen der Wand zurueckgenommen', () => {
+  // Wer den Wandmodus mit laufendem Timer verlaesst, bricht das Verdrahten ab -
+  // und ausserhalb der Wand verdrahtet niemand mehr, der das Attribut
+  // zuruecknehmen koennte. Es waere fuer den Rest der Sitzung an <html>
+  // haengengeblieben und haette den Screensaver auf JEDER Seite unterdrueckt.
+  const at = SOURCE.indexOf("signal.addEventListener('abort'");
+  assert.ok(at > 0, 'Reichweite: der Abbruch-Pfad wurde gefunden');
+  const abort = SOURCE.slice(at, at + 260);
+  assert.match(abort, /setRunningAttr\(false\)/,
+    'der Abbruch raeumt das Attribut, nicht nur das Intervall');
+  assert.match(abort, /clearInterval/, 'und den Takt weiterhin auch');
 });

@@ -181,6 +181,23 @@ function chime(ctx) {
   } catch { /* Kein Ton ist besser als ein Fehler auf der Wand. */ }
 }
 
+/**
+ * EIN Kontext je Seitensitzung, nicht je Render.
+ *
+ * Er stand bis zum Review in der Closure von `wireWallTimer` - und genau dort
+ * konnte er nie wirken: der Startknopf erzeugt ihn und ruft sofort `rerender()`,
+ * der die Flaeche neu baut und `wireWallTimer` mit einer frischen Closure
+ * aufruft. Die beiden Renderzustaende schliessen einander aus: der Ruhezustand
+ * hat den Knopf, aber keinen Sekundentakt; der laufende hat den Takt, aber
+ * keinen Knopf, der den Kontext je gesetzt haette. Der Wecker lief also jedes
+ * Mal auf `chime(null)` und blieb still.
+ *
+ * Modulweit heisst hier auch: er wird NICHT geschlossen. Ein `close()` beim
+ * Seitenwechsel naehme dem naechsten Timer den Kontext, den er nur aus einer
+ * Nutzergeste heraus wiederbekommen kann.
+ */
+let audioCtx = null;
+
 function makeAudioContext() {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -203,17 +220,15 @@ function makeAudioContext() {
 export function wireWallTimer(wall, rerender, signal) {
   if (!wall) return;
 
-  // Ueber die Lebenszeit dieser Flaeche EIN Kontext, angelegt bei der ersten
-  // Geste. Ein neuer je Ablauf waere zu spaet fuer die Autoplay-Sperre.
-  let audio = null;
-
   const setRunningAttr = (running) => {
     document.documentElement.toggleAttribute(RUNNING_ATTR, running);
   };
 
   wall.querySelectorAll('[data-wall-timer-start]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      audio = audio ?? makeAudioContext();
+      // Angelegt bei der ersten Geste - eine Autoplay-Sperre laesst Ton nur
+      // daraus zu, und spaeter gibt es keine mehr.
+      audioCtx = audioCtx ?? makeAudioContext();
       startWallTimer(Number(btn.dataset.wallTimerStart));
       setRunningAttr(true);
       rerender();
@@ -242,8 +257,16 @@ export function wireWallTimer(wall, rerender, signal) {
     }
     clearInterval(tick);
     setRunningAttr(false);
-    chime(audio);
+    chime(audioCtx);
     rerender();
   }, 1000);
-  signal.addEventListener('abort', () => clearInterval(tick));
+  // DAS ATTRIBUT GEHOERT NICHT DEM INTERVALL. Wer den Wandmodus mit laufendem
+  // Timer verlaesst, bricht dieses Verdrahten ab - und ausserhalb der Wand
+  // verdrahtet niemand mehr, der es zuruecknehmen koennte. Das Attribut waere
+  // fuer den Rest der Sitzung an `<html>` haengengeblieben und haette den
+  // Screensaver auf JEDER Seite unterdrueckt.
+  signal.addEventListener('abort', () => {
+    clearInterval(tick);
+    setRunningAttr(false);
+  });
 }
