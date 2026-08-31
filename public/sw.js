@@ -105,6 +105,7 @@ const APP_SHELL = [
   '/components/quick-links-manager.js',
   '/components/task-detail.js',
   '/components/user-multi-select.js',
+  '/components/wall-timer.js',
   '/utils/birthday-event.js',
   '/utils/bulk-pill.js',
   '/utils/category-labels.js',

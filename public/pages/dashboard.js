@@ -30,6 +30,7 @@ import {
 import { whoMark } from '/utils/seal-pair.js';
 import { MODULE_ICON, moduleIconHTML } from '/nav-icons.js';
 import { enterWallMode, exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
+import { renderWallTimer, wireWallTimer } from '/components/wall-timer.js';
 import { rememberLayoutHint, layoutHintSizes, layoutHintQuery } from '/utils/dashboard-layout-hint.js';
 import { emptyHintHTML } from '/utils/empty-state.js';
 import { quickLinkHost } from '/utils/quick-link-url.js';
@@ -3398,15 +3399,22 @@ function renderWallSurface(data, weather, { failed = false, loading = false, upd
     ? `<p class="wall__updated">${esc(t('dashboard.updatedAt', { time: formatTime(updatedAt) }))}</p>`
     : '<p class="wall__updated"></p>';
 
+  // Der Kuechentimer (#844). Er wird auch im Lade- und Fehlerzustand gebaut: er
+  // haengt an nichts, was geladen werden koennte, und ein laufender Timer, der
+  // beim naechsten Netzfehler verschwaende, waere schlimmer als gar keiner.
+  const timer = renderWallTimer();
+
   return `
     <div class="wall">
       ${renderClockWidget({ wall: true })}
       <div class="wall__stage${failed || loading ? ' wall__stage--single' : ''}">${main}</div>
+      ${timer.display}
       <div class="wall__foot">
         ${stamp}
-        <button type="button" class="wall__exit" id="wall-exit" aria-label="${esc(t('dashboard.wallExit'))}">
+        ${timer.controls}
+        <button type="button" class="wall__foot-btn" id="wall-exit" aria-label="${esc(t('dashboard.wallExit'))}">
           <i data-lucide="minimize-2" aria-hidden="true"></i>
-          <span class="wall__exit-label" aria-hidden="true">${esc(t('dashboard.wallExit'))}</span>
+          <span class="wall__foot-btn-label" aria-hidden="true">${esc(t('dashboard.wallExit'))}</span>
         </button>
       </div>
     </div>`;
@@ -3451,6 +3459,8 @@ function wireWallSurface(container, rerender, signal) {
     }), 'success', 6000);
     rerender();
   };
+
+  wireWallTimer(wall, rerender, signal);
 
   container.querySelector('#wall-exit')?.addEventListener('click', leave, { signal });
   window.addEventListener('keydown', (event) => {

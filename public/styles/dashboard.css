@@ -4037,6 +4037,9 @@ svg.weather-forecast__icon {
   --wall-row-title:  clamp(var(--text-xl), 4vmin, var(--text-4xl));
   --wall-row-sub:    clamp(var(--text-sm), 2.2vmin, var(--text-2xl));
   --wall-pad:        clamp(var(--space-4), 3vmin, var(--space-10));
+  /* Der Kuechentimer (#844) liegt zwischen Programmzeile und Uhr: er muss aus
+   * zwei Metern ablesbar sein, ohne der Uhr den Rang abzulaufen. */
+  --wall-timer:      clamp(var(--text-4xl), 7vw, var(--text-5xl));
 
   display: flex;
   flex-direction: column;
@@ -4473,7 +4476,13 @@ svg.weather-forecast__icon {
   color: var(--color-text-tertiary);
 }
 
-/* LEISE DA, HELL AUF BERÜHRUNG. Ein dauerhaft voller Knopf widerspräche der
+/* Die Gestalt der Fuß-Knöpfe - Ausstieg (#915) und Timer-Abbruch (#844) tragen
+ * sie beide. Sie hieß bis #844 `.wall__exit`: ein Name, der die eine Stelle
+ * meinte, an der es sie gab. Ein zweiter Knopf hätte daneben entweder die
+ * fremde Klasse getragen oder ihre Werte kopiert; beides ist ein Vokabular, das
+ * beim nächsten Anfassen auseinanderläuft.
+ *
+ * LEISE DA, HELL AUF BERÜHRUNG. Ein dauerhaft voller Knopf widerspräche der
  * ruhigen Fläche, ein unsichtbarer wäre eine Falle. Im Ruhezustand steht
  * deshalb nur das Zeichen da - in Sekundärfarbe, also weiterhin AA und
  * weiterhin fokussierbar. Jede Berührung setzt `data-wall-awake` und hebt ihn
@@ -4482,7 +4491,7 @@ svg.weather-forecast__icon {
  * Die Beschriftung wird ein- und ausgeblendet, nicht animiert: eine Breiten-
  * Transition wäre eine Layout-Animation für einen Zustand, den ohnehin niemand
  * beobachtet, der zwei Meter entfernt steht. Bewegt wird nur Farbe. */
-.wall__exit {
+.wall__foot-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -4498,32 +4507,106 @@ svg.weather-forecast__icon {
   transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
-.wall__exit svg {
+.wall__foot-btn svg {
   width: var(--icon-lg);
   height: var(--icon-lg);
   flex-shrink: 0;
 }
 
-.wall__exit-label {
+.wall__foot-btn-label {
   display: none;
 }
 
-.wall__exit:hover,
-.wall__exit:focus-visible,
-.wall[data-wall-awake] .wall__exit {
+.wall__foot-btn:hover,
+.wall__foot-btn:focus-visible,
+.wall[data-wall-awake] .wall__foot-btn {
   padding: 0 var(--space-4);
   border-color: var(--color-border);
   background: var(--color-surface);
   color: var(--color-text-primary);
 }
 
-.wall__exit:hover .wall__exit-label,
-.wall__exit:focus-visible .wall__exit-label,
-.wall[data-wall-awake] .wall__exit-label {
+.wall__foot-btn:hover .wall__foot-btn-label,
+.wall__foot-btn:focus-visible .wall__foot-btn-label,
+.wall[data-wall-awake] .wall__foot-btn-label {
   display: inline;
 }
 
-.wall__exit:focus-visible {
+.wall__foot-btn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* ── Küchentimer (#844) ──────────────────────────────────────────────────────
+ *
+ * Das ERSTE Bedienelement der Fläche, das nicht wieder hinausführt. Es steht
+ * hier, weil es die Zusage des Modus nicht bricht, sondern ihren Rand markiert:
+ * die Wand navigiert nicht und ändert nichts am Haushalt - ein Timer tut beides
+ * nicht. Die Regel dazu steht im Kopf von `utils/wall-mode.js`.
+ *
+ * Der laufende Timer ist IMMER voll da, anders als der Ausstieg: er ist der
+ * Grund, warum jemand ihn gestartet hat. Die Startknöpfe dagegen sind wie der
+ * Ausstieg - leise, bis jemand die Fläche berührt. Eine Wand, auf der dauerhaft
+ * fünf Minutenknöpfe leuchten, wäre keine ruhige Anzeige mehr. */
+.wall__timer {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  padding: var(--space-2) 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.wall__timer-value {
+  font-size: var(--wall-timer);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+/* Abgelaufen: die Ziffer wird zum Wort, und die Farbe trägt die Nachricht mit.
+ * Erfolgsgrün, nicht Warnrot - der Timer hat getan, was er sollte. */
+.wall__timer[data-state="done"] .wall__timer-value {
+  color: var(--color-success);
+  animation: wall-timer-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes wall-timer-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+.wall__timer-presets {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Leise da, hell auf Berührung - dieselbe Grammatik wie der Fuß-Knopf daneben,
+ * nur schmaler: fünf davon stehen nebeneinander. */
+.wall__timer-preset {
+  min-height: var(--target-lg);
+  min-width: var(--target-lg);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: transparent;
+  font-family: inherit;
+  font-size: var(--type-secondary);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.wall__timer-preset:hover,
+.wall__timer-preset:focus-visible,
+.wall[data-wall-awake] .wall__timer-preset {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.wall__timer-preset:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
 }
@@ -4595,8 +4678,15 @@ svg.weather-forecast__icon {
  * Absenkung holt ihr Licht aus dem Träger der Programmliste, nicht von hier. */
 
 @media (prefers-reduced-motion: reduce) {
-  .wall__exit {
+  .wall__foot-btn,
+  .wall__timer-preset {
     transition: none;
+  }
+
+  /* Der Puls des fertigen Timers ist Dekoration, die Farbe trägt die Nachricht
+   * ohnehin allein. */
+  .wall__timer[data-state="done"] .wall__timer-value {
+    animation: none;
   }
 }
 

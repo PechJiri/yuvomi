@@ -39,6 +39,29 @@
  *    steht nur, warum es keinen Kiosk-Lockdown gibt: der Modus ist eine
  *    Darstellung, keine Sicherheitsgrenze.
  *
+ *    WAS "REINE ANZEIGE" NICHT HEISST: keine Knoepfe. Der Ausstieg steht seit
+ *    dem ersten Tag auf der Flaeche, und seit #915 auch der Einstieg auf der
+ *    Uebersicht daneben - bedienelementfrei war der Modus nie. Die Zusage ist
+ *    enger und haelt dafuer: die Wand fuehrt nirgendwohin und aendert nichts am
+ *    Haushalt.
+ *
+ *    Der Kuechentimer (#844) war der erste Fall, der das auf die Probe stellte,
+ *    und er hat die Regel nicht gebrochen, sondern ihren Rand markiert. Damit
+ *    der naechste Fall nicht wieder eine Einzelfallentscheidung wird, steht sie
+ *    hier als AUFNAHMEREGEL statt als Ausnahme mit Verfallsdatum - ein Datum
+ *    fuer etwas, das bleiben soll, waere eine Luege im Kommentar.
+ *
+ *    Ein Bedienelement darf auf die Wand, wenn es alle vier erfuellt:
+ *      (a) es navigiert nicht - kein Link, keine Route, kein Modal, das die
+ *          Flaeche verlaesst;
+ *      (b) es aendert nichts am Haushalt - kein Schreibzugriff auf den Server,
+ *          nichts, was auf einem zweiten Geraet ankommt;
+ *      (c) es bleibt auf diesem Geraet - Zustand in localStorage, wie der Modus
+ *          selbst, aus demselben Grund (geteiltes Konto, siehe 2.);
+ *      (d) es ist aus zwei Metern bedienbar - wenige grosse Ziele, keine
+ *          Eingabefelder, keine Auswahl-Ebene davor.
+ *    Was eine davon reisst, gehoert nicht hierher, sondern in die App.
+ *
  * ── WARUM DIE ATTRIBUTE AN DER WURZEL HAENGEN ─────────────────────────────
  *
  * Der Modus blendet Sidebar und Tab-Leiste aus, und beide sind Shell-Elemente

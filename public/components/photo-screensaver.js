@@ -40,6 +40,13 @@ function caption(photo) {
 }
 
 async function start() {
+  // A running kitchen timer (#844) keeps the screensaver away. A countdown that
+  // disappears behind a photo is not a timer, and the wall tablet is exactly
+  // where both of these live. The attribute is the one source, set by
+  // components/wall-timer.js; it is dropped the moment the timer rings, so a
+  // finished timer nobody acknowledged does not block the screensaver forever.
+  if (document.documentElement.hasAttribute('data-wall-timer')) return false;
+
   const currentRun = ++run;
   try {
     const payload = await api.get('/screensaver/photos');
