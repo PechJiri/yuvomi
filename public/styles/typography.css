@@ -52,7 +52,13 @@
  * Titel im Sticky-Modulkopf: alle Module, Settings-Leaf, Split. Löst den
  * zuvor gestreuten 18/22/28px-Konflikt der Seitentitel auf.
  * ------------------------------------------------------------------------ */
-.u-toolbar-title,
+/* Die Rolle ist BEWUSST nicht als freie Utility adressierbar: die einzige
+ * u-toolbar-title-Vergabe außerhalb der Shell waren acht Sektionsköpfe im
+ * Gesundheitsmodul - drei Hierarchie-Ebenen kollabierten auf eine (Critique
+ * 2026-08-31). Wer den Kopf-Schnitt trägt, ist eine Shell-Klasse in DIESER
+ * Liste; test-typography.js wacht darüber. Der Sub-Tabs-Titel ist die
+ * Kopfzeile der Leisten-Architektur (Küche/Settings), kein Modul-Inhalt. */
+.sub-tabs-bar__title,
 .page-toolbar__title,
 /* Der angedockte Titel der scrollenden Architektur ist derselbe Seitentitel in
  * seinem Inline-Zustand, nur ein zweites Element (der echte bleibt in der

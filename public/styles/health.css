@@ -273,9 +273,6 @@
 }
 
 .health-meds__section-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--color-text-primary);
   margin: 0;
 }
 
@@ -762,9 +759,6 @@ button.health-med-card:hover {
 }
 
 .health-labs__section-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--color-text-primary);
   margin: 0;
 }
 

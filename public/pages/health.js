@@ -1376,18 +1376,18 @@ function renderMedsShell() {
     </div>
     ${readOnlyBannerMarkup(meds.members, meds.personId, canEditFor(meds.personId, meds.meId), meds.meId)}
     <div class="health-meds__toolbar">
-      <h3 class="health-meds__section-title u-toolbar-title">${esc(t('health.meds.dueToday.title'))}</h3>
+      <h3 class="health-meds__section-title u-section-title">${esc(t('health.meds.dueToday.title'))}</h3>
     </div>
     <div class="health-meds__due">${dueTodayMarkup()}</div>
     ${prnMeds('meds').length ? `
-    <h3 class="health-meds__section-title u-toolbar-title">${esc(t('health.meds.prn.title'))}</h3>
+    <h3 class="health-meds__section-title u-section-title">${esc(t('health.meds.prn.title'))}</h3>
     <div class="health-meds__prn">${prnListMarkup('meds')}</div>` : ''}
     <div class="health-meds__adherence-wrap">${adherenceMarkup()}${medLogHistoryMarkup()}</div>
     <!-- „Alle Medikamente", nicht „Medikamente": der Abschnitt stand unter dem
          gleichnamigen Tab und trug denselben Namen wie das Panel, benannte sich
          also gegen „Heute faellig" gar nicht. Gefunden vom Guard, der die
          Titelwiederholung seit Runde 5 fuer Leiste UND Abschnitt prueft. -->
-    <h3 class="health-meds__section-title u-toolbar-title">${esc(t('health.meds.allTitle'))}</h3>
+    <h3 class="health-meds__section-title u-section-title">${esc(t('health.meds.allTitle'))}</h3>
     <div class="health-meds__list" id="health-meds-list">${medListMarkup()}</div>
   `);
   if (window.lucide) window.lucide.createIcons({ el: meds.root });
@@ -2514,7 +2514,7 @@ function renderLabsShell() {
     </div>
     ${readOnlyBannerMarkup(labs.members, labs.personId, canEditFor(labs.personId, labs.meId), labs.meId)}
     <div class="health-labs__toolbar">
-      <h3 class="health-labs__section-title u-toolbar-title">${esc(t('health.labs.reportsTitle'))}</h3>
+      <h3 class="health-labs__section-title u-section-title">${esc(t('health.labs.reportsTitle'))}</h3>
     </div>
     <div class="health-labs__list" id="health-labs-list">${labReportListMarkup()}</div>
     <div class="health-labs__detail" id="health-labs-detail">${labDetailMarkup()}</div>
@@ -3279,7 +3279,7 @@ function activityLogMarkup(rows) {
   }
   const own = canEditFor(activity.personId, activity.meId);
   return `
-    <h3 class="health-activity__log-title u-toolbar-title">${esc(t('health.activity.logTitle'))}</h3>
+    <h3 class="health-activity__log-title u-section-title">${esc(t('health.activity.logTitle'))}</h3>
     <ul class="health-activity-list">${rows.map((r) => activityRowMarkup(r, own)).join('')}</ul>`;
 }
 
@@ -3695,7 +3695,7 @@ function overviewCard(icon, titleKey, body) {
     <section class="health-overview__card">
       <header class="health-overview__card-head">
         <i data-lucide="${esc(icon)}" class="health-overview__card-icon" aria-hidden="true"></i>
-        <h3 class="health-overview__card-title u-toolbar-title">${esc(t(titleKey))}</h3>
+        <h3 class="health-overview__card-title u-section-title">${esc(t(titleKey))}</h3>
       </header>
       <div class="health-overview__card-body">${body}</div>
     </section>`;
@@ -4472,7 +4472,7 @@ function cycleCalendarMarkup(own) {
   return `
     <section class="cycle-cal">
       <div class="cycle-cal__head">
-        <h3 class="cycle-section__title u-toolbar-title">${esc(t('health.cycle.calendar.title'))}</h3>
+        <h3 class="cycle-section__title u-section-title">${esc(t('health.cycle.calendar.title'))}</h3>
         <div class="cycle-cal__nav">
           <button class="btn btn--icon" data-cycle-month="-1" aria-label="${esc(t('health.cycle.calendar.prevMonth'))}"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
           <span class="cycle-cal__month">${esc(cycleMonthLabel(cycle.anchor))}</span>
@@ -4511,7 +4511,7 @@ function cycleHistoryMarkup(own) {
 
   return `
     <section class="cycle-history">
-      <h3 class="cycle-section__title u-toolbar-title">${esc(t('health.cycle.history.title'))}</h3>
+      <h3 class="cycle-section__title u-section-title">${esc(t('health.cycle.history.title'))}</h3>
       <ul class="cycle-history__list">${rows.map((p) => {
         const start = String(p.start_date).slice(0, 10);
         const end = p.end_date ? String(p.end_date).slice(0, 10) : null;

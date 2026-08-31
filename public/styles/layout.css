@@ -2084,7 +2084,7 @@ html.fab-anim-done .page-fab {
 
 .page-toolbar__title {
   /* Größe/Weight kommen aus der Canonical-Page-Head-Rolle in typography.css
-   * (.u-toolbar-title / .page-toolbar__title → --type-toolbar-title, 20px). */
+   * (.page-toolbar__title → --type-toolbar-title, 22px). */
   white-space: nowrap;
   /* min-width:0 allein kürzt bei nowrap NICHT — ohne overflow/text-overflow
    * läuft der Titel in langen Locales („Haushaltsbuch", „Paramètres") aus

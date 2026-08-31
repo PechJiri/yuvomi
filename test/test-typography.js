@@ -214,6 +214,51 @@ test('kein Markup greift die entfallene Eyebrow-Klasse wieder auf', () => {
   assert.deepEqual(offenders, [], `u-eyebrow ist entfallen und steht wieder im Markup:\n${offenders.join('\n')}`);
 });
 
+/**
+ * Die Kopf-Titelrolle (Canonical Page Head) ist seit 2026-08-31 nicht mehr
+ * frei adressierbar: die einzige Utility-Vergabe außerhalb der Shell waren
+ * acht Sektionsköpfe des Gesundheitsmoduls - drei Hierarchie-Ebenen
+ * kollabierten auf eine, und keine der übrigen 20+ Seiten hatte die Klasse je
+ * gebraucht. Die Rolle beziehen NUR die konkreten Shell-Klassen in
+ * typography.css (page-toolbar, dock, Settings, Split, Sub-Tabs-Leiste).
+ * Regel statt Allowlist, und über BEIDE Türen: kein Stylesheet deklariert die
+ * Utility-Klasse, kein Markup vergibt sie - eine Klasse ohne Regel wäre stumm,
+ * aber der Wiedereinstieg (siehe den Eyebrow-Guard direkt darüber).
+ */
+test('die Kopf-Titelrolle ist nicht frei adressierbar (u-toolbar-title bleibt entfallen)', () => {
+  for (const file of cssFiles) {
+    const css = stripComments(readFileSync(new URL(file, STYLES_DIR), 'utf8'));
+    const declaring = [...eachRule(css)].flatMap(({ selector }) => selector.split(','))
+      .map((part) => part.trim())
+      .filter((part) => /(^|[\s>+~])\.u-toolbar-title([\s.:[]|$)/.test(part));
+    assert.deepEqual(
+      declaring,
+      [],
+      `${file} deklariert .u-toolbar-title - die Kopf-Titelrolle gehört den Shell-Klassen in typography.css`,
+    );
+  }
+
+  const roots = ['../public/pages/', '../public/components/', '../public/settings/', '../public/utils/'];
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })) {
+      const path = `${dir}${entry.name}`;
+      if (entry.isDirectory()) { walk(`${path}/`); continue; }
+      if (!entry.name.endsWith('.js')) continue;
+      if (/\bu-toolbar-title\b/.test(readFileSync(new URL(path, import.meta.url), 'utf8'))) offenders.push(path);
+    }
+  };
+  for (const root of roots) walk(root);
+  for (const single of ['../public/router.js', '../public/index.html', '../public/offline.html']) {
+    if (/\bu-toolbar-title\b/.test(readFileSync(new URL(single, import.meta.url), 'utf8'))) offenders.push(single);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `u-toolbar-title ist entfallen - die Kopf-Titelrolle wird nur über Shell-Klassen bezogen:\n${offenders.join('\n')}`,
+  );
+});
+
 test('die Produkt-Typografie nutzt feste semantische Rollenwerte', () => {
   const tokens = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
 

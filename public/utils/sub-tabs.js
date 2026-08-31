@@ -118,7 +118,7 @@ export function renderSubTabs(anchorEl, {
   // eine Tablist exponiert dadurch weiterhin nur die Tabs.
   if (title) {
     const titleEl = document.createElement('span');
-    titleEl.className = 'sub-tabs-bar__title u-toolbar-title';
+    titleEl.className = 'sub-tabs-bar__title';
     titleEl.setAttribute('aria-hidden', 'true');
     titleEl.textContent = title;
     bar.appendChild(titleEl);
