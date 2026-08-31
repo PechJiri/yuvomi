@@ -74,6 +74,9 @@ dedicated `podman-compose.yml` (SELinux `:Z` labels).
      what you copy into a provider console is what the app will send.
    - A language switcher (top corner) overrides the auto-detected browser
      language and remembers your choice.
+   - Reloading or closing the page mid-setup asks for confirmation first: the
+     wizard deliberately keeps no form state (the fields carry secrets), so a
+     stray reload used to discard everything silently.
    - **Existing keys survive a re-run.** If `SESSION_SECRET` or
      `DB_ENCRYPTION_KEY` are already in your `.env`, no new value is generated
      for them: the encryption key opens your current database, and a fresh one
@@ -169,7 +172,12 @@ served; its values mirror the current tokens, because a fallback that shows the
 previous release sends the diagnosis in the wrong direction. The wizard meets WCAG 2.1 AA
 (keyboard-operable accordions, ARIA live regions for Docker status, focus
 management, labelled controls, a `<main>` landmark, and field-level error
-identification — `aria-invalid` plus focus moved to the offending input).
+identification - `aria-invalid` plus focus, with the error banner relocated
+beneath the offending field and linked to it via `aria-describedby`). The step
+counter is announced together with each step heading, the container log is
+keyboard-focusable and scrollable, and the irreversible save step arms visibly
+(accent ring), audibly (live region) and with a short cooldown so a literal
+double-click cannot pass both confirmation stages at once.
 
 ## Architecture
 

@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.3] - 2026-08-31
+
+### Added
+
+- **The web installer validates the two remaining silent late-failures: timezone and SMTP port.**
+  A typo like `Europe/Berln` used to fall back to UTC without a word - the backup cron and the
+  household-timezone default then ran on the wrong clock; an SMTP port of `70000` surfaced weeks
+  later at the first password reset. Both are now checked on the spot (the timezone against the
+  browser's IANA table), with the message bound to the offending field. The timezone message is
+  new in all 24 installer languages.
+- **The three home-network permissions explain themselves.** Their per-toggle hints - naming
+  Mealie, Tandoor and Nextcloud as the tools they exist for - had been translated into all 24
+  languages but were never rendered; they now sit beneath their checkboxes.
+- **The security-keys warning names the way out.** Alongside "there is no reset" it now says the
+  finished `.env` file, including both keys, can be downloaded at the end of setup (all 24
+  languages) - so nobody transcribes two 64-character keys by hand out of fear.
+- **`BACKUP_UPLOAD_LIMIT` is documented in `.env.example`** and listed in the installer's
+  exception map. The server read it and the installation guide described it, but the example file
+  never carried it - the one variable for which no decision had ever been recorded.
+
+### Changed
+
+- **Arming "Save & Start" is now visible, audible and double-click-proof.** The two-click
+  confirmation on both setup paths only swapped the button label: a literal double-click passed
+  both stages in one gesture, and screen-reader users heard nothing at all. The armed state now
+  carries an accent ring, is announced via a live region, and ignores clicks for a short cooldown
+  after arming.
+- **One vocabulary per screen.** German no longer mixes "Sicherungen" and "Backups" on the storage
+  step or "Heimnetz" and "eigenes Netz" on the advanced step; the review page names the keys
+  exactly like the key step (in English too); and untouched defaults read "not enabled" instead of
+  posing as a decision ("disabled").
+
+### Fixed
+
+- **A reload no longer discards the whole setup silently.** Reloading or closing the tab midway
+  through the wizard threw away every entered value, pasted OAuth secrets included - while,
+  ironically, the language choice survived. The browser now asks first, from the first step up to
+  (but not including) the finish screen.
+- **Switching the language on the review page translated the labels but not the values.** "Neu
+  erzeugt" and "Direkt / HTTP" stayed German under English labels - on the one screen whose job is
+  to be read carefully before the irreversible click. The review now re-renders on every language
+  switch.
+- **Validation errors are visible and bound to their field.** The error banner lived at the end of
+  the step and could sit below the viewport: sighted users saw a red border with no reason, only
+  screen readers got the text. The banner now moves directly beneath the offending field and is
+  linked to it via `aria-describedby`; raw server error details are wrapped in a translated
+  message instead of appearing in English across all 24 languages.
+- **The review page no longer scrolls the whole page sideways on phones.** A realistic public
+  address or WebDAV URL pushed the page to 534px at a 375px viewport (WCAG 1.4.10); the value
+  column now shrinks and wraps. The redirect URIs in the calendar and storage steps wrap too
+  instead of being clipped by their card - they are the one value copied character-for-character
+  into a provider console.
+- **Smaller accessibility and theming debts of the installer.** The language selector's chevron
+  was a hard-coded color below the 3:1 threshold in dark mode and now follows the theme token; the
+  container log is keyboard-focusable and scrollable; the step counter is announced together with
+  the step heading; the admin fields are marked required; dark-mode card shadows carry the app's
+  1px edge ring - and the fallback-token parity guard now compares non-hex values, so this class
+  of drift can no longer pass silently.
+- **Landing page copy tightened** after the 2026-08-31 critique run: one verb family for
+  installing, the hero's solo promise carried through the feature copy, and the no-JS page no
+  longer shows dead language and theme controls.
+
 ## [2.57.2] - 2026-08-31
 
 ### Fixed
