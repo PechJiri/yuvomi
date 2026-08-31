@@ -150,6 +150,16 @@
      width, where the full radius reads as a squircle. */
   --r-phone: 26px; --r-phone-inset: 20px;
 
+  /* Und ein Seitenverhaeltnis zum Rahmen. Wer 26px Ecke und 4px Steg anlegt,
+     sagt "Telefon" - dann muss der Kasten darunter auch eins sein. Die
+     Handyaufnahmen sind 1320x2867; .feat-phone stand auf 1320/1780 und
+     .mod-shot img auf 1320/1900, also auf erfundenen Zuschnitten, die die
+     Aufnahme unten abschnitten und aus dem Telefon ein gedrungenes Tablet
+     machten. Dieselbe Drift wie bei den Radien eine Zeile hoeher, nur eine
+     Ebene groeber: .hero-float und der schmale Galerierahmen fuehrten daneben
+     das echte Mass. Ein Name, ein Verhaeltnis. */
+  --ar-phone: 1320 / 2867;
+
   /* Neutral shadows, like the app's. They used to carry a warm tint
      (rgba(18,14,8,…)) that belonged to the linen palette. */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05), 0 1px 4px rgba(0,0,0,0.04);

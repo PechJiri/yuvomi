@@ -43,6 +43,19 @@
  *            solches Markup klaglos, deshalb ist auch die Konsole leer. Was
  *            fehlte, war die Frage nach der BILANZ.
  *
+ *        (7) Ein Telefonrahmen hat die Proportion eines Telefons.
+ *            Vier Stellen zeichnen denselben Handyrahmen (26px Ecke, 4px Steg),
+ *            zwei davon standen auf erfundenen Zuschnitten: `.feat-phone` auf
+ *            1320/1780 und `.mod-shot img` auf 1320/1900, waehrend `.hero-float
+ *            img` und der schmale Galerierahmen daneben das echte Mass 1320/2867
+ *            fuehrten. Dasselbe Objekt sprach auf einer Seite zwei Sprachen, und
+ *            die beiden falschen Kaesten machten aus dem Telefon ein gedrungenes
+ *            Tablet - 200x270 statt 200x434. Kein Kontrast-, Ueberlauf- oder
+ *            Bilanz-Guard sieht das: die Aufnahme darin ist unverzerrt, nur
+ *            unten abgeschnitten. Der Guard fragt deshalb nach der QUELLE des
+ *            Verhaeltnisses (ein Name, `--ar-phone`) und danach, ob dieser Name
+ *            noch das misst, was die Aufnahmen wirklich sind.
+ *
  * Ausführen: node --test test/test-docs-landing.js   (bzw. npm run test:docs-landing)
  */
 
@@ -52,6 +65,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { dictBlock, dictValue, decodeEntities, stripTags, unescapeJs } from './docs-dict.js';
+import { eachRule } from './css-rules.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DOCS = resolve(ROOT, 'docs');
@@ -766,4 +780,153 @@ test('der Kapitelmarken-Guard erkennt den Schaden, gegen den er gebaut ist', () 
   const html = read('index.html');
   const lead = sectionHeads(html).filter((h) => h.lead).length;
   assert.equal(lead * 2, sectionCount(html), 'der Stand liegt exakt auf der erlaubten Grenze');
+});
+
+// ── (7) Ein Telefonrahmen hat die Proportion eines Telefons ──────────────────
+/**
+ * Zwei Fragen, die zusammen erst die Kopplung halten:
+ *
+ * a) Steht das Verhaeltnis an EINER Stelle? Ein Literal in einer Regel ist die
+ *    Bauart, an der es schon einmal auseinandergelaufen ist - dieselbe Drift,
+ *    die die Geraete-Radien in `site.css` schon hinter `--r-phone` gezwungen
+ *    hat, nur eine Ebene groeber. Der Guard fragt nicht nach den beiden
+ *    bekannten Klassennamen, sondern nach der REGEL: ein hochkant stehendes
+ *    `aspect-ratio` auf diesen Seiten beschreibt immer einen Handyrahmen, also
+ *    laeuft es ueber `var(--ar-phone)`. Querformat (die 4/3-Desktopaufnahme)
+ *    bleibt erlaubt - sie ist kein Geraeterahmen.
+ *
+ * b) Misst dieser Name noch die Wirklichkeit? Ein sauber getokenter falscher
+ *    Wert waere derselbe Fehler mit besserer Buchhaltung. Die 124 Mobil-PNGs
+ *    unter `docs/screenshots/` sind die Quelle, und sie sind alle gleich gross;
+ *    wer sie in einer anderen Geraetegroesse neu aufnimmt, faellt hier auf.
+ */
+const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+function pngSize(file) {
+  const buf = readFileSync(file);
+  assert.ok(buf.subarray(0, 8).equals(PNG_SIG), `${file} ist kein PNG`);
+  return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+}
+
+function mobileShotFiles() {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('-mobile.png')) files.push(full);
+    }
+  };
+  walk(SHOTS);
+  return files;
+}
+
+/** Alle Stylesheet-Quellen der Doku-Seiten: die `<style>`-Bloecke plus site.css. */
+function docsStylesheets() {
+  const sheets = [{ where: 'assets/site.css', css: read('assets/site.css') }];
+  for (const page of PAGES) {
+    const html = read(page);
+    const blocks = html.match(/<style\b[^>]*>[\s\S]*?<\/style>/gi) || [];
+    blocks.forEach((block, i) => {
+      sheets.push({ where: `${page} <style> #${i + 1}`, css: block.replace(/^<style\b[^>]*>/i, '').replace(/<\/style>$/i, '') });
+    });
+  }
+  return sheets;
+}
+
+/**
+ * Liefert jedes `aspect-ratio`, das als LITERAL geschrieben ist und hochkant
+ * steht. `var(...)` zaehlt nicht - genau darauf soll es ja laufen.
+ */
+function portraitRatioLiterals(sheets) {
+  const found = [];
+  for (const { where, css } of sheets) {
+    for (const rule of eachRule(css)) {
+      for (const decl of rule.body.split(';')) {
+        const m = decl.match(/(^|[^-\w])aspect-ratio\s*:\s*([^;]+)$/);
+        if (!m) continue;
+        const value = m[2].trim().replace(/\s*!important$/, '');
+        if (value.includes('var(')) continue;
+        const parts = value.split('/').map((n) => Number(n.trim()));
+        if (parts.length !== 2 || !parts.every((n) => Number.isFinite(n) && n > 0)) continue;
+        if (parts[0] >= parts[1]) continue;
+        found.push({ where, selector: rule.selector, value });
+      }
+    }
+  }
+  return found;
+}
+
+function tokenRatio() {
+  const css = read('assets/site.css');
+  const m = css.match(/--ar-phone\s*:\s*([^;]+);/);
+  assert.ok(m, '--ar-phone fehlt in docs/assets/site.css - die vier Handyrahmen haetten wieder keine gemeinsame Quelle');
+  const parts = m[1].split('/').map((n) => Number(n.trim()));
+  assert.equal(parts.length, 2, `--ar-phone muss ein Verhaeltnis "b / h" sein, war: ${m[1].trim()}`);
+  return { w: parts[0], h: parts[1] };
+}
+
+test('docs: kein Handy-Seitenverhaeltnis steht als Literal in einer Regel', () => {
+  const found = portraitRatioLiterals(docsStylesheets());
+  assert.deepEqual(
+    found, [],
+    'hochkantes aspect-ratio als Literal - das ist die Bauart, an der .feat-phone (1320/1780) und '
+    + '.mod-shot img (1320/1900) vom echten Mass weggelaufen sind. Es gehoert auf var(--ar-phone):\n'
+    + found.map((f) => `  ${f.where}: ${f.selector} { aspect-ratio: ${f.value} }`).join('\n')
+  );
+});
+
+test('docs: --ar-phone misst die Aufnahmen, die es rahmt', () => {
+  const token = tokenRatio();
+  const files = mobileShotFiles();
+  assert.ok(files.length > 0, 'keine -mobile.png gefunden - der Guard haette nichts zu vergleichen');
+
+  const sizes = new Map();
+  for (const file of files) {
+    const { w, h } = pngSize(file);
+    const key = `${w}x${h}`;
+    if (!sizes.has(key)) sizes.set(key, []);
+    sizes.get(key).push(file.slice(SHOTS.length + 1));
+  }
+
+  assert.equal(
+    sizes.size, 1,
+    'die Handyaufnahmen haben nicht mehr alle dasselbe Mass, ein Token kann sie also nicht mehr '
+    + 'gemeinsam rahmen:\n'
+    + [...sizes].map(([k, v]) => `  ${k}: ${v.length}x, z.B. ${v[0]}`).join('\n')
+  );
+
+  const [w, h] = [...sizes.keys()][0].split('x').map(Number);
+  assert.deepEqual(
+    { w: token.w, h: token.h }, { w, h },
+    `--ar-phone steht auf ${token.w} / ${token.h}, die ${files.length} Aufnahmen sind aber ${w}x${h}. `
+    + 'Ein getokenter falscher Wert ist derselbe Fehler mit besserer Buchhaltung.'
+  );
+});
+
+test('der Ratio-Guard erkennt den Schaden, gegen den er gebaut ist', () => {
+  // Der ECHTE Stand vor dem Fix, beide Fundstellen woertlich.
+  const kaputt = [{
+    where: 'test',
+    css: '.feat-phone { display: block; width: 100%; aspect-ratio: 1320 / 1780; object-fit: cover; }\n'
+      + '@media (max-width: 700px) { .mod-shot img { width: 100%; aspect-ratio: 1320 / 1900; } }',
+  }];
+  const treffer = portraitRatioLiterals(kaputt);
+  assert.equal(treffer.length, 2, 'beide Fundstellen muessen anschlagen - auch die im @media-Block');
+  assert.deepEqual(treffer.map((f) => f.value), ['1320 / 1780', '1320 / 1900']);
+
+  // Gegenprobe zur Gegenprobe: der reparierte Stand ist still - und das echte
+  // Mass als Literal waere es NICHT. Ein Name, nicht ein richtiger Wert.
+  const repariert = [{ where: 'test', css: kaputt[0].css.replace(/1320 \/ (?:1780|1900)/g, 'var(--ar-phone)') }];
+  assert.deepEqual(portraitRatioLiterals(repariert), [], 'ueber den Token gefuehrt meldet der Guard nichts');
+  assert.equal(
+    portraitRatioLiterals([{ where: 'test', css: '.x { aspect-ratio: 1320 / 2867; }' }]).length, 1,
+    'auch das RICHTIGE Verhaeltnis als Literal ist ein Treffer'
+  );
+
+  // Und Querformat bleibt erlaubt: die Desktopaufnahme ist kein Geraeterahmen.
+  assert.deepEqual(
+    portraitRatioLiterals([{ where: 'test', css: '.gal-frame img { aspect-ratio: 4 / 3; }' }]), [],
+    '4/3 ist die Desktopaufnahme und darf als Literal stehen'
+  );
 });

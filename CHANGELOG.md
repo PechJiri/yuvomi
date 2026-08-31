@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The phone mockups on the project website were not phone-shaped.** Four places draw the same
+  device frame, and two of them stood on invented crops: the four feature cards and the row of
+  module thumbnails below them cut roughly a third off the bottom of every capture, while the
+  hero's floating phone and the narrow gallery frame right next to them carried the real
+  proportion. The same object spoke two languages on one page, and the two wrong boxes turned a
+  19.5:9 phone into a squat tablet - 200x270 pixels instead of 200x434 in the feature cards. It
+  survived because a crop is not a distortion: the screenshot inside stayed correct, only the
+  frame around it lied, and no contrast, overflow or layout-balance check asks about that. Two
+  heuristic review runs over the same page did not see it either; a person did, at a glance. The
+  crop had been meant to save vertical space and saved none - the text column drives the height of
+  a feature card anyway, so the honest phone fits underneath it and the grid measures exactly the
+  same as before. Only the thumbnail row grew, which is what five phones that look like phones
+  cost. The proportion now has a single name in the site's tokens, next to the device corner
+  radius that had drifted the same way once before, and the landing-page suite holds both halves
+  of the coupling: no portrait aspect ratio may be written as a literal, and that one name has to
+  keep matching the dimensions of the screenshots it frames.
+
 ## [2.57.4] - 2026-08-31
 
 ### Fixed
