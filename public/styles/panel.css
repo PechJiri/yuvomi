@@ -360,7 +360,7 @@
  * ihren eigenen Container nicht umstellen, und `.metric-grid` IST er (die
  * Wertstufen darueber sind Kinder und duerfen fragen). 640px ist die kanonische
  * Mobile-Grenze aus tokens.css, kein neuer Breakpoint. */
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .metric-grid {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }

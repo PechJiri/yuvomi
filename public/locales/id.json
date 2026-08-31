@@ -470,7 +470,7 @@
         "countdownHint": "Menampilkan di ikhtisar berapa lama lagi. Jika tugas berulang sejak diselesaikan, hitung mundurnya dimulai lagi sesudahnya.",
         "countdownNeedsDue": "Tanpa tanggal tenggat tidak ada yang bisa dihitung mundur.",
         "countdownDetail": "Dihitung mundur di ikhtisar",
-        "syncTargetLabel": "Target sinkronisasi",
+        "syncTargetLabel": "Daftar pengingat",
         "syncTargetLocal": "Simpan hanya secara lokal",
         "syncTargetHint": "Pilih daftar pengingat untuk menulis tugas ini.",
         "syncTargetMirrored": "Tugas ini sudah disinkronkan dengan daftar pengingat. Daftarnya tidak dapat diubah setelahnya.",

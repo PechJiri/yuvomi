@@ -458,7 +458,7 @@
         "countdownHint": "Mostra nella panoramica quanto manca. Se l’attività si ripete dal completamento, il conto alla rovescia riparte da capo.",
         "countdownNeedsDue": "Senza una data di scadenza non c’è nulla da contare.",
         "countdownDetail": "Conta alla rovescia nella panoramica",
-        "syncTargetLabel": "Destinazione di sincronizzazione",
+        "syncTargetLabel": "Elenco promemoria",
         "syncTargetLocal": "Salva solo in locale",
         "syncTargetHint": "Scegli un elenco di promemoria in cui scrivere questa attività.",
         "syncTargetMirrored": "Questa attività è già sincronizzata con un elenco di promemoria. L'elenco non può essere cambiato in seguito.",

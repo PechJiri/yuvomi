@@ -14,7 +14,7 @@
    * den zweiten Kopf unter der Leiste flach (Issue #577). */
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .kitchen-tabs-bar {
     gap: var(--space-0h);
   }

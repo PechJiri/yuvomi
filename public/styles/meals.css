@@ -235,7 +235,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   /* Der geteilte Kopf schiebt seinen __center-Slot beim Umbruch nach UNTEN
    * (order: 3 in layout.css), weil „center" in den meisten Modulen ein Suchfeld
    * ist und damit nachrangig gegenüber Titel und Aktionen. Hier ist der
@@ -550,7 +550,7 @@
 /* Sichtbar per Default, nur auf Zeigergeräten eingeblendet.
  *
  * Vorher stand `opacity: 0` unbedingt hier und wurde erst per
- * `@media (max-width: 640px)` zurückgenommen. Zwei Folgen, beide gemessen:
+ * `@media (max-width: 639px)` zurückgenommen. Zwei Folgen, beide gemessen:
  * Ein Tablet ohne Hover und über 640px bekam die Aktionen nie zu sehen (sie
  * waren dort nicht entdeckbar, nur zufällig treffbar), und im ausgeblendeten
  * Zustand blieb ein 114px breites, unsichtbares aber klickbares Band stehen,
@@ -669,7 +669,7 @@
  * HÖHER als vorher, obwohl an jeder einzelnen Regel nichts falsch war.
  * -------------------------------------------------------- */
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   /* DER ZWEITE ANLEGEWEG FÄLLT WEG, UND ZWAR UNTER DERSELBEN BEDINGUNG, UNTER
    * DER DER ERSTE ERSCHEINT.
    *
@@ -955,7 +955,7 @@
   }
 }
 
-@media (hover: none), (max-width: 640px) {
+@media (hover: none), (max-width: 639px) {
   .meal-card__actions {
     opacity: 1;
   }

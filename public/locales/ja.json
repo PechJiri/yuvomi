@@ -458,7 +458,7 @@
         "countdownHint": "概要に残り時間を表示します。完了時点から繰り返すタスクなら、その後カウントダウンは最初からやり直します。",
         "countdownNeedsDue": "期限日がないと、数える対象がありません。",
         "countdownDetail": "概要でカウントダウン中",
-        "syncTargetLabel": "同期先",
+        "syncTargetLabel": "リマインダーリスト",
         "syncTargetLocal": "ローカルにのみ保存",
         "syncTargetHint": "このタスクを書き込むリマインダーリストを選んでください。",
         "syncTargetMirrored": "このタスクはすでにリマインダーリストと同期しています。後からリストを変更することはできません。",

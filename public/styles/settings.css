@@ -1095,7 +1095,7 @@
   border-radius: var(--radius-full);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .settings-profile-editor {
     grid-template-columns: 1fr;
   }
@@ -1537,7 +1537,7 @@
   line-height: 1.5;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .settings-backup-card {
     grid-template-columns: 1fr;
   }
@@ -2168,7 +2168,7 @@
    „Trennen" nicht allein auf der letzten Zeile landet und dort zum optischen
    Anker der Kartenfuß wird - die destruktivste Aktion bekäme sonst die
    prominenteste Position. */
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .caldav-account-actions .btn--sm:first-child {
     flex: 1 0 100%;
   }
@@ -2577,7 +2577,7 @@
   white-space: nowrap;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .settings-mobile-nav-slots {
     grid-template-columns: 1fr;
   }
@@ -2825,7 +2825,7 @@
 .perm-empty { padding: var(--space-6) 0; }
 
 /* Fokussierte Spalte: Label und Control nah beieinander statt breit gestreckt. */
-.perm-matrix { max-width: 640px; }
+.perm-matrix { max-width: 639px; }
 
 /* Abweichungs-Überblick: die Form einer Rolle auf einen Blick. */
 .perm-summary {

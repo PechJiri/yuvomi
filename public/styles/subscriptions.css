@@ -968,7 +968,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .subscriptions-page {
     padding: var(--space-3);
   }

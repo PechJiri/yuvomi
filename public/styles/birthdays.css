@@ -436,7 +436,7 @@
 /* --------------------------------------------------------
  * Responsive
  * -------------------------------------------------------- */
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   /* Hier stand der Umbruch der Namenszeile (`.birthday-item__row { flex-wrap:
    * wrap }` plus `flex: 1 1 100%` am Namen). Er war die Antwort darauf, dass
    * Name und Countdown-Chip sich eine Zeile teilten und auf dem Telefon nicht
@@ -599,7 +599,7 @@
   margin-top: var(--space-4);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   /* Icon-only: der Button trägt sein Label via aria-label weiter.
    * DIE LABEL-VERLUST-REGEL (Runde 6, Phase 3b): er wechselt dabei in die
    * Icon-Form seiner Familie - quadratisch auf `--target-base`, die Kapsel wird

@@ -1236,6 +1236,11 @@
    * REGEL: Komponenten-interne Umbrüche gehören in @container-Queries,
    * NICHT in neue Viewport-Breakpoints.
    * -------------------------------------------------------- */
+  /* Paarungs-Konvention: die Grenze GEHÖRT der grossen Seite. Aufwärts heisst
+   * `min-width: 640px`, abwärts `max-width: 639px` - bei `max-width: 640px`
+   * gälten bei exakt 640px BEIDE Seiten zugleich (gemessen: mobile
+   * Kompaktregeln UND 3-Spalten-Kanban, Audit 2026-08-31). Gilt für alle vier
+   * Grenzen; test-typography.js wacht darüber. */
   --bp-mobile:  640px;
   --bp-tablet:  768px;
   --bp-desktop: 1024px;

@@ -458,7 +458,7 @@
         "countdownHint": "Hiển thị trên trang tổng quan còn bao lâu nữa. Nếu công việc lặp lại kể từ lúc hoàn thành, đếm ngược sẽ bắt đầu lại sau đó.",
         "countdownNeedsDue": "Không có ngày đến hạn thì không có gì để đếm ngược.",
         "countdownDetail": "Đang đếm ngược trên trang tổng quan",
-        "syncTargetLabel": "Đích đồng bộ",
+        "syncTargetLabel": "Danh sách lời nhắc",
         "syncTargetLocal": "Chỉ lưu cục bộ",
         "syncTargetHint": "Chọn một danh sách nhắc nhở để ghi nhiệm vụ này vào.",
         "syncTargetMirrored": "Nhiệm vụ này đã đồng bộ với một danh sách nhắc nhở. Không thể đổi danh sách sau đó.",

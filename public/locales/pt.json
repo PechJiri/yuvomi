@@ -458,7 +458,7 @@
         "countdownHint": "Mostra na visão geral quanto tempo falta. Se a tarefa se repetir a partir da conclusão, a contagem recomeça depois.",
         "countdownNeedsDue": "Sem data de vencimento não há nada para contar.",
         "countdownDetail": "Contagem regressiva na visão geral",
-        "syncTargetLabel": "Destino de sincronização",
+        "syncTargetLabel": "Lista de lembretes",
         "syncTargetLocal": "Guardar apenas localmente",
         "syncTargetHint": "Escolhe uma lista de lembretes para escrever esta tarefa.",
         "syncTargetMirrored": "Esta tarefa já sincroniza com uma lista de lembretes. A lista não pode ser alterada depois.",

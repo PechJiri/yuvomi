@@ -470,7 +470,7 @@
         "countdownHint": "개요에 얼마나 남았는지 보여줍니다. 완료 시점부터 반복되는 할 일이라면 그 뒤에 카운트다운이 다시 시작됩니다.",
         "countdownNeedsDue": "마감일이 없으면 셀 대상이 없습니다.",
         "countdownDetail": "개요에서 카운트다운 중",
-        "syncTargetLabel": "동기화 대상",
+        "syncTargetLabel": "미리 알림 목록",
         "syncTargetLocal": "로컬에만 저장",
         "syncTargetHint": "이 작업을 기록할 미리 알림 목록을 선택하세요.",
         "syncTargetMirrored": "이 작업은 이미 미리 알림 목록과 동기화됩니다. 목록은 나중에 변경할 수 없습니다.",

@@ -154,6 +154,35 @@ test('die kanonischen Breakpoint-Tokens existieren in tokens.css', () => {
 });
 
 /**
+ * Die Grenze gehoert der GROSSEN Seite: aufwaerts `min-width: 640px`, abwaerts
+ * `max-width: 639px`. Ein `max-width` exakt AUF einem Kanonwert laesst bei
+ * dieser Breite beide Seiten zugleich gelten - gemessen bei 640px: mobile
+ * Kompaktregeln UND 3-Spalten-Kanban gleichzeitig (Audit 2026-08-31; 33
+ * Fundstellen in 15 Dateien, waehrend 768/1024 laengst korrekt als 767/1023
+ * gepaart waren). Regel statt Liste: kein Stylesheet darf ein max-width auf
+ * einem der vier Kanonwerte fuehren.
+ */
+test('kein max-width sitzt exakt auf einem Breakpoint-Kanonwert', () => {
+  const violations = [];
+  for (const file of cssFiles) {
+    const css = stripComments(readFileSync(new URL(file, STYLES_DIR), 'utf8'));
+    for (const bp of [640, 768, 1024, 1440]) {
+      const re = new RegExp(`max-width:\\s*${bp}px`, 'g');
+      let m;
+      while ((m = re.exec(css)) !== null) {
+        const line = css.slice(0, m.index).split('\n').length;
+        violations.push(`${file}:${line} → max-width: ${bp}px (Paarung: ${bp - 1}px)`);
+      }
+    }
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    `max-width auf Kanonwert - die Grenze gehoert der grossen Seite (min-width):\n${violations.join('\n')}`,
+  );
+});
+
+/**
  * Die Rollen-Schicht traegt, was sie als REGEL fuehrt - nicht, was ihr
  * Kommentar erwaehnt.
  *

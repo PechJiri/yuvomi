@@ -458,7 +458,7 @@
         "countdownHint": "Muestra en el resumen cuánto falta. Si la tarea se repite desde su finalización, la cuenta atrás vuelve a empezar.",
         "countdownNeedsDue": "Sin fecha de vencimiento no hay nada que contar.",
         "countdownDetail": "Cuenta atrás en el resumen",
-        "syncTargetLabel": "Destino de sincronización",
+        "syncTargetLabel": "Lista de recordatorios",
         "syncTargetLocal": "Guardar solo localmente",
         "syncTargetHint": "Elige una lista de recordatorios en la que escribir esta tarea.",
         "syncTargetMirrored": "Esta tarea ya se sincroniza con una lista de recordatorios. La lista no se puede cambiar después.",

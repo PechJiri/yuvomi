@@ -2375,8 +2375,11 @@ const SHORTCUTS = [
   // Grund für den früheren Zweitweg über `#fab-main` (Audit A1-12), und er ist
   // seit dem Folgevorgang zu #634 selbst ein `.page-fab`.
   { key: 'n',   description: () => t('shortcuts.new'),     action: () => document.querySelector('.page-fab')?.click() },
-  { key: 'f',   description: () => t('shortcuts.searchCalendar'), action: () => {
-    if (location.pathname === '/calendar') document.querySelector('#cal-search')?.click();
+  { key: 'f',   description: () => t('shortcuts.searchCalendar'), action: async () => {
+    // Ausserhalb des Kalenders war `f` ein stiller No-Op (Critique 2026-08-31,
+    // Alex-Persona): erst hinwechseln, dann suchen - ein Griff, ein Ziel.
+    if (location.pathname !== '/calendar') await navigate('/calendar');
+    document.querySelector('#cal-search')?.click();
   } },
   { key: '?',   description: () => t('shortcuts.help'),    action: () => showHelpModal() },
   { key: 'g d', description: () => t('shortcuts.goDash'),  action: () => navigate('/') },
@@ -2394,6 +2397,14 @@ const SHORTCUTS = [
   { key: 'g k s', description: () => t('nav.shopping'),        action: () => navigate('/shopping')          },
   { key: 'g k v', description: () => t('nav.pantry'),          action: () => navigate('/pantry')            },
   { key: 'g i', description: () => t('shortcuts.goInventory'), action: () => navigate('/inventory') },
+  // Beschriftung wie bei den Kuechen-3er-Chords direkt aus den Nav-Labels -
+  // kein zweiter Uebersetzungssatz. Nur die zwei Ziele mit eindeutiger
+  // deutscher Merkhilfe (Budget, Einstellungen); die uebrigen Kandidaten
+  // (Kontakte, Dokumente, Schichtplan, Haushaltshilfe, Belohnungen,
+  // Geburtstage) warten auf eine Buchstaben-Entscheidung des Betreibers,
+  // bevor sich ein unmerkbares Schema festsetzt (Critique 2026-08-31, Alex).
+  { key: 'g b', description: () => t('nav.budget'),   action: () => navigate('/budget') },
+  { key: 'g e', description: () => t('nav.settings'), action: () => navigate('/settings') },
 ];
 
 let _pendingKey = null;

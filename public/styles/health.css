@@ -151,9 +151,6 @@
   color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary));
 }
 
-.health-vitals__add {
-  margin-inline-start: auto;
-}
 
 /* Karten-Grid je Metrik. Mindestbreite 160px: die schmalste Karte muss den
  * längsten Metrik-Namen („Sauerstoffsättigung") einzeilig tragen können,
@@ -276,9 +273,6 @@
   margin: 0;
 }
 
-.health-meds__add {
-  margin-inline-start: auto;
-}
 
 /* „Heute fällig"-Liste - Haarlinien-Liste, der Trenner ersetzt den Abstand.
  * Auf dem Medikamente-Tab liegt sie auf dem Grouped-Grund und braucht deshalb
@@ -762,9 +756,6 @@ button.health-med-card:hover {
   margin: 0;
 }
 
-.health-labs__add {
-  margin-inline-start: auto;
-}
 
 /* Befund-Karten-Grid */
 .health-labs__list {
@@ -1081,9 +1072,6 @@ button.health-med-card:hover {
   min-width: 0;
 }
 
-.health-activity__add {
-  margin-inline-start: auto;
-}
 
 /* Summen-Karten */
 .health-activity__summary {
@@ -1197,7 +1185,7 @@ button.health-med-card:hover {
   flex: 0 0 auto;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   /* .health-page bekommt hier BEWUSST keinen eigenen padding-inline mehr:
    * --space-3 (12px) schlug --page-inline-pad (16px) und setzte den Inhalt
    * mobil 4px neben die eigene Tab-Leiste — genau der Versatz, den #577
@@ -1409,14 +1397,6 @@ button.health-med-card:hover {
   gap: var(--space-2);
 }
 
-/* Untere Reihe der Aktivität-Toolbar auf Mobil: der „Erfassen"-Button nimmt die
- * volle Breite, statt asymmetrisch rechts unter dem Wochen-Stepper zu hängen. */
-@media (max-width: 640px) {
-  .health-activity__toolbar .health-activity__add {
-    flex: 1 1 100%;
-    justify-content: center;
-  }
-}
 
 /* ==========================================================================
  * Geteilte Bausteine (Phase 8): Nur-Lesen-Hinweis, Disclaimer, Chart-Details
@@ -1507,7 +1487,7 @@ button.health-med-card:hover {
   gap: var(--space-3);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .cycle-skeleton { flex-direction: column; }
   .cycle-skeleton__ring { width: 200px; height: 200px; }
 }
@@ -2076,7 +2056,7 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
  * (layout.css, #872). */
 .cycle-bulk__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .cycle-hero { flex-direction: column; }
   .cycle-ring { width: 200px; height: 200px; }
 }

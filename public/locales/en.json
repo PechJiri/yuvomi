@@ -458,7 +458,7 @@
         "countdownHint": "Shows on the overview how long there is to go. If the task repeats from completion, the countdown starts over afterwards.",
         "countdownNeedsDue": "Without a due date there is nothing to count down to.",
         "countdownDetail": "Counts down on the overview",
-        "syncTargetLabel": "Sync target",
+        "syncTargetLabel": "Reminders list",
         "syncTargetLocal": "Store locally only",
         "syncTargetHint": "Choose a reminder list to write this task to.",
         "syncTargetMirrored": "This task already syncs with a reminder list. The list cannot be changed afterwards.",

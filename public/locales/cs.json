@@ -458,7 +458,7 @@
         "countdownHint": "Na přehledu ukazuje, kolik ještě zbývá. Pokud se úkol opakuje od dokončení, odpočet začne poté znovu.",
         "countdownNeedsDue": "Bez data splnění není co odpočítávat.",
         "countdownDetail": "Odpočítává na přehledu",
-        "syncTargetLabel": "Cíl synchronizace",
+        "syncTargetLabel": "Seznam připomínek",
         "syncTargetLocal": "Uložit pouze lokálně",
         "syncTargetHint": "Vyber seznam připomínek, do kterého se má tento úkol zapsat.",
         "syncTargetMirrored": "Tento úkol se už synchronizuje se seznamem připomínek. Seznam už nelze změnit.",
