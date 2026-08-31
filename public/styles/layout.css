@@ -3160,6 +3160,16 @@ html.fab-anim-done .page-fab {
   background-color: color-mix(in srgb, var(--color-danger) var(--tint-state), transparent);
 }
 
+/* Einfachauswahl-Variante (role=menuitemradio): Häkchen nur bei der aktiven
+ * Option - `visibility: hidden` statt `display: none`, damit die Textspalte
+ * für alle Einträge an derselben Stelle beginnt. Stand als Lokalkopie in
+ * recipes.css (Quellenfilter); mit dem Personen-Umschalter der Gesundheit
+ * (2026-08-31) hat das Muster einen zweiten Nutzer und wohnt beim Rest des
+ * popover-menu-Vokabulars. */
+.popover-menu__item-check--hidden {
+  visibility: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .popover-menu,
   .popover-menu__item {

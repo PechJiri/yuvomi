@@ -15,13 +15,14 @@ import { api } from '/api.js';
 import { t, formatDate, formatTime, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { CHART, chartScales, chartGridMarkup, chartXLabelsMarkup } from '/utils/chart.js';
-import { wireScrollFade, scheduleUndoableDelete } from '/utils/ux.js';
+import { scheduleUndoableDelete } from '/utils/ux.js';
 import { toLocalDateKey, parseLocalDateKey, addLocalDays, todayKey} from '/utils/date.js';
 import { zonedDateKey } from '/utils/timezone.js';
 import { nowFields } from '/utils/timezone.js';
 import { trendMarkup } from '/utils/metric-card.js';
 import { openModal, closeModal, confirmModal, confirmOverModal, reportFieldError } from '/components/modal.js';
 import { createPageFab, setPageFabAction } from '/utils/fab.js';
+import { installPopoverMenus } from '/utils/popover-menu.js';
 import {
   computeVitalSeries, VITAL_METRICS, vitalMetric,
   MOOD_SCALE, moodStep, splitDuration, durationToHours,
@@ -438,9 +439,8 @@ function renderVitalsShell() {
   }
 
   vitals.root.insertAdjacentHTML('beforeend', `
-    <div class="health-persons" role="tablist" aria-label="${esc(t('health.vitals.personsLabel'))}">
-      ${personChipsMarkup(vitals.members, vitals.personId, vitals.meId)}
-    </div>
+    ${personSwitcherMarkup(vitals.members, vitals.personId, vitals.meId,
+      { menuId: 'health-person-menu-vitals', label: t('health.vitals.personsLabel') })}
     ${readOnlyBannerMarkup(vitals.members, vitals.personId, canEditFor(vitals.personId, vitals.meId), vitals.meId)}
     <div class="health-vitals__toolbar">
       <div class="health-vitals__ranges" role="tablist" aria-label="${esc(t('health.vitals.chartTitle'))}">
@@ -459,22 +459,42 @@ function renderVitalsShell() {
   renderDetail();
 }
 
-// Geteilter Personen-Umschalter (Vitalwerte + Medikamente): identisches Markup,
-// die aktive Person und „Ich"-Markierung kommen je Tab per Argument.
-function personChipsMarkup(members, activeId, meId) {
-  return (members || []).map((m) => {
-    const active = m.id === activeId;
-    const label = m.id === meId
-      ? `${m.display_name} · ${t('health.vitals.you')}`
-      : m.display_name;
-    return `
-      <button type="button" class="health-person-chip${active ? ' is-active' : ''}"
-        data-person-id="${esc(m.id)}" role="tab" aria-selected="${active}">
-        <span class="health-person-chip__dot" aria-hidden="true"
-          style="background:${esc(m.avatar_color) || 'var(--module-health)'}"></span>
-        <span class="health-person-chip__name">${esc(label)}</span>
-      </button>`;
-  }).join('');
+// Geteilter Personen-Umschalter: EIN Knopf mit der aktiven Person statt einer
+// Dauer-Pillenzeile (Critique 2026-08-31: 6 Ansichts-Tabs + 4 Personen-Pillen
+// = 10 Wahlmoeglichkeiten vor dem ersten Inhalt, mobil eine volle 48px-Zeile).
+// Die aktive Person bleibt am Knopf sichtbar (Wiedererkennen statt Erinnern);
+// das Menue ist das geteilte popover-menu-Vokabular mit role=menuitemradio -
+// dieselbe Bauart wie der Rezepte-Quellenfilter. Ein Haushalt mit nur einer
+// sichtbaren Person bekommt keinen Umschalter: die eigene Ansicht ist die
+// einzige, und ein Menue mit einem Eintrag waere Chrome ohne Auskunft.
+function personSwitcherMarkup(members, activeId, meId, { menuId, label }) {
+  const list = members || [];
+  if (list.length <= 1) return '';
+  const nameOf = (m) => (m.id === meId
+    ? `${m.display_name} · ${t('health.vitals.you')}`
+    : m.display_name);
+  const dotOf = (m) => `<span class="health-person-chip__dot" aria-hidden="true"
+          style="background:${esc(m.avatar_color) || 'var(--module-health)'}"></span>`;
+  const active = list.find((m) => m.id === activeId) ?? list[0];
+  return `
+    <div class="health-person-switcher">
+      <button type="button" class="health-person-switcher__trigger popover-menu__trigger"
+              popovertarget="${esc(menuId)}"
+              aria-label="${esc(label)}: ${esc(nameOf(active))}">
+        ${dotOf(active)}
+        <span class="health-person-switcher__name">${esc(nameOf(active))}</span>
+        <i data-lucide="chevron-down" class="icon-sm health-person-switcher__chevron" aria-hidden="true"></i>
+      </button>
+      <div class="popover-menu" id="${esc(menuId)}" popover role="menu" aria-label="${esc(label)}">
+        ${list.map((m) => `
+          <button type="button" role="menuitemradio" aria-checked="${m.id === activeId}"
+                  class="popover-menu__item" data-person-id="${esc(m.id)}">
+            <i data-lucide="check" class="icon-md popover-menu__item-check${m.id === activeId ? '' : ' popover-menu__item-check--hidden'}" aria-hidden="true"></i>
+            ${dotOf(m)}
+            <span>${esc(nameOf(m))}</span>
+          </button>`).join('')}
+      </div>
+    </div>`;
 }
 
 // Hinweis auf den Zustand einer fremden Ansicht. Zwei Fälle, ein Baustein:
@@ -556,16 +576,9 @@ function chartTableMarkup(caption, headers, rows) {
 // so löst nicht jeder Tastendruck einen Personen-Reload aus. Der Haupt-Tab-Balken
 // (.health-tabs-bar) liegt außerhalb der Panels und bringt eigene Tastatur mit.
 function wireTablistKeys(root) {
-  // Personen-Chipzeile: Rand-Fade-Affordanz beim Überlaufen (geteilte
-  // has-fade-*-Konvention, Audit F-06). Hier zentral, weil alle sechs Tabs
-  // diesen Helfer nach jedem Panel-Render aufrufen.
-  const persons = root.querySelector('.health-persons');
-  wireScrollFade(persons);
-  // Aktive Person ins Sichtfeld holen: mobil kann der ausgewählte Chip außerhalb
-  // des Viewports liegen (Audit P2 "Sichtbarkeit vor Scroll-Position", Muster wie
-  // tablist.js/sub-tabs.js). role="tab"+aria-selected trägt den Gedrückt-Zustand.
-  persons?.querySelector('.health-person-chip.is-active')
-    ?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  // Die Personen-Chipzeile (Fade-Affordanz + scrollIntoView) ist hier raus:
+  // der Umschalter ist seit 2026-08-31 ein popover-menu-Knopf, keine
+  // scrollende Tabliste mehr - siehe personSwitcherMarkup.
   root.querySelectorAll('[role="tablist"]:not(.health-tabs-bar)').forEach((list) => {
     const tabs = () => [...list.querySelectorAll('[role="tab"]')];
     tabs().forEach((el) => { el.tabIndex = el.getAttribute('aria-selected') === 'true' ? 0 : -1; });
@@ -591,7 +604,8 @@ function wireTablistKeys(root) {
 
 function wireVitals() {
   wireTablistKeys(vitals.root);
-  vitals.root.querySelectorAll('.health-person-chip').forEach((chip) =>
+  installPopoverMenus(vitals.root);
+  vitals.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
     chip.addEventListener('click', () => {
       const id = Number(chip.dataset.personId);
       if (id === vitals.personId) return;
@@ -1371,9 +1385,8 @@ function renderMedsShell() {
   }
 
   meds.root.insertAdjacentHTML('beforeend', `
-    <div class="health-persons" role="tablist" aria-label="${esc(t('health.meds.personsLabel'))}">
-      ${personChipsMarkup(meds.members, meds.personId, meds.meId)}
-    </div>
+    ${personSwitcherMarkup(meds.members, meds.personId, meds.meId,
+      { menuId: 'health-person-menu-meds', label: t('health.meds.personsLabel') })}
     ${readOnlyBannerMarkup(meds.members, meds.personId, canEditFor(meds.personId, meds.meId), meds.meId)}
     <div class="health-meds__toolbar">
       <h3 class="health-meds__section-title u-section-title">${esc(t('health.meds.dueToday.title'))}</h3>
@@ -2008,7 +2021,8 @@ function medCardMarkup(med) {
 
 function wireMeds() {
   wireTablistKeys(meds.root);
-  meds.root.querySelectorAll('.health-person-chip').forEach((chip) =>
+  installPopoverMenus(meds.root);
+  meds.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
     chip.addEventListener('click', () => {
       const id = Number(chip.dataset.personId);
       if (id === meds.personId) return;
@@ -2509,9 +2523,8 @@ function renderLabsShell() {
   }
 
   labs.root.insertAdjacentHTML('beforeend', `
-    <div class="health-persons" role="tablist" aria-label="${esc(t('health.labs.personsLabel'))}">
-      ${personChipsMarkup(labs.members, labs.personId, labs.meId)}
-    </div>
+    ${personSwitcherMarkup(labs.members, labs.personId, labs.meId,
+      { menuId: 'health-person-menu-labs', label: t('health.labs.personsLabel') })}
     ${readOnlyBannerMarkup(labs.members, labs.personId, canEditFor(labs.personId, labs.meId), labs.meId)}
     <div class="health-labs__toolbar">
       <h3 class="health-labs__section-title u-section-title">${esc(t('health.labs.reportsTitle'))}</h3>
@@ -2756,7 +2769,8 @@ const FLAG_DOT_COLORS = {
 
 function wireLabs() {
   wireTablistKeys(labs.root);
-  labs.root.querySelectorAll('.health-person-chip').forEach((chip) =>
+  installPopoverMenus(labs.root);
+  labs.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
     chip.addEventListener('click', () => {
       const id = Number(chip.dataset.personId);
       if (id === labs.personId) return;
@@ -3188,9 +3202,8 @@ function renderActivityShell() {
   // Leer-Meldung im Log entfallen (Audit A2-09/A2-21).
 
   activity.root.insertAdjacentHTML('beforeend', `
-    <div class="health-persons" role="tablist" aria-label="${esc(t('health.activity.personsLabel'))}">
-      ${personChipsMarkup(activity.members, activity.personId, activity.meId)}
-    </div>
+    ${personSwitcherMarkup(activity.members, activity.personId, activity.meId,
+      { menuId: 'health-person-menu-activity', label: t('health.activity.personsLabel') })}
     ${readOnlyBannerMarkup(activity.members, activity.personId, canEditFor(activity.personId, activity.meId), activity.meId)}
     <div class="health-activity__toolbar">
       <div class="health-activity__stepper">
@@ -3324,7 +3337,8 @@ function activityRowMarkup(row, own) {
 
 function wireActivity() {
   wireTablistKeys(activity.root);
-  activity.root.querySelectorAll('.health-person-chip').forEach((chip) =>
+  installPopoverMenus(activity.root);
+  activity.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
     chip.addEventListener('click', () => {
       const id = Number(chip.dataset.personId);
       if (id === activity.personId) return;
@@ -3671,9 +3685,8 @@ function renderOverviewShell() {
   }
 
   overview.root.insertAdjacentHTML('beforeend', `
-    <div class="health-persons" role="tablist" aria-label="${esc(t('health.overview.personsLabel'))}">
-      ${personChipsMarkup(overview.members, overview.personId, overview.meId)}
-    </div>
+    ${personSwitcherMarkup(overview.members, overview.personId, overview.meId,
+      { menuId: 'health-person-menu-overview', label: t('health.overview.personsLabel') })}
     ${readOnlyBannerMarkup(overview.members, overview.personId, canEditFor(overview.personId, overview.meId), overview.meId)}
     <div class="health-overview__grid">
       ${overviewCard('calendar-check', 'health.overview.dueToday.title', overviewDueMarkup())}
@@ -3980,7 +3993,8 @@ function rerenderExportButtons() {
 
 function wireOverview() {
   wireTablistKeys(overview.root);
-  overview.root.querySelectorAll('.health-person-chip').forEach((chip) =>
+  installPopoverMenus(overview.root);
+  overview.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
     chip.addEventListener('click', () => {
       const id = Number(chip.dataset.personId);
       if (id === overview.personId) return;
@@ -4159,9 +4173,8 @@ function renderCycleShell() {
   const prediction = predictCycle(cycle.periods, cycleSettings());
 
   const persons = `
-    <div class="health-persons" role="tablist" aria-label="${esc(t('health.cycle.personsLabel'))}">
-      ${personChipsMarkup(cycle.members, cycle.personId, cycle.meId)}
-    </div>
+    ${personSwitcherMarkup(cycle.members, cycle.personId, cycle.meId,
+      { menuId: 'health-person-menu-cycle', label: t('health.cycle.personsLabel') })}
     ${readOnlyBannerMarkup(cycle.members, cycle.personId, own, cycle.meId)}`;
 
   // Schwangerschafts-Modus: Vorhersagen sind pausiert — statt Ring/Prognose wird
@@ -4557,7 +4570,8 @@ function cycleFooterMarkup(own) {
 
 function wireCycle() {
   wireTablistKeys(cycle.root);
-  cycle.root.querySelectorAll('.health-person-chip').forEach((chip) =>
+  installPopoverMenus(cycle.root);
+  cycle.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
     chip.addEventListener('click', () => {
       const id = Number(chip.dataset.personId);
       if (id === cycle.personId) return;
