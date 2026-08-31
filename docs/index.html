@@ -289,7 +289,7 @@
       border-radius: var(--r-phone); border: 4px solid var(--surface); box-shadow: var(--shadow-xl);
       z-index: 2; overflow: hidden; background: var(--surface);
     }
-    .hero-float img { width: 100%; display: block; aspect-ratio: 1320 / 2867; }
+    .hero-float img { width: 100%; display: block; aspect-ratio: var(--ar-phone); }
 
     /* ===== Proof bar ===== */
     .proof { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg-alt); }
@@ -452,7 +452,16 @@
       background: radial-gradient(60% 60% at 50% 40%, color-mix(in srgb, var(--m) 18%, transparent), transparent 75%);
       filter: blur(26px);
     }
-    .feat-phone { display: block; width: 100%; aspect-ratio: 1320 / 1780;
+    /* Volles Geraetemass, nicht 1320/1780. Der erfundene Zuschnitt sparte
+       Hoehe, die diese Spalte gar nicht braucht: die Textspalte fuehrt die
+       Zeile mit 447px bzw. 485px Inhalt, das Telefon kommt bei 200px Breite
+       auf 434px und bleibt darunter - das Raster ist nach der Korrektur
+       gemessene 1.062px hoch, also exakt so hoch wie vorher. Bezahlt wurde
+       dafuer nur die Form, und die war der ganze Punkt des Rahmens.
+       `object-fit` bleibt als Wache stehen: waere hier je eine Aufnahme im
+       falschen Format, zeigte `cover` deren oberen Ausschnitt statt eines
+       Zerrbilds - dieselbe Begruendung wie am schmalen Galerierahmen. */
+    .feat-phone { display: block; width: 100%; aspect-ratio: var(--ar-phone);
       object-fit: cover; object-position: top center;
       border-radius: var(--r-phone) !important; border: 4px solid var(--surface);
       box-shadow: var(--shadow-lg); position: relative; z-index: 2; }
@@ -463,14 +472,17 @@
        Telefon unter ~150px zeigt nichts mehr. */
     .mod-shots { display: flex; flex-wrap: wrap; justify-content: center; gap: 26px 22px; margin-top: 52px; }
     .mod-shot { width: 176px; }
-    .mod-shot img { width: 100%; aspect-ratio: 1320 / 1900; object-fit: cover; object-position: top center;
+    .mod-shot img { width: 100%; aspect-ratio: var(--ar-phone); object-fit: cover; object-position: top center;
       border-radius: var(--r-phone);
       border: 4px solid var(--surface); box-shadow: var(--shadow-lg); display: block; }
     .mod-shot figcaption { margin-top: 12px; text-align: center; font-size: 0.82rem; font-weight: 600; color: var(--text-3); }
-    /* 176px breite Telefone brechen bei 390px auf drei Reihen um und kosten dort
-       1.539px - mehr als das Karussell, das diese Reihe ersetzt hat. Bei 104px
-       passen drei nebeneinander, es bleiben zwei Reihen. Auf Daumennagelgroesse
-       ist das der Beleg, dass es das Modul gibt, und mehr soll es hier nicht sein.
+    /* 176px breite Telefone brechen bei 390px auf fuenf Reihen um und kosten dort
+       2.129px - weit mehr als das Karussell, das diese Reihe ersetzt hat. Bei
+       104px passen drei nebeneinander, es bleiben zwei Reihen und 527px. Auf
+       Daumennagelgroesse ist das der Beleg, dass es das Modul gibt, und mehr soll
+       es hier nicht sein. (Gemessen nach der Ratio-Korrektur: mit dem alten
+       1320/1900-Zuschnitt sah dieselbe Rechnung um ein Drittel guenstiger aus,
+       weil jedes Telefon 129px seiner eigenen Hoehe verschwieg.)
        Steht bewusst HINTER der Basisregel: gleiche Spezifitaet, es entscheidet
        die Quellreihenfolge. */
     @media (max-width: 700px) {
@@ -796,7 +808,7 @@
          bis dahin (oder wenn eine -m-Variante fehlt) steckt die 4:3-Aufnahme im
          1320/2867-Rahmen und `fill` verzerrt sie auf 300x652. `cover` zeigt in
          dem Fall den oberen Ausschnitt statt eines Zerrbilds. */
-      .gal-frame img { aspect-ratio: 1320 / 2867; max-width: 300px; margin: 0 auto;
+      .gal-frame img { aspect-ratio: var(--ar-phone); max-width: 300px; margin: 0 auto;
         object-fit: cover; object-position: top center;
         border-radius: var(--r-phone); border-width: 4px; border-color: var(--surface); }
       .gal-frame::before { inset: -4% 14%; }
