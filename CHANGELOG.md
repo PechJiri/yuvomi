@@ -7,8 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.58.0] - 2026-08-31
+
+### Added
+
+- **Two more keyboard chords: `g b` jumps to the budget, `g e` to the settings.** They follow the
+  kitchen chords and take their labels straight from the navigation, so there is no second set of
+  translations to keep in step. Only these two targets got a letter: contacts, documents, the shift
+  planner, housekeeping, rewards and birthdays all have candidates that read well in one language
+  and arbitrarily in the next, and a mnemonic scheme that nobody can remember is worse than no
+  scheme. Those letters are a decision for the operator, not something to settle by alphabet.
+
+### Changed
+
+- **The health module switches people through one avatar button instead of a permanent row of
+  pills.** All six views carried the same 48-pixel strip above their content, so a household of
+  four met ten choices - six view tabs plus four people - before the first piece of information.
+  The active person now sits on a single button that opens the shared popover menu, the same
+  vocabulary and the same single-select check mark as the recipe source filter. Recognising beats
+  remembering: the person you are looking at stays readable on the closed button. Households with
+  only one visible person get no switcher at all, because a menu with one entry is chrome that
+  answers nothing.
+- **The new-task dialog no longer opens at full length.** Status, sync target, visibility, lock and
+  attachments were laid out as open field groups *after* the "more settings" disclosure, which made
+  the disclosure look like the end of the form when it was the middle of it. They now sit inside it,
+  and any value you have set is named in its summary line, so nothing hides silently. The form went
+  from 1422 to 938 pixels. The three documented counter-decisions stayed untouched: the note field
+  keeps its place next to the title (#731), the countdown stays visible (#647), and recurrence
+  stays outside the disclosure, as in the calendar.
+- **The install banner shows once a day instead of once per navigation.** It is a persistent
+  element, so gating it on mount never worked in a single-page app: it reappeared on every route,
+  over the thumb zone and the floating action button. Any real appearance now starts a 24-hour
+  quiet period, and the banner hides itself after 15 seconds - enough to read the iOS instructions,
+  short enough not to sit in the way. Dismissing it explicitly still buys 30 days.
+- **Icon rendering is scoped for real.** Around 230 call sites pass `createIcons({ el })` and assume
+  only that subtree is touched; the bundled Lucide build does not know the parameter and scanned the
+  whole document each time, so every partial re-render paid for a full-document query. A small patch
+  file next to the bundle now implements the scoping and mirrors the bundle's own replacement
+  semantics, including that an unknown icon name warns without breaking anything. The month grid
+  also measures its day cells in three phases rather than alternating reads and writes across up to
+  42 cells, which costs one reflow instead of many.
+
 ### Fixed
 
+- **Section headings in the health module were set in the module-header role.** Eight of them drew
+  the sticky toolbar's 22/700 instead of the 20/600 every other section heading in the app uses -
+  the only place where the type hierarchy broke. The utility class that made the header role freely
+  addressable is gone; its one legitimate user is named directly in the role layer, so the role
+  cannot be borrowed by accident again.
+- **An accessibility batch that had been left half-finished in several places.** The split-expense
+  search field was the last input whose focus outline was removed without a replacement (WCAG
+  2.4.7); module dialogs now announce their errors with `role="alert"` the way the auth pages
+  already did; counters no longer glue themselves onto the name of their target, which a screen
+  reader read as "Rewards1" and now reads as "Rewards, 1 open"; the quaternary text tone and the
+  drag handles moved up to the tertiary tone to clear 3:1; the date picker's focus glow, which sat
+  at roughly 1.05:1 against its surroundings, was replaced by the global focus ring; and the
+  discard button in the unsaved-changes guard is now styled as the destructive action it is.
+- **The browser's font-size setting now affects the app.** The root carried a hard `font-size: 16px`,
+  which pins the rem scale to the page zoom and ignores the setting itself (WCAG 1.4.4). It is
+  `100%` now; the default is still 16 pixels, so nothing about the standard rendering changes.
+- **Layout and behaviour disagreed at exactly 640 pixels.** Downward media queries were written on
+  the breakpoint value rather than one below it, so at that one width both sides of the pair applied
+  at once - mobile compaction and the three-column board together. The boundary now belongs to the
+  larger side throughout (`min-width: 640px` upward, `max-width: 639px` downward). The same fix had
+  to reach the JavaScript: the calendar, the meal planner and the documents view ask `matchMedia`
+  themselves, and at 640 pixels the CSS had already switched to its mobile shape while the scripts
+  still ran the desktop logic - in the calendar that meant a tap had to land on a 10-pixel dot
+  instead of the whole day cell. The guard that is supposed to hold the two sides together compared
+  bare numbers and was satisfied by a `min-width: 640px` elsewhere; it compares thresholds and their
+  direction now, and reports all four call sites.
+- **Overflow and select menus can be operated from the keyboard.** They announce themselves as
+  menus, but the popover API only supplies the top layer, light dismiss and Escape - not the
+  behaviour the role promises. Opening one now moves focus into it, onto the active choice in a
+  single-select menu; the arrow keys walk the entries and wrap at both ends, Home and End jump to
+  the edges, disabled entries are skipped, and Tab leaves the menu rather than walking through it.
+  Escape, Tab and Enter are left alone, because dismissal and focus return depend on them. Choosing
+  a person in the health module re-renders the view, so focus is handed back to the freshly drawn
+  button instead of falling to the document.
+- **`f` outside the calendar did nothing.** It opened the calendar search only when you already were
+  in the calendar; it now takes you there first.
+- **The tasks toolbar stood a row and a half tall.** The extra 55 pixels were not spacing but the
+  "board view" label wrapping onto a second line; it no longer wraps and appears only at the width
+  where it fits, so the bar matches the 44-pixel silhouette of its neighbours.
+- **The task field labelled "sync target" now says what it is.** It picks a reminder list, and it
+  says so, in all 24 languages.
 - **The phone mockups on the project website were not phone-shaped.** Four places draw the same
   device frame, and two of them stood on invented crops: the four feature cards and the row of
   module thumbnails below them cut roughly a third off the bottom of every capture, while the
@@ -25,6 +107,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   radius that had drifted the same way once before, and the landing-page suite holds both halves
   of the coupling: no portrait aspect ratio may be written as a literal, and that one name has to
   keep matching the dimensions of the screenshots it frames.
+
+### Removed
+
+- **Dead CSS and dead markup hooks.** A layout-primitives block that nothing referenced, the
+  outbound page-transition variants together with their keyframes, and four unused health add
+  buttons among others - each verified unreferenced before removal.
 
 ## [2.57.4] - 2026-08-31
 
