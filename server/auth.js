@@ -332,6 +332,49 @@ function publicApiToken(row) {
   };
 }
 
+/**
+ * Liest die Scopes eines mitgeschickten API-Tokens, OHNE `last_used_at` zu
+ * beruehren - reiner Lesepfad fuer das Auth-Router-Gate unten (die volle
+ * Authentifizierung inkl. Update macht spaeter `requireAuth` pro Route).
+ * Rueckgabe:
+ *   - `undefined` = kein/kein gueltiges Token (Session- oder oeffentliche Route)
+ *   - `null`      = gueltiges, aber UNGESCOPTES Token (Legacy, voller Zugriff)
+ *   - `string[]`  = die gewaehrten Scopes eines gescopten Tokens
+ * @param {import('express').Request} req
+ * @returns {string[]|null|undefined}
+ */
+function requestTokenScopes(req) {
+  const token = extractApiToken(req);
+  if (!token) return undefined;
+  const row = db.get().prepare(`
+    SELECT scopes FROM api_tokens
+    WHERE token_hash = ?
+      AND revoked_at IS NULL
+      AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  `).get(hashApiToken(token));
+  if (!row) return undefined;
+  return parseScopes(row.scopes);
+}
+
+// Sicherheits-Gate (GHSA-xcv5-6w6x-x5q2): Der Auth-Router ist in server/index.js
+// bewusst VOR den globalen Scope-/Guest-/Modul-Gates gemountet, damit oeffentliche
+// Routen (login, setup, oidc, 2fa/verify) ohne Authentifizierung erreichbar sind.
+// Genau dadurch umging ein gescoptes API-Token hier aber die Scope-Durchsetzung:
+// `/auth` ist kein scopebares Modul (moduleForPath === null), also wuerde das
+// globale Gate JEDES gescopte Token verwerfen - dieser Router bekam es aber nie zu
+// sehen. Ein auf ein einzelnes Lese-Modul beschraenktes Token konnte so ein
+// unbeschraenktes Token oder einen Admin anlegen. Die Sperre zieht dieselbe Grenze
+// schon am Router-Eingang: gescopte Tokens erreichen keine Auth-Route. Ungescopte
+// (Legacy-)Tokens und Session-Auth bleiben unberuehrt. Muss VOR allen Routen
+// dieses Routers registriert sein.
+router.use((req, res, next) => {
+  const scopes = requestTokenScopes(req);
+  if (scopes != null) {
+    return res.status(403).json({ error: 'Token scope does not permit this operation.', code: 403 });
+  }
+  next();
+});
+
 function publicUser(row) {
   return {
     id: row.id,
