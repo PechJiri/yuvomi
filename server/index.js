@@ -528,7 +528,11 @@ app.get('/{*path}', spaLimiter, (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'Not found.', code: 404 });
   }
-  res.sendFile(path.join(import.meta.dirname, '..', 'public', 'index.html'));
+  // root-Option statt absolutem Pfad: sendFile ohne root laesst `send` JEDES
+  // Segment des absoluten Pfads auf Dotfiles pruefen - liegt der Checkout unter
+  // einem Dot-Verzeichnis (z. B. ~/.claude/...), liefert jede Deep-URL 500.
+  // Mit root prueft `send` nur den relativen Teil ('index.html').
+  res.sendFile('index.html', { root: path.join(import.meta.dirname, '..', 'public') });
 });
 
 // --------------------------------------------------------
