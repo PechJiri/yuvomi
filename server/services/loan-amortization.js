@@ -148,6 +148,11 @@ export function remainingPrincipalAfter(schedule, principal, paidInstallments) {
  * remainingAfterBinding) bleiben bewusst planbasiert - sie beschreiben den
  * Vertrag, nicht den Kontostand.
  *
+ * Eine LUECKE in den Ratennummern (Zahlung geloescht, spaetere Nummer direkt
+ * gebucht) ist in diesem Modell eine Null-Zahlung: die Periode war da, ihr Zins
+ * faellt an und schlaegt aufs Kapital. Ohne diese Regel unterschlüge die Rechnung
+ * genau die Zinsen der ausgelassenen Monate und meldete zu wenig Restschuld.
+ *
  * @param {object} params            Zins-Parameter wie bei computeLoanSchedule
  *                                   (initialRepaymentRate wird nicht gebraucht:
  *                                   getilgt wird, was nach dem Zins übrig ist)
@@ -169,6 +174,7 @@ export function remainingPrincipalFromPayments({
   const bindingMonths = variable && Number.isFinite(Number(fixedPeriodMonths))
     ? Number(fixedPeriodMonths)
     : null;
+  const rateFor = (n) => ((!bindingMonths || n <= bindingMonths) ? rf : rv);
 
   const rows = (Array.isArray(payments) ? payments : [])
     .map((p) => ({ n: Math.floor(Number(p?.installment_number) || 0), amount: Number(p?.amount) || 0 }))
@@ -176,14 +182,19 @@ export function remainingPrincipalFromPayments({
     .sort((a, b) => a.n - b.n);
 
   let balance = Number(principal) || 0;
+  let prevN = 0;
   for (const { n, amount } of rows) {
     // Getilgt ist getilgt: auf null Restschuld fällt kein Zins mehr an, und eine
     // weitere Buchung kann das Kapital nicht unter null drücken.
     if (balance <= 0.005) { balance = 0; break; }
-    const inFixed = !bindingMonths || n <= bindingMonths;
-    const rate = inFixed ? rf : rv;
-    const interest = balance * (rate / 100 / 12);
+    // Ausgelassene Perioden zahlen nichts, verzinsen aber - gekappt bei
+    // MAX_LOAN_MONTHS, damit eine absurde Ratennummer keine Endlosarbeit wird.
+    for (let k = prevN + 1; k < n && k <= MAX_LOAN_MONTHS; k++) {
+      balance += balance * (rateFor(k) / 100 / 12);
+    }
+    const interest = balance * (rateFor(n) / 100 / 12);
     balance -= (amount - interest);
+    prevN = n;
   }
   return round2(Math.max(0, balance));
 }

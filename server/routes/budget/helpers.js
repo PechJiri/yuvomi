@@ -633,6 +633,14 @@ export function loanSummaryRow(loan, baseCurrency = budgetCurrency()) {
   // keinen Zinsanteil, dort sind beide identisch.
   const remainingPrincipal = interest ? interest.remaining_principal : remainingAmount;
 
+  // Fertig ist ein Darlehen, wenn kein Kapital mehr offen ist - beim Zins-Darlehen
+  // entscheidet das seit #954 die REALE Restschuld: wer frueh tilgt, schuldet die
+  // kuenftigen Planzinsen nicht nach, also darf danach auch keine Rate mehr buchbar
+  // sein. remaining_installments zaehlt weiter die ungebuchten Plan-Raten (eine
+  // Zaehlung, keine Schuld); zinsfreie Darlehen laufen ueber denselben Ausdruck,
+  // weil remainingPrincipal dort remainingAmount IST.
+  const settled = remainingInstallments <= 0 || remainingPrincipal <= 0.005;
+
   // Währung je Darlehen (#582): Alle Beträge oben bleiben in der Darlehenswährung.
   // currency=NULL heißt "Budget-Währung" und wird erst hier aufgelöst, damit eine
   // spätere Umstellung der Haushaltswährung den Altbestand mitzieht.
@@ -651,8 +659,9 @@ export function loanSummaryRow(loan, baseCurrency = budgetCurrency()) {
     remaining_amount: remainingAmount,
     remaining_principal: remainingPrincipal,
     remaining_installments: remainingInstallments,
-    next_installment_number: remainingInstallments > 0 ? paidInstallments + 1 : null,
-    next_due_month: remainingInstallments > 0 ? addMonths(loan.start_month, paidInstallments) : null,
+    is_settled: settled,
+    next_installment_number: !settled ? paidInstallments + 1 : null,
+    next_due_month: !settled ? addMonths(loan.start_month, paidInstallments) : null,
     interest,
     payments,
   };
@@ -709,7 +718,10 @@ export function loadLoan(id, baseCurrency = budgetCurrency()) {
 export function refreshLoanStatus(loanId) {
   const loan = loadLoan(loanId);
   if (!loan) return null;
-  const status = loan.remaining_installments === 0 || loan.remaining_amount <= 0.005 ? 'paid' : 'active';
+  // is_settled traegt seit #954 auch die reale Restschuld des Zins-Darlehens -
+  // eine fruehe Volltilgung stellt den Status auf paid, obwohl Plan-Raten
+  // ungebucht bleiben (deren Zinsen schuldet niemand nach).
+  const status = loan.is_settled ? 'paid' : 'active';
   if (status !== loan.status) {
     db.get().prepare('UPDATE budget_loans SET status = ? WHERE id = ?').run(status, loanId);
     return loadLoan(loanId);

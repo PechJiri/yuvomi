@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (monthly payment, total interest, remaining term) deliberately stay plan-based: they describe the
   contract, not the account balance.
 
+  Two consequences of following the money, both from review: a gap in the installment numbers (a
+  deleted payment, a later number booked directly) counts as a zero payment, so its period interest
+  accrues instead of silently vanishing. And a loan whose real balance reaches zero is *paid* -
+  status flips, no further installment is offered or accepted - even though plan installments were
+  never booked: the future plan interest of an early payoff is nobody's debt.
+
 ## [2.57.1] - 2026-08-31
 
 ### Security

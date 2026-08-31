@@ -229,11 +229,16 @@ test('remainingPrincipalFromPayments: nach der Zinsbindung rechnet der Anschluss
     interestMode: 'fixed_then_variable', fixedPeriodMonths: 2, followupRate: 4,
   };
   // Eine einzelne Rate mit Nummer 3 liegt hinter der Bindung: ihr Zinsanteil
-  // muss mit 4 % gerechnet werden, nicht mit 2,5 %.
+  // muss mit 4 % gerechnet werden, nicht mit 2,5 %. Die Perioden 1 und 2 davor
+  // sind Null-Zahlungen IN der Bindung und verzinsen mit 2,5 %.
+  const rFix = 2.5 / 100 / 12;
+  const rVar = 4 / 100 / 12;
   const paid = remainingPrincipalFromPayments(params, [{ installment_number: 3, amount: 1000 }]);
-  const interestAtFollowup = 200000 * (4 / 100 / 12);
-  assert.ok(near(paid, 200000 - (1000 - interestAtFollowup)), `Restschuld ${paid}`);
+  let b3 = 200000 * (1 + rFix) * (1 + rFix);
+  assert.ok(near(paid, b3 - (1000 - b3 * rVar)), `Restschuld ${paid}`);
   const paidFixed = remainingPrincipalFromPayments(params, [{ installment_number: 2, amount: 1000 }]);
+  const b2 = 200000 * (1 + rFix);
+  assert.ok(near(paidFixed, b2 - (1000 - b2 * rFix)), `Restschuld in der Bindung ${paidFixed}`);
   assert.ok(paidFixed < paid, 'in der Bindung tilgt dieselbe Rate mehr');
 });
 
@@ -242,4 +247,37 @@ test('remainingPrincipalFromPayments: leere oder unbrauchbare Historie = Kredits
   assert.equal(remainingPrincipalFromPayments(params, []), 21000);
   assert.equal(remainingPrincipalFromPayments(params, null), 21000);
   assert.equal(remainingPrincipalFromPayments(params, [{ installment_number: 0, amount: -5 }]), 21000);
+});
+
+test('remainingPrincipalFromPayments: eine Lücke ist eine Null-Zahlung, ihr Zins läuft auf', () => {
+  // Lücken entstehen real: eine Zahlung wird gelöscht, oder eine spätere
+  // Ratennummer wird direkt gebucht. Ohne Zinslauf über die ausgelassene
+  // Periode meldete die Rechnung zu WENIG Restschuld - die bequeme Richtung.
+  const params = { principal: 200000, fixedRate: 2.5, initialRepaymentRate: 2, interestMode: 'fixed' };
+  const r = computeLoanSchedule(params);
+  const m = r.monthlyPayment;
+  const rate = 2.5 / 100 / 12;
+
+  const gapped = remainingPrincipalFromPayments(params, [
+    { installment_number: 1, amount: m },
+    { installment_number: 3, amount: m },
+  ]);
+  // Von Hand: Rate 1, dann verzinst Periode 2 ohne Zahlung, dann Rate 3.
+  let b = 200000;
+  b -= (m - b * rate);      // Rate 1
+  b += b * rate;            // Periode 2: Null-Zahlung, Zins schlägt aufs Kapital
+  b -= (m - b * rate);      // Rate 3
+  assert.equal(gapped, Math.round(b * 100) / 100, 'die Lücke verzinst genau eine Periode');
+
+  const dense = remainingPrincipalFromPayments(params, [
+    { installment_number: 1, amount: m },
+    { installment_number: 2, amount: m },
+  ]);
+  assert.ok(gapped > dense, `mit Lücke ${gapped} muss mehr offen sein als ohne ${dense}`);
+
+  // Auch eine Lücke VOR der ersten Buchung verzinst: dieselbe Rate später
+  // gebucht lässt mehr Kapital offen.
+  const late = remainingPrincipalFromPayments(params, [{ installment_number: 3, amount: m }]);
+  const early = remainingPrincipalFromPayments(params, [{ installment_number: 1, amount: m }]);
+  assert.ok(late > early, `späte Erstbuchung ${late} > frühe ${early}`);
 });

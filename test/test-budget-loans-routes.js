@@ -567,6 +567,40 @@ test('Sondertilgung: die Restschuld folgt dem gebuchten Geld, nicht der Ratennum
   assert.equal(a.interest.total_interest, b.interest.total_interest);
 });
 
+test('Frühe Volltilgung: Restschuld 0 heißt bezahlt, kuenftige Planzinsen schuldet niemand nach (#954)', async () => {
+  setMode('shared');
+  setBudgetCurrency('EUR');
+  db.prepare('DELETE FROM budget_loans').run();
+
+  const created = await call('POST', '/loans', {
+    as: AA,
+    body: {
+      borrower: 'Lukas', title: 'Auto', start_month: '2022-12',
+      interest_mode: 'fixed', principal: 21000,
+      fixed_rate: 4.07, initial_repayment_rate: 14.792857,
+    },
+  });
+  assert.equal(created.status, 201);
+  const id = created.body.data.id;
+
+  // Kapital plus Zinsanteil der ersten Periode in einer Rate: real ist danach
+  // nichts mehr offen, obwohl 71 Plan-Raten nie gebucht wurden.
+  const payoff = 21000 + 21000 * (4.07 / 100 / 12) + 1;
+  const pay = await call('POST', `/loans/${id}/payments`, { as: AA, body: { paid_date: '2026-07-01', amount: payoff } });
+  assert.equal(pay.status, 201);
+
+  const loan = (await call('GET', '/loans', { as: AA })).body.data.loans.find((l) => l.id === id);
+  assert.equal(loan.remaining_principal, 0, 'keine Restschuld mehr');
+  assert.equal(loan.status, 'paid', 'die Volltilgung stellt den Status um');
+  assert.equal(loan.is_settled, true);
+  assert.equal(loan.next_installment_number, null, 'keine Rate mehr im Angebot');
+  assert.equal(loan.next_due_month, null);
+
+  // Und buchbar ist auch keine mehr - vorher bot der Zaehlungs-Gate 71 weitere an.
+  const again = await call('POST', `/loans/${id}/payments`, { as: AA, body: { paid_date: '2026-08-01' } });
+  assert.equal(again.status, 409, `weitere Rate muss abgewiesen werden, kam ${again.status}`);
+});
+
 // --------------------------------------------------------------------------
 // Richtung der Rate (#638)
 //
