@@ -158,6 +158,9 @@ const INTENTIONALLY_NOT_IN_INSTALLER = {
   MCP_INTERNAL_BASE_URL: 'Betriebs-Feinjustage.',
   RATE_LIMIT_WINDOW_MS: 'Betriebs-Feinjustage.',
   RATE_LIMIT_MAX_ATTEMPTS: 'Betriebs-Feinjustage.',
+  BACKUP_UPLOAD_LIMIT:
+    'Betriebs-Feinjustage: Body-Limit fuer den Restore-Upload im Admin-UI, nur beim '
+    + 'Zurueckspielen einer ueberdimensionierten Datenbank relevant.',
 };
 
 /** Alle in .env.example dokumentierten Variablennamen, auch die auskommentierten. */
