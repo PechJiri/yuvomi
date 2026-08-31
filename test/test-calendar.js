@@ -1030,6 +1030,73 @@ test('sameColor vergleicht Hex-Werte ohne Ruecksicht auf Schreibweise', () => {
 });
 
 // --------------------------------------------------------
+// nextOccurrence: MONTHLY ueber kurze Monate
+//
+// Die Klemmung stand hinter dem Monatswechsel statt davor, und ein 31. Februar
+// rollt in JavaScript still auf den 3. Maerz. Damit griff die Korrektur nie:
+// der kurze Monat fiel nicht auf seinen letzten Tag, er fiel ganz aus.
+//
+// Geprueft wird deshalb die REGEL, nicht die Datumsliste: eine monatliche Serie
+// besucht jeden Monat genau einmal. Eine Liste erwarteter Daten waere beim
+// naechsten Randfall wieder nur eine Liste - die Regel bricht bei jedem
+// ausgefallenen Monat, egal an welchem Tag er haengt.
+// --------------------------------------------------------
+
+/** Die naechsten n Vorkommen ab (ausschliesslich) `start`. */
+function occurrences(start, rule, n) {
+  const out = [];
+  let d = start;
+  for (let i = 0; i < n; i++) {
+    d = nextOccurrence(d, rule);
+    if (!d) break;
+    out.push(d);
+  }
+  return out;
+}
+
+/** Fortlaufender Monatsindex - macht den Jahreswechsel zu einem Schritt wie jeder andere. */
+function monthIndex(dateKey) {
+  return Number(dateKey.slice(0, 4)) * 12 + Number(dateKey.slice(5, 7));
+}
+
+test('nextOccurrence: MONTHLY laesst keinen Monat aus, egal an welchem Tag die Serie haengt', () => {
+  for (const day of ['28', '29', '30', '31']) {
+    const start = `2026-01-${day}`;
+    const list = occurrences(start, 'FREQ=MONTHLY', 12);
+    assert(list.length === 12, `am ${day}.: zwoelf Vorkommen erwartet, bekommen ${list.length}`);
+    // NICHT die Zahl der verschiedenen Monate zaehlen: ueber zwei Jahre hinweg
+    // sind auch die Monate einer Serie, die jeden Februar ueberspringt, alle
+    // verschieden. Die Regel ist der lueckenlose SCHRITT - jedes Vorkommen liegt
+    // genau einen Kalendermonat nach dem vorigen.
+    const steps = [start, ...list].map(monthIndex);
+    for (let i = 1; i < steps.length; i++) {
+      assert(steps[i] - steps[i - 1] === 1,
+        `am ${day}.: Sprung von ${[start, ...list][i - 1]} nach ${[start, ...list][i]} ueberspringt einen Monat`);
+    }
+  }
+});
+
+test('nextOccurrence: MONTHLY klemmt auf den letzten Tag des kurzen Monats', () => {
+  assert(nextOccurrence('2026-01-31', 'FREQ=MONTHLY') === '2026-02-28', '31. Januar → 28. Februar (2026 kein Schaltjahr)');
+  assert(nextOccurrence('2024-01-31', 'FREQ=MONTHLY') === '2024-02-29', 'im Schaltjahr auf den 29.');
+  assert(nextOccurrence('2026-03-31', 'FREQ=MONTHLY') === '2026-04-30', '31. Maerz → 30. April, wie der Kommentar es immer versprochen hat');
+});
+
+test('nextOccurrence: MONTHLY haelt seinen Takt auch ueber kurze Monate', () => {
+  // Der uebersprungene Monat verschob vorher den Rhythmus: vom 31. Juli ging es
+  // drei Monate weiter statt zwei.
+  const rule = 'FREQ=MONTHLY;INTERVAL=2';
+  const list = occurrences('2026-01-31', rule, 5);
+  const months = list.map((d) => Number(d.slice(5, 7)));
+  assert(months.join(',') === '3,5,7,9,11', `Zweimonatstakt erwartet 3,5,7,9,11 - bekommen ${months.join(',')}`);
+});
+
+test('nextOccurrence: MONTHLY rechnet ueber den Jahreswechsel', () => {
+  assert(nextOccurrence('2026-12-31', 'FREQ=MONTHLY') === '2027-01-31', 'Dezember → Januar des Folgejahres');
+  assert(nextOccurrence('2026-11-30', 'FREQ=MONTHLY;INTERVAL=3') === '2027-02-28', 'drei Monate weiter, geklemmt');
+});
+
+// --------------------------------------------------------
 // Ergebnis
 // --------------------------------------------------------
 console.log(`\n[Calendar-Test] Ergebnis: ${passed} bestanden, ${failed} fehlgeschlagen\n`);
