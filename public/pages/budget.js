@@ -1799,7 +1799,10 @@ function loanInterestMeta(it, loan) {
 function renderLoanCard(loan) {
   const paidPct = Math.min(100, Math.round((loan.paid_amount / loan.total_amount) * 100));
   const nextDue = loan.next_due_month ? formatMonthLabel(loan.next_due_month) : t('budget.loanPaidStatus');
-  const payDisabled = loan.remaining_installments <= 0 ? 'disabled' : '';
+  // is_settled statt der Raten-Zaehlung: ein frueh volltilgtes Zins-Darlehen hat
+  // noch ungebuchte Plan-Raten, aber nichts mehr zu bezahlen (#954). Der Server
+  // wiese die Buchung ohnehin mit 409 ab - der Knopf soll das nicht erst anbieten.
+  const payDisabled = loan.is_settled ? 'disabled' : '';
   // Führende Zahl ist bei verzinsten Darlehen die Restschuld, nicht die Summe der
   // Restraten: Letztere enthält die Zinsen der Restlaufzeit und weicht deshalb von
   // dem ab, was die Bank als offenen Betrag meldet. Bezugsgröße darunter ist dann

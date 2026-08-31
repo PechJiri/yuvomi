@@ -509,7 +509,9 @@ router.post('/loans/:id/payments', (req, res) => {
     if (!loan) return res.status(404).json({ error: 'Loan not found.', code: 404 });
     const loanRow = db.get().prepare('SELECT owner_id, visibility, created_by, direction, account_id FROM budget_loans WHERE id = ?').get(id);
     if (!mayEdit(req, loanRow)) return res.status(403).json({ error: 'You cannot modify this loan.', code: 403 });
-    if (loan.remaining_installments <= 0) return res.status(409).json({ error: 'Loan is already paid.', code: 409 });
+    // is_settled statt remaining_installments: ein frueh volltilgtes Zins-Darlehen
+    // hat noch ungebuchte Plan-Raten, aber nichts mehr zu bezahlen (#954).
+    if (loan.is_settled) return res.status(409).json({ error: 'Loan is already paid.', code: 409 });
 
     const installmentNumber = req.body.installment_number === undefined
       ? loan.next_installment_number

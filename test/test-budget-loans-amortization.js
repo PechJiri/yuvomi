@@ -9,7 +9,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeLoanSchedule, remainingPrincipalAfter, MAX_LOAN_MONTHS } from '../server/services/loan-amortization.js';
+import { computeLoanSchedule, remainingPrincipalAfter, remainingPrincipalFromPayments, MAX_LOAN_MONTHS } from '../server/services/loan-amortization.js';
 
 const near = (a, b, eps = 0.02) => Math.abs(a - b) <= eps;
 
@@ -161,4 +161,123 @@ test('Restschuld liegt unter der Summe der Restraten, Differenz = Restzinsen', (
   assert.ok(near(paymentsLeft - principalLeft, interestLeft, 0.5), 'die Differenz sind die Restzinsen');
   // Summe der planmäßigen Tilgungsanteile ab hier == Restschuld.
   assert.ok(near(rest.reduce((s, x) => s + x.principal, 0), principalLeft, 0.5));
+});
+
+// --------------------------------------------------------------------------
+// Restschuld aus der Zahlungshistorie (#954, gemeldet in #935)
+// --------------------------------------------------------------------------
+
+test('remainingPrincipalFromPayments: exakte Annuität == Planposition (Äquivalenz)', () => {
+  // Die Abkürzung über die Planposition war 44 Raten lang richtig, solange jede
+  // Rate exakt der Annuität entsprach - genau diese Gleichheit muss der Ersatz
+  // beweisen, sonst ist er nur eine zweite, leise abweichende Rechnung.
+  const params = { principal: 200000, fixedRate: 2.5, initialRepaymentRate: 2, interestMode: 'fixed' };
+  const r = computeLoanSchedule(params);
+  assert.equal(r.ok, true);
+  for (const n of [1, 12, 60, r.totalMonths]) {
+    const pays = Array.from({ length: n }, (_, i) => ({ installment_number: i + 1, amount: r.monthlyPayment }));
+    // Die letzte Rate ist kleiner als die Annuität; im Plan wird sie gekappt,
+    // hier zahlt der Test sie in voller Höhe - deshalb keine Cent-Gleichheit
+    // am Laufzeitende, sondern die Null-Zusicherung darunter.
+    if (n < r.totalMonths) {
+      assert.equal(remainingPrincipalFromPayments(params, pays), remainingPrincipalAfter(r.schedule, 200000, n), `nach ${n} Raten`);
+    } else {
+      assert.equal(remainingPrincipalFromPayments(params, pays), 0, 'volle Laufzeit tilgt vollständig');
+    }
+  }
+});
+
+test('remainingPrincipalFromPayments: eine Sondertilgung senkt die Restschuld um genau ihren Betrag', () => {
+  const params = { principal: 200000, fixedRate: 2.5, initialRepaymentRate: 2, interestMode: 'fixed' };
+  const r = computeLoanSchedule(params);
+  const pays = Array.from({ length: 13 }, (_, i) => ({ installment_number: i + 1, amount: r.monthlyPayment }));
+  pays[12] = { installment_number: 13, amount: r.monthlyPayment + 10000 };
+  const withExtra = remainingPrincipalFromPayments(params, pays);
+  const planAt13 = remainingPrincipalAfter(r.schedule, 200000, 13);
+  // Bis Rate 12 laufen beide identisch, der Zinsanteil der 13. Rate ist deshalb
+  // derselbe - das Extra geht eins zu eins in die Tilgung.
+  assert.ok(near(withExtra, planAt13 - 10000), `mit Extra ${withExtra}, Plan ${planAt13}`);
+});
+
+test('remainingPrincipalFromPayments: eine Minderzahlung lässt mehr Kapital offen als der Plan behauptet', () => {
+  const params = { principal: 200000, fixedRate: 2.5, initialRepaymentRate: 2, interestMode: 'fixed' };
+  const r = computeLoanSchedule(params);
+  const pays = [
+    { installment_number: 1, amount: r.monthlyPayment },
+    { installment_number: 2, amount: 100 }, // deckt nicht einmal den Zinsanteil (~416 €)
+  ];
+  const real = remainingPrincipalFromPayments(params, pays);
+  const planAt2 = remainingPrincipalAfter(r.schedule, 200000, 2);
+  assert.ok(real > planAt2, `real ${real} muss über der Planposition ${planAt2} liegen`);
+  // Unter dem Zinsanteil wächst die Restschuld gegenüber dem Stand nach Rate 1 -
+  // ehrlich gerechnet, nicht stillschweigend als volle Rate gezählt.
+  assert.ok(real > remainingPrincipalAfter(r.schedule, 200000, 1), 'Rückstand erhöht das offene Kapital');
+});
+
+test('remainingPrincipalFromPayments: Überzahlung endet bei 0, nie darunter', () => {
+  const params = { principal: 21000, fixedRate: 4.07, initialRepaymentRate: 14.792857, interestMode: 'fixed' };
+  const pays = [
+    { installment_number: 1, amount: 22000 },
+    { installment_number: 2, amount: 330.10 }, // Buchung nach der Tilgung schuldet nichts nach
+  ];
+  assert.equal(remainingPrincipalFromPayments(params, pays), 0);
+});
+
+test('remainingPrincipalFromPayments: nach der Zinsbindung rechnet der Anschlusszins', () => {
+  const params = {
+    principal: 200000, fixedRate: 2.5, initialRepaymentRate: 2,
+    interestMode: 'fixed_then_variable', fixedPeriodMonths: 2, followupRate: 4,
+  };
+  // Eine einzelne Rate mit Nummer 3 liegt hinter der Bindung: ihr Zinsanteil
+  // muss mit 4 % gerechnet werden, nicht mit 2,5 %. Die Perioden 1 und 2 davor
+  // sind Null-Zahlungen IN der Bindung und verzinsen mit 2,5 %.
+  const rFix = 2.5 / 100 / 12;
+  const rVar = 4 / 100 / 12;
+  const paid = remainingPrincipalFromPayments(params, [{ installment_number: 3, amount: 1000 }]);
+  let b3 = 200000 * (1 + rFix) * (1 + rFix);
+  assert.ok(near(paid, b3 - (1000 - b3 * rVar)), `Restschuld ${paid}`);
+  const paidFixed = remainingPrincipalFromPayments(params, [{ installment_number: 2, amount: 1000 }]);
+  const b2 = 200000 * (1 + rFix);
+  assert.ok(near(paidFixed, b2 - (1000 - b2 * rFix)), `Restschuld in der Bindung ${paidFixed}`);
+  assert.ok(paidFixed < paid, 'in der Bindung tilgt dieselbe Rate mehr');
+});
+
+test('remainingPrincipalFromPayments: leere oder unbrauchbare Historie = Kreditsumme', () => {
+  const params = { principal: 21000, fixedRate: 4.07, initialRepaymentRate: 14.792857, interestMode: 'fixed' };
+  assert.equal(remainingPrincipalFromPayments(params, []), 21000);
+  assert.equal(remainingPrincipalFromPayments(params, null), 21000);
+  assert.equal(remainingPrincipalFromPayments(params, [{ installment_number: 0, amount: -5 }]), 21000);
+});
+
+test('remainingPrincipalFromPayments: eine Lücke ist eine Null-Zahlung, ihr Zins läuft auf', () => {
+  // Lücken entstehen real: eine Zahlung wird gelöscht, oder eine spätere
+  // Ratennummer wird direkt gebucht. Ohne Zinslauf über die ausgelassene
+  // Periode meldete die Rechnung zu WENIG Restschuld - die bequeme Richtung.
+  const params = { principal: 200000, fixedRate: 2.5, initialRepaymentRate: 2, interestMode: 'fixed' };
+  const r = computeLoanSchedule(params);
+  const m = r.monthlyPayment;
+  const rate = 2.5 / 100 / 12;
+
+  const gapped = remainingPrincipalFromPayments(params, [
+    { installment_number: 1, amount: m },
+    { installment_number: 3, amount: m },
+  ]);
+  // Von Hand: Rate 1, dann verzinst Periode 2 ohne Zahlung, dann Rate 3.
+  let b = 200000;
+  b -= (m - b * rate);      // Rate 1
+  b += b * rate;            // Periode 2: Null-Zahlung, Zins schlägt aufs Kapital
+  b -= (m - b * rate);      // Rate 3
+  assert.equal(gapped, Math.round(b * 100) / 100, 'die Lücke verzinst genau eine Periode');
+
+  const dense = remainingPrincipalFromPayments(params, [
+    { installment_number: 1, amount: m },
+    { installment_number: 2, amount: m },
+  ]);
+  assert.ok(gapped > dense, `mit Lücke ${gapped} muss mehr offen sein als ohne ${dense}`);
+
+  // Auch eine Lücke VOR der ersten Buchung verzinst: dieselbe Rate später
+  // gebucht lässt mehr Kapital offen.
+  const late = remainingPrincipalFromPayments(params, [{ installment_number: 3, amount: m }]);
+  const early = remainingPrincipalFromPayments(params, [{ installment_number: 1, amount: m }]);
+  assert.ok(late > early, `späte Erstbuchung ${late} > frühe ${early}`);
 });
