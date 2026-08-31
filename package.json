@@ -295,9 +295,9 @@
     "express-rate-limit": "^8.6.2",
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
-    "libphonenumber-js": "^1.13.11",
+    "libphonenumber-js": "^1.13.12",
     "node-cron": "^4.6.0",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^9.0.6",
     "openid-client": "^6.8.7",
     "web-push": "^3.6.7"
   },
