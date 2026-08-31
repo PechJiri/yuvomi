@@ -479,7 +479,7 @@ function personSwitcherMarkup(members, activeId, meId, { menuId, label }) {
   return `
     <div class="health-person-switcher">
       <button type="button" class="health-person-switcher__trigger popover-menu__trigger"
-              popovertarget="${esc(menuId)}"
+              popovertarget="${esc(menuId)}" aria-haspopup="menu" aria-expanded="false"
               aria-label="${esc(label)}: ${esc(nameOf(active))}">
         ${dotOf(active)}
         <span class="health-person-switcher__name">${esc(nameOf(active))}</span>
@@ -495,6 +495,32 @@ function personSwitcherMarkup(members, activeId, meId, { menuId, label }) {
           </button>`).join('')}
       </div>
     </div>`;
+}
+
+/**
+ * Verdrahtet den Personen-Umschalter - und gibt den Fokus zurueck.
+ *
+ * DER RUECKWEG IST DER HALBE FIX. Die Auswahl laedt neu und rendert die ganze
+ * Ansicht samt Umschalter neu; der Browser gibt den Fokus beim Schliessen des
+ * Popovers zwar an den Trigger zurueck, aber den gibt es dann nicht mehr - der
+ * neue ist ein anderer Knoten mit derselben Rolle, und der Fokus faellt auf
+ * <body>. Wer per Tastatur die Person wechselt, faengt sonst jedes Mal von
+ * vorn an zu tabben, und die Pfeiltasten im Menue waeren eine Bedienung, die
+ * beim ersten Gebrauch endet.
+ *
+ * EINMAL FUER ALLE SECHS ANSICHTEN: dieselben sieben Zeilen standen sechsmal
+ * da, einmal je Ansicht - genau die Bauart, an der dieser PR sein
+ * Nachzuegler-Muster gemessen hat.
+ */
+function wirePersonSwitcher(view, onSwitch) {
+  view.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((item) =>
+    item.addEventListener('click', async () => {
+      const id = Number(item.dataset.personId);
+      if (id === view.personId) return;
+      view.personId = id;
+      await onSwitch();
+      view.root.querySelector('.health-person-switcher__trigger')?.focus();
+    }));
 }
 
 // Hinweis auf den Zustand einer fremden Ansicht. Zwei Fälle, ein Baustein:
@@ -605,13 +631,7 @@ function wireTablistKeys(root) {
 function wireVitals() {
   wireTablistKeys(vitals.root);
   installPopoverMenus(vitals.root);
-  vitals.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.personId);
-      if (id === vitals.personId) return;
-      vitals.personId = id;
-      switchPerson();
-    }));
+  wirePersonSwitcher(vitals, switchPerson);
 
   vitals.root.querySelectorAll('.health-vitals__range').forEach((btn) =>
     btn.addEventListener('click', () => {
@@ -2022,13 +2042,7 @@ function medCardMarkup(med) {
 function wireMeds() {
   wireTablistKeys(meds.root);
   installPopoverMenus(meds.root);
-  meds.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.personId);
-      if (id === meds.personId) return;
-      meds.personId = id;
-      switchMedsPerson();
-    }));
+  wirePersonSwitcher(meds, switchMedsPerson);
 
 
   meds.root.querySelectorAll('[data-med-edit]').forEach((card) =>
@@ -2770,13 +2784,7 @@ const FLAG_DOT_COLORS = {
 function wireLabs() {
   wireTablistKeys(labs.root);
   installPopoverMenus(labs.root);
-  labs.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.personId);
-      if (id === labs.personId) return;
-      labs.personId = id;
-      switchLabsPerson();
-    }));
+  wirePersonSwitcher(labs, switchLabsPerson);
 
 
   labs.root.querySelectorAll('.health-lab-card').forEach((card) =>
@@ -3338,13 +3346,7 @@ function activityRowMarkup(row, own) {
 function wireActivity() {
   wireTablistKeys(activity.root);
   installPopoverMenus(activity.root);
-  activity.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.personId);
-      if (id === activity.personId) return;
-      activity.personId = id;
-      switchActivityPerson();
-    }));
+  wirePersonSwitcher(activity, switchActivityPerson);
 
   activity.root.querySelectorAll('[data-step]').forEach((btn) =>
     btn.addEventListener('click', () => {
@@ -3994,13 +3996,7 @@ function rerenderExportButtons() {
 function wireOverview() {
   wireTablistKeys(overview.root);
   installPopoverMenus(overview.root);
-  overview.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.personId);
-      if (id === overview.personId) return;
-      overview.personId = id;
-      switchOverviewPerson();
-    }));
+  wirePersonSwitcher(overview, switchOverviewPerson);
 
   overview.root.querySelectorAll('[data-ov-dose-take]').forEach((btn) =>
     btn.addEventListener('click', () => handleOverviewDose(btn, 'take')));
@@ -4571,13 +4567,7 @@ function cycleFooterMarkup(own) {
 function wireCycle() {
   wireTablistKeys(cycle.root);
   installPopoverMenus(cycle.root);
-  cycle.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((chip) =>
-    chip.addEventListener('click', () => {
-      const id = Number(chip.dataset.personId);
-      if (id === cycle.personId) return;
-      cycle.personId = id;
-      switchCyclePerson();
-    }));
+  wirePersonSwitcher(cycle, switchCyclePerson);
 
   cycle.root.querySelectorAll('[data-cycle-month]').forEach((btn) =>
     btn.addEventListener('click', () => { stepCycleMonth(Number(btn.dataset.cycleMonth)); renderCycleShell(); }));
