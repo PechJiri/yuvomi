@@ -360,11 +360,18 @@
  * auf den Inline-Schnitt): gemessen 79px bei 1024 und 1440px, mit Label wie
  * ohne. Was das Label kostet, ist dort 1px.
  *
+ * NACHGEMESSEN MIT NOWRAP (2026-08-31): die 1px-Aussage oben galt nur, weil
+ * „Kanban-Ansicht" damals ZWEIZEILIG umbrach und der Umschalter dadurch
+ * kuenstlich schmal blieb. Einzeilig (nowrap, Regel oben) misst er 393px,
+ * und bei 1024-1279px endet der Primaerknopf der Kopfzeile bei x=1221 -
+ * ausserhalb des Viewports. Das Label kommt deshalb erst, wenn die Zeile es
+ * traegt (gemessen: ab ~1240px frei, 1280 als naechste runde Schwelle).
+ *
  * Warum HIER und nicht im 640er-Block oben: die Bauteile stehen ab Zeile 247,
  * also HINTER jenem Block. Eine Regel gleicher Spezifitaet wuerde dort gegen
  * die spaetere Definition verlieren - dieselbe Kaskaden-Falle, die im
  * schmalen Zustand der Kueche schon einmal 358px Hoehe gekostet hat. */
-@media (max-width: 1023px) {
+@media (max-width: 1279px) {
   .group-toggle--icons .group-toggle__label {
     display: none;
   }
