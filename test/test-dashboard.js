@@ -1656,6 +1656,37 @@ test('Wand-Modus: der Ausstieg steht in JEDEM Zustand im DOM', async () => {
   });
 });
 
+test('Wand-Modus: Einstieg und Ausstieg sind Gegenstücke auf derselben Seite (#915)', async () => {
+  const { __test } = await import('../public/pages/dashboard.js');
+  await withWallWindow(() => {
+    // Der Modus wurde nur unter Einstellungen -> Persönlich -> Darstellung
+    // eingeschaltet und hier verlassen: man ging dort hinaus, wo man nicht
+    // hineinkam. Geprüft wird deshalb das PAAR, nicht der neue Knopf allein -
+    // verschwindet eine der beiden Hälften, ist die Einbahnstraße zurück.
+    const uebersicht = __test.renderDashboardOverview({ display_name: 'Ulas' }, false);
+    const wand = __test.renderWallSurface({ urgentTasks: wallTasks(1), users: [] }, null, {});
+
+    nodeAssert.match(uebersicht, /id="dashboard-wall-enter"/, 'die Übersicht trägt den Einstieg');
+    nodeAssert.match(wand, /id="wall-exit"/, 'die Wand trägt den Ausstieg');
+
+    // Und er sitzt in der Werkzeugzeile, nicht irgendwo: ein Knopf ausserhalb
+    // wäre nicht das Gegenstück zum Ausstieg, sondern ein zweiter Ort.
+    const tools = uebersicht.slice(uebersicht.indexOf('dashboard-overview__tools'));
+    nodeAssert.match(tools, /id="dashboard-wall-enter"/, 'in der Werkzeugzeile der Übersicht');
+  });
+});
+
+test('Wand-Modus: der Einstieg fällt im Anpassen-Modus weg', async () => {
+  const { __test } = await import('../public/pages/dashboard.js');
+  await withWallWindow(() => {
+    // Dort geht es um die Anordnung der Kacheln; ein Moduswechsel mittendrin
+    // würfe eine ungespeicherte Bearbeitung weg.
+    const editing = __test.renderDashboardOverview({ display_name: 'Ulas' }, true);
+    nodeAssert.ok(!/id="dashboard-wall-enter"/.test(editing), 'kein Einstieg im Anpassen-Modus');
+    nodeAssert.match(editing, /id="dashboard-customize-save"/, 'Reichweite: es IST der Anpassen-Modus');
+  });
+});
+
 test('Wand-Modus: der Fehlerzustand trägt keinen Retry-Knopf, aber die Uhr', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
   await withWallWindow(() => {

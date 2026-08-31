@@ -29,7 +29,7 @@ import {
 } from '/utils/dashboard-widgets.js';
 import { whoMark } from '/utils/seal-pair.js';
 import { MODULE_ICON, moduleIconHTML } from '/nav-icons.js';
-import { exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
+import { enterWallMode, exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
 import { rememberLayoutHint, layoutHintSizes, layoutHintQuery } from '/utils/dashboard-layout-hint.js';
 import { emptyHintHTML } from '/utils/empty-state.js';
 import { quickLinkHost } from '/utils/quick-link-url.js';
@@ -2295,6 +2295,28 @@ function renderDashboardOverview(user, editing = false, weather = null, updatedA
             <button class="btn btn--secondary" id="dashboard-customize-cancel">${t('common.cancel')}</button>
             <button class="btn btn--primary" id="dashboard-customize-save">${t('common.save')}</button>
           </div>` : ''}
+          <!-- DER EINSTIEG SITZT DA, WO DER AUSSTIEG SITZT (#915). Der Wandmodus
+               liess sich nur unter Einstellungen -> Persoenlich -> Darstellung
+               einschalten, verlassen aber hier auf der Uebersicht - man ging
+               dort hinaus, wo man nicht hineinkam.
+
+               Kein eigener Schalter dafuer, ob dieser Knopf erscheint: er
+               laege in denselben Einstellungen, in denen der Modus selbst
+               schon steht, und waere ein zweiter Schalter fuer eine Sache.
+               Auch keine Regel nach Geraeteform - ein falsch versteckter
+               Einstieg ist wieder unauffindbar und verschoebe das Problem nur.
+               Er ist ein Icon-Knopf wie der daneben und traegt sich so leise
+               wie der.
+
+               Im Anpassen-Modus faellt er weg: dort geht es um die Anordnung
+               der Kacheln, und ein Moduswechsel mittendrin wuerfe eine
+               ungespeicherte Bearbeitung weg. -->
+          ${editing ? '' : `
+          <button class="dashboard-icon-btn" id="dashboard-wall-enter"
+                  aria-label="${t('dashboard.wallEnter')}"
+                  title="${t('dashboard.wallEnter')}">
+            <i data-lucide="maximize-2" aria-hidden="true"></i>
+          </button>`}
           <button class="dashboard-icon-btn" id="dashboard-customize-btn"
                   aria-label="${editing ? t('dashboard.customizeExit') : t('dashboard.customize')}"
                   title="${editing ? t('dashboard.customizeExit') : t('dashboard.customize')}"
@@ -3414,13 +3436,18 @@ function wireWallSurface(container, rerender, signal) {
 
   const leave = () => {
     exitWallMode();
-    // Der Toast sagt, WO der Schalter sitzt - wer versehentlich aussteigt, soll
-    // nicht suchen muessen. Die beiden Namen kommen aus ihren eigenen
-    // Schluesseln statt aus dem Satz: sonst driftet die Wegbeschreibung, sobald
-    // das Blatt umbenannt wird.
+    // Der Toast sagt, WO der Weg zurueck liegt - wer versehentlich aussteigt,
+    // soll nicht suchen muessen. Der Name kommt aus dem Schluessel des Knopfes
+    // statt aus dem Satz: sonst driftet die Wegbeschreibung, sobald der Knopf
+    // umbenannt wird.
+    //
+    // Er zeigte bis #915 in die Einstellungen, weil der Modus dort als einziges
+    // eingeschaltet werden konnte. Das war nie falsch, aber seit der Einstieg in
+    // der Werkzeugzeile steht, waere es der Umweg - und ein Hinweis, der den
+    // Umweg nennt, waehrend der kurze Weg sichtbar danebenliegt, ist eine
+    // schlechtere Auskunft als gar keiner.
     window.yuvomi?.showToast(t('dashboard.wallExited', {
-      settings: t('nav.settings'),
-      page: t('settings.pageAppearance'),
+      action: t('dashboard.wallEnter'),
     }), 'success', 6000);
     rerender();
   };
@@ -4225,6 +4252,10 @@ export async function render(container, { user }) {
       weather = updatedWeather;
       rebuildDashboard(cfg);
     });
+    container.querySelector('#dashboard-wall-enter')?.addEventListener('click', () => {
+      enterWallMode();
+      rerender();
+    }, { signal: _fabController.signal });
     container.querySelector('#dashboard-customize-btn')?.addEventListener('click', () => {
       isCustomizing = !isCustomizing;
       if (!isCustomizing) {
@@ -4373,7 +4404,7 @@ export async function render(container, { user }) {
   }
 }
 
-export const __test = { buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWallWeather, relativeDateLabel };
+export const __test = { buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, renderDashboardOverview, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWallWeather, relativeDateLabel };
 
 function wireWeatherRefresh(container, onUpdated = null) {
   const refreshBtn = container.querySelector('#weather-refresh-btn');

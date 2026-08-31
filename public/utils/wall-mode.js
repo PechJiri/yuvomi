@@ -181,3 +181,16 @@ export function exitWallMode() {
   setWallModeEnabled(false);
   syncWallMode(location.pathname);
 }
+
+/**
+ * Gegenstueck zu `exitWallMode`, und erst seit #915 ueberhaupt vorhanden.
+ *
+ * Der Modus liess sich nur unter Einstellungen -> Persoenlich -> Darstellung
+ * einschalten, verlassen aber auf der Uebersicht: man ging dort hinaus, wo man
+ * nicht hineinkam. Der Weg ueber die Einstellungen bleibt - er ist der
+ * ausfuehrliche, mit Erklaerung daneben; dies ist der kurze am Ort der Wirkung.
+ */
+export function enterWallMode() {
+  setWallModeEnabled(true);
+  syncWallMode(location.pathname);
+}
