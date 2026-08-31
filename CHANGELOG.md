@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.1] - 2026-08-31
+
+### Security
+
+- **A scoped API token can no longer reach the account-management routes to escape its own scope
+  (GHSA-xcv5-6w6x-x5q2).** The auth router is mounted ahead of the global scope, guest and module
+  gates so that login, first-run setup and the OIDC handshake stay reachable without a session -
+  but that placement also meant none of those gates ran for `/api/v1/auth/*`. A token restricted to
+  a single read scope, acting as an admin subject, could therefore create a new unscoped token or a
+  new admin user and so defeat the least-privilege boundary that scoping exists to provide. The
+  router now re-checks scope at its own entry: a scoped token (including one scoped to nothing) is
+  refused on every auth route, while unscoped legacy tokens and interactive sessions are unaffected.
+
 ## [2.57.0] - 2026-08-31
 
 ### Fixed
