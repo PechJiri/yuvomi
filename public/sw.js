@@ -43,6 +43,7 @@ const APP_SHELL = [
   '/push.js',
   '/sw-register.js',
   '/lucide.min.js',
+  '/lucide-scope.js',
   // Alles, was `index.html` als `<link rel="stylesheet">` eager lädt, gehört
   // hierher - sonst rendert der allererste Offline-Start ungestylt. Die Regel
   // hält `test:sw-precache`; sie ist keine Liste, die man von Hand nachträgt.
