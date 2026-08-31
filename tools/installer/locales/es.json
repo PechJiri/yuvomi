@@ -11,7 +11,8 @@
     "copy": "Copiar",
     "copied": "Copiado ✓",
     "language": "Idioma",
-    "copyRedirect": "Copiar URI de redirección"
+    "copyRedirect": "Copiar URI de redirección",
+    "opt": "(opcional)"
   },
   "config": {
     "title": "Configuración básica",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "La guía de Docker",
     "prereqLinkCompose": "La guía de podman-compose",
     "prereqRecheck": "Comprobar de nuevo",
-    "errSecureOverHttp": "La dirección pública empieza por http://, pero esta opción exige cookies seguras: así nadie puede iniciar sesión. Elige «Acceso directo» o usa una dirección https://."
+    "errSecureOverHttp": "La dirección pública empieza por http://, pero esta opción exige cookies seguras: así nadie puede iniciar sesión. Elige «Acceso directo» o usa una dirección https://.",
+    "errTz": "Zona horaria no válida. Se espera un nombre IANA como Europe/Berlin."
   },
   "secrets": {
     "title": "Claves de seguridad",
@@ -37,7 +39,7 @@
     "dbLabel": "Clave de cifrado de la base de datos",
     "dbHint": "Cifra la base de datos SQLite en reposo.",
     "errBoth": "Ambas claves son obligatorias.",
-    "dangerWarn": "Guarda estas claves ahora. Si las pierdes, tus datos cifrados serán irrecuperables: no hay forma de restablecerlas.",
+    "dangerWarn": "Guarda estas claves ahora. Si las pierdes, tus datos cifrados serán irrecuperables: no hay forma de restablecerlas. Al final de la configuración podrás descargar el archivo .env con ambas claves.",
     "preserved": "Se conservan tus claves existentes, por lo que esta configuración no te bloqueará el acceso a la base de datos actual. Deja un campo vacío para conservar su clave; introducir un valor nuevo la reemplaza.",
     "keepPlaceholder": "Se conserva la clave existente"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (correo)",
     "applePassLabel": "Contraseña específica de la aplicación",
     "appleUrlLabel": "URL de CalDAV",
-    "appleUrlOpt": "(opcional)",
     "appleUrlHint": "Déjalo vacío salvo que tu proveedor use un punto de enlace CalDAV diferente.",
     "outlook": "Calendario de Outlook (Microsoft Graph)",
     "outlookHint": "Crea un registro de aplicación de Entra ID gratuito (\"Solo cuentas Microsoft personales\") en {{link}} - consulta la guía de instalación. URI de redirección: {{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "Recetas",
     "privateNetworkWebdav": "Documentos WebDAV",
     "baseUrl": "Dirección pública",
-    "outlook": "Calendario de Outlook"
+    "outlook": "Calendario de Outlook",
+    "notEnabled": "no habilitado"
   },
   "docker": {
     "title": "Iniciando Yuvomi",
@@ -136,7 +138,8 @@
     "stalled": "Está tardando más de lo habitual. El registro de abajo muestra por qué.",
     "showLogs": "Mostrar registro",
     "hideLogs": "Ocultar registro",
-    "timedOut": "Sin respuesta tras 15 minutos. Revisa el registro e inténtalo de nuevo."
+    "timedOut": "Sin respuesta tras 15 minutos. Revisa el registro e inténtalo de nuevo.",
+    "logLabel": "Registro del contenedor"
   },
   "admin": {
     "title": "Crear cuenta de administrador",

@@ -77,9 +77,12 @@
         --color-accent: #A78BFA; --color-accent-hover: #BCA6FC; --color-ink-on-vivid: #0A0A0C;
         --neutral-950: #FBFAF7;
         --color-success: #30D158; --color-warning: #FF9F0A; --color-danger: #FF6961;
-        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
-        --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.40);
-        --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.50);
+        /* Inkl. des 1px-Kantenrings aus tokens.css (Dark-Kur 2026-08-17): ein
+           reiner Schwarz-Wurf ist auf der Kohle-Buehne unsichtbar, die Karte
+           hinge allein am Flaechenkontrast. */
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(255, 255, 255, 0.06);
+        --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(255, 255, 255, 0.06);
+        --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.05);
       }
     }
   </style>
@@ -153,10 +156,20 @@
       border: 1.5px solid var(--color-border); border-radius: var(--radius-sm);
       background: var(--color-surface); color: var(--color-text-primary);
       font-family: var(--font-sans); cursor: pointer; min-height: 36px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c6b67' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-      background-repeat: no-repeat; background-position: right 9px center;
     }
-    html[dir="rtl"] .lang-switch select { padding: 6px 10px 6px 26px; background-position: left 9px center; }
+    html[dir="rtl"] .lang-switch select { padding: 6px 10px 6px 26px; }
+    /* Chevron als Maske statt background-image: url() kann keine var() tragen,
+       der Strich stand deshalb hartkodiert auf #6c6b67 - im Dark Mode 2.77:1
+       auf der Feldflaeche und damit unter der 3:1-Schwelle fuer UI-Grafik
+       (WCAG 1.4.11). Die Maske nimmt ihre Farbe aus dem Token und folgt beiden
+       Themes; inset-inline-end deckt RTL ohne zweite Regel. */
+    .lang-switch::after {
+      content: ''; position: absolute; inset-inline-end: 9px; top: 50%;
+      width: 12px; height: 12px; margin-top: -6px; pointer-events: none;
+      background: var(--color-text-secondary);
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+    }
     .lang-switch select:focus-visible { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent); }
 
     /* Modus-Wahl: zwei große, klar unterscheidbare Wege. */
@@ -307,6 +320,12 @@
        die erklaerende Prosa fuer Laien kleiner als in der fertigen App. */
     .hint { font-size: var(--text-sm); color: var(--color-text-secondary); margin-top: 5px; line-height: 1.4; }
     .hint a { color: var(--color-accent); }
+    /* Redirect-URIs sind unzerbrechliche Maschinenwerte in fester Kartenbreite:
+       ohne Umbruch clippte overflow:hidden der Toggle-Card sie mobil kommentarlos
+       (gemessen 472px Inhalt in 343px Karte) - und genau dieser Wert muss
+       zeichengenau in eine fremde Konsole. #done-path traegt dasselbe Muster
+       inline; hier gilt es fuer alle drei Redirect-<code>-Knoten. */
+    .hint code { word-break: break-all; }
     /* Kapsel statt eigener 8px-Ecke: die App gibt für Buttons durchgängig
        --radius-glass-button (= --radius-full) vor, der Installer erfand hier
        eine fremde Grammatik. --radius-full lag ungenutzt im Dokument. */
@@ -321,6 +340,14 @@
        direkt neben einem Marken-Tile, das die App-Farbe korrekt traegt. */
     .btn-primary { background: color-mix(in srgb, var(--color-accent) 88%, var(--neutral-950)); color: var(--color-ink-on-vivid); }
     .btn-primary:hover:not(:disabled) { background: var(--color-accent-hover); }
+    /* Scharfgestellte Zwei-Klick-Bestaetigung (Speichern & Starten): der Zustand
+       muss SICHTBAR sein, nicht nur im Buttontext - ein Doppelklicker liest das
+       Label nie, ein Zoegerer haelt den ersten Klick sonst fuer wirkungslos.
+       Bleibt in der einen violetten Stimme: hellere Flaeche plus Akzentring. */
+    .btn-primary.is-armed {
+      background: var(--color-accent-hover);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent);
+    }
     .btn-ghost   { background: var(--color-surface-2); color: var(--color-text-primary); border: 1.5px solid var(--color-border); }
     .btn-ghost:hover:not(:disabled) { background: var(--color-border); }
     .btn-sm      { min-height: 40px; padding: 6px 12px; font-size: var(--text-xs); }
@@ -370,7 +397,17 @@
       margin-top: 12px; padding: 10px; background: var(--color-surface-2);
       border: 1px solid var(--color-border); border-radius: var(--radius-xs);
     }
-    .review-grid { display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; font-size: var(--text-sm); }
+    /* Die Box ist per Tastatur fokussier- und scrollbar (tabindex im Markup):
+       im Fehlerfall ist das Protokoll die einzige Diagnose. */
+    .log-box:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+    /* minmax(0, 1fr) statt 1fr: die Wertspalte darf unter ihre min-content-
+       Breite schrumpfen, und overflow-wrap bricht unzerbrechliche Maschinenwerte
+       (BASE_URL mit DDNS-Host, Nextcloud-WebDAV-URL) um. Ohne beides schob die
+       Pruefseite die GANZE Seite seitlich (gemessen 534px body-scrollWidth bei
+       375px Viewport, WCAG 1.4.10) - ausgerechnet der Kontrollschirm vor dem
+       irreversiblen Klick. Die Schluesselspalte gibt auf schmalen Viewports mit. */
+    .review-grid { display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr); gap: 8px 12px; font-size: var(--text-sm); }
+    .review-grid > :not(.review-key) { overflow-wrap: anywhere; }
     .review-key  { color: var(--color-text-secondary); }
     .masked      { font-family: var(--font-mono); letter-spacing: 3px; color: var(--color-text-secondary); }
     .done-wrap   { text-align: center; padding: 20px 0 8px; }
@@ -485,9 +522,9 @@
 
     /* Touch-Ziele ≥44px und erreichbarer Footer auf Mobilgeräten. */
     @media (max-width: 640px) {
-      /* Der Sprachumschalter ist position:fixed und auf 44px Zielgroesse
-         gewachsen: er reichte damit bis 56px herunter, waehrend der Inhalt bei
-         48px begann und das Markenzeichen anschnitt. */
+      /* Der Sprachumschalter sitzt absolut oben rechts und ist auf 44px
+         Zielgroesse gewachsen: er reichte damit bis 56px herunter, waehrend der
+         Inhalt bei 48px begann und das Markenzeichen anschnitt. */
       body { padding-top: 68px; }
       .btn-sm { min-height: 44px; min-width: 44px; padding: 8px 12px; }
       .secret-row .btn-sm { flex: 0 0 auto; }
@@ -520,7 +557,8 @@
   </style>
 </head>
 <body>
-  <div class="progress-track"><div class="progress-fill" id="prog"></div></div>
+  <!-- Rein dekorativ: die Auskunft "wo bin ich" traegt der Schrittzaehler. -->
+  <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="prog"></div></div>
 
   <!-- Sprachumschaltung: überschreibt die Browser-Erkennung, Wahl wird gemerkt. -->
 
@@ -649,6 +687,8 @@
       </div>
       <div class="card-foot">
         <button class="btn btn-ghost" data-back data-i18n="common.back">Back</button>
+        <!-- Live-Region wie bei rev-next: das Scharfstellen muss angesagt werden. -->
+        <span class="vh" role="status" id="simple-armed-note"></span>
         <button class="btn btn-primary" id="simple-next" data-i18n="simple.start">Set up &amp; start Yuvomi</button>
       </div>
     </div>
@@ -879,7 +919,7 @@
               <input type="password" id="apple-pass">
             </div>
             <div class="field">
-              <label for="apple-url"><span data-i18n="calendar.appleUrlLabel">CalDAV URL</span> <span class="opt" data-i18n="calendar.appleUrlOpt">(optional)</span></label>
+              <label for="apple-url"><span data-i18n="calendar.appleUrlLabel">CalDAV URL</span> <span class="opt" data-i18n="common.opt">(optional)</span></label>
               <input type="text" id="apple-url" placeholder="https://caldav.icloud.com">
               <div class="hint" data-i18n="calendar.appleUrlHint">Leave empty unless your provider uses a different CalDAV endpoint.</div>
             </div>
@@ -969,7 +1009,7 @@
             <div class="hint" data-i18n="email.fromHint">The “from” address recipients will see. Many providers require it to match your username.</div>
           </div>
           <div class="field">
-            <label for="email-from-name"><span data-i18n="email.fromNameLabel">Sender name</span> <span class="opt" data-i18n="calendar.appleUrlOpt">(optional)</span></label>
+            <label for="email-from-name"><span data-i18n="email.fromNameLabel">Sender name</span> <span class="opt" data-i18n="common.opt">(optional)</span></label>
             <input type="text" id="email-from-name" placeholder="Yuvomi">
           </div>
         </div>
@@ -1226,14 +1266,21 @@
              als eine Auskunft zeigt, wird hier als eine Frage gestellt. -->
         <div class="group-label" data-i18n="advanced.sectionPrivateNetwork">Access to your home network</div>
         <p class="hint" style="margin-bottom:12px" data-i18n="advanced.privateNetworkHint">Yuvomi refuses connections to addresses on your own network by default, which protects against a server being tricked into reaching internal services. Enable what you actually run at home.</p>
+        <!-- Die drei Einzel-Hints lagen fertig uebersetzt in allen 24 Locales,
+             wurden aber nie gerendert - dabei tragen genau sie die Anker
+             (Mealie, Tandoor, Nextcloud), an denen ein Erstinstallierer erkennt,
+             ob ihn die Freigabe betrifft. -->
         <div class="field">
           <label><input type="checkbox" id="adv-ics-private"> <span data-i18n="advanced.icsPrivateNetwork">Allow calendar subscriptions from your home network</span></label>
+          <div class="hint" data-i18n="advanced.icsPrivateNetworkHint">Needed for ICS feeds from devices on your own network. Lifts the SSRF protection for calendar subscriptions.</div>
         </div>
         <div class="field">
           <label><input type="checkbox" id="adv-recipe-provider-private"> <span data-i18n="advanced.recipeProviderPrivateNetwork">Allow recipe provider mirrors on your home network</span></label>
+          <div class="hint" data-i18n="advanced.recipeProviderPrivateNetworkHint">Needed for a Mealie or Tandoor instance on your own network. Lifts the SSRF protection for recipe provider mirrors.</div>
         </div>
         <div class="field">
           <label><input type="checkbox" id="adv-document-webdav-private"> <span data-i18n="advanced.documentWebdavPrivateNetwork">Allow a WebDAV target on your home network</span></label>
+          <div class="hint" data-i18n="advanced.documentWebdavPrivateNetworkHint">Needed for a Nextcloud on your own network. Lifts the SSRF protection for this target.</div>
         </div>
 
         <div class="group-label" data-i18n="advanced.sectionMore">More options</div>
@@ -1316,6 +1363,10 @@
       </div>
       <div class="card-foot">
         <button class="btn btn-ghost" data-back data-i18n="common.back">Back</button>
+        <!-- Live-Region fuer das Scharfstellen: der Textwechsel am fokussierten
+             Button wird nicht zuverlaessig angesagt - wer ihn nicht sieht, haelt
+             den ersten Klick fuer wirkungslos und klickt "zum ersten Mal". -->
+        <span class="vh" role="status" id="rev-armed-note"></span>
         <!-- Kein data-i18n: traegt die Zwei-Klick-Bestaetigung im Text. -->
         <button class="btn btn-primary" id="rev-next">Save &amp; Start Docker</button>
       </div>
@@ -1355,7 +1406,10 @@
             <span class="warn-icon" aria-hidden="true">&#x26A0;</span>
             <span data-i18n="docker.stalled">This is taking longer than usual. The log below shows why.</span>
           </div>
-          <div class="log-box" id="dkr-log"></div>
+          <!-- tabindex: die Box scrollt, und im Fehlerfall ist das Protokoll die
+               einzige Diagnose - ohne Fokus war sie per Tastatur unscrollbar
+               (WCAG 2.1.1). -->
+          <div class="log-box" id="dkr-log" tabindex="0" role="region" aria-label="Container log" data-i18n-aria="docker.logLabel"></div>
         </div>
       </div>
       <div class="card-foot" id="dkr-foot" style="display:none">
@@ -1376,17 +1430,20 @@
       <div class="card-body">
         <div class="field">
           <label for="adm-user" data-i18n="admin.userLabel">Username</label>
-          <input type="text" id="adm-user" placeholder="jane" autocomplete="username">
+          <!-- required: die Wizard-Konvention ist "alles optional" - gerade darum
+               tragen die faktischen Pflichtfelder dieses Schritts den Zustand
+               programmatisch (WCAG 3.3.2; validiert wird in createAdmin). -->
+          <input type="text" id="adm-user" placeholder="jane" autocomplete="username" required aria-required="true">
           <div class="hint" data-i18n="admin.userHint">3-64 characters: letters, numbers, . - _</div>
         </div>
         <div class="field">
           <label for="adm-name" data-i18n="admin.nameLabel">Display Name</label>
-          <input type="text" id="adm-name" placeholder="Jane Smith" autocomplete="name">
+          <input type="text" id="adm-name" placeholder="Jane Smith" autocomplete="name" required aria-required="true">
         </div>
         <div class="field">
           <label for="adm-pass" data-i18n="admin.passLabel">Password</label>
           <div class="secret-row">
-            <input type="password" id="adm-pass" placeholder="At least 8 characters" data-i18n-ph="admin.passPlaceholder" autocomplete="new-password">
+            <input type="password" id="adm-pass" placeholder="At least 8 characters" data-i18n-ph="admin.passPlaceholder" autocomplete="new-password" required aria-required="true">
             <button type="button" class="btn btn-ghost btn-sm" data-eye="adm-pass" aria-pressed="false" aria-label="Show or hide value" data-i18n-aria="common.toggleVisibility">
               <svg class="icon-svg icon-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
               <svg class="icon-svg icon-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19M6.61 6.61A18.5 18.5 0 0 0 2 12s3.5 7 10 7a9.12 9.12 0 0 0 5.4-1.61"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
@@ -1395,7 +1452,7 @@
         </div>
         <div class="field">
           <label for="adm-conf" data-i18n="admin.confLabel">Confirm Password</label>
-          <input type="password" id="adm-conf" autocomplete="new-password">
+          <input type="password" id="adm-conf" autocomplete="new-password" required aria-required="true">
         </div>
         <div class="error-banner" id="adm-err" role="alert"></div>
       </div>
@@ -1583,6 +1640,13 @@ let simpleLockedByEnv = false;
 let dockerPrimaryKey = 'docker.toAdmin';
 let dockerTextKey = 'docker.phasePull';
 let reviewConfirmed = false;
+// Zeitstempel des Scharfstellens: ein woertlicher Doppelklick (~200 ms) traf
+// sonst beide Stufen der Zwei-Klick-Bestaetigung in einer Geste - derselbe
+// Button, dieselbe Position, und dahinter liegt .env-Schreiben plus
+// Container-Neustart. Der zweite Klick zaehlt erst nach einer Schrecksekunde.
+const CONFIRM_COOLDOWN_MS = 600;
+let reviewArmedAt = 0;
+let simpleArmedAt = 0;
 let logsOpen = false;
 // Muss ebenfalls vor localize() stehen: der Abschluss-Untertitel haengt daran,
 // und localize() laeuft schon beim Laden. Beim Rerun gab es das Admin-Konto
@@ -1621,6 +1685,10 @@ function localize() {
   $('done-subtitle').textContent = t(adminExisted ? 'done.subtitleExisting' : 'done.subtitle');
   // Dasselbe für die Adresszeile des Einfach-Pfads ({{url}}).
   if (wizardReady) $('simple-access-desc').textContent = t('simple.itemAccessDesc', { url: deriveBaseUrl() });
+  // Und fuer die Werte der Pruefseite: ihre Labels uebersetzt applyTranslations,
+  // die Werte ("Neu erzeugt", "Direkt / HTTP") kommen aus renderReview - ohne
+  // diesen Aufruf blieb der Kontrollschirm nach einem Sprachwechsel zweisprachig.
+  if (wizardReady) renderReview();
   applyStepCounters();
 }
 
@@ -1724,6 +1792,12 @@ function plannedOrigin() {
   // gesetzt, der Nutzer steht beim Tippen aber noch davor.
   const scheme = $('adv-proxy')?.value === 'direct' ? 'http' : 'https';
   return deriveBaseUrl(scheme, host, port);
+}
+
+/** Kennt der Browser diese Zeitzone? Intl wirft bei unbekannten IANA-Namen. */
+function isValidTimeZone(tz) {
+  try { new Intl.DateTimeFormat(undefined, { timeZone: tz }); return true; }
+  catch { return false; }
 }
 
 /** Ein 32-Byte-Hex-Secret vom Installer-Server holen. */
@@ -1960,7 +2034,19 @@ function showStep(n) {
   // Fokus auf die Überschrift des neuen Schritts, damit Tastatur-/Screenreader-
   // Nutzer der Navigation folgen (WCAG 2.4.3). preventScroll verhindert Sprünge.
   const heading = $(`step-${active}`)?.querySelector('h1, h2');
-  if (heading) heading.focus({ preventScroll: true });
+  if (heading) {
+    // Der Schrittzaehler steht im DOM VOR der fokussierten H2 und wurde beim
+    // Schrittwechsel nie mit angesagt - der Fortschritt war nur rueckwaerts
+    // erkundbar. describedby haengt ihn an die Fokus-Ansage an.
+    const tag = $(`step-${active}`)?.querySelector('.step-tag');
+    if (tag && tag.textContent) {
+      if (!tag.id) tag.id = `step-tag-${active}`;
+      heading.setAttribute('aria-describedby', tag.id);
+    } else {
+      heading.removeAttribute('aria-describedby');
+    }
+    heading.focus({ preventScroll: true });
+  }
   onEnterStep(active);
 }
 
@@ -1976,6 +2062,16 @@ function onEnterStep(name) {
     // Bestätigungszustand zurücksetzen, falls der Nutzer erneut hierher navigiert.
     simpleConfirmed = false;
     $('simple-next').textContent = t('simple.start');
+    $('simple-next').classList.remove('is-armed');
+    $('simple-armed-note').textContent = '';
+  } else if (name === 'review') {
+    renderReview();
+    // Bestätigungszustand zurücksetzen, falls der Nutzer erneut hierher
+    // navigiert - dieselbe Entwaffnung wie beim Einfach-Pfad oben.
+    reviewConfirmed = false;
+    $('rev-next').textContent = t('review.save');
+    $('rev-next').classList.remove('is-armed');
+    $('rev-armed-note').textContent = '';
   } else if (name === 'config') {
     // Vorbelegen, aber nur solange der Nutzer nichts eingetippt hat: sonst
     // überschriebe ein Schritt zurück und wieder vor seine Eingabe.
@@ -2127,15 +2223,32 @@ function showErr(id, msg) {
 
 /** aria-invalid auf allen Feldern zurücksetzen (bei Schrittwechsel / erneuter Prüfung). */
 function clearInvalid(root = document) {
-  root.querySelectorAll('[aria-invalid="true"]').forEach(el => el.removeAttribute('aria-invalid'));
+  root.querySelectorAll('[aria-invalid="true"]').forEach(el => {
+    el.removeAttribute('aria-invalid');
+    // Nur fail() setzt describedby; mit der Markierung geht auch die Bindung.
+    el.removeAttribute('aria-describedby');
+  });
 }
 
 /** Banner-Fehler zeigen UND das schuldige Feld markieren + fokussieren (WCAG 3.3.1). */
 function fail(bannerId, msg, inputId) {
-  showErr(bannerId, msg);
   const el = inputId && $(inputId);
+  const banner = $(bannerId);
+  // Das Banner unter das schuldige Feld ziehen: es stand am Ende des card-body
+  // und lag bei langen Schritten ausserhalb des Viewports (gemessen: Bannertop
+  // 787px bei 720px Viewport) - Sehende sahen nur den roten Rahmen, den Grund
+  // bekam allein der Screenreader. Verschieben statt erzeugen haelt die
+  // "kein dynamisches DOM"-Regel dieses Moduls.
+  if (el && banner) {
+    const wrap = el.closest('.field') || el;
+    if (wrap.nextElementSibling !== banner) wrap.after(banner);
+  }
+  showErr(bannerId, msg);
   if (el) {
     el.setAttribute('aria-invalid', 'true');
+    // Meldung programmatisch ans Feld binden: wer spaeter zum Feld
+    // zurueckkehrt, hoert den Grund, nicht nur "ungueltig" (WCAG 3.3.1/1.3.1).
+    el.setAttribute('aria-describedby', bannerId);
     el.focus({ preventScroll: true });
     el.scrollIntoView({ block: 'center' });
   }
@@ -2239,10 +2352,19 @@ $('cfg-next').addEventListener('click', () => {
     fail('cfg-err', t('config.errPort'), 'cfg-port');
     return;
   }
+  // Die Zeitzone ist derselbe stille Spaetzuender wie BASE_URL: ein Tippfehler
+  // ("Europe/Berln") faellt lautlos auf UTC zurueck, und Backup-Cron plus
+  // Haushaltszonen-Vorbelegung laufen falsch, ohne dass irgendwo etwas rot wird.
+  // Der eigene Port wird streng geprueft - dieses Feld war das einzige ohne Riegel.
+  const rawTz = $('cfg-tz').value.trim();
+  if (rawTz && !isValidTimeZone(rawTz)) {
+    fail('cfg-err', t('config.errTz'), 'cfg-tz');
+    return;
+  }
   showErr('cfg-err', '');
   S.host = rawHost;
   S.port = String(rawPort);
-  S.tz   = $('cfg-tz').value.trim() || 'UTC';
+  S.tz   = rawTz || 'UTC';
 
   // Reverse proxy vs. direct access drives the secure-cookie / trust-proxy pair.
   // Steht seit dem Umzug hier statt in adv-next: die Entscheidung gehoert zu
@@ -2349,8 +2471,16 @@ $('email-next').addEventListener('click', () => {
     const from = $('email-from').value.trim();
     // Host und Absenderadresse sind das Minimum für einen funktionierenden Versand.
     if (!host || !from) { fail('email-err', t('email.errIncomplete'), !host ? 'email-host' : 'email-from'); return; }
+    // Der SMTP-Port zeigt einen Fehler erst Wochen spaeter beim ersten
+    // Passwort-Reset - dieselbe Spaetzuender-Klasse wie BASE_URL. Leer bleibt
+    // erlaubt (Server-Default 587); config.errPort trifft die Aussage woertlich.
+    const smtpPort = $('email-port').value.trim();
+    if (smtpPort && (!/^\d+$/.test(smtpPort) || +smtpPort < 1 || +smtpPort > 65535)) {
+      fail('email-err', t('config.errPort'), 'email-port');
+      return;
+    }
     S.EMAIL_SMTP_HOST   = host;
-    S.EMAIL_SMTP_PORT   = $('email-port').value.trim();
+    S.EMAIL_SMTP_PORT   = smtpPort;
     S.EMAIL_SMTP_SECURE = $('email-secure').value;
     S.EMAIL_SMTP_USER   = $('email-user').value.trim();
     S.EMAIL_SMTP_PASS   = $('email-pass').value;
@@ -2566,15 +2696,12 @@ $('adv-next').addEventListener('click', () => {
   }
   showErr('adv-err', '');
 
-  // Backups: validate optional schedule/retention before persisting.
   // Die drei Heimnetz-Freigaben stehen seit der Zusammenfuehrung beisammen.
   S.ICS_SUBSCRIPTION_ALLOW_PRIVATE_NETWORK = $('adv-ics-private').checked ? 'true' : '';
   S.RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK = $('adv-recipe-provider-private').checked ? 'true' : '';
   S.DOCUMENT_STORAGE_WEBDAV_ALLOW_PRIVATE_NETWORK =
     $('adv-document-webdav-private').checked ? 'true' : '';
 
-  S.ICS_SUBSCRIPTION_ALLOW_PRIVATE_NETWORK = $('adv-ics-private').checked ? 'true' : '';
-  S.RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK = $('adv-recipe-provider-private').checked ? 'true' : '';
   S.FIXER_API_KEY  = $('adv-fixer').value.trim();
   S.VAPID_SUBJECT  = $('adv-push-subject').value.trim();
 
@@ -2584,6 +2711,20 @@ $('adv-next').addEventListener('click', () => {
   }
   S.SYNC_INTERVAL_MINUTES = syncInterval;
 
+  next();
+});
+
+/**
+ * Die Pruefseite aus dem Zustand rendern.
+ *
+ * Lebte als Block im adv-next-Handler - mit der Folge, dass ein Sprachwechsel
+ * AUF der Pruefseite die Labels uebersetzte, die Werte aber deutsch stehen
+ * liess ("Neu erzeugt", "Direkt / HTTP"): localize() hatte keinen Review-Zweig,
+ * und neu gerendert wurde nur auf dem Weg durch adv-next. Ausgerechnet der
+ * Kontrollschirm vor dem irreversiblen Klick war zweisprachig. Jetzt rufen
+ * onEnterStep('review') und localize() dieselbe Funktion.
+ */
+function renderReview() {
   $('rv-host').textContent    = S.host;
   $('rv-port').textContent    = S.port;
   $('rv-tz').textContent      = S.tz;
@@ -2626,26 +2767,30 @@ $('adv-next').addEventListener('click', () => {
     S.RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK === 'true' && t('review.privateNetworkRecipes'),
     S.DOCUMENT_STORAGE_WEBDAV_ALLOW_PRIVATE_NETWORK === 'true' && t('review.privateNetworkWebdav'),
   ].filter(Boolean);
-  $('rv-private-network').textContent = privateNet.length ? privateNet.join(', ') : t('review.off');
-
-  // Bestätigungszustand zurücksetzen, falls der Nutzer erneut hierher navigiert.
-  reviewConfirmed = false;
-  $('rev-next').textContent = t('review.save');
-
-
-  next();
-});
+  // "nicht freigegeben" statt "deaktiviert": der unberuehrte Default ist keine
+  // getroffene Entscheidung und soll auch nicht wie eine klingen.
+  $('rv-private-network').textContent = privateNet.length ? privateNet.join(', ') : t('review.notEnabled');
+}
 
 $('rev-next').addEventListener('click', async () => {
   const btn = $('rev-next');
   // Irreversibler Schritt: erster Klick fordert Bestätigung, zweiter führt aus.
   if (!reviewConfirmed) {
     reviewConfirmed = true;
+    reviewArmedAt = Date.now();
     btn.textContent = t('review.confirm');
+    // Sichtbar scharfstellen, nicht nur den Text wechseln (siehe .is-armed).
+    btn.classList.add('is-armed');
+    // Und hoerbar: der Textwechsel am fokussierten Button wird nicht
+    // zuverlaessig angesagt - ohne die Live-Region wirkte der erste Klick fuer
+    // Screenreader wie "nichts passiert".
+    $('rev-armed-note').textContent = t('review.confirm');
     showErr('rev-err', '');
     return;
   }
-  btn.disabled = true; btn.textContent = t('review.saving');
+  if (Date.now() - reviewArmedAt < CONFIRM_COOLDOWN_MS) return;
+  btn.disabled = true; btn.textContent = t('review.saving'); btn.classList.remove('is-armed');
+  $('rev-armed-note').textContent = '';
   const env = buildEnv();
   try {
     const r = await fetch('/api/save-env', {
@@ -2654,13 +2799,17 @@ $('rev-next').addEventListener('click', async () => {
       body: JSON.stringify({ env }),
     });
     const d = await r.json().catch(() => null);
-    if (!r.ok) throw new Error(d?.error || t('review.errSave'));
+    if (!r.ok) throw new Error(d?.error || '');
     if (d?.path) savedEnvPath = d.path;
     next();
     startDocker();
   } catch (e) {
     btn.disabled = false; btn.textContent = t('review.save'); reviewConfirmed = false;
-    showErr('rev-err', e.message);
+    $('rev-armed-note').textContent = '';
+    // Uebersetzte Hauptaussage zuerst, das rohe Server-/Netzwerkdetail nur als
+    // Klammer: sanitizeEnv-Meldungen sind englisch, die Nutzerin liest hier
+    // aber eine von 24 Sprachen.
+    showErr('rev-err', e.message ? `${t('review.errSave')} (${e.message})` : t('review.errSave'));
   }
 });
 
@@ -2673,11 +2822,18 @@ $('simple-next').addEventListener('click', async () => {
   // Netz für die Nutzer, die weniger überblicken.
   if (!simpleConfirmed) {
     simpleConfirmed = true;
+    simpleArmedAt = Date.now();
     btn.textContent = t('review.confirm');
+    // Sichtbar scharfstellen, nicht nur den Text wechseln (siehe .is-armed).
+    btn.classList.add('is-armed');
+    // Hoerbar wie bei rev-next (siehe dort).
+    $('simple-armed-note').textContent = t('review.confirm');
     showErr('simple-err', '');
     return;
   }
-  btn.disabled = true; btn.textContent = t('review.saving');
+  if (Date.now() - simpleArmedAt < CONFIRM_COOLDOWN_MS) return;
+  btn.disabled = true; btn.textContent = t('review.saving'); btn.classList.remove('is-armed');
+  $('simple-armed-note').textContent = '';
   try {
     await ensureKeys();
     S.BASE_URL = deriveBaseUrl();
@@ -2687,13 +2843,15 @@ $('simple-next').addEventListener('click', async () => {
       body: JSON.stringify({ env: buildEnv() }),
     });
     const d = await r.json().catch(() => null);
-    if (!r.ok) throw new Error(d?.error || t('review.errSave'));
+    if (!r.ok) throw new Error(d?.error || '');
     if (d?.path) savedEnvPath = d.path;
     next();
     startDocker();
   } catch (e) {
     btn.disabled = false; btn.textContent = t('simple.start'); simpleConfirmed = false;
-    showErr('simple-err', e.message);
+    $('simple-armed-note').textContent = '';
+    // Wie bei rev-err: uebersetzte Hauptaussage, rohes Detail in Klammern.
+    showErr('simple-err', e.message ? `${t('review.errSave')} (${e.message})` : t('review.errSave'));
   }
 });
 
@@ -2931,11 +3089,13 @@ async function createAdmin() {
       next();   // derselbe Abschluss: Download und „Als Naechstes" braucht er genauso
     } else {
       btn.disabled = false; btn.textContent = t('admin.create');
-      showErr('adm-err', d.error || t('admin.errCreate'));
+      // Uebersetzte Hauptaussage zuerst, das rohe Serverdetail nur in Klammern -
+      // hier landen sonst englische Serverstrings in allen 24 Sprachen.
+      showErr('adm-err', d.error ? `${t('admin.errCreate')} (${d.error})` : t('admin.errCreate'));
     }
   } catch (e) {
     btn.disabled = false; btn.textContent = t('admin.create');
-    showErr('adm-err', e.message);
+    showErr('adm-err', e.message ? `${t('admin.errCreate')} (${e.message})` : t('admin.errCreate'));
   }
 }
 
@@ -2946,6 +3106,20 @@ document.addEventListener('keydown', e => {
   if (el.tagName !== 'INPUT' || el.type === 'checkbox') return;
   const primary = $(`step-${flow[currentStep]}`)?.querySelector('.card-foot .btn-primary');
   if (primary && !primary.disabled) { e.preventDefault(); primary.click(); }
+});
+
+// Reload oder Schliessen wirft die gesamte Eingabe weg: der Wizard haelt
+// bewusst keinen Formularzustand vor (die Felder tragen Secrets). Ab dem
+// ersten Schritt fragt der Browser deshalb nach; auf dem Abschluss ist nichts
+// mehr zu verlieren. Gemessen: Reload auf Schritt 8 warf vorher kommentarlos
+// alles weg, inklusive eingefuegter OAuth-Secrets - waehrend ausgerechnet die
+// Sprachwahl den Reload ueberlebte.
+window.addEventListener('beforeunload', e => {
+  if (currentStep > 0 && flow[currentStep] !== 'done') {
+    e.preventDefault();
+    // Chrome verlangt zusaetzlich returnValue, der Text selbst kommt vom Browser.
+    e.returnValue = '';
+  }
 });
 
 showStep(0);

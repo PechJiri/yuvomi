@@ -11,7 +11,8 @@
     "copy": "Kopiera",
     "copied": "Kopierat ✓",
     "language": "Språk",
-    "copyRedirect": "Kopiera omdirigerings-URI"
+    "copyRedirect": "Kopiera omdirigerings-URI",
+    "opt": "(valfritt)"
   },
   "config": {
     "title": "Grundkonfiguration",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Docker-guiden",
     "prereqLinkCompose": "podman-compose-guiden",
     "prereqRecheck": "Kontrollera igen",
-    "errSecureOverHttp": "Den publika adressen börjar med http://, men det här valet kräver säkra kakor - då kan ingen logga in. Välj \"Direktåtkomst\" eller använd en https://-adress."
+    "errSecureOverHttp": "Den publika adressen börjar med http://, men det här valet kräver säkra kakor - då kan ingen logga in. Välj \"Direktåtkomst\" eller använd en https://-adress.",
+    "errTz": "Ogiltig tidszon. En IANA-beteckning som Europe/Berlin förväntas."
   },
   "secrets": {
     "title": "Säkerhetsnycklar",
@@ -37,7 +39,7 @@
     "dbLabel": "Krypteringsnyckel för databasen",
     "dbHint": "Krypterar SQLite-databasen i vila.",
     "errBoth": "Båda nycklarna krävs.",
-    "dangerWarn": "Spara dessa nycklar nu. Om du förlorar dem går dina krypterade data inte att återställa — det finns ingen återställning.",
+    "dangerWarn": "Spara dessa nycklar nu. Om du förlorar dem går dina krypterade data inte att återställa — det finns ingen återställning. I slutet av installationen kan du ladda ner .env-filen med båda nycklarna.",
     "preserved": "Dina befintliga nycklar behålls, så den här installationen låser dig inte ute från den nuvarande databasen. Lämna ett fält tomt för att behålla dess nyckel; ett nytt värde ersätter den.",
     "keepPlaceholder": "Befintlig nyckel behålls"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple-ID (e-post)",
     "applePassLabel": "Appspecifikt lösenord",
     "appleUrlLabel": "CalDAV-URL",
-    "appleUrlOpt": "(valfritt)",
     "appleUrlHint": "Lämna tomt om inte din leverantör använder en annan CalDAV-slutpunkt.",
     "outlook": "Outlook-kalender (Microsoft Graph)",
     "outlookHint": "Skapa en kostnadsfri Entra ID-appregistrering (\"Endast personliga Microsoft-konton\") på {{link}} - se installationsguiden. Omdirigerings-URI: {{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "Recept",
     "privateNetworkWebdav": "WebDAV-dokument",
     "baseUrl": "Publik adress",
-    "outlook": "Outlook-kalender"
+    "outlook": "Outlook-kalender",
+    "notEnabled": "inte aktiverat"
   },
   "docker": {
     "title": "Startar Yuvomi",
@@ -136,7 +138,8 @@
     "stalled": "Det här tar längre tid än vanligt. Loggen nedan visar varför.",
     "showLogs": "Visa logg",
     "hideLogs": "Dölj logg",
-    "timedOut": "Inget svar efter 15 minuter. Kontrollera loggen och försök igen."
+    "timedOut": "Inget svar efter 15 minuter. Kontrollera loggen och försök igen.",
+    "logLabel": "Containerlogg"
   },
   "admin": {
     "title": "Skapa administratörskonto",

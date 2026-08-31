@@ -11,7 +11,8 @@
     "copy": "Kopiëren",
     "copied": "Gekopieerd ✓",
     "language": "Taal",
-    "copyRedirect": "Redirect-URI kopiëren"
+    "copyRedirect": "Redirect-URI kopiëren",
+    "opt": "(optioneel)"
   },
   "config": {
     "title": "Basisconfiguratie",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "De Docker-handleiding",
     "prereqLinkCompose": "De podman-compose-handleiding",
     "prereqRecheck": "Opnieuw controleren",
-    "errSecureOverHttp": "Het openbare adres begint met http://, maar deze keuze vereist beveiligde cookies - dan kan niemand inloggen. Kies \"Directe toegang\" of gebruik een https://-adres."
+    "errSecureOverHttp": "Het openbare adres begint met http://, maar deze keuze vereist beveiligde cookies - dan kan niemand inloggen. Kies \"Directe toegang\" of gebruik een https://-adres.",
+    "errTz": "Ongeldige tijdzone. Verwacht wordt een IANA-naam zoals Europe/Berlin."
   },
   "secrets": {
     "title": "Beveiligingssleutels",
@@ -37,7 +39,7 @@
     "dbLabel": "Databaseversleutelingssleutel",
     "dbHint": "Versleutelt de SQLite-database in rust.",
     "errBoth": "Beide sleutels zijn vereist.",
-    "dangerWarn": "Bewaar deze sleutels nu. Als je ze kwijtraakt, zijn je versleutelde gegevens onherstelbaar — er is geen herstel.",
+    "dangerWarn": "Bewaar deze sleutels nu. Als je ze kwijtraakt, zijn je versleutelde gegevens onherstelbaar — er is geen herstel. Aan het einde van de installatie kun je het .env-bestand met beide sleutels downloaden.",
     "preserved": "Je bestaande sleutels blijven behouden, zodat deze installatie je niet buitensluit van de huidige database. Laat een veld leeg om de sleutel te behouden; een nieuwe waarde vervangt hem.",
     "keepPlaceholder": "Bestaande sleutel behouden"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (e-mail)",
     "applePassLabel": "App-specifiek wachtwoord",
     "appleUrlLabel": "CalDAV-URL",
-    "appleUrlOpt": "(optioneel)",
     "appleUrlHint": "Leeg laten tenzij je provider een ander CalDAV-eindpunt gebruikt.",
     "outlook": "Outlook-agenda (Microsoft Graph)",
     "outlookHint": "Maak een gratis Entra ID-appregistratie aan (\"Alleen persoonlijke Microsoft-accounts\") op {{link}} - zie de installatiehandleiding. Redirect-URI: {{redirect}}",
@@ -198,7 +199,8 @@
     "privateNetworkRecipes": "Recepten",
     "privateNetworkWebdav": "WebDAV-documenten",
     "baseUrl": "Openbaar adres",
-    "outlook": "Outlook-agenda"
+    "outlook": "Outlook-agenda",
+    "notEnabled": "niet vrijgegeven"
   },
   "docker": {
     "title": "Yuvomi wordt gestart",
@@ -216,7 +218,8 @@
     "stalled": "Dit duurt langer dan gebruikelijk. Het logboek hieronder laat zien waarom.",
     "showLogs": "Logboek tonen",
     "hideLogs": "Logboek verbergen",
-    "timedOut": "Geen reactie na 15 minuten. Bekijk het logboek en probeer het opnieuw."
+    "timedOut": "Geen reactie na 15 minuten. Bekijk het logboek en probeer het opnieuw.",
+    "logLabel": "Containerlogboek"
   },
   "admin": {
     "title": "Beheerdersaccount aanmaken",

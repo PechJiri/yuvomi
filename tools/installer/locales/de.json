@@ -11,7 +11,8 @@
     "copy": "Kopieren",
     "copied": "Kopiert ✓",
     "language": "Sprache",
-    "copyRedirect": "Redirect-URI kopieren"
+    "copyRedirect": "Redirect-URI kopieren",
+    "opt": "(optional)"
   },
   "config": {
     "title": "Grundkonfiguration",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Die Docker-Anleitung",
     "prereqLinkCompose": "Die podman-compose-Anleitung",
     "prereqRecheck": "Erneut prüfen",
-    "errSecureOverHttp": "Die öffentliche Adresse beginnt mit http://, diese Auswahl erzwingt aber sichere Cookies - dann ist keine Anmeldung möglich. Wähle „Direkter Zugriff\" oder nutze eine https://-Adresse."
+    "errSecureOverHttp": "Die öffentliche Adresse beginnt mit http://, diese Auswahl erzwingt aber sichere Cookies - dann ist keine Anmeldung möglich. Wähle „Direkter Zugriff\" oder nutze eine https://-Adresse.",
+    "errTz": "Ungültige Zeitzone. Erwartet wird ein IANA-Name wie Europe/Berlin."
   },
   "secrets": {
     "title": "Sicherheitsschlüssel",
@@ -37,7 +39,7 @@
     "dbLabel": "Datenbank-Verschlüsselungsschlüssel",
     "dbHint": "Verschlüsselt die SQLite-Datenbank im Ruhezustand.",
     "errBoth": "Beide Schlüssel sind erforderlich.",
-    "dangerWarn": "Speichere diese Schlüssel jetzt. Gehen sie verloren, sind deine verschlüsselten Daten unwiederbringlich - es gibt kein Zurücksetzen.",
+    "dangerWarn": "Speichere diese Schlüssel jetzt. Gehen sie verloren, sind deine verschlüsselten Daten unwiederbringlich - es gibt kein Zurücksetzen. Am Ende der Einrichtung kannst du die .env-Datei mit beiden Schlüsseln herunterladen.",
     "preserved": "Deine bestehenden Schlüssel bleiben erhalten - diese Einrichtung sperrt dich nicht aus der aktuellen Datenbank aus. Lass ein Feld leer, um seinen Schlüssel zu behalten; ein neuer Wert ersetzt ihn.",
     "keepPlaceholder": "Bestehender Schlüssel bleibt erhalten"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple-ID (E-Mail)",
     "applePassLabel": "App-spezifisches Passwort",
     "appleUrlLabel": "CalDAV-URL",
-    "appleUrlOpt": "(optional)",
     "appleUrlHint": "Leer lassen, sofern dein Anbieter keinen anderen CalDAV-Endpunkt verwendet.",
     "outlook": "Outlook-Kalender (Microsoft Graph)",
     "outlookHint": "Erstelle eine kostenlose Entra-ID-App-Registrierung (\"Nur persönliche Microsoft-Konten\") unter {{link}} - siehe Installationsanleitung. Redirect-URI: {{redirect}}",
@@ -127,7 +128,7 @@
     "fixerHint": "Optional. Rechnet Abo-Währungen mit Live-Kursen um. Abonnements funktionieren auch ohne.",
     "pushSubjectLabel": "Push-Kontaktadresse",
     "pushSubjectHint": "Wird an Push-Dienste als Kontakt für deinen Server gesendet. Leer lassen für den Standard.",
-    "documentGoogleDrive": "Google-Drive-Dokumentenspeicher",
+    "documentGoogleDrive": "Google-Drive-Dokumentspeicher",
     "documentGoogleDriveHint": "Konfiguriere hier die OAuth-Anmeldedaten. Verbinde Google Drive nach der Installation in den Dokumenteinstellungen und wähle es dort ausdrücklich aus.",
     "documentGoogleDriveEnable": "Google Drive für Dokumente konfigurieren",
     "documentGoogleDriveClientIdLabel": "Eigene Client-ID (optional)",
@@ -141,11 +142,11 @@
     "documentLocalDirLabel": "Host-Ordner",
     "documentLocalDirHint": "Der Ordner auf dem Server, der in den Container eingehängt wird. Leer lassen für ./documents.",
     "documentWebdavPrivateNetwork": "WebDAV-Ziel im Heimnetz erlauben",
-    "documentWebdavPrivateNetworkHint": "Nötig für ein Nextcloud im eigenen Netz. Hebt den SSRF-Schutz für dieses Ziel auf.",
+    "documentWebdavPrivateNetworkHint": "Nötig für ein Nextcloud im Heimnetz. Hebt den SSRF-Schutz für dieses Ziel auf.",
     "icsPrivateNetwork": "Kalender-Abos aus dem Heimnetz erlauben",
-    "icsPrivateNetworkHint": "Nötig für ICS-Feeds von Geräten im eigenen Netz. Hebt den SSRF-Schutz für Kalender-Abos auf.",
+    "icsPrivateNetworkHint": "Nötig für ICS-Feeds von Geräten im Heimnetz. Hebt den SSRF-Schutz für Kalender-Abos auf.",
     "recipeProviderPrivateNetwork": "Rezept-Provider-Spiegel im Heimnetz erlauben",
-    "recipeProviderPrivateNetworkHint": "Nötig für eine Mealie- oder Tandoor-Instanz im eigenen Netz. Hebt den SSRF-Schutz für Rezept-Provider-Spiegel auf.",
+    "recipeProviderPrivateNetworkHint": "Nötig für eine Mealie- oder Tandoor-Instanz im Heimnetz. Hebt den SSRF-Schutz für Rezept-Provider-Spiegel auf.",
     "oidcTrustEmail": "E-Mail ohne verified-Claim vertrauen",
     "oidcTrustEmailHint": "Nur aktivieren, wenn dein Anbieter kein email_verified sendet und du ihm vertraust.",
     "oidcAllowSignup": "SSO-Anmeldungen dürfen neue Konten anlegen",
@@ -156,7 +157,7 @@
     "syncIntervalHint": "Wie oft Yuvomi Kalender und Kontakte abgleicht. Höher stellen, wenn dein Anbieter die Rate begrenzt.",
     "errSyncInterval": "Bitte eine positive ganze Zahl in Minuten angeben.",
     "sectionPrivateNetwork": "Zugriff auf dein Heimnetz",
-    "privateNetworkHint": "Yuvomi lehnt Verbindungen zu Adressen im eigenen Netz standardmäßig ab - das schützt davor, dass der Server dazu gebracht wird, interne Dienste zu erreichen. Gib frei, was du zu Hause wirklich betreibst.",
+    "privateNetworkHint": "Yuvomi lehnt Verbindungen zu Adressen im Heimnetz standardmäßig ab - das schützt davor, dass der Server dazu gebracht wird, interne Dienste zu erreichen. Gib frei, was du zu Hause wirklich betreibst.",
     "authPasswordLogin": "Anmeldung mit Benutzername und Passwort beibehalten",
     "authPasswordLoginHint": "Ausschalten macht SSO zum einzigen Weg hinein: Anmeldeformular und Passwort-Reset verschwinden. Wirksam wird es, sobald mindestens ein Konto mit dem Anbieter verknüpft ist - eine frische Installation kann ihren ersten Administrator also noch anlegen. Ist der Anbieter nicht erreichbar, führt der Weg zurück über die .env-Datei und einen Neustart."
   },
@@ -188,17 +189,18 @@
     "on": "aktiviert",
     "off": "deaktiviert",
     "documentGoogleDrive": "Google-Drive-Dokumente",
-    "sessionSecret": "Sitzungsschlüssel",
-    "dbKey": "Datenbankschlüssel",
+    "sessionSecret": "Session-Secret",
+    "dbKey": "Datenbank-Verschlüsselungsschlüssel",
     "keyGenerated": "Neu erzeugt",
     "keyPreserved": "Bestehender bleibt erhalten",
     "dataDir": "Datenordner",
-    "privateNetwork": "Zugriff ins eigene Netz",
+    "privateNetwork": "Zugriff ins Heimnetz",
     "privateNetworkIcs": "Kalender-Abos",
     "privateNetworkRecipes": "Rezepte",
-    "privateNetworkWebdav": "WebDAV-Dokumente",
+    "privateNetworkWebdav": "WebDAV-Ziel",
     "baseUrl": "Öffentliche Adresse",
-    "outlook": "Outlook-Kalender"
+    "outlook": "Outlook-Kalender",
+    "notEnabled": "nicht freigegeben"
   },
   "docker": {
     "title": "Yuvomi wird gestartet",
@@ -216,7 +218,8 @@
     "stalled": "Das dauert länger als üblich. Das Protokoll unten zeigt, woran es liegt.",
     "showLogs": "Protokoll anzeigen",
     "hideLogs": "Protokoll ausblenden",
-    "timedOut": "Nach 15 Minuten kam keine Rückmeldung. Prüfe das Protokoll und versuche es erneut."
+    "timedOut": "Nach 15 Minuten kam keine Rückmeldung. Prüfe das Protokoll und versuche es erneut.",
+    "logLabel": "Container-Protokoll"
   },
   "admin": {
     "title": "Admin-Konto erstellen",
@@ -261,7 +264,7 @@
     "simpleDesc": "Wir übernehmen die technischen Details für dich. Ideal, um Yuvomi zu Hause zu betreiben.",
     "simpleTime": "Etwa 2 Minuten",
     "advancedTitle": "Erweiterte Einrichtung",
-    "advancedDesc": "Volle Kontrolle: Reverse-Proxy, Kalender-Sync, E-Mail, Single Sign-On und Backups.",
+    "advancedDesc": "Volle Kontrolle: Reverse-Proxy, Kalender-Synchronisation, E-Mail, Single Sign-On und Backups.",
     "advancedTime": "Jede Option, Schritt für Schritt",
     "existingLocked": "Bestehende Installation erkannt. Nutze die erweiterte Einrichtung, damit deine bisherigen Einstellungen erhalten bleiben.",
     "containerRunning": "Yuvomi läuft gerade. Beim Speichern wird der Container neu gestartet und ist kurz nicht erreichbar."
@@ -298,9 +301,9 @@
     "errIncomplete": "SMTP-Server und Absenderadresse sind erforderlich."
   },
   "storage": {
-    "title": "Speicher & Sicherungen",
+    "title": "Speicher & Backups",
     "subtitle": "Wo deine Daten auf dem Server liegen und wohin ihre Kopien gehen. Alles optional - die Voreinstellungen funktionieren.",
-    "sectionBackups": "Sicherungen",
+    "sectionBackups": "Backups",
     "sectionDocuments": "Dokumentspeicher"
   }
 }

@@ -11,7 +11,8 @@
     "copy": "复制",
     "copied": "已复制 ✓",
     "language": "语言",
-    "copyRedirect": "复制重定向 URI"
+    "copyRedirect": "复制重定向 URI",
+    "opt": "（可选）"
   },
   "config": {
     "title": "基本配置",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Docker 指南",
     "prereqLinkCompose": "podman-compose 指南",
     "prereqRecheck": "重新检查",
-    "errSecureOverHttp": "公开地址以 http:// 开头，但此选项会强制使用安全 Cookie，这样任何人都无法登录。请选择「直接访问」或改用 https:// 地址。"
+    "errSecureOverHttp": "公开地址以 http:// 开头，但此选项会强制使用安全 Cookie，这样任何人都无法登录。请选择「直接访问」或改用 https:// 地址。",
+    "errTz": "时区无效。需要 IANA 名称，例如 Europe/Berlin。"
   },
   "secrets": {
     "title": "安全密钥",
@@ -37,7 +39,7 @@
     "dbLabel": "数据库加密密钥",
     "dbHint": "在静态状态下加密 SQLite 数据库。",
     "errBoth": "两个密钥都为必填项。",
-    "dangerWarn": "现在就保存这些密钥。一旦丢失，你的加密数据将无法恢复——没有重置。",
+    "dangerWarn": "现在就保存这些密钥。一旦丢失，你的加密数据将无法恢复——没有重置。 设置结束时，你可以下载包含这两个密钥的 .env 文件。",
     "preserved": "系统会保留你现有的密钥，因此本次安装不会让你无法访问当前数据库。留空即保留该密钥；填入新值则会替换它。",
     "keepPlaceholder": "保留现有密钥"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID（电子邮件）",
     "applePassLabel": "App 专用密码",
     "appleUrlLabel": "CalDAV 网址",
-    "appleUrlOpt": "（可选）",
     "appleUrlHint": "除非你的服务商使用不同的 CalDAV 端点，否则留空即可。",
     "outlook": "Outlook 日历 (Microsoft Graph)",
     "outlookHint": "在 {{link}} 创建免费的 Entra ID 应用注册（仅限个人 Microsoft 帐户），详见安装指南。重定向 URI：{{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "食谱",
     "privateNetworkWebdav": "WebDAV 文档",
     "baseUrl": "公开地址",
-    "outlook": "Outlook 日历"
+    "outlook": "Outlook 日历",
+    "notEnabled": "未启用"
   },
   "docker": {
     "title": "正在启动 Yuvomi",
@@ -136,7 +138,8 @@
     "stalled": "耗时比平常更久。下方日志会说明原因。",
     "showLogs": "显示日志",
     "hideLogs": "隐藏日志",
-    "timedOut": "15 分钟内没有响应。请查看日志后重试。"
+    "timedOut": "15 分钟内没有响应。请查看日志后重试。",
+    "logLabel": "容器日志"
   },
   "admin": {
     "title": "创建管理员账户",

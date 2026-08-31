@@ -11,7 +11,8 @@
     "copy": "Salin",
     "copied": "Disalin ✓",
     "language": "Bahasa",
-    "copyRedirect": "Salin URI pengalihan"
+    "copyRedirect": "Salin URI pengalihan",
+    "opt": "(opsional)"
   },
   "config": {
     "title": "Konfigurasi dasar",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Panduan Docker",
     "prereqLinkCompose": "Panduan podman-compose",
     "prereqRecheck": "Periksa lagi",
-    "errSecureOverHttp": "Alamat publik dimulai dengan http://, tetapi pilihan ini mewajibkan cookie aman - tidak ada yang bisa masuk. Pilih \"Akses langsung\" atau gunakan alamat https://."
+    "errSecureOverHttp": "Alamat publik dimulai dengan http://, tetapi pilihan ini mewajibkan cookie aman - tidak ada yang bisa masuk. Pilih \"Akses langsung\" atau gunakan alamat https://.",
+    "errTz": "Zona waktu tidak valid. Diharapkan nama IANA seperti Europe/Berlin."
   },
   "secrets": {
     "title": "Kunci keamanan",
@@ -37,7 +39,7 @@
     "dbLabel": "Kunci enkripsi basis data",
     "dbHint": "Mengenkripsi basis data SQLite saat diam.",
     "errBoth": "Kedua kunci diperlukan.",
-    "dangerWarn": "Simpan kunci ini sekarang. Jika hilang, data terenkripsi Anda tidak dapat dipulihkan — tidak ada penyetelan ulang.",
+    "dangerWarn": "Simpan kunci ini sekarang. Jika hilang, data terenkripsi Anda tidak dapat dipulihkan — tidak ada penyetelan ulang. Di akhir penyiapan, Anda dapat mengunduh file .env yang berisi kedua kunci.",
     "preserved": "Kunci yang sudah ada tetap dipertahankan, sehingga penyiapan ini tidak akan mengunci Anda dari basis data saat ini. Biarkan kolom kosong untuk mempertahankan kuncinya; memasukkan nilai baru akan menggantinya.",
     "keepPlaceholder": "Kunci yang ada dipertahankan"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (email)",
     "applePassLabel": "Kata sandi khusus aplikasi",
     "appleUrlLabel": "URL CalDAV",
-    "appleUrlOpt": "(opsional)",
     "appleUrlHint": "Biarkan kosong kecuali penyedia Anda menggunakan endpoint CalDAV yang berbeda.",
     "outlook": "Kalender Outlook (Microsoft Graph)",
     "outlookHint": "Buat pendaftaran aplikasi Entra ID gratis (\"Hanya akun Microsoft pribadi\") di {{link}} - lihat panduan instalasi. Redirect URI: {{redirect}}",
@@ -198,7 +199,8 @@
     "privateNetworkRecipes": "Resep",
     "privateNetworkWebdav": "Dokumen WebDAV",
     "baseUrl": "Alamat publik",
-    "outlook": "Kalender Outlook"
+    "outlook": "Kalender Outlook",
+    "notEnabled": "tidak diaktifkan"
   },
   "docker": {
     "title": "Yuvomi sedang dimulai",
@@ -216,7 +218,8 @@
     "stalled": "Ini lebih lama dari biasanya. Log di bawah menunjukkan alasannya.",
     "showLogs": "Tampilkan log",
     "hideLogs": "Sembunyikan log",
-    "timedOut": "Tidak ada respons setelah 15 menit. Periksa log dan coba lagi."
+    "timedOut": "Tidak ada respons setelah 15 menit. Periksa log dan coba lagi.",
+    "logLabel": "Log kontainer"
   },
   "admin": {
     "title": "Buat akun admin",
