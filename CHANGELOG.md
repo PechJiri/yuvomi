@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.0] - 2026-08-31
+
+### Added
+
+- **Greek, Hungarian and Vietnamese get a region preset - and Vietnamese gets its currency back**
+  (#297). VND had been in the currency picker since June and disappeared in #340, when four literal
+  copies of the currency list were consolidated into one shared list. The consolidation was right -
+  adding a currency is one line today - but the surviving guards compare that list against *itself*,
+  so a dropped code was invisible. Meanwhile `vi.json` kept shipping: a Vietnamese household could
+  run the whole app in its own language and not pick its own currency. Two months passed before
+  anyone said so, and the report arrived as a comment in a discussion that had been closed since
+  July.
+
+  **The tell was in the code the entire time.** `services/split-expenses.js` still listed `VND` among
+  the currencies with no decimal places. The app knew how to *calculate* in dong and refused to let
+  anyone *choose* it.
+
+  **Asking why nothing caught it found the larger gap.** Of 24 shipped languages, three had no region
+  preset at all - Greek, Hungarian, Vietnamese. A region preset sets currency, date format and time
+  format together; without one those languages always landed on "Custom" and left people to guess
+  all three. Hungarian was the sharpest case, because HUF sat in the currency list the whole time
+  with nowhere to select it from. The three new presets take their values from each locale's CLDR
+  default rather than from assumption, which is how `el-GR` ended up on a 12-hour clock while the
+  countries around it write 24h, and `hu-HU` on a year-first date - the first region in the app to
+  use that format.
+
+  **The guard is a rule over the codebase, not a list of files:** every locale under
+  `public/locales/` must have at least one region preset. Together with the check that already
+  existed - every preset names a selectable currency - it closes the loop this fell through: a
+  language with no region could not demand a currency, so nobody noticed its currency was gone.
+
+### Fixed
+
+- **The guest sign-in only appears where the household actually has guests** (#962). Setting
+  `AUTH_ALLOW_PASSWORD_LOGIN=false` to make SSO the only way in still left a "guest sign-in with
+  password" button on the login page. The exemption behind it is deliberate and stays: shared
+  expenses can involve people who are not in the household - a neighbour settling a bill - and an
+  admin creates those accounts with a password, because they have no entry in the household identity
+  provider (#847). Without the exemption, switching on SSO-only would have silently bricked every
+  existing guest account.
+
+  **Showing it unconditionally was the bug.** The page never asked whether the household *has* such a
+  guest; it saw "password login is off" and offered the route regardless. A household with no shared
+  expenses was looking at an entrance nobody can walk through - and from the outside that is
+  indistinguishable from an open one, which is why it was reported as a hole in the bolt the operator
+  had just closed.
+
+  `GET /api/v1/auth/oidc/config` now answers the question the page failed to ask. Two properties of
+  that answer are deliberate: it is **one bit** - "there are guests", never who or how many - and it
+  is **short-circuited**, so where password login is open the question is moot and the guest table is
+  never read. On a normal installation the public endpoint therefore reveals nothing it did not
+  already reveal.
+
 ## [2.58.0] - 2026-08-31
 
 ### Added

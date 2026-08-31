@@ -239,9 +239,9 @@ docker compose up -d
 Docker pulls `ghcr.io/ulsklyc/yuvomi:latest` automatically. No build step, no Node.js installation needed.
 
 > **Pinning a version.** Every release is also published under immutable tags:
-> `2.58.0` (exact version), `2.58` (latest patch of that minor), plus a moving `main`
+> `2.59.0` (exact version), `2.59` (latest patch of that minor), plus a moving `main`
 > tag for the current development state. To pin production to a known-good release,
-> set `image: ghcr.io/ulsklyc/yuvomi:2.58.0` in your compose file and bump it
+> set `image: ghcr.io/ulsklyc/yuvomi:2.59.0` in your compose file and bump it
 > deliberately; `latest` always points at the newest release.
 
 Continue with [Step 4 — Verify](#4-verify-the-container-is-running).
@@ -287,7 +287,7 @@ docker compose logs -f
 You should see output like:
 
 ```
-yuvomi  | [Yuvomi] Server running on port 3000 | Version 2.58.0
+yuvomi  | [Yuvomi] Server running on port 3000 | Version 2.59.0
 yuvomi  | [Yuvomi] Environment: production
 yuvomi  | [Sync] Auto-sync active every 15 minutes.
 ```
@@ -889,7 +889,7 @@ When all four OIDC variables are set, a **"Sign in with SSO"** button appears on
 
 **Who gets an account.** By default every identity your provider accepts gets one on first sign-in - convenient for a provider you run for this household alone, but a directory is a list of people, not a list of household members. Set `OIDC_ALLOW_SIGNUP=false` and provisioning stops: an unknown identity is turned away with "There is no account here yet for this SSO sign-in" instead of the generic SSO error, while known accounts sign in as before. Linking still happens too, which is what makes the switch usable: create the account under **Settings → Administration → Family** with the member's email address, and their first SSO sign-in binds the two together (the provider must report `email_verified: true`, or the account owner links it themselves under **Settings → Account → Single sign-on**).
 
-**Making SSO the only way in.** Even with SSO configured, Yuvomi keeps a second door open: the login form stays, password reset stays, and every account carries a password hash. Set `AUTH_ALLOW_PASSWORD_LOGIN=false` and that door closes - the login page shows nothing but the SSO button, `POST /auth/login` is refused outright (the rule sits on the route, not just on the page), and password reset disappears with it rather than staying as a route that can still send mail.
+**Making SSO the only way in.** Even with SSO configured, Yuvomi keeps a second door open: the login form stays, password reset stays, and every account carries a password hash. Set `AUTH_ALLOW_PASSWORD_LOGIN=false` and that door closes - the login page shows nothing but the SSO button, `POST /auth/login` is refused outright (the rule sits on the route, not just on the page), and password reset disappears with it rather than staying as a route that can still send mail. **One exception is offered, and only where it applies (#962):** guests of shared expenses stay exempt from the switch, because they are external people with no entry in your identity provider, so a household that has such guests keeps a second button for them. A household that has none sees no second button - it used to appear regardless, which looked like a hole in the bolt you had just closed.
 
 Three things are deliberate:
 
