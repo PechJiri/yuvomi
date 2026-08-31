@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.4] - 2026-08-31
+
+### Fixed
+
+- **Deep links no longer fail when the app lives under a dot-directory.** Opening a page directly
+  (a bookmark or hard reload on `/calendar`, for instance) returned HTTP 500 whenever the
+  installation path contained a dot segment (such as `/opt/.apps/yuvomi`): Express' `sendFile`
+  checks every segment of an absolute path against its dotfile policy, so the server-controlled
+  checkout path itself tripped the guard. The SPA fallback and third-party module assets now serve
+  relative to an explicit root, so only the request-derived part of the path is checked. A new
+  path-independent suite (`test:sendfile-dotpath`) rebuilds the condition in a temp directory and
+  pins the `send` behavior the fix relies on.
+
 ## [2.57.3] - 2026-08-31
 
 ### Added

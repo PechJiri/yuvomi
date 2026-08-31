@@ -1,8 +1,8 @@
-<!-- version: 2.57.3 -->
-This is a maintenance release focused on Yuvomi's setup wizard - the guided installer used for manual Docker installations. Since Umbrel installs and updates Yuvomi through the app store, existing households are not affected by these changes and will notice nothing new in day-to-day use.
+<!-- version: 2.57.4 -->
+This is a small bugfix release. It fixes a case where opening a page directly by its address - a bookmark to the calendar, for example, or reloading the browser somewhere other than the start page - failed with a server error when Yuvomi was installed under a folder whose name begins with a dot. Assets of third-party modules were affected the same way.
 
-For anyone who does run the wizard, it became considerably more forgiving: a page reload no longer silently discards everything entered, typos in the timezone or SMTP port are caught immediately instead of surfacing weeks later, error messages appear right at the field they belong to, and the review screen now works properly on phones and after switching languages. Several accessibility gaps for keyboard and screen-reader users were closed as well.
+Umbrel installs Yuvomi in a standard location that is not affected by this, so existing households will notice no difference in day-to-day use; the fix matters for manual Docker installations in unusual directories.
 
 The update needs nothing from you and applies no database change.
 
-Full release notes are available at https://github.com/ulsklyc/yuvomi/releases/tag/v2.57.3
+Full release notes are available at https://github.com/ulsklyc/yuvomi/releases/tag/v2.57.4
