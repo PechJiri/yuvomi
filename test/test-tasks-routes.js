@@ -819,3 +819,84 @@ test('Kommentare: wem das Modul entzogen ist, bekommt keine Erwähnungs-Meldung'
   const wieder = resolvePermissions(db, bob);
   assert.notEqual(wieder.modules.tasks, 'none', 'Aufräumen: Bobs Zugriff ist wiederhergestellt');
 });
+
+// --------------------------------------------------------
+// Status beim Anlegen (#807)
+//
+// Der Dialog zeigte das Feld nur beim Bearbeiten, und der Server hatte den
+// zweiten Halt: `validateTaskInput` prüfte einen mitgeschickten Status seit
+// jeher, das INSERT schrieb ihn nie. Ein Wert, der validiert und dann still
+// verworfen wird, ist die schlechtere Hälfte von beidem - deshalb prüfen die
+// Tests nicht nur, DASS der Status ankommt, sondern dass er denselben Weg
+// nimmt wie beim Abhaken.
+// --------------------------------------------------------
+test('POST: ohne Status bleibt es beim ersten Status', async () => {
+  const r = await call('POST', '/', { as: { id: ALICE, role: 'admin' }, body: { title: 'Ohne Status' } });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.status, 'open');
+});
+
+test('POST: mitgeschickter Status wird geschrieben, nicht still verworfen', async () => {
+  const r = await call('POST', '/', {
+    as: { id: ALICE, role: 'admin' },
+    body: { title: 'Schon angefangen', status: 'in_progress' },
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.status, 'in_progress', 'Antwort trägt den Status');
+  const row = db.prepare('SELECT status FROM tasks WHERE id = ?').get(r.body.data.id);
+  assert.equal(row.status, 'in_progress', 'und die Zeile auch');
+});
+
+test('POST: erledigt angelegt bucht Punkte und schreibt den Verlauf', async () => {
+  const admin = { id: ALICE, role: 'admin' };
+  db.prepare('INSERT OR REPLACE INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(BOB);
+
+  const r = await call('POST', '/', {
+    as: admin,
+    body: { title: `erledigt-angelegt-${randomUUID().slice(0, 8)}`, status: 'done', points: 5, assigned_to: [BOB] },
+  });
+  assert.equal(r.status, 201);
+  const id = r.body.data.id;
+
+  // Die Zahl kommt aus derselben Abfrage wie beim Abhaken weiter oben: ein
+  // erledigt angelegter Vorgang darf nicht anders zählen als ein erledigt
+  // abgehakter, sonst führen Punktekonto und Verlauf zwei Buchhaltungen.
+  const earned = db.prepare("SELECT COALESCE(SUM(delta), 0) AS n FROM reward_ledger WHERE task_id = ? AND type = 'earn'").get(id).n;
+  assert.equal(earned, 5, 'Anlegen mit done bucht wie das Abhaken');
+
+  const completions = db.prepare('SELECT COUNT(*) AS n FROM task_completions WHERE task_id = ?').get(id).n;
+  assert.equal(completions, 1, 'und steht im Verlauf');
+});
+
+test('POST: erledigt angelegte Serie legt die nächste Instanz nach', async () => {
+  const admin = { id: ALICE, role: 'admin' };
+  const marker = `serie-${randomUUID().slice(0, 8)}`;
+  const r = await call('POST', '/', {
+    as: admin,
+    body: {
+      title: marker, status: 'done', due_date: '2026-09-07',
+      is_recurring: 1, recurrence_rule: 'FREQ=WEEKLY;BYDAY=MO',
+    },
+  });
+  assert.equal(r.status, 201);
+
+  // Ohne den Nachfolger endete die Serie in dem Moment, in dem sie entsteht.
+  const rows = db.prepare('SELECT status, due_date FROM tasks WHERE title = ? ORDER BY id').all(marker);
+  assert.equal(rows.length, 2, 'erledigte Instanz plus Nachfolger');
+  assert.equal(rows[0].status, 'done');
+  assert.equal(rows[1].status, 'open');
+  assert.equal(rows[1].due_date, '2026-09-14', 'der Nachfolger steht eine Woche später');
+});
+
+test('POST: status=archived legt nicht ab, sondern fällt auf den ersten Status', async () => {
+  // 'archived' ist seit #688 eine eigene Achse. PUT deutet den Wert für
+  // Bestandsclients als „ablegen"; beim Anlegen gibt es nichts abzulegen, und
+  // eine Aufgabe, die als Leiche zur Welt käme, wäre kein Anlegen.
+  const r = await call('POST', '/', {
+    as: { id: ALICE, role: 'admin' },
+    body: { title: 'Direkt abgelegt?', status: 'archived' },
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.status, 'open');
+  assert.equal(r.body.data.archived_at, null, 'und liegt nicht in der Ablage');
+});

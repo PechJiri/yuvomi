@@ -792,6 +792,12 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
    * eine gekuerzte Notiz im Summary waere eine schlechtere Notiz. Sie steht
    * deshalb OBEN beim Titel - Titel und Notiz sichtbar, alles andere hinter
    * einem Einstieg, genau wie Apple Erinnerungen es haelt. */
+  // Der Anfangswert des Statusfelds. Ein Bestandswert ausserhalb der Liste
+  // (bis v1.86.2 stand 'archived' darin) faellt auf den ersten Status zurueck -
+  // vorher waehlte in dem Fall der Browser die erste Option, waehrend die
+  // Zusammenfassung noch den alten Wert nannte.
+  const statusValue = STATUSES().find((s) => s.value === task?.status)?.value ?? STATUSES()[0].value;
+
   const advancedSummary = [];
   if (isEdit && task.priority && task.priority !== 'none') {
     advancedSummary.push(PRIORITY_LABELS()[task.priority] ?? task.priority);
@@ -809,8 +815,8 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
   // Regel vorbei. Sie stehen jetzt darin, und gesetzte Werte nennt die
   // Zusammenfassung, wie bei allen anderen. (Sync-Ziel fehlt in der Summary:
   // sein Anzeigename kommt asynchron aus /tasks/sync-targets.)
-  if (isEdit && task.status && task.status !== 'open') {
-    advancedSummary.push(STATUSES().find((s) => s.value === task.status)?.label ?? task.status);
+  if (statusValue !== STATUSES()[0].value) {
+    advancedSummary.push(STATUSES().find((s) => s.value === statusValue).label);
   }
   if (!isSoloHousehold() && visibility !== 'all') advancedSummary.push(t(`common.visibility.${visibility}`));
   if (!isSoloHousehold() && task?.locked) advancedSummary.push(t('tasks.lockedBadge'));
@@ -867,15 +873,20 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
         <p class="task-field-hint">${t('tasks.tagsHint')}</p>
       </div>
 
-      ${isEdit ? `
-        <div class="form-group" style="margin-top:var(--space-4)">
-          <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
-          <select class="input" id="task-status" name="status">
-            ${STATUSES().map((s) =>
-              `<option value="${s.value}" ${task.status === s.value ? 'selected' : ''}>${s.label}</option>`
-            ).join('')}
-          </select>
-        </div>` : ''}
+      <!-- DAS FELD STAND BIS #807 NUR IM BEARBEITEN-ZWEIG. Vergessen war es
+           nicht, aber die Annahme darunter stimmte nicht: notiert wird oft
+           etwas, das laengst laeuft, und dafuer brauchte es bisher zwei
+           Schritte - anlegen, wieder oeffnen, umstellen. Die Vorauswahl bleibt
+           der erste Status, damit ein Anlegen, das das Feld nicht beruehrt,
+           sich genau wie vorher verhaelt. -->
+      <div class="form-group" style="margin-top:var(--space-4)">
+        <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
+        <select class="input" id="task-status" name="status">
+          ${STATUSES().map((s) =>
+            `<option value="${s.value}" ${statusValue === s.value ? 'selected' : ''}>${s.label}</option>`
+          ).join('')}
+        </select>
+      </div>
 ${syncTargetFieldHtml(task)}
       <!-- EINE QUELLE, NICHT ZWEI: die Bedingung war "users.length > 1" und
            beantwortete dieselbe Frage wie der Solo-Schalter, nur aus einer

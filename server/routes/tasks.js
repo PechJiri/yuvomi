@@ -947,6 +947,21 @@ router.post('/', (req, res) => {
       : clampPoints(req.body.points);
     const visibility = normalizeVisibility(req.body.visibility);
 
+    // Status beim Anlegen (#807). Das Feld stand im Dialog nur im
+    // Bearbeiten-Zweig, und hier lag der zweite Halt: validiert wurde ein
+    // mitgeschickter Status schon immer, geschrieben nie - er fiel still weg.
+    // Wer etwas notiert, das er laengst angefangen hat, brauchte deshalb zwei
+    // Schritte.
+    //
+    // 'archived' faellt auf den Anfangsstatus zurueck, statt abzulegen: das
+    // Archiv ist seit #688 eine eigene Achse (archived_at), und eine Aufgabe
+    // anzulegen, um sie im selben Zug wegzuraeumen, ist kein Anlegen. PUT deutet
+    // den Wert fuer Bestandsclients als "ablegen"; beim Anlegen gibt es nichts,
+    // was abzulegen waere.
+    const status = (req.body.status === undefined || req.body.status === ARCHIVE_STATUS)
+      ? 'open'
+      : req.body.status;
+
     const userIds  = parseAssignedTo(req.body.assigned_to);
     const firstUid = userIds[0] ?? null;
 
@@ -977,12 +992,12 @@ router.post('/', (req, res) => {
     const taskId = db.get().transaction(() => {
       const result = db.get().prepare(`
         INSERT INTO tasks
-          (title, description, category, priority, start_date, due_date, due_time,
+          (title, description, category, priority, status, start_date, due_date, due_time,
            assigned_to, created_by, parent_task_id, is_recurring, recurrence_rule,
            recurrence_from_completion, points, visibility, countdown, locked)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        title.trim(), description, category, priority,
+        title.trim(), description, category, priority, status,
         start_date, due_date, due_time, firstUid, req.authUserId || req.session.userId, parent_task_id,
         is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0, points, visibility,
         countdown ? 1 : 0, req.body.locked ? 1 : 0
@@ -993,6 +1008,27 @@ router.post('/', (req, res) => {
         db.get().prepare(
           'UPDATE tasks SET target_caldav_account_id = ?, target_caldav_list_url = ? WHERE id = ?'
         ).run(syncTarget.accountId, syncTarget.listUrl, result.lastInsertRowid);
+      }
+      // EIN ANLEGEN MIT STATUS IST EIN STATUSWECHSEL - er faengt nur bei 'open'
+      // an statt bei einem gespeicherten Wert. Er laeuft deshalb durch dieselben
+      // Uebergangsfunktionen wie PUT und PATCH. Wuerde hier nur die Spalte
+      // gefuellt, haetten Punktekonto und Verlauf zwei Buchhaltungen: dieselbe
+      // erledigte Aufgabe zaehlte, je nachdem ob sie erledigt angelegt oder
+      // erledigt abgehakt wurde.
+      //
+      // syncHousekeepingPaymentStatus steht bewusst nicht dabei: es aktualisiert
+      // eine Zahlungszeile, die eine gerade erst angelegte Aufgabe noch nicht hat.
+      if (status !== 'open') {
+        const actingUserId = req.authUserId || req.session.userId;
+        const newId = Number(result.lastInsertRowid);
+        syncTaskRewards(db.get(), newId, 'open', status, actingUserId);
+        syncTaskCompletion(db.get(), newId, 'open', status, actingUserId);
+        // Erledigt angelegte Serie: die naechste Instanz gehoert dazu, genau wie
+        // beim Abhaken. Ohne sie endete eine Serie in dem Moment, in dem sie
+        // entsteht.
+        if (status === 'done') {
+          spawnRecurrenceFollowup(db.get().prepare('SELECT * FROM tasks WHERE id = ?').get(newId));
+        }
       }
       return result.lastInsertRowid;
     })();
