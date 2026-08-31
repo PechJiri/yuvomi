@@ -1106,6 +1106,13 @@
   position: relative;
 }
 
+/* Dieselbe Modulton-Einladung wie am grossen Statusknopf (oben) und an
+ * .item-check (shopping.css) - die Unteraufgabe war der dritte Abhakmoment
+ * und der einzige ohne sie (Signaturelement-Runde 2026-08-31). */
+.subtask-item__checkbox:hover {
+  border-color: var(--module-accent, var(--color-accent));
+}
+
 .subtask-item__checkbox::before {
   content: '';
   position: absolute;
