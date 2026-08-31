@@ -54,11 +54,19 @@ function prefersReducedMotion() {
  *        (z. B. wenn eine Add-Zeile im selben Container mitgerendert wird)
  * @param {string} [opts.filter] - CSS-Selektor der Zeilen, die NICHT gezogen werden
  *        dürfen, obwohl sie zu `draggable` passen (z. B. bereits abgehakte)
+ * @param {string|object} [opts.group] - Verbund mehrerer Listen, zwischen denen
+ *        gezogen werden darf (SortableJS-`group`). Ohne Angabe bleibt jede Liste
+ *        für sich - der Normalfall, denn ein Zug in eine fremde Liste ist meist
+ *        ein Kategoriewechsel und keine Umsortierung.
+ * @param {boolean} [opts.sort=true] - Ob INNERHALB einer Liste umsortiert werden
+ *        darf. `false` zusammen mit `group`: die Liste ist ein Fach, kein Rang -
+ *        wer keine Reihenfolge speichert, darf auch keine anbieten, sonst steht
+ *        die verschobene Zeile da, bis irgendetwas anderes neu zeichnet.
  * @param {(evt: object) => void|Promise<void>} opts.onEnd - Callback nach Drop;
- *        bekommt das rohe SortableJS-Event (item, oldIndex, newIndex, ...)
+ *        bekommt das rohe SortableJS-Event (item, from, to, oldIndex, newIndex, ...)
  * @returns {Promise<object|null>} die Sortable-Instanz (zum späteren `.destroy()`) oder null
  */
-export async function makeSortable(listEl, { handle, draggable, filter, onEnd } = {}) {
+export async function makeSortable(listEl, { handle, draggable, filter, group, sort = true, onEnd } = {}) {
   if (!listEl || typeof onEnd !== 'function') return null;
   const Sortable = await loadSortable();
   const reduced = prefersReducedMotion();
@@ -66,6 +74,8 @@ export async function makeSortable(listEl, { handle, draggable, filter, onEnd } 
     handle,
     draggable,
     filter,
+    group,
+    sort,
     animation: reduced ? 0 : 150,
     easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
     delay: 120,
@@ -80,7 +90,16 @@ export async function makeSortable(listEl, { handle, draggable, filter, onEnd } 
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
     onEnd(evt) {
-      if (evt.oldIndex === evt.newIndex) return;
+      // ZWISCHEN LISTEN ZAEHLT DER INDEX NICHT. Die Bedingung war
+      // `oldIndex === newIndex` und stimmte, solange jede Liste fuer sich blieb:
+      // gleicher Platz hiess dann "nichts passiert". Mit `group` (#808:
+      // Aufgabenboard) ist Platz 0 in einer Spalte nicht Platz 0 in der
+      // naechsten - die oberste Karte von "Offen" nach "Erledigt" haette
+      // denselben Index behalten und der Drop waere still verfallen.
+      //
+      // Fuer jeden bisherigen Aufrufer aendert sich nichts: ohne `group` ist
+      // `from === to` immer wahr, und die Bedingung liest sich wie vorher.
+      if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
       vibrate(15);
       onEnd(evt);
     },

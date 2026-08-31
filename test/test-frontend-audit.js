@@ -10398,7 +10398,47 @@ test('Jeder Sortable-Nutzer hat einen tastaturbedienbaren Reorder-Pfad', () => {
   // Als Pfad zählt eine Tastenbehandlung, die die Reihenfolge ändert: entweder
   // Auf/Ab-Bedienelemente (Kategorie-Manager) oder Pfeiltasten an einem
   // fokussierbaren Griff (Einkaufsliste, #678).
+  //
+  // DRITTER FALL SEIT #808: eine Liste, die gar nicht sortiert (`sort: false`),
+  // hat keine Reihenfolge, die eine Pfeiltaste ändern könnte. Das Aufgabenboard
+  // schiebt Karten zwischen Spalten, und sein Tastaturweg ist der
+  // Weiterschalt-Knopf auf jeder Karte. Der Guard hätte ihn nicht erkannt und
+  // wäre beim Richtigstellen rot geworden - dann liegt der Guard falsch, nicht
+  // der Code.
+  //
+  // Geprüft wird deshalb die Sache statt der Schreibweise, und zwar schärfer als
+  // bei den ersten beiden Fällen: der Kopf von sortable.js verlangt einen Pfad,
+  // "der DENSELBEN Persistenz-Handler aufruft". Genau das steht hier - eine
+  // Funktion, die sowohl im Drop-Handler als auch aus einem Klick heraus läuft.
+  // Zwei getrennte Wege, die dasselbe zu tun behaupten, laufen auseinander,
+  // sobald einer von beiden einen Sonderfall bekommt.
   const violations = [];
+
+  /** Namen der Funktionen, die in `onEnd:` aufgerufen werden. */
+  function droppedThrough(source) {
+    const at = source.indexOf('onEnd:');
+    if (at < 0) return [];
+    const block = source.slice(at, at + 800);
+    return [...block.matchAll(/\b([a-z][A-Za-z0-9_$]*)\s*\(/g)].map((m) => m[1]);
+  }
+
+  /** Namen der Funktionen, die aus einem Klick-Handler heraus laufen. */
+  function clickedThrough(source) {
+    const names = [];
+    const re = /addEventListener\(\s*['"]click['"][\s\S]{0,2000}/g;
+    for (const match of source.matchAll(re)) {
+      names.push(...[...match[0].matchAll(/\b([a-z][A-Za-z0-9_$]*)\s*\(/g)].map((m) => m[1]));
+    }
+    return names;
+  }
+
+  // Sprachbausteine und Sammler zählen nicht als Persistenz-Handler: sie stehen
+  // in JEDEM Block und machten den Test grün, ohne dass ein Weg existiert.
+  const NOT_A_HANDLER = new Set([
+    'if', 'for', 'while', 'switch', 'catch', 'return', 'typeof',
+    'find', 'filter', 'map', 'forEach', 'some', 'every', 'closest', 'querySelector',
+    'querySelectorAll', 'preventDefault', 'stopPropagation', 'push', 'includes', 'test',
+  ]);
 
   for (const file of [...walkJsFiles('../public/pages/'), ...walkJsFiles('../public/components/')]) {
     const source = read(file);
@@ -10408,6 +10448,12 @@ test('Jeder Sortable-Nutzer hat einen tastaturbedienbaren Reorder-Pfad', () => {
     const hasMoveButtons = /data-action="(up|down)"/.test(source)
       || /'(up|down)'/.test(source) && /addEventListener\(\s*['"]click['"]/.test(source);
     if (hasArrowKeys || hasMoveButtons) continue;
+
+    if (/sort:\s*false/.test(source)) {
+      const viaClick = new Set(clickedThrough(source));
+      const shared = droppedThrough(source).filter((n) => !NOT_A_HANDLER.has(n) && viaClick.has(n));
+      if (shared.length) continue;
+    }
 
     violations.push(file);
   }
