@@ -8,7 +8,7 @@ import express from 'express';
 import path from 'node:path';
 import { requireAdmin } from '../auth.js';
 import { createLogger } from '../logger.js';
-import { listModules, resolveAssetPath, setModuleEnabled } from '../services/modules.js';
+import { MODULES_DIR, listModules, resolveAssetPath, setModuleEnabled } from '../services/modules.js';
 
 const router = express.Router();
 const log = createLogger('Modules');
@@ -48,7 +48,13 @@ router.get('/assets/:id/{*assetPath}', async (req, res) => {
     if (ext === '.js') res.type('text/javascript');
     else if (ext === '.css') res.type('text/css');
     res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    res.sendFile(assetPath);
+    // root-Option statt absolutem Pfad: sendFile ohne root laesst `send` JEDES
+    // Segment des absoluten Pfads auf Dotfiles pruefen - liegt MODULES_DIR unter
+    // einem Dot-Verzeichnis (z. B. ~/.claude/...), wuerde jedes Asset 500 liefern.
+    // Mit root prueft `send` nur den relativen Teil; resolveAssetPath hat den
+    // Pfad bereits validiert (Traversal-Schutz, Existenz, Confinement).
+    const moduleRoot = path.join(MODULES_DIR, req.params.id);
+    res.sendFile(path.relative(moduleRoot, assetPath), { root: moduleRoot });
   } catch (err) {
     const status = err.status || 500;
     if (status >= 500) log.error('Module asset failed:', err);
