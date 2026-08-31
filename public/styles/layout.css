@@ -93,51 +93,19 @@
   from { opacity: 0; transform: translateX(-20px); }
   to   { opacity: 1; transform: none; }
 }
-@keyframes page-out-left {
-  from { opacity: 1; transform: none; }
-  to   { opacity: 0; transform: translateX(-20px); }
-}
-@keyframes page-out-right {
-  from { opacity: 1; transform: none; }
-  to   { opacity: 0; transform: translateX(20px); }
-}
-
-@keyframes page-crossfade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
 .page-transition--in-right {
   animation: page-slide-in-right var(--duration-md) var(--ease-out);
 }
 .page-transition--in-left {
   animation: page-slide-in-left var(--duration-md) var(--ease-out);
 }
-.page-transition--out-left {
-  animation: page-out-left var(--duration-xs) ease forwards; /* ← out braucht forwards, wird ja eh entfernt */
-  pointer-events: none;
-}
-.page-transition--out-right {
-  animation: page-out-right var(--duration-xs) ease forwards;
-  pointer-events: none;
-}
-
-.page-transition--crossfade {
-  animation: page-crossfade-in 180ms var(--ease-out);
-  opacity: 1;
-}
+/* Die out-/crossfade-Varianten (--out-left, --out-right, --crossfade) sind mit
+ * dem Toter-Selektoren-Aufraeumen 2026-08-31 entfallen: router.js vergibt seit
+ * je nur --in-right/--in-left, die Gegenrichtung entstand nie. */
 
 @media (prefers-reduced-motion: reduce) {
   .page-transition--in-right,
   .page-transition--in-left {
-    animation: none;
-    opacity: 1;
-  }
-  .page-transition--out-left,
-  .page-transition--out-right {
-    animation: none;
-  }
-  .page-transition--crossfade {
     animation: none;
     opacity: 1;
   }
@@ -2084,7 +2052,7 @@ html.fab-anim-done .page-fab {
 
 .page-toolbar__title {
   /* Größe/Weight kommen aus der Canonical-Page-Head-Rolle in typography.css
-   * (.u-toolbar-title / .page-toolbar__title → --type-toolbar-title, 20px). */
+   * (.page-toolbar__title → --type-toolbar-title, 22px). */
   white-space: nowrap;
   /* min-width:0 allein kürzt bei nowrap NICHT — ohne overflow/text-overflow
    * läuft der Titel in langen Locales („Haushaltsbuch", „Paramètres") aus
@@ -2229,7 +2197,7 @@ html.fab-anim-done .page-fab {
  * Tab-Polster unter 640px, die mehr Tabs in den Viewport lassen (Bauart aus
  * budget.css, Audit P2 - jetzt geteilt, weil dieselbe Leiste in sechs
  * Moduldateien lebt). */
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .page-toolbar__bar .sub-tab {
     padding: 0 var(--space-2);
   }
@@ -2883,7 +2851,7 @@ html.fab-anim-done .page-fab {
  * Die Media-Liste nennt beide Faelle EINMAL, statt den Block zu verdoppeln:
  * eine zweite Kopie waere die zweite Handschrift derselben Regel.
  * -------------------------------------------------------- */
-@media (max-width: 640px), (max-width: 1023px) and (max-height: 499px) {
+@media (max-width: 639px), (max-width: 1023px) and (max-height: 499px) {
   /* Die Bauart ist die Label-Verlust-Regel: ein Bedienelement, dem der Platz
    * ausgeht, wird zum Einstieg seiner Familie und behaelt --target-base. Kein
    * neues Markup und kein JS - `.page-search` IST ein `<label for>`, ein Klick
@@ -2991,7 +2959,7 @@ html.fab-anim-done .page-fab {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .page-toolbar {
     /* Nur die Bauhöhe verdichten. Der horizontale Rand bleibt bewusst
      * --page-inline-pad: er muss mit dem Seiten-Body fluchten, und ein
@@ -3158,6 +3126,16 @@ html.fab-anim-done .page-fab {
 .popover-menu__item--danger:hover,
 .popover-menu__item--danger:focus-visible {
   background-color: color-mix(in srgb, var(--color-danger) var(--tint-state), transparent);
+}
+
+/* Einfachauswahl-Variante (role=menuitemradio): Häkchen nur bei der aktiven
+ * Option - `visibility: hidden` statt `display: none`, damit die Textspalte
+ * für alle Einträge an derselben Stelle beginnt. Stand als Lokalkopie in
+ * recipes.css (Quellenfilter); mit dem Personen-Umschalter der Gesundheit
+ * (2026-08-31) hat das Muster einen zweiten Nutzer und wohnt beim Rest des
+ * popover-menu-Vokabulars. */
+.popover-menu__item-check--hidden {
+  visibility: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4348,11 +4326,6 @@ p.field-hint--warn[hidden] {
   white-space: normal;
 }
 
-/* Einleitender Hinweis-Text über gestapelten Modal-Aktionen (z. B. Scope-Wahl). */
-.modal-lead {
-  margin: 0 0 var(--space-4);
-}
-
 /* Folgen-Erklärung unter der Bestätigungsfrage (confirmModal detail-Slot). */
 .modal-confirm__detail {
   margin: 0 0 var(--space-4);
@@ -5092,8 +5065,6 @@ textarea::placeholder {
   .fab,
   .page-fab { animation: none; }
 
-  .list-stagger > * { animation: none; }
-
   .swipe-row--hint > :first-child { animation: none; }
 
   .btn--loading::after { animation: none; }
@@ -5338,151 +5309,6 @@ textarea::placeholder {
   .grid--4 { grid-template-columns: repeat(4, 1fr); }
 }
 
-/* --------------------------------------------------------
- * Layout-Primitives
- *
- * Wiederverwendbare Content-Area-Patterns für Desktop.
- * Mobile: immer single-column (Stacking).
- *
- * .layout-master-detail  - Liste links, Detail rechts (Aufgaben, Einkauf)
- * .layout-content-aside  - Hauptinhalt + schmale Seitenleiste (Kalender)
- * .layout-center         - Zentrierter schmaler Content (Settings, Login)
- * .layout-wide           - Volle Breite mit max-width (Dashboard)
- * -------------------------------------------------------- */
-
-/* ── Master-Detail ──
- * Mobile: gestapelt (Detail wird programmatisch ein-/ausgeblendet).
- * Desktop: 2 Spalten - Liste ~40%, Detail ~60%.
- */
-.layout-master-detail {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  max-width: var(--content-max-width);
-  margin: 0 auto;
-}
-
-.layout-master-detail__master {
-  flex: 1;
-  min-width: 0;
-}
-
-.layout-master-detail__detail {
-  flex: 1;
-  min-width: 0;
-}
-
-@media (min-width: 1024px) {
-  .layout-master-detail {
-    flex-direction: row;
-    gap: var(--space-6);
-  }
-
-  .layout-master-detail__master {
-    flex: 0 0 380px;
-    max-width: 420px;
-    overflow-y: auto;
-    max-height: calc(100dvh - var(--space-16));
-    position: sticky;
-    top: var(--space-8);
-  }
-
-  .layout-master-detail__detail {
-    flex: 1;
-  }
-}
-
-@media (min-width: 1440px) {
-  .layout-master-detail__master {
-    flex: 0 0 420px;
-    max-width: 460px;
-  }
-}
-
-/* ── Content + Aside ──
- * Mobile: gestapelt.
- * Desktop: Hauptinhalt nimmt Platz ein, Aside ist 280–320px.
- */
-.layout-content-aside {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  max-width: var(--content-max-width);
-  margin: 0 auto;
-}
-
-.layout-content-aside__main {
-  flex: 1;
-  min-width: 0;
-}
-
-.layout-content-aside__aside {
-  min-width: 0;
-}
-
-@media (min-width: 1024px) {
-  .layout-content-aside {
-    flex-direction: row;
-    gap: var(--space-6);
-  }
-
-  .layout-content-aside__main {
-    flex: 1;
-  }
-
-  .layout-content-aside__aside {
-    flex: 0 0 280px;
-    overflow-y: auto;
-    max-height: calc(100dvh - var(--space-16));
-    position: sticky;
-    top: var(--space-8);
-  }
-}
-
-@media (min-width: 1440px) {
-  .layout-content-aside__aside {
-    flex: 0 0 320px;
-  }
-}
-
-/* ── Center ──
- * Schmaler, zentrierter Content-Bereich (max. 720px).
- * Ideal für Settings, Formulare, Einzelansichten.
- */
-.layout-center {
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-/* ── Wide ──
- * Volle verfügbare Breite mit max-width.
- * Für Dashboard und andere Multi-Column-Ansichten.
- */
-.layout-wide {
-  max-width: var(--content-max-width);
-  margin: 0 auto;
-}
-
-/* ── Prose ──
- * Text-Content mit optimaler Lesebreite.
- */
-.prose {
-  max-width: 720px;
-}
-
-/* ── Sticky-Header (Modul-Toolbars) ──
- * Klebt am oberen Rand beim Scrollen.
- */
-.sticky-header {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-  /* Opaque background required: backdrop-filter on position:sticky inside overflow:auto
-   * triggers a WebKit compositor bug that blanks the entire scroll container (iOS 26+). */
-  background-color: var(--color-bg);
-  padding-bottom: var(--space-3);
-  margin-bottom: var(--space-4);
-}
 
 /* Hier stand ein prefers-reduced-transparency-Fallback für fünf Modul-Köpfe -
  * der letzte Rest einer Annahme, die seit Issue #577 nicht mehr gilt. Er
@@ -6147,29 +5973,17 @@ textarea::placeholder {
 }
 
 /* --------------------------------------------------------
- * List Stagger
- * Füge .list-stagger zum Container hinzu.
- * Items erscheinen sequenziell beim ersten Rendern.
+ * Listen-Eintritt
+ * `.list-stagger` (Container-Klasse mit gestaffelten Delays) ist mit dem
+ * Toter-Selektoren-Aufraeumen 2026-08-31 entfallen - null Nutzer im Markup.
+ * Die Keyframes bleiben: der No-Results-Reset der Dokumente (weiter oben)
+ * blendet mit ihnen ein.
  * -------------------------------------------------------- */
 @keyframes list-item-in {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.list-stagger > * {
-  animation: list-item-in var(--duration-md) var(--ease-out) both;
-}
-
-.list-stagger > *:nth-child(1)   { animation-delay: 0ms; }
-.list-stagger > *:nth-child(2)   { animation-delay: 35ms; }
-.list-stagger > *:nth-child(3)   { animation-delay: 65ms; }
-.list-stagger > *:nth-child(4)   { animation-delay: 90ms; }
-.list-stagger > *:nth-child(5)   { animation-delay: 112ms; }
-.list-stagger > *:nth-child(6)   { animation-delay: 130ms; }
-.list-stagger > *:nth-child(7)   { animation-delay: 145ms; }
-.list-stagger > *:nth-child(8)   { animation-delay: 157ms; }
-.list-stagger > *:nth-child(9)   { animation-delay: 166ms; }
-.list-stagger > *:nth-child(n+10) { animation-delay: 173ms; }
 
 /* --------------------------------------------------------
  * Swipe Affordance Hint
@@ -6280,12 +6094,6 @@ textarea::placeholder {
   }
 
   .more-backdrop {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
-  .sticky-header {
-    background-color: var(--color-bg);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }

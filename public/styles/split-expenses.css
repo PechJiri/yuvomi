@@ -136,6 +136,15 @@
   background: var(--color-surface-2);
 }
 
+/* Tastaturfokus: das Feld darin ist randlos (outline: 0 unten), also zeigt
+ * der TRÄGER den Zustand - dasselbe Rezept wie .input:focus im Feldkanon
+ * (layout.css). Ohne diese Regel war das Suchfeld das einzige der App ohne
+ * jeden sichtbaren Fokus (WCAG 2.4.7). */
+.split-search:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
+}
+
 .split-search input {
   width: 100%;
   min-height: 42px;

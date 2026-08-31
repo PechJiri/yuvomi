@@ -926,7 +926,7 @@ test('der Install-Nachlauf haengt am gerenderten Banner, nicht an seiner Existen
  * JS UND CSS SCHALTEN AN DERSELBEN SCHWELLE.
  *
  * Der Kalender fragte viermal `(max-width: 639px)` ab, waehrend
- * `calendar.css` bei `max-width: 640px` schaltet. Bei GENAU 640px war die
+ * `calendar.css` bei `max-width: 640px` schaltete. Bei GENAU 640px war die
  * Seite in zwei Zustaenden zugleich: das CSS hatte die Termin-Chips schon auf
  * Punkte reduziert, das JS hielt noch die Desktop-Klicklogik - ein Tap musste
  * einen 10px-Punkt treffen statt die ganze Zelle.
@@ -937,16 +937,29 @@ test('der Install-Nachlauf haengt am gerenderten Banner, nicht an seiner Existen
  * Schwelle, an der sie auseinanderlaufen.
  */
 test('jede matchMedia-Grenze einer Seite kennt ihr CSS auch', () => {
-  // SEITENWEISE, NICHT UEBER ALLE STYLESHEETS - und das ist die Lehre aus der
-  // ersten Fassung dieses Guards. Sie sammelte die Grenzen aller Dateien in
-  // EINEN Satz; damit war `639px` „gedeckt", weil schedule.css und
-  // split-expenses.css es fuehren, und der Guard blieb gruen, als ich den
-  // Fehler zur Gegenprobe wieder einbaute. Ein Breakpoint ist nur dort eine
-  // Deckung, wo er auf DIESELBEN Elemente wirkt.
+  // SEITENWEISE, NICHT UEBER ALLE STYLESHEETS - die erste Lehre aus diesem
+  // Guard. Die Urfassung sammelte die Grenzen aller Dateien in EINEN Satz;
+  // damit war `639px` „gedeckt", weil schedule.css und split-expenses.css es
+  // fuehren, und der Guard blieb gruen, als ich den Fehler zur Gegenprobe
+  // wieder einbaute. Ein Breakpoint ist nur dort eine Deckung, wo er auf
+  // DIESELBEN Elemente wirkt - deshalb baut `own` je Seite auf.
+  //
+  // GEZAEHLT WIRD DIE SCHWELLE, NICHT DIE ZAHL - die zweite Lehre.
+  // `max-width: 639px` und `min-width: 640px` sind DIESELBE Schwelle (die
+  // Grenze gehoert der grossen Seite, siehe test:typography);
+  // `max-width: 640px` ist dagegen die Schwelle 641, die kein Stylesheet
+  // fuehrt. Die Vorfassung sammelte nackte Zahlen: als der Breakpoint-Sweep
+  // das CSS auf die Paarung 639 zog und die matchMedia-Aufrufe von Kalender,
+  // Essensplan und Dokumenten bei 640 stehen blieben, deckte ausgerechnet das
+  // `min-width: 640px` aus layout.css die falsche Zahl ab. Der Guard blieb
+  // gruen an genau dem Fehler, gegen den er geschrieben wurde.
+  const threshold = (kind, px) => (kind === 'max' ? Number(px) + 1 : Number(px));
+  const BOUNDARY = /\(\s*(min|max)-width:\s*(\d+)px\s*\)/g;
+
   const shared = new Set();
   for (const file of ['layout.css', 'tokens.css', 'list-row.css', 'panel.css', 'sub-tabs.css']) {
-    for (const m of read(`../public/styles/${file}`).matchAll(/\(\s*(?:min|max)-width:\s*(\d+)px\s*\)/g)) {
-      shared.add(m[1]);
+    for (const m of read(`../public/styles/${file}`).matchAll(BOUNDARY)) {
+      shared.add(threshold(m[1], m[2]));
     }
   }
 
@@ -956,7 +969,7 @@ test('jede matchMedia-Grenze einer Seite kennt ihr CSS auch', () => {
     const cssPath = `../public/styles/${page}.css`;
     const own = new Set(shared);
     if (existsSync(new URL(cssPath, import.meta.url))) {
-      for (const m of read(cssPath).matchAll(/\(\s*(?:min|max)-width:\s*(\d+)px\s*\)/g)) own.add(m[1]);
+      for (const m of read(cssPath).matchAll(BOUNDARY)) own.add(threshold(m[1], m[2]));
     }
 
     // JEDES Media-Query-LITERAL der Datei, nicht nur die direkt an
@@ -966,9 +979,9 @@ test('jede matchMedia-Grenze einer Seite kennt ihr CSS auch', () => {
     // durch die Aufraeumarbeit, die dieser Guard absichern soll. Beide
     // Gegenproben (639px, 641px) blieben gruen. Ein Guard, der die gute Form
     // nicht mehr prueft, prueft nichts.
-    for (const m of withoutBlockComments(read(path)).matchAll(/['"`]\(\s*(?:min|max)-width:\s*(\d+)px\s*\)['"`]/g)) {
-      if (!own.has(m[1])) {
-        offenders.push(`${path}: schaltet bei ${m[1]}px, aber weder ${page}.css noch die geteilten Stylesheets kennen diese Grenze`);
+    for (const m of withoutBlockComments(read(path)).matchAll(/['"`]\(\s*(min|max)-width:\s*(\d+)px\s*\)['"`]/g)) {
+      if (!own.has(threshold(m[1], m[2]))) {
+        offenders.push(`${path}: schaltet an der Schwelle ${threshold(m[1], m[2])}px (${m[1]}-width: ${m[2]}px), aber weder ${page}.css noch die geteilten Stylesheets kennen diese Schwelle`);
       }
     }
   }
@@ -5916,11 +5929,11 @@ test('responsive adaptation keeps all four Kitchen tabs readable on narrow phone
   // aus .sub-tabs-bar und fluchtet damit mit dem Body-Inhalt.
   assert.match(
     kitchenTabs,
-    /@media \(max-width:\s*640px\)[\s\S]*\.kitchen-tabs-bar \.sub-tabs-bar__title\s*\{[\s\S]*display:\s*none/
+    /@media \(max-width:\s*639px\)[\s\S]*\.kitchen-tabs-bar \.sub-tabs-bar__title\s*\{[\s\S]*display:\s*none/
   );
   assert.doesNotMatch(
     kitchenTabs,
-    /@media \(max-width:\s*640px\)[\s\S]*\.kitchen-tabs-bar\s*\{[^}]*padding-inline/,
+    /@media \(max-width:\s*639px\)[\s\S]*\.kitchen-tabs-bar\s*\{[^}]*padding-inline/,
     'kitchen-tabs-bar darf --page-inline-pad aus .sub-tabs-bar nicht überschreiben',
   );
   // Die Labels werden NICHT gekürzt - die Leiste scrollt lieber.
@@ -6010,7 +6023,7 @@ test('dashboard polish keeps one page heading and native quick-action controls',
   // pointer:coarse-Block der Edit-Controls) quer über die Datei.
   assert.doesNotMatch(
     css,
-    /@media \(max-width:\s*640px\)[\s\S]*?\.dashboard-icon-btn\s*\{[^{}]*width:\s*var\(--target-base\)[^{}]*height:\s*var\(--target-base\)/,
+    /@media \(max-width:\s*639px\)[\s\S]*?\.dashboard-icon-btn\s*\{[^{}]*width:\s*var\(--target-base\)[^{}]*height:\s*var\(--target-base\)/,
     'mobile dashboard controls must keep the large touch target through the final cascade'
   );
   assert.match(
@@ -6936,7 +6949,7 @@ test('the dashboard speed dial owns no FAB geometry of its own', () => {
     + 'Reserve am Modul stapelt sich zu totem Raum (Audit A1-16)');
   assert.doesNotMatch(
     dashboard,
-    /@media \(max-width:\s*640px\)[\s\S]*\.dashboard-shell\s*\{[^}]*padding-bottom/,
+    /@media \(max-width:\s*639px\)[\s\S]*\.dashboard-shell\s*\{[^}]*padding-bottom/,
     'the mobile shell must not stack a second FAB clearance (Audit A1-16)'
   );
 });
@@ -8101,19 +8114,19 @@ test('mobile meal actions remain visible and touch-safe after the full cascade',
 
   assert.match(
     meals,
-    /@media \(hover:\s*none\),\s*\(max-width:\s*640px\)[\s\S]*?\.meal-card__actions\s*\{[\s\S]*?opacity:\s*1/,
+    /@media \(hover:\s*none\),\s*\(max-width:\s*639px\)[\s\S]*?\.meal-card__actions\s*\{[\s\S]*?opacity:\s*1/,
   );
   assert.match(
     meals,
-    /@media \(hover:\s*none\),\s*\(max-width:\s*640px\)[\s\S]*?\.meal-card__action-btn\s*\{[\s\S]*?width:\s*var\(--target-lg\)[\s\S]*?height:\s*var\(--target-lg\)/,
+    /@media \(hover:\s*none\),\s*\(max-width:\s*639px\)[\s\S]*?\.meal-card__action-btn\s*\{[\s\S]*?width:\s*var\(--target-lg\)[\s\S]*?height:\s*var\(--target-lg\)/,
   );
   assert.match(
     meals,
-    /@media \(hover:\s*none\),\s*\(max-width:\s*640px\)[\s\S]*?\.week-nav__today,[\s\S]*?\.meal-slot__add-more-btn\s*\{[\s\S]*?min-height:\s*var\(--target-lg\)/,
+    /@media \(hover:\s*none\),\s*\(max-width:\s*639px\)[\s\S]*?\.week-nav__today,[\s\S]*?\.meal-slot__add-more-btn\s*\{[\s\S]*?min-height:\s*var\(--target-lg\)/,
   );
   assert.match(
     meals,
-    /@media \(hover:\s*none\),\s*\(max-width:\s*640px\)[\s\S]*?\.meal-card__action-btn\s*\{[\s\S]*?color:\s*var\(--color-text-secondary\)/,
+    /@media \(hover:\s*none\),\s*\(max-width:\s*639px\)[\s\S]*?\.meal-card__action-btn\s*\{[\s\S]*?color:\s*var\(--color-text-secondary\)/,
   );
 });
 
@@ -8128,7 +8141,7 @@ test('audited profile, birthday, navigation, and budget controls meet mobile tou
   assert.match(settings, /\.settings-avatar-action\s*\{[\s\S]*width:\s*var\(--target-md\)[\s\S]*height:\s*var\(--target-md\)/);
   assert.match(
     settings,
-    /@media \(max-width:\s*640px\)[\s\S]*\.settings-avatar-action\s*\{[\s\S]*width:\s*var\(--target-lg\)[\s\S]*height:\s*var\(--target-lg\)/,
+    /@media \(max-width:\s*639px\)[\s\S]*\.settings-avatar-action\s*\{[\s\S]*width:\s*var\(--target-lg\)[\s\S]*height:\s*var\(--target-lg\)/,
   );
   assert.match(settings, /\.settings-module-move\s*\{[\s\S]*width:\s*var\(--target-base\)[\s\S]*height:\s*var\(--target-base\)/);
   // Zeilen-Aktionen (Bearbeiten/Löschen in Geburtstags-/Budget-/Kontakt-Karten)
@@ -8304,7 +8317,7 @@ test('documents and navigation settings use progressive disclosure instead of st
   assert.match(settingsCss, /\.settings-navigation-panel\s*\{[\s\S]*border-bottom:\s*var\(--space-px\)\s+solid\s+var\(--color-border-subtle\)/);
   assert.match(
     settingsCss,
-    /@media \(max-width:\s*640px\)[\s\S]*\.settings-module-drag\s*\{[\s\S]*display:\s*none/,
+    /@media \(max-width:\s*639px\)[\s\S]*\.settings-module-drag\s*\{[\s\S]*display:\s*none/,
   );
 });
 
@@ -14583,7 +14596,7 @@ test('jede auf Touch ausgeblendete Karten-Aktion hat einen Weg in der Leseansich
   const hidesOnNarrow = [...eachRule(css)].some(({ selector, body, at }) =>
     /\.task-card__inline-action(?![\w-])/.test(selector)
     && /display\s*:\s*none/.test(body)
-    && at.some((pre) => /max-width\s*:\s*640px/.test(pre)));
+    && at.some((pre) => /max-width\s*:\s*639px/.test(pre)));
   assert.ok(hidesOnNarrow,
     'tasks.css blendet .task-card__inline-action nicht mehr unter 640px aus - '
     + 'entweder ist die Regel umgezogen (dann muss dieser Guard mit) oder die '

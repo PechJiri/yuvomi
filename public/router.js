@@ -1276,8 +1276,12 @@ function paintMoreSheetBadges(sheet) {
     if (count > 0) {
       if (existing) existing.replaceWith(moreBadgeEl(count));
       else item.appendChild(moreBadgeEl(count));
+      // Ansage am Link, nicht am Badge - siehe moreBadgeEl.
+      const labelText = item.querySelector('.more-item__label')?.textContent;
+      if (labelText) item.setAttribute('aria-label', `${labelText}, ${t('nav.moreBadge', { count })}`);
     } else {
       existing?.remove();
+      item.removeAttribute('aria-label');
     }
   });
 }
@@ -2371,8 +2375,11 @@ const SHORTCUTS = [
   // Grund für den früheren Zweitweg über `#fab-main` (Audit A1-12), und er ist
   // seit dem Folgevorgang zu #634 selbst ein `.page-fab`.
   { key: 'n',   description: () => t('shortcuts.new'),     action: () => document.querySelector('.page-fab')?.click() },
-  { key: 'f',   description: () => t('shortcuts.searchCalendar'), action: () => {
-    if (location.pathname === '/calendar') document.querySelector('#cal-search')?.click();
+  { key: 'f',   description: () => t('shortcuts.searchCalendar'), action: async () => {
+    // Ausserhalb des Kalenders war `f` ein stiller No-Op (Critique 2026-08-31,
+    // Alex-Persona): erst hinwechseln, dann suchen - ein Griff, ein Ziel.
+    if (location.pathname !== '/calendar') await navigate('/calendar');
+    document.querySelector('#cal-search')?.click();
   } },
   { key: '?',   description: () => t('shortcuts.help'),    action: () => showHelpModal() },
   { key: 'g d', description: () => t('shortcuts.goDash'),  action: () => navigate('/') },
@@ -2390,6 +2397,14 @@ const SHORTCUTS = [
   { key: 'g k s', description: () => t('nav.shopping'),        action: () => navigate('/shopping')          },
   { key: 'g k v', description: () => t('nav.pantry'),          action: () => navigate('/pantry')            },
   { key: 'g i', description: () => t('shortcuts.goInventory'), action: () => navigate('/inventory') },
+  // Beschriftung wie bei den Kuechen-3er-Chords direkt aus den Nav-Labels -
+  // kein zweiter Uebersetzungssatz. Nur die zwei Ziele mit eindeutiger
+  // deutscher Merkhilfe (Budget, Einstellungen); die uebrigen Kandidaten
+  // (Kontakte, Dokumente, Schichtplan, Haushaltshilfe, Belohnungen,
+  // Geburtstage) warten auf eine Buchstaben-Entscheidung des Betreibers,
+  // bevor sich ein unmerkbares Schema festsetzt (Critique 2026-08-31, Alex).
+  { key: 'g b', description: () => t('nav.budget'),   action: () => navigate('/budget') },
+  { key: 'g e', description: () => t('nav.settings'), action: () => navigate('/settings') },
 ];
 
 let _pendingKey = null;
@@ -3721,21 +3736,27 @@ function moreItemEl({ path, navHref, label, icon, module: mod, accent, navId }) 
   // einen gibt. Die Kachel bleibt ohne ihn vollstaendig - ein Badge ist eine
   // Zugabe, kein Bestandteil.
   const count = _moduleCounts[navId ?? mod];
-  if (count > 0) a.appendChild(moreBadgeEl(count));
+  if (count > 0) {
+    a.appendChild(moreBadgeEl(count));
+    a.setAttribute('aria-label', `${label}, ${t('nav.moreBadge', { count })}`);
+  }
   return a;
 }
 
 /**
  * Zaehlbadge einer Modulkachel: „was wartet", nie „was existiert".
- * Die nackte Ziffer im Text traegt fuer sich keine Bedeutung - der Screenreader
- * laese „Aufgaben 3". Das aria-label sagt, was die 3 ist; den Modulnamen hat
- * die Vorlesekette aus dem Label daneben bereits.
+ * Die nackte Ziffer haengt sich sonst an den Kachelnamen („Belohnungen1"):
+ * ein aria-label auf dem <span> zaehlt bei der Namensberechnung des Links
+ * NICHT (Rolle generic traegt keinen Namen), sein Ziffern-Text aber schon.
+ * Deshalb ist das Badge aria-hidden, und die Ansage steht als aria-label auf
+ * der Kachel selbst („Belohnungen, 1 offen") - dasselbe Muster wie
+ * nav-badges.js und setSubTabBadge.
  */
 function moreBadgeEl(count) {
   const badge = document.createElement('span');
   badge.className = 'more-item__badge';
   badge.textContent = count > 99 ? '99+' : String(count);
-  badge.setAttribute('aria-label', t('nav.moreBadge', { count }));
+  badge.setAttribute('aria-hidden', 'true');
   return badge;
 }
 

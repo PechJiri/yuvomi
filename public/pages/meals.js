@@ -331,7 +331,7 @@ function wireRailToggle() {
     hidden = gespeichert === 'hidden';
   } else {
     const grid = _container.querySelector('#week-grid');
-    const desktop = !window.matchMedia?.('(max-width: 640px)').matches;
+    const desktop = !window.matchMedia?.('(max-width: 639px)').matches;
     hidden = Boolean(desktop && grid && grid.scrollWidth > grid.clientWidth + 1);
   }
   apply(hidden);
@@ -465,7 +465,7 @@ function renderWeekGrid() {
   }
 
   // Auf schmalen Viewports (gestapelte Tage) den heutigen Tag in den Blick scrollen.
-  if (window.matchMedia?.('(max-width: 640px)').matches) {
+  if (window.matchMedia?.('(max-width: 639px)').matches) {
     grid.querySelector('.day-header--today')?.closest('.day-column')
       ?.scrollIntoView({ block: 'start' });
   } else if (grid.scrollWidth > grid.clientWidth + 1) {

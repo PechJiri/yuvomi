@@ -334,17 +334,25 @@ const PEOPLE_FILTER_KEY   = 'yuvomi:calendar:people';
 /* DIE MOBIL-GRENZE STEHT EINMAL, UND SIE FOLGT DEM CSS.
  *
  * Sie stand viermal als `(max-width: 639px)` im JS, waehrend calendar.css an
- * drei Stellen bei `max-width: 640px` schaltet. Bei GENAU 640px war die App
+ * drei Stellen bei `max-width: 640px` schaltete. Bei GENAU 640px war die App
  * deshalb in zwei Zustaenden zugleich: das CSS hatte die Termin-Chips schon
  * auf Punkte reduziert, das JS hielt noch die Desktop-Klicklogik - ein Tap
  * musste einen 10px-Punkt treffen, statt die ganze Zelle als Ziel zu haben.
  * Verifiziert bei 640px: `cssMobile: true`, `jsMobile: false`.
  *
- * Ein Guard haelt beide Seiten zusammen (`test:frontend-audit`): jede
- * matchMedia-Grenze dieser Datei muss eine Media-Query-Grenze in calendar.css
- * sein. Zwei Zahlen fuer dieselbe Schwelle sind genau die Bauart, an der
- * dieser Fehler entstanden ist. */
-const MOBILE_MEDIA_QUERY = '(max-width: 640px)';
+ * Der Wert ist seither ZWEIMAL gewandert, und beide Male wanderte nur eine
+ * Seite: erst zog das JS auf die CSS-Zahl 640, dann zog der Breakpoint-Sweep
+ * das CSS auf die Paarung 639 - und liess das JS wieder allein bei 640 stehen,
+ * mit demselben Zwei-Zustaende-Bild bei genau 640px, nur seitenverkehrt. Ein
+ * Guard, der Zahlen ohne ihre Richtung vergleicht, sah beide Male nichts:
+ * `min-width: 640px` in layout.css deckte die JS-640 scheinbar ab.
+ *
+ * Der Guard vergleicht deshalb nicht mehr Zahlen, sondern SCHWELLEN (`test:
+ * frontend-audit`): `max-width: 639px` und `min-width: 640px` sind dieselbe
+ * Schwelle 640, `max-width: 640px` ist die Schwelle 641 - und die kennt kein
+ * Stylesheet. Zwei Zahlen fuer dieselbe Schwelle sind genau die Bauart, an der
+ * dieser Fehler zweimal entstanden ist. */
+const MOBILE_MEDIA_QUERY = '(max-width: 639px)';
 
 const HOLIDAY_PUBLIC_FALLBACK = '#FF3B30';
 const HOLIDAY_SCHOOL_FALLBACK = '#34C759';
@@ -1700,34 +1708,51 @@ let _monthFitRaf = 0;
 // damit nie ein Chip mittig abschneidet (vorher: festes Budget=3 clippte still).
 function fitMonthDayCells(grid) {
   if (!grid) return;
-  grid.querySelectorAll('.month-day').forEach((cell) => {
+
+  // DREI PHASEN STATT EINER SCHLEIFE MIT LESE-/SCHREIB-WECHSEL. Vorher lief je
+  // Zelle Schreiben → Messen → Schreiben → Messen, über bis zu 42 Zellen also
+  // mehrere erzwungene Reflows pro Durchlauf (Audit 2026-08-31, der eine
+  // Thrash-Kandidat der Codebase). Jetzt schreiben alle Zellen zuerst ihren
+  // Messzustand, dann misst EIN Layoutlauf alles, dann fallen die
+  // Entscheidungen. Die "+N"-Zeile darf dafür vorab sichtbar sein: sie steht
+  // NACH den Chips und verschiebt deren Unterkanten nicht, und ihre Höhe ist
+  // einzeilig textunabhängig - die Endzustände sind mit der alten Fassung
+  // identisch (leer/fitsAll → Zeile versteckt und geleert).
+  const cells = [];
+  for (const cell of grid.querySelectorAll('.month-day')) {
     const chips   = [...cell.querySelectorAll('.month-day__holiday, .month-day__event, .cal-task-chip')];
     const moreRow = cell.querySelector('.month-day__more');
-    if (!moreRow) return;
+    if (!moreRow) continue;
     const total = Number(cell.dataset.total) || chips.length;
 
     // Reset auf vollständig sichtbar für eine stabile Messung.
     chips.forEach((c) => c.classList.remove('is-clipped'));
-    moreRow.hidden = true;
-    moreRow.textContent = '';
-    if (!chips.length) return;
+    moreRow.hidden = !chips.length;
+    moreRow.textContent = chips.length ? t('calendar.moreEvents', { count: total }) : '';
+    if (chips.length) cells.push({ cell, chips, moreRow, total });
+  }
 
-    const cs         = getComputedStyle(cell);
-    const cellBottom = cell.getBoundingClientRect().bottom - parseFloat(cs.paddingBottom);
+  // Messphase: der erste Zugriff erzwingt EINEN Reflow, der Rest liest mit.
+  for (const item of cells) {
+    const cs        = getComputedStyle(item.cell);
+    item.cellBottom = item.cell.getBoundingClientRect().bottom - parseFloat(cs.paddingBottom);
+    item.reserved   = item.cellBottom - item.moreRow.getBoundingClientRect().height;
+    item.bottoms    = item.chips.map((c) => c.getBoundingClientRect().bottom);
+  }
 
+  for (const { chips, moreRow, total, bottoms, cellBottom, reserved } of cells) {
     // Passt alles rein (inkl. evtl. nicht gerenderter Überzähliger)? Dann fertig.
-    const fitsAll = total <= chips.length
-      && chips[chips.length - 1].getBoundingClientRect().bottom <= cellBottom;
-    if (fitsAll) return;
+    const fitsAll = total <= chips.length && bottoms[bottoms.length - 1] <= cellBottom;
+    if (fitsAll) {
+      moreRow.hidden = true;
+      moreRow.textContent = '';
+      continue;
+    }
 
     // Platz für die "+N"-Zeile freihalten (einzeilig, Höhe unabhängig von N).
-    moreRow.hidden = false;
-    moreRow.textContent = t('calendar.moreEvents', { count: total });
-    const reserved = cellBottom - moreRow.getBoundingClientRect().height;
-
     let visible = 0;
-    for (const chip of chips) {
-      if (chip.getBoundingClientRect().bottom <= reserved) visible += 1;
+    for (const bottom of bottoms) {
+      if (bottom <= reserved) visible += 1;
       else break;
     }
     visible = Math.max(1, visible); // nie ganz leer wirken lassen
@@ -1740,7 +1765,7 @@ function fitMonthDayCells(grid) {
       moreRow.hidden = true;
       moreRow.textContent = '';
     }
-  });
+  }
 }
 
 // Neurechnung per rAF drosseln: der ResizeObserver kann beim Fensterziehen

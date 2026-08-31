@@ -458,7 +458,7 @@
         "countdownHint": "Affiche sur l’aperçu le temps restant. Si la tâche se répète à partir de son achèvement, le compte à rebours redémarre ensuite.",
         "countdownNeedsDue": "Sans date d’échéance, il n’y a rien à décompter.",
         "countdownDetail": "Compte à rebours sur l’aperçu",
-        "syncTargetLabel": "Cible de synchronisation",
+        "syncTargetLabel": "Liste de rappels",
         "syncTargetLocal": "Enregistrer localement uniquement",
         "syncTargetHint": "Choisissez une liste de rappels dans laquelle écrire cette tâche.",
         "syncTargetMirrored": "Cette tâche est déjà synchronisée avec une liste de rappels. La liste ne peut plus être modifiée.",

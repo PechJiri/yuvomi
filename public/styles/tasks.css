@@ -93,7 +93,7 @@
   margin-inline-start: auto;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   /* Kompakter Kopf (Finish-Review Fundament-Phase): die Toolbar schob die
    * erste Aufgabe unter die Falz. Eine Stufe weniger Vertikalraum je Naht. */
   .tasks-body {
@@ -208,7 +208,7 @@
  * anderthalb Bedienzeilen aus einem `flex-wrap: wrap`, das für 375px gedacht
  * war, wo der Platz FEHLT. Hier ist die Breite da und die Höhe knapp.
  *
- * Die scrollende Chip-Reihe steht schon unter (max-width: 640px) und wird
+ * Die scrollende Chip-Reihe steht schon unter (max-width: 639px) und wird
  * hier wiederholt statt geteilt: ein 800x400-Fenster ist breit genug für die
  * erste Regel und trotzdem zu niedrig für zwei Zeilen. Eine gemeinsame
  * Bedingung hätte auch das Padding und die Nähte mitgenommen, die dort aus
@@ -277,7 +277,7 @@
  *
  * Die Rücknahme auf Touch steht wie beim Chip daneben; die Begründung dort
  * gilt hier wörtlich (filter-chip.css, § kompakte Höhenklasse). */
-/* `height` UND `min-height`, weil die Breitenklasse (max-width: 640px) dem Knopf
+/* `height` UND `min-height`, weil die Breitenklasse (max-width: 639px) dem Knopf
  * ein festes `height: var(--target-base)` gibt - ein reines `min-height` hätte
  * dagegen lautlos verloren, und bei 640x400 greifen BEIDE Klassen. */
 @media (max-height: 499px) {
@@ -292,6 +292,35 @@
     height: var(--target-base);
     min-height: var(--target-base);
   }
+}
+
+/* ZWEI HÖHEN JE KOPFZEILE (Critique 2026-08-31, P3): der Ansichts-Umschalter
+ * stand am Desktop als 54px-Well neben 40px-Kapseln (--target-md ist die
+ * entschiedene Desktop-Zielhöhe der Kopf-Bedienelemente, siehe tokens.css) -
+ * die wichtigste Aktion war das KLEINSTE Element der Zeile. Am Zeigegerät
+ * fallen die Segmente des Kopf-Umschalters in dieselbe Höhenklasse wie ihre
+ * Nachbarn; Touch behält --target-lg aus der Basisregel. Bewusst nur im Kopf
+ * (.page-toolbar): die Gruppierungswahl der Filterzeile folgt dokumentiert
+ * der Höhenklasse ihres Chip-Nachbarn (Kommentar oben). */
+@media (hover: hover) and (pointer: fine) {
+  .page-toolbar .group-toggle {
+    /* 1px-Naht statt 2px: 40px-Segmente + Naht + Rand = 44px Aussenhoehe,
+     * exakt die Silhouette der Icon-Kapseln daneben. */
+    padding: var(--space-px);
+  }
+
+  .page-toolbar .group-toggle__btn {
+    min-height: var(--target-md);
+  }
+}
+
+/* Ein Segment-Label ist EINZEILIG oder gar nicht da: fuer Enge gibt es die
+ * Label-Verlust-Regel (Weglassen), nicht den Umbruch. Ohne nowrap brach
+ * „Kanban-Ansicht" am Bindestrich auf zwei Zeilen und streckte via
+ * align-items-Stretch ALLE Segmente auf 49px - das 55px-Well der Critique
+ * 2026-08-31 war in Wahrheit dieser eine Umbruch. */
+.group-toggle__label {
+  white-space: nowrap;
 }
 
 /* Das Icon steht neben dem Label, nicht statt seiner - solange Platz ist.
@@ -317,7 +346,7 @@
 
 /* DER KOPF-UMSCHALTER TRAEGT SEIN LABEL ERST IN DER SIDEBAR-WELT.
  *
- * Die Label-Verlust-Regel oben (max-width: 640px) ist die Schwelle des
+ * Die Label-Verlust-Regel oben (max-width: 639px) ist die Schwelle des
  * Umschalters in der FILTERREIHE - der steht dort allein in seiner Zeile und
  * hat den Platz. Der Umschalter im KOPF teilt sich seine Zeile mit Titel,
  * Suche und vier weiteren Knoepfen, und fuer ihn ist 640px zu frueh:
@@ -331,11 +360,21 @@
  * auf den Inline-Schnitt): gemessen 79px bei 1024 und 1440px, mit Label wie
  * ohne. Was das Label kostet, ist dort 1px.
  *
+ * NACHGEMESSEN MIT NOWRAP (2026-08-31): die 1px-Aussage oben galt nur, weil
+ * „Kanban-Ansicht" damals ZWEIZEILIG umbrach und der Umschalter dadurch
+ * kuenstlich schmal blieb. Einzeilig (nowrap, Regel oben) misst er 393px,
+ * und ab 1024px endete der Primaerknopf der Kopfzeile bei x=1221 - auf
+ * schmaleren Sidebar-Viewports ausserhalb. Frei ist die Zeile ab ~1240px;
+ * der Breakpoint-Kanon (tokens.css §11c, Guard in test-frontend-audit.js)
+ * erlaubt aber nur 640/768/1024/1440 samt Komplementen - also traegt der
+ * Umschalter sein Label erst in der Wide-Klasse (>= 1440). Zwischen 1024
+ * und 1439 stehen Icons mit aria-label/title, wie unterhalb 1024 zuvor.
+ *
  * Warum HIER und nicht im 640er-Block oben: die Bauteile stehen ab Zeile 247,
  * also HINTER jenem Block. Eine Regel gleicher Spezifitaet wuerde dort gegen
  * die spaetere Definition verlieren - dieselbe Kaskaden-Falle, die im
  * schmalen Zustand der Kueche schon einmal 358px Hoehe gekostet hat. */
-@media (max-width: 1023px) {
+@media (max-width: 1439px) {
   .group-toggle--icons .group-toggle__label {
     display: none;
   }
@@ -650,7 +689,7 @@
 
 /* Auf Mobile trägt die Kategorie-Section-Überschrift die Kategorie bereits —
  * das Inline-Label je Zeile ist dort redundant und kostet Platz. */
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .task-card .task-card__meta .task-card__category {
     display: none;
   }
@@ -954,7 +993,7 @@
   color: var(--color-text-primary);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .task-card__main {
     gap: var(--space-2);
     /* Der Takt der Liste entsteht aus Polsterung UND Metazeile. Die Metazeile
@@ -1104,6 +1143,13 @@
   justify-content: center;
   transition: all var(--transition-fast);
   position: relative;
+}
+
+/* Dieselbe Modulton-Einladung wie am grossen Statusknopf (oben) und an
+ * .item-check (shopping.css) - die Unteraufgabe war der dritte Abhakmoment
+ * und der einzige ohne sie (Signaturelement-Runde 2026-08-31). */
+.subtask-item__checkbox:hover {
+  border-color: var(--module-accent, var(--color-accent));
 }
 
 .subtask-item__checkbox::before {
@@ -1432,7 +1478,7 @@
   min-height: var(--target-base);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .bulk-actions-bar {
     align-items: stretch;
     flex-direction: column;

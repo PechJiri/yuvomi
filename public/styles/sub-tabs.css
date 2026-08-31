@@ -77,7 +77,8 @@
 }
 
 /* Optionaler Modul-Titel links der Tabs (Canonical Page Head).
- * Größe/Weight aus der u-toolbar-title-Rolle (typography.css). */
+ * Größe/Weight aus der Kopf-Titelrolle: der Selektor steht in typography.css
+ * in der Shell-Liste der Rolle - eine freie Utility dafür gibt es nicht. */
 .sub-tabs-bar__title {
   flex-shrink: 0;
   margin-right: var(--space-2);

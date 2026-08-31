@@ -709,7 +709,7 @@
 
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   /* Der Button ist mobil vollbreit (grid-column: 1 / -1) — das Label bleibt
    * sichtbar, statt eine leere Pille mit nacktem Icon zu zeigen (Audit F9). */
   .housekeeping-check-small {

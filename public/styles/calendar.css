@@ -1600,7 +1600,7 @@
   background: color-mix(in srgb, var(--ev-color) var(--tint-raised), var(--color-surface-work));
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .event-title-picker {
     grid-template-columns: 1fr;
   }
@@ -1761,7 +1761,7 @@
  * (Nach der kanonischen .month-day__holiday-Regel platziert, damit die
  *  Reihenfolge stimmt und die Punkt-Overrides greifen.)
  * -------------------------------------------------------- */
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .month-day {
     min-height: 54px;
     padding: var(--space-0h);

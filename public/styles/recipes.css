@@ -387,12 +387,9 @@
   min-width: 160px;
 }
 
-/* Häkchen nur bei der aktiven Option - `visibility: hidden` statt
- * `display: none`, damit die Textspalte für alle drei Einträge an derselben
- * Stelle beginnt, unabhängig davon, welcher gerade ausgewählt ist. */
-.popover-menu__item-check--hidden {
-  visibility: hidden;
-}
+/* Das Häkchen-Muster der Einfachauswahl (.popover-menu__item-check--hidden)
+ * wohnt seit 2026-08-31 beim restlichen popover-menu-Vokabular in layout.css -
+ * es hat mit dem Personen-Umschalter der Gesundheit einen zweiten Nutzer. */
 
 /* ENTFERNT mit dem Kartenraster:
  *   .recipes-search-empty  - der Suchtreffer-Leerzustand läuft jetzt über

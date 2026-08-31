@@ -458,7 +458,7 @@
         "countdownHint": "Toont op het overzicht hoe lang het nog duurt. Herhaalt de taak zich vanaf het afvinken, dan begint het aftellen daarna opnieuw.",
         "countdownNeedsDue": "Zonder vervaldatum valt er niets af te tellen.",
         "countdownDetail": "Telt af op het overzicht",
-        "syncTargetLabel": "Synchronisatiedoel",
+        "syncTargetLabel": "Herinneringenlijst",
         "syncTargetLocal": "Alleen lokaal opslaan",
         "syncTargetHint": "Kies een herinneringslijst om deze taak naartoe te schrijven.",
         "syncTargetMirrored": "Deze taak wordt al gesynchroniseerd met een herinneringslijst. De lijst kan achteraf niet worden gewijzigd.",

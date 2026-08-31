@@ -407,7 +407,7 @@ function renderSourceFilter() {
   el.replaceChildren();
   el.insertAdjacentHTML('beforeend', `
     <button type="button" class="btn btn--ghost btn--icon popover-menu__trigger"
-            popovertarget="recipes-source-filter-menu"
+            popovertarget="recipes-source-filter-menu" aria-haspopup="menu" aria-expanded="false"
             aria-label="${esc(t('recipes.sourceFilterLabel'))}: ${esc(activeLabel)}"
             title="${esc(t('recipes.sourceFilterLabel'))}: ${esc(activeLabel)}">
       <i data-lucide="filter" class="icon-md" aria-hidden="true"></i>

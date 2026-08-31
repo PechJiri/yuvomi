@@ -74,7 +74,7 @@ let state = {
   // gespeicherte Wahl gewinnt auf jedem Geraet; 640px ist die kanonische
   // Mobile-Grenze (tokens.css §11c).
   view: localStorage.getItem('yuvomi-documents-view')
-    || (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 640px)').matches ? 'list' : 'grid'),
+    || (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 639px)').matches ? 'list' : 'grid'),
   sort: SORTS.includes(localStorage.getItem('yuvomi-documents-sort'))
     ? localStorage.getItem('yuvomi-documents-sort')
     : 'updated',
@@ -1579,7 +1579,7 @@ function openDocumentModal(doc = null) {
           <div class="document-member-picker__grid">${memberOptions(doc?.allowed_member_ids || [])}</div>
         </div>
         ${advancedSection(advancedFieldsHtml, { open: advancedOpen })}
-        <div id="document-error" class="form-error" hidden></div>
+        <div id="document-error" class="form-error" role="alert" hidden></div>
         <div class="modal-panel__footer modal-panel__footer--plain">
           <button type="submit" class="btn btn--primary" id="document-submit">${isEdit ? t('common.save') : t('documents.uploadAction')}</button>
         </div>
@@ -1750,7 +1750,7 @@ function openFolderModal({ parentId = null } = {}) {
             ${options}
           </select>
         </div>
-        <div id="document-folder-error" class="form-error" hidden></div>
+        <div id="document-folder-error" class="form-error" role="alert" hidden></div>
         <div class="modal-panel__footer modal-panel__footer--plain">
           <button type="submit" class="btn btn--primary">${t('documents.createFolderAction')}</button>
         </div>

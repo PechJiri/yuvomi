@@ -921,7 +921,7 @@ test('die Transaktionsliste bleibt auf kurzen Desktop-Viewports erreichbar (#904
   // 32px hoch, Liste ab y=648 bei 620px Viewport). Beide Hälften einzeln
   // gepinnt: jede allein genügt, um den Defekt wiederzubeleben.
   // Vier Fluchtwege aus dem Review, jeder mit Gegenprobe belegt:
-  // 1. Ausgenommen ist NUR der benannte Mobil-Reflow (max-width: 640px), nicht
+  // 1. Ausgenommen ist NUR der benannte Mobil-Reflow (max-width: 639px), nicht
   //    jeder At-Block - #904 ist ein Kurz-Viewport-Defekt, eine max-height-
   //    Query wäre der wahrscheinlichste Rückweg gewesen und blieb unsichtbar.
   // 2. Geprüft wird jede Regel, deren SUBJEKT (letzter Compound) das Element
@@ -941,7 +941,7 @@ test('die Transaktionsliste bleibt auf kurzen Desktop-Viewports erreichbar (#904
   let panelSeen = false;
   let floorSeen = false;
   for (const { selector, body, at } of eachRule(budgetCss)) {
-    if (at.some((a) => /max-width:\s*640px/.test(a))) continue;
+    if (at.some((a) => /max-width:\s*639px/.test(a))) continue;
     if (subjectIs(selector, '.budget-tab-panel--budget')) {
       panelSeen = true;
       // `clip` kappt wie `hidden`, nur ohne Scrollport - und die Block-Achse

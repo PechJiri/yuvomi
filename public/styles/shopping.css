@@ -664,6 +664,15 @@
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
+/* Modulton an der EINLADUNG (Hover des leeren Kastens) - dieselbe Geste wie
+ * .task-status-btn:hover::after in tasks.css; der Einkauf war der eine
+ * Abhakmoment ohne sie (Signaturelement-Runde 2026-08-31). Grün bleibt die
+ * BESTÄTIGUNG: „erledigt" spricht app-weit --color-success, der Modulton
+ * lädt nur ein. */
+.item-check:hover::before {
+  border-color: var(--module-accent, var(--color-accent));
+}
+
 .item-check--checked {
   animation: check-pop var(--duration-md) var(--ease-out);
 }

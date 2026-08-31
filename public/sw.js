@@ -3,10 +3,12 @@
  * Zweck: Offline-Fähigkeit, differenzierte Caching-Strategien, Update-Notification
  * Abhängigkeiten: keine
  *
- * Caching-Strategien:
- *   APP_SHELL (HTML + kritische JS/CSS): Cache-First (frisch vorgeladen via install)
- *   PAGE_MODULES (Seiten-JS): Cache-First (frisch vorgeladen via install)
- *   ASSETS (Bilder, Icons): Cache-First, lazily gecacht, bei SW-Update geleert
+ * Caching-Strategien (der Dispatcher unten ist die Wahrheit; dieser Kopf
+ * behauptete bis 2026-08-31 "Cache-First" für Shell und Seitenmodule):
+ *   Navigation + APP_SHELL + PAGE_MODULES + Locales: Network-First mit dem
+ *        Precache (install) als Offline-Fallback - frisch, solange Netz da ist.
+ *   ASSETS (Bilder, Icons) und der Rest-Fallback: Cache-First, lazily gecacht,
+ *        bei SW-Update geleert
  *   API: Network-First für eine Read-only-GET-Whitelist (Kalender, Tasks, …)
  *        → offline letzter Stand sichtbar; Mutationen/Auth immer direkt ans Netz.
  *        Cache wird bei Logout/Session-Ende geleert (CLEAR_API_CACHE-Message).
@@ -43,6 +45,7 @@ const APP_SHELL = [
   '/push.js',
   '/sw-register.js',
   '/lucide.min.js',
+  '/lucide-scope.js',
   // Alles, was `index.html` als `<link rel="stylesheet">` eager lädt, gehört
   // hierher - sonst rendert der allererste Offline-Start ungestylt. Die Regel
   // hält `test:sw-precache`; sie ist keine Liste, die man von Hand nachträgt.

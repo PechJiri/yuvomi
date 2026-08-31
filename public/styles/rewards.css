@@ -550,7 +550,7 @@
  * hat Belohnungen zufällig vor dem Überlauf bewahrt, der die Haushaltshilfe mit
  * derselben Bauart traf. */
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .rewards-content__inner { gap: var(--space-6); padding-top: var(--space-4); }
   .rw-reward-grid { grid-template-columns: 1fr; }
   /* Schmaler Viewport ⇒ mit hoher Wahrscheinlichkeit Touch: 44-pt-Ziele. */

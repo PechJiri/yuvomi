@@ -458,7 +458,7 @@
         "countdownHint": "Az áttekintésen megmutatja, mennyi van még hátra. Ha a feladat az elvégzéstől ismétlődik, a visszaszámlálás utána elölről kezdődik.",
         "countdownNeedsDue": "Határidő nélkül nincs mit visszaszámlálni.",
         "countdownDetail": "Visszaszámlál az áttekintésen",
-        "syncTargetLabel": "Szinkronizálási cél",
+        "syncTargetLabel": "Emlékeztetőlista",
         "syncTargetLocal": "Csak helyben mentés",
         "syncTargetHint": "Válassz emlékeztetőlistát, amelybe ez a feladat kerüljön.",
         "syncTargetMirrored": "Ez a feladat már szinkronizálva van egy emlékeztetőlistával. A lista utólag nem módosítható.",

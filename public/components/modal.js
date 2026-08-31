@@ -803,7 +803,10 @@ export async function closeModal({ force = false } = {}) {
       const suspended = _suspendActiveModal();
 
       const confirmed = await _confirmOverSuspended(t('modal.unsavedChanges'), {
-        danger: false,
+        // danger: „Verwerfen" wirft Eingaben unwiderruflich weg. Als
+        // btn--primary lud die Optik im Moment des Zögerns zur destruktiven
+        // Wahl ein (Critique 2026-08-31); rot benennt die Konsequenz.
+        danger: true,
         confirmLabel: t('modal.discardChanges'),
         detail: t('modal.unsavedChangesDetail'),
       }, suspended);

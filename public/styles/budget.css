@@ -1111,7 +1111,7 @@
   gap: var(--space-3);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   .budget-loans__header,
   .budget-loan-card__footer {
     align-items: stretch;
@@ -1387,7 +1387,7 @@
  *   schwebende FAB keine Kategorie-/Transaktionszeile mehr verdeckt und das
  *   9-zeilige Kategorie-Chart nicht abgeschnitten wird.
  * -------------------------------------------------------- */
-@media (max-width: 640px) {
+@media (max-width: 639px) {
   /* Die frühere 100vw-Kappung der Tab-Leiste ist mit der Bar-Zeile entfallen:
    * als .page-toolbar__bar begrenzt der Kopf selbst (flex-basis 100% +
    * min-width 0), viewport-relativ war nur der Actions-Slot-Notbehelf. */

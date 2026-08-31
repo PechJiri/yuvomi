@@ -458,7 +458,7 @@
         "countdownHint": "在概览中显示还剩多久。如果任务从完成时开始重复，倒计时随后会重新开始。",
         "countdownNeedsDue": "没有截止日期就没有可倒数的对象。",
         "countdownDetail": "在概览中倒计时",
-        "syncTargetLabel": "同步目标",
+        "syncTargetLabel": "提醒列表",
         "syncTargetLocal": "仅保存在本地",
         "syncTargetHint": "选择一个提醒列表，用于写入此任务。",
         "syncTargetMirrored": "此任务已与某个提醒列表同步，之后无法更换列表。",

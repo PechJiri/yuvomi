@@ -295,7 +295,7 @@ function thirdPartyRowHtml(row) {
           <span class="settings-module-origin">${esc(t('settings.modulesExternalBadge'))}</span>
           <span class="settings-module-status ${statusClass}">${esc(row.status)}</span>
         </div>
-        ${row.error ? `<p class="form-error">${esc(row.error)}</p>` : ''}
+        ${row.error ? `<p class="form-error" role="alert">${esc(row.error)}</p>` : ''}
       </div>
     </div>
   `;

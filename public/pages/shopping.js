@@ -162,11 +162,15 @@ function renderTabs(container) {
 
   const tabsHtml = state.lists.map((list) => {
     const unchecked = list.item_total - list.item_checked;
+    // Der Zähler ist aria-hidden, sonst klebt er am Buttonnamen („Einkauf23");
+    // die Ansage steht als aria-label auf dem Tab selbst - dasselbe Muster wie
+    // setSubTabBadge. „0 offene Artikel" deckt auch den ✓-Zustand ehrlich ab.
     return `
       <button class="list-tab ${list.id === state.activeListId ? 'list-tab--active' : ''}"
-              data-action="switch-list" data-id="${list.id}">
+              data-action="switch-list" data-id="${list.id}"
+              ${list.item_total > 0 ? `aria-label="${esc(list.name)}, ${esc(t('nav.shoppingOpen', { count: unchecked }))}"` : ''}>
         ${esc(list.name)}
-        ${list.item_total > 0 ? `<span class="list-tab__count">${unchecked > 0 ? unchecked : '✓'}</span>` : ''}
+        ${list.item_total > 0 ? `<span class="list-tab__count" aria-hidden="true">${unchecked > 0 ? unchecked : '✓'}</span>` : ''}
       </button>`;
   }).join('');
 

@@ -470,7 +470,7 @@
         "countdownHint": "Zeigt auf der Übersicht, wie lange es noch dauert. Wiederholt sich die Aufgabe ab Erledigung, beginnt der Countdown danach von vorn.",
         "countdownNeedsDue": "Ohne Fälligkeitsdatum gibt es nichts, worauf gezählt werden kann.",
         "countdownDetail": "Zählt auf der Übersicht herunter",
-        "syncTargetLabel": "Sync-Ziel",
+        "syncTargetLabel": "Erinnerungsliste",
         "syncTargetLocal": "Nur lokal speichern",
         "syncTargetHint": "Wähle eine Erinnerungsliste, in die diese Aufgabe geschrieben wird.",
         "syncTargetMirrored": "Diese Aufgabe wird bereits mit einer Erinnerungsliste abgeglichen. Die Liste lässt sich nachträglich nicht wechseln.",

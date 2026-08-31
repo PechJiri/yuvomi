@@ -7,7 +7,8 @@
  * Erlaubt:
  *   - var(--…) (auch mit Fallback)
  *   - 0, normal, inherit
- *   - reset.css: die 1rem-Basis (font-size: 16px) — Fundament der rem-Skala
+ *   - reset.css: die 1rem-Basis (font-size: 100%) — Fundament der rem-Skala,
+ *     folgt der Browser-Schriftgrößen-Einstellung (WCAG 1.4.4)
  *   - tokens.css: die Token-Definitionen selbst
  */
 import { test } from 'node:test';
@@ -153,6 +154,43 @@ test('die kanonischen Breakpoint-Tokens existieren in tokens.css', () => {
 });
 
 /**
+ * Die Grenze gehoert der GROSSEN Seite: aufwaerts `min-width: 640px`, abwaerts
+ * `max-width: 639px`. Ein `max-width` exakt AUF einem Kanonwert laesst bei
+ * dieser Breite beide Seiten zugleich gelten - gemessen bei 640px: mobile
+ * Kompaktregeln UND 3-Spalten-Kanban gleichzeitig (Audit 2026-08-31; 33
+ * Fundstellen in 15 Dateien, waehrend 768/1024 laengst korrekt als 767/1023
+ * gepaart waren). Regel statt Liste: keine Media-Query darf ein max-width auf
+ * einem der vier Kanonwerte fuehren.
+ *
+ * NUR IM PRELUDE, UND DAS IST DIE KORREKTUR AN DIESEM GUARD SELBST. Die erste
+ * Fassung suchte `max-width: 640px` IRGENDWO im Stylesheet und traf damit zwei
+ * Deklarationen, die keine Schwelle sind: `.budget-tab-panel--reading` und
+ * `.perm-matrix` fuehren eine Lesespaltenbreite. Bei denen gibt es keine zweite
+ * Seite, mit der sie sich ueberlappen koennten - die Paarungsregel gilt fuer
+ * Viewport-Grenzen, nicht fuer Elementbreiten. Der Sweep hat beide auf 639px
+ * gezogen, WEIL der Guard sie rot faerbte; ein Guard, der beim Richtigstellen
+ * rot wird, prueft die Schreibweise statt der Sache.
+ */
+test('kein max-width einer Media-Query sitzt exakt auf einem Breakpoint-Kanonwert', () => {
+  const violations = [];
+  for (const file of cssFiles) {
+    const css = stripComments(readFileSync(new URL(file, STYLES_DIR), 'utf8'));
+    for (const at of css.matchAll(/@media([^{]*)\{/g)) {
+      for (const bp of [640, 768, 1024, 1440]) {
+        if (!new RegExp(`max-width:\\s*${bp}px`).test(at[1])) continue;
+        const line = css.slice(0, at.index).split('\n').length;
+        violations.push(`${file}:${line} → @media max-width: ${bp}px (Paarung: ${bp - 1}px)`);
+      }
+    }
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    `max-width auf Kanonwert - die Grenze gehoert der grossen Seite (min-width):\n${violations.join('\n')}`,
+  );
+});
+
+/**
  * Die Rollen-Schicht traegt, was sie als REGEL fuehrt - nicht, was ihr
  * Kommentar erwaehnt.
  *
@@ -212,6 +250,51 @@ test('kein Markup greift die entfallene Eyebrow-Klasse wieder auf', () => {
   };
   for (const root of roots) walk(root);
   assert.deepEqual(offenders, [], `u-eyebrow ist entfallen und steht wieder im Markup:\n${offenders.join('\n')}`);
+});
+
+/**
+ * Die Kopf-Titelrolle (Canonical Page Head) ist seit 2026-08-31 nicht mehr
+ * frei adressierbar: die einzige Utility-Vergabe außerhalb der Shell waren
+ * acht Sektionsköpfe des Gesundheitsmoduls - drei Hierarchie-Ebenen
+ * kollabierten auf eine, und keine der übrigen 20+ Seiten hatte die Klasse je
+ * gebraucht. Die Rolle beziehen NUR die konkreten Shell-Klassen in
+ * typography.css (page-toolbar, dock, Settings, Split, Sub-Tabs-Leiste).
+ * Regel statt Allowlist, und über BEIDE Türen: kein Stylesheet deklariert die
+ * Utility-Klasse, kein Markup vergibt sie - eine Klasse ohne Regel wäre stumm,
+ * aber der Wiedereinstieg (siehe den Eyebrow-Guard direkt darüber).
+ */
+test('die Kopf-Titelrolle ist nicht frei adressierbar (u-toolbar-title bleibt entfallen)', () => {
+  for (const file of cssFiles) {
+    const css = stripComments(readFileSync(new URL(file, STYLES_DIR), 'utf8'));
+    const declaring = [...eachRule(css)].flatMap(({ selector }) => selector.split(','))
+      .map((part) => part.trim())
+      .filter((part) => /(^|[\s>+~])\.u-toolbar-title([\s.:[]|$)/.test(part));
+    assert.deepEqual(
+      declaring,
+      [],
+      `${file} deklariert .u-toolbar-title - die Kopf-Titelrolle gehört den Shell-Klassen in typography.css`,
+    );
+  }
+
+  const roots = ['../public/pages/', '../public/components/', '../public/settings/', '../public/utils/'];
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })) {
+      const path = `${dir}${entry.name}`;
+      if (entry.isDirectory()) { walk(`${path}/`); continue; }
+      if (!entry.name.endsWith('.js')) continue;
+      if (/\bu-toolbar-title\b/.test(readFileSync(new URL(path, import.meta.url), 'utf8'))) offenders.push(path);
+    }
+  };
+  for (const root of roots) walk(root);
+  for (const single of ['../public/router.js', '../public/index.html', '../public/offline.html']) {
+    if (/\bu-toolbar-title\b/.test(readFileSync(new URL(single, import.meta.url), 'utf8'))) offenders.push(single);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `u-toolbar-title ist entfallen - die Kopf-Titelrolle wird nur über Shell-Klassen bezogen:\n${offenders.join('\n')}`,
+  );
 });
 
 test('die Produkt-Typografie nutzt feste semantische Rollenwerte', () => {
