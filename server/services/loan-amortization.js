@@ -112,10 +112,10 @@ export function computeLoanSchedule({
  * dieser Funktion.
  *
  * Der Wert kommt aus dem Tilgungsplan, ist also planmäßig: er unterstellt, dass
- * jede Rate in Höhe der Annuität und zum Fälligkeitsmonat gezahlt wurde. Abweichend
- * gebuchte Ratenbeträge verschieben die reale Tilgung und werden hier bewusst nicht
- * nachgeführt, damit die Restschuld zur selben Prognose gehört wie Monatsrate,
- * Gesamtzins und Laufzeit.
+ * jede Rate in Höhe der Annuität und zum Fälligkeitsmonat gezahlt wurde. Für die
+ * ANZEIGE der Restschuld ist das seit #954 nicht mehr gut genug - dort rechnet
+ * remainingPrincipalFromPayments die gebuchten Beträge nach. Diese Funktion bleibt
+ * die planmäßige Lesart (Prognosen, Äquivalenzreferenz in den Tests).
  *
  * @param {Array<{ balance: number }>} schedule Tilgungsplan aus computeLoanSchedule
  * @param {number} principal        Kreditsumme (Restschuld vor der ersten Rate)
@@ -128,4 +128,62 @@ export function remainingPrincipalAfter(schedule, principal, paidInstallments) {
   // Über den Plan hinaus gebuchte Raten können das Kapital nicht unter null drücken.
   if (paid >= schedule.length) return 0;
   return schedule[paid - 1].balance;
+}
+
+/**
+ * Restschuld aus den tatsächlich gebuchten Raten (#954, gemeldet in #935).
+ *
+ * remainingPrincipalAfter liest die Planposition und unterstellt damit, dass jede
+ * Rate exakt in Annuitätenhöhe floss. Sobald jemand mehr oder weniger zahlt, ist
+ * die angezeigte Zahl falsch, nicht bloß unvollständig: eine Sondertilgung
+ * verschwand aus der Anzeige, eine Minderzahlung beschönigte sie. Hier wird
+ * stattdessen die Zahlungshistorie nachgerechnet: je gebuchter Rate der Zinsanteil
+ * auf die REALE Restschuld zum Phasensatz ihrer Ratennummer, der Rest tilgt.
+ * Eine Rate unter dem Zinsanteil erhöht die Restschuld - das ist ehrlich, kein
+ * Rechenfehler.
+ *
+ * Wer exakt die Annuität zahlt, bekommt dasselbe Ergebnis wie aus der
+ * Planposition (Äquivalenztest in test:budget-loans-amortization). Die
+ * Prognose-Kennzahlen daneben (Monatsrate, Gesamtzins, Restlaufzeit,
+ * remainingAfterBinding) bleiben bewusst planbasiert - sie beschreiben den
+ * Vertrag, nicht den Kontostand.
+ *
+ * @param {object} params            Zins-Parameter wie bei computeLoanSchedule
+ *                                   (initialRepaymentRate wird nicht gebraucht:
+ *                                   getilgt wird, was nach dem Zins übrig ist)
+ * @param {Array<{ installment_number: number, amount: number }>} payments
+ *                                   Gebuchte Raten; Reihenfolge egal, gerechnet
+ *                                   wird nach Ratennummer
+ * @returns {number} Restschuld in Euro, auf Cent gerundet, nie negativ
+ */
+export function remainingPrincipalFromPayments({
+  principal,
+  fixedRate,
+  interestMode,
+  fixedPeriodMonths = null,
+  followupRate = null,
+}, payments) {
+  const rf = Number(fixedRate);
+  const variable = interestMode === 'fixed_then_variable';
+  const rv = variable ? Number(followupRate) : rf;
+  const bindingMonths = variable && Number.isFinite(Number(fixedPeriodMonths))
+    ? Number(fixedPeriodMonths)
+    : null;
+
+  const rows = (Array.isArray(payments) ? payments : [])
+    .map((p) => ({ n: Math.floor(Number(p?.installment_number) || 0), amount: Number(p?.amount) || 0 }))
+    .filter((p) => p.n > 0 && p.amount > 0)
+    .sort((a, b) => a.n - b.n);
+
+  let balance = Number(principal) || 0;
+  for (const { n, amount } of rows) {
+    // Getilgt ist getilgt: auf null Restschuld fällt kein Zins mehr an, und eine
+    // weitere Buchung kann das Kapital nicht unter null drücken.
+    if (balance <= 0.005) { balance = 0; break; }
+    const inFixed = !bindingMonths || n <= bindingMonths;
+    const rate = inFixed ? rf : rv;
+    const interest = balance * (rate / 100 / 12);
+    balance -= (amount - interest);
+  }
+  return round2(Math.max(0, balance));
 }

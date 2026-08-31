@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The remaining principal of an interest loan follows the money you booked, not the calendar**
+  (#954, reported in #935). Loan payments always carried a free amount - paying 500 instead of the
+  planned 300 was accepted and stored - but the displayed remaining principal was read off the
+  original amortization schedule at position *n*: whoever paid extra saw none of it, and the number
+  on screen was wrong, not merely incomplete. It now replays the recorded payments (interest share
+  per installment at that installment's phase rate, the rest amortizes), so an extra payment lowers
+  the balance one to one and a short payment - honestly - does not count as a full installment.
+  Paying exactly the annuity yields the same figures as before. The forecast figures next to it
+  (monthly payment, total interest, remaining term) deliberately stay plan-based: they describe the
+  contract, not the account balance.
+
 ## [2.57.0] - 2026-08-31
 
 ### Fixed

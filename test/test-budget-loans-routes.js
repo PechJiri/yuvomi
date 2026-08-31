@@ -523,6 +523,50 @@ test('GET zinsfreies Darlehen: remaining_principal == remaining_amount', async (
   assert.equal(r.body.data.summary.remaining_principal, r.body.data.summary.remaining_amount);
 });
 
+test('Sondertilgung: die Restschuld folgt dem gebuchten Geld, nicht der Ratennummer (#954)', async () => {
+  setMode('shared');
+  setBudgetCurrency('EUR');
+  db.prepare('DELETE FROM budget_loans').run();
+
+  // Zwei identische Darlehen als Differentialprobe: bis Rate 1 laufen beide
+  // gleich, in Rate 2 zahlt eines 500 € mehr. Der Zinsanteil der 2. Rate ist in
+  // beiden derselbe (gleiche Restschuld davor), das Extra geht also eins zu
+  // eins in die Tilgung - vorher zeigten beide dieselbe Planposition, und die
+  // Sondertilgung war unsichtbar (#935).
+  const mk = () => call('POST', '/loans', {
+    as: AA,
+    body: {
+      borrower: 'Lukas', title: 'Auto', start_month: '2022-12',
+      interest_mode: 'fixed', principal: 21000,
+      fixed_rate: 4.07, initial_repayment_rate: 14.792857,
+    },
+  });
+  const plain = (await mk()).body.data;
+  const extra = (await mk()).body.data;
+
+  for (const id of [plain.id, extra.id]) {
+    const pay = await call('POST', `/loans/${id}/payments`, { as: AA, body: { paid_date: '2026-07-01' } });
+    assert.equal(pay.status, 201);
+  }
+  const p2 = await call('POST', `/loans/${plain.id}/payments`, { as: AA, body: { paid_date: '2026-08-01' } });
+  assert.equal(p2.status, 201);
+  const e2 = await call('POST', `/loans/${extra.id}/payments`, {
+    as: AA, body: { paid_date: '2026-08-01', amount: plain.installment_amount + 500 },
+  });
+  assert.equal(e2.status, 201);
+
+  const r = await call('GET', '/loans', { as: AA });
+  const a = r.body.data.loans.find((l) => l.id === plain.id);
+  const b = r.body.data.loans.find((l) => l.id === extra.id);
+  assert.equal(a.paid_installments, 2, 'die Zählung bleibt eine Zählung');
+  assert.equal(b.paid_installments, 2);
+  assert.ok(Math.abs((a.remaining_principal - b.remaining_principal) - 500) <= 0.02,
+    `500 € Extra müssen die Restschuld um 500 € trennen (plain ${a.remaining_principal}, extra ${b.remaining_principal})`);
+  // Die Prognose-Kennzahlen bleiben planbasiert und damit identisch.
+  assert.equal(a.interest.monthly_payment, b.interest.monthly_payment);
+  assert.equal(a.interest.total_interest, b.interest.total_interest);
+});
+
 // --------------------------------------------------------------------------
 // Richtung der Rate (#638)
 //
