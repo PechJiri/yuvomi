@@ -363,15 +363,18 @@
  * NACHGEMESSEN MIT NOWRAP (2026-08-31): die 1px-Aussage oben galt nur, weil
  * „Kanban-Ansicht" damals ZWEIZEILIG umbrach und der Umschalter dadurch
  * kuenstlich schmal blieb. Einzeilig (nowrap, Regel oben) misst er 393px,
- * und bei 1024-1279px endet der Primaerknopf der Kopfzeile bei x=1221 -
- * ausserhalb des Viewports. Das Label kommt deshalb erst, wenn die Zeile es
- * traegt (gemessen: ab ~1240px frei, 1280 als naechste runde Schwelle).
+ * und ab 1024px endete der Primaerknopf der Kopfzeile bei x=1221 - auf
+ * schmaleren Sidebar-Viewports ausserhalb. Frei ist die Zeile ab ~1240px;
+ * der Breakpoint-Kanon (tokens.css §11c, Guard in test-frontend-audit.js)
+ * erlaubt aber nur 640/768/1024/1440 samt Komplementen - also traegt der
+ * Umschalter sein Label erst in der Wide-Klasse (>= 1440). Zwischen 1024
+ * und 1439 stehen Icons mit aria-label/title, wie unterhalb 1024 zuvor.
  *
  * Warum HIER und nicht im 640er-Block oben: die Bauteile stehen ab Zeile 247,
  * also HINTER jenem Block. Eine Regel gleicher Spezifitaet wuerde dort gegen
  * die spaetere Definition verlieren - dieselbe Kaskaden-Falle, die im
  * schmalen Zustand der Kueche schon einmal 358px Hoehe gekostet hat. */
-@media (max-width: 1279px) {
+@media (max-width: 1439px) {
   .group-toggle--icons .group-toggle__label {
     display: none;
   }
