@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.2] - 2026-08-31
+
 ### Fixed
 
 - **The remaining principal of an interest loan follows the money you booked, not the calendar**
