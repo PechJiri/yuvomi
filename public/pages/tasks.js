@@ -803,6 +803,18 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
   const summaryPoints = isEdit ? Number(task.points) : prefillPoints;
   if (summaryPoints > 0) advancedSummary.push(t('tasks.pointsSummary', { count: summaryPoints }));
   if (isEdit && task.tags?.length) advancedSummary.push(task.tags.join(', '));
+  // Der Schwanz hinter dem Aufklapper ist eingezogen (Critique 2026-08-31):
+  // Status, Sync-Ziel, Sichtbarkeit, Sperre und Anhaenge standen als offene
+  // Feldgruppen NACH der Sektion - dieselbe Sorte Sekundaerfeld, nur an der
+  // Regel vorbei. Sie stehen jetzt darin, und gesetzte Werte nennt die
+  // Zusammenfassung, wie bei allen anderen. (Sync-Ziel fehlt in der Summary:
+  // sein Anzeigename kommt asynchron aus /tasks/sync-targets.)
+  if (isEdit && task.status && task.status !== 'open') {
+    advancedSummary.push(STATUSES().find((s) => s.value === task.status)?.label ?? task.status);
+  }
+  if (!isSoloHousehold() && visibility !== 'all') advancedSummary.push(t(`common.visibility.${visibility}`));
+  if (!isSoloHousehold() && task?.locked) advancedSummary.push(t('tasks.lockedBadge'));
+  if (task?.documents?.length) advancedSummary.push(task.documents.map((d) => d.name).join(', '));
 
   const advancedLabel = advancedSummary.length
     ? `${t('modal.moreSettings')} · ${advancedSummary.join(' · ')}`
@@ -853,7 +865,63 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
           </datalist>
         </div>
         <p class="task-field-hint">${t('tasks.tagsHint')}</p>
-      </div>`;
+      </div>
+
+      ${isEdit ? `
+        <div class="form-group" style="margin-top:var(--space-4)">
+          <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
+          <select class="input" id="task-status" name="status">
+            ${STATUSES().map((s) =>
+              `<option value="${s.value}" ${task.status === s.value ? 'selected' : ''}>${s.label}</option>`
+            ).join('')}
+          </select>
+        </div>` : ''}
+${syncTargetFieldHtml(task)}
+      <!-- EINE QUELLE, NICHT ZWEI: die Bedingung war "users.length > 1" und
+           beantwortete dieselbe Frage wie der Solo-Schalter, nur aus einer
+           anderen Zahl - der geladenen Nutzerliste dieses Moduls statt der
+           gezaehlten Haushaltsgroesse. Zwei Quellen fuer eine Frage laufen
+           auseinander, sobald eine von beiden einen Sonderfall bekommt
+           (Split-Gaeste zaehlen in der Nutzerliste mit, im Haushalt nicht).
+
+           UND VERBORGEN, NICHT ENTFERNT - das ist hier kein Stilfrage, sondern
+           die Regel selbst. Der Absende-Pfad liest
+           "#task-visibility?.value || 'all'" (unten): ohne den Knoten schreibt
+           JEDES Speichern im Solo-Haushalt "all" ueber den gespeicherten Wert,
+           und eine als "private" angelegte Aufgabe verliert ihre Sichtbarkeit
+           stillschweigend. Der Fehler steckte schon in der alten
+           users.length-Bedingung; die Solo-Regel sagt ausdruecklich, dass sie
+           keine Daten aendert (utils/household.js), also muss der Knoten
+           stehenbleiben. Dokumente machen es an ihrer Stelle genauso. -->
+      <div class="form-group" style="margin-top:var(--space-4)"${isSoloHousehold() ? ' hidden' : ''}>
+        <label class="label" for="task-visibility">${t('common.visibility.label')}</label>
+        <select class="input" id="task-visibility" name="visibility">
+          <option value="all"       ${visibility === 'all'       ? 'selected' : ''}>${t('common.visibility.all')}</option>
+          <option value="assignees" ${visibility === 'assignees' ? 'selected' : ''}>${t('common.visibility.assignees')}</option>
+          <option value="private"   ${visibility === 'private'   ? 'selected' : ''}>${t('common.visibility.private')}</option>
+        </select>
+        <p class="task-field-hint">${t('common.visibility.hint')}</p>
+        <p class="task-field-hint field-hint--warn" id="task-visibility-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.assigneesNobodyHint')}</span></p>
+      </div>
+
+      <!-- #830: Die Sperre steht neben der Sichtbarkeit, weil beide dieselbe
+           Frage beantworten - wer darf hier was. Sichtbarkeit regelt das Sehen,
+           die Sperre das Aendern. In einem Ein-Personen-Haushalt sagen beide
+           nichts, also verschwinden sie zusammen (isSoloHousehold). -->
+      <div class="form-group" style="margin-top:var(--space-4)"${isSoloHousehold() ? ' hidden' : ''}>
+        <label class="toggle" style="margin:0">
+          <input type="checkbox" id="task-locked" name="locked" aria-describedby="task-locked-hint"
+                 ${task?.locked ? 'checked' : ''}>
+          <span class="toggle__track"></span>
+          <span>${t('tasks.lockedToggle')}</span>
+        </label>
+        <p class="task-field-hint" id="task-locked-hint">${t('tasks.lockedHint')}</p>
+      </div>
+
+      ${renderDocumentAttachField({
+        attachments: (task?.documents ?? []).map((doc) => ({ document_id: doc.id, name: doc.name, mime_type: doc.mime_type })),
+        label: t('tasks.documentsLabel'),
+      })}`;
 
   return `
     <form id="task-form" novalidate>
@@ -888,7 +956,7 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
                  >${esc(task?.description)}</textarea>
         <small class="form-hint">${t('tasks.descriptionMarkdownHint')}</small>
       </div>
-${syncTargetFieldHtml(task)}
+
       <div class="modal-grid modal-grid--2">
         <div class="form-group">
           <label class="label" for="task-due-date">${t('tasks.dueDateLabel')}</label>
@@ -908,47 +976,6 @@ ${syncTargetFieldHtml(task)}
            es unveraendert (utils/household.js). -->
       <div class="form-group" style="margin-top:var(--space-4)"${isSoloHousehold() ? ' hidden' : ''}>
         ${renderUserMultiSelect(users, selectedIds, 'task_assigned', 'tasks.assignedLabel')}
-      </div>
-
-      <!-- EINE QUELLE, NICHT ZWEI: die Bedingung war "users.length > 1" und
-           beantwortete dieselbe Frage wie der Solo-Schalter, nur aus einer
-           anderen Zahl - der geladenen Nutzerliste dieses Moduls statt der
-           gezaehlten Haushaltsgroesse. Zwei Quellen fuer eine Frage laufen
-           auseinander, sobald eine von beiden einen Sonderfall bekommt
-           (Split-Gaeste zaehlen in der Nutzerliste mit, im Haushalt nicht).
-
-           UND VERBORGEN, NICHT ENTFERNT - das ist hier kein Stilfrage, sondern
-           die Regel selbst. Der Absende-Pfad liest
-           "#task-visibility?.value || 'all'" (unten): ohne den Knoten schreibt
-           JEDES Speichern im Solo-Haushalt "all" ueber den gespeicherten Wert,
-           und eine als "private" angelegte Aufgabe verliert ihre Sichtbarkeit
-           stillschweigend. Der Fehler steckte schon in der alten
-           users.length-Bedingung; die Solo-Regel sagt ausdruecklich, dass sie
-           keine Daten aendert (utils/household.js), also muss der Knoten
-           stehenbleiben. Dokumente machen es an ihrer Stelle genauso. --> 
-      <div class="form-group" style="margin-top:var(--space-4)"${isSoloHousehold() ? ' hidden' : ''}>
-        <label class="label" for="task-visibility">${t('common.visibility.label')}</label>
-        <select class="input" id="task-visibility" name="visibility">
-          <option value="all"       ${visibility === 'all'       ? 'selected' : ''}>${t('common.visibility.all')}</option>
-          <option value="assignees" ${visibility === 'assignees' ? 'selected' : ''}>${t('common.visibility.assignees')}</option>
-          <option value="private"   ${visibility === 'private'   ? 'selected' : ''}>${t('common.visibility.private')}</option>
-        </select>
-        <p class="task-field-hint">${t('common.visibility.hint')}</p>
-        <p class="task-field-hint field-hint--warn" id="task-visibility-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.assigneesNobodyHint')}</span></p>
-      </div>
-
-      <!-- #830: Die Sperre steht neben der Sichtbarkeit, weil beide dieselbe
-           Frage beantworten - wer darf hier was. Sichtbarkeit regelt das Sehen,
-           die Sperre das Aendern. In einem Ein-Personen-Haushalt sagen beide
-           nichts, also verschwinden sie zusammen (isSoloHousehold). -->
-      <div class="form-group" style="margin-top:var(--space-4)"${isSoloHousehold() ? ' hidden' : ''}>
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="task-locked" name="locked" aria-describedby="task-locked-hint"
-                 ${task?.locked ? 'checked' : ''}>
-          <span class="toggle__track"></span>
-          <span>${t('tasks.lockedToggle')}</span>
-        </label>
-        <p class="task-field-hint" id="task-locked-hint">${t('tasks.lockedHint')}</p>
       </div>
 
       <!-- #647: die Haelfte, die @jamespurnama1 beschrieben hat. Fuehrerschein
@@ -976,27 +1003,12 @@ ${syncTargetFieldHtml(task)}
 
       ${advancedSection(advancedFieldsHtml, { label: advancedLabel })}
 
-      ${isEdit ? `
-        <div class="form-group">
-          <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
-          <select class="input" id="task-status" name="status">
-            ${STATUSES().map((s) =>
-              `<option value="${s.value}" ${task.status === s.value ? 'selected' : ''}>${s.label}</option>`
-            ).join('')}
-          </select>
-        </div>` : ''}
-
       ${renderRRuleFields('task', task?.recurrence_rule, {
         allowFromCompletion: true,
         fromCompletion: !!task?.recurrence_from_completion,
       })}
 
       ${renderReminderSection(task, reminder)}
-
-      ${renderDocumentAttachField({
-        attachments: (task?.documents ?? []).map((doc) => ({ document_id: doc.id, name: doc.name, mime_type: doc.mime_type })),
-        label: t('tasks.documentsLabel'),
-      })}
 
       <div id="task-form-error" class="form-error" role="alert" hidden></div>
 
