@@ -579,3 +579,100 @@ test('die Anmeldeseite fragt beide Wege in EINEM Aufruf ab', () => {
     'ohne die Kopplung an ssoEnabled kann die Seite ganz ohne Weg hinein enden');
   assert.equal((login.match(/fetch\('\/api\/v1\/auth\/oidc\/config'/g) || []).length, 1);
 });
+
+// ─── Der Gast-Weg zeigt sich nur, wo es Gaeste gibt (#962) ───────────────────
+//
+// Die Ausnahme aus #847 ist richtig und bleibt. Falsch war, sie bedingungslos
+// ANZUZEIGEN: ein Haushalt ohne geteilte Ausgaben schaltet
+// `AUTH_ALLOW_PASSWORD_LOGIN=false` und sieht weiter einen Passwort-Weg, den
+// niemand gehen kann. Der Melder las ihn als Loch im Riegel - zu Recht, denn
+// von aussen ist eine unbenutzbare Tuer von einer offenen nicht zu
+// unterscheiden.
+
+const { hasSplitExpenseGuests } = await import('../server/auth.js');
+
+test('mit einem Gast in den geteilten Ausgaben lautet die Antwort ja', () => {
+  assert.equal(hasSplitExpenseGuests(makeDb()), true);
+});
+
+test('ohne einen einzigen Gast lautet sie nein', () => {
+  const db = makeDb();
+  db.exec('DELETE FROM split_expense_guest_users');
+  assert.equal(hasSplitExpenseGuests(db), false);
+  // Die Konten selbst bleiben stehen - gefragt ist die GAeSTE-Eigenschaft,
+  // nicht die Zahl der Nutzer. Ein Haushalt hat immer welche.
+  assert.ok(db.prepare('SELECT COUNT(*) AS n FROM users').get().n > 0);
+});
+
+test('ein Schema ohne die Tabelle sperrt niemanden aus, es hat nur keine Gaeste', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY)');
+  assert.equal(hasSplitExpenseGuests(db), false);
+});
+
+// Der Endpunkt selbst, nicht sein Quelltext: die Anmeldeseite zeichnet nach
+// dieser einen Antwort, also muss sie stimmen und nicht nur so aussehen.
+async function configFor(db) {
+  const [{ router }, { _setTestDatabase, _resetTestDatabase }] = await Promise.all([
+    import('../server/auth.js'),
+    import('../server/db.js'),
+  ]);
+  _setTestDatabase(db);
+  try {
+    const app = express();
+    app.use('/auth', router);
+    const { json } = await callJson(app, 'GET', '/auth/oidc/config');
+    return json;
+  } finally {
+    _resetTestDatabase();
+  }
+}
+
+test('bei gesperrtem Passwort-Login und vorhandenem Gast bietet der Server den Gast-Weg an', async () => {
+  const db = makeDb();
+  await withOidc({ AUTH_ALLOW_PASSWORD_LOGIN: 'false' }, async () => {
+    const cfg = await configFor(db);
+    assert.equal(cfg.password_login_enabled, false, 'der Riegel muss greifen, sonst prueft der Test nichts');
+    assert.equal(cfg.guest_password_login_enabled, true);
+  });
+});
+
+test('derselbe Haushalt ohne Gaeste bekommt den Weg NICHT angeboten (#962)', async () => {
+  const db = makeDb();
+  db.exec('DELETE FROM split_expense_guest_users');
+  await withOidc({ AUTH_ALLOW_PASSWORD_LOGIN: 'false' }, async () => {
+    const cfg = await configFor(db);
+    assert.equal(cfg.password_login_enabled, false);
+    assert.equal(cfg.guest_password_login_enabled, false);
+  });
+});
+
+test('steht der Passwort-Login offen, ist die Gast-Frage gegenstandslos', async () => {
+  // Sonst verriete der oeffentliche Endpunkt bei JEDER Installation, ob der
+  // Haushalt geteilte Ausgaben mit Externen fuehrt - eine Auskunft, die die
+  // Anmeldeseite hier gar nicht braucht: das Formular steht ohnehin offen.
+  const db = makeDb();
+  await withOidc({ AUTH_ALLOW_PASSWORD_LOGIN: 'true' }, async () => {
+    const cfg = await configFor(db);
+    assert.equal(cfg.password_login_enabled, true);
+    assert.equal(cfg.guest_password_login_enabled, false,
+      'obwohl es einen Gast gibt - die Antwort haengt an der Anzeigefrage, nicht am Datenbestand');
+  });
+});
+
+test('die Anmeldeseite zeigt den Gast-Knopf nur unter dieser Antwort', () => {
+  // Der Server kann richtig antworten, waehrend die Seite die Antwort nicht
+  // liest - genau so stand es vor #962 da.
+  const loginSrc = readFileSync(new URL('../public/pages/login.js', import.meta.url), 'utf8');
+  const flag = loginSrc.match(/const guestPasswordLoginEnabled = ([^;]+);/);
+  assert.ok(flag, 'login.js leitet das Flag nicht aus der Server-Antwort ab');
+  assert.match(flag[1], /guest_password_login_enabled/,
+    'das Flag muss aus dem Feld des Servers kommen, nicht aus einer zweiten Herleitung');
+
+  // Der Knopf steht INNERHALB der Bedingung: die blosse Anwesenheit beider
+  // Namen in der Datei hiesse gar nichts.
+  const block = loginSrc.match(/\$\{guestPasswordLoginEnabled \? `([\s\S]*?)` : ''\}/);
+  assert.ok(block, 'der Gast-Knopf haengt an keiner Bedingung');
+  assert.match(block[1], /id="show-password-form"/,
+    'die Bedingung umschliesst nicht den Gast-Knopf');
+});

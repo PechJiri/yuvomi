@@ -41,6 +41,12 @@ export async function render(container) {
   // viel. Der Server haelt dieselbe Regel, hier ist sie nur die Anzeige davon -
   // faellt der Aufruf aus (`oidc === null`), bleibt es beim Formular.
   const passwordLoginEnabled = !(ssoEnabled && oidc?.password_login_enabled === false);
+  // Der zweite Weg hinein gilt AUSSCHLIESSLICH den Gaesten aus den geteilten
+  // Ausgaben (#847). Ein Haushalt ohne einen einzigen solchen Gast sah ihn
+  // trotzdem und las ihn als Loch im Riegel, den er gerade zugemacht hatte
+  // (#962). Die Frage stellt der Server, weil nur er sie beantworten kann - und
+  // er beantwortet sie mit einem Bit, nicht mit einer Gaesteliste.
+  const guestPasswordLoginEnabled = oidc?.guest_password_login_enabled === true;
 
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
@@ -63,9 +69,11 @@ export async function render(container) {
         <div class="auth-form" id="sso-only-block">
           <p class="auth-form__sso-only">${esc(t('login.ssoOnlyHint'))}</p>
           <a href="/api/v1/auth/oidc/start" class="btn btn--primary auth-form__submit">${esc(t('login.loginWithSso'))}</a>
+          ${guestPasswordLoginEnabled ? `
           <p class="auth-form__forgot">
             <button type="button" class="auth-linkish" id="show-password-form">${esc(t('login.guestPasswordLogin'))}</button>
           </p>
+          ` : ''}
         </div>
         ` : ''}
         <form class="auth-form" id="auth-form" novalidate ${!passwordLoginEnabled ? 'hidden' : ''}>

@@ -218,3 +218,39 @@ test('preferences route validates the region field shape', async () => {
   assert.ok(!pattern.test('fr_FR'));
   assert.ok(!pattern.test(''));
 });
+
+// --------------------------------------------------------------------------
+// #297: Der Melder fand VND nicht mehr in der Auswahl, obwohl `vi.json`
+// ausgeliefert wird. Der Code war beim Vereinheitlichen der vier
+// Waehrungskopien (#340) verschwunden und zwei Monate lang niemandem
+// aufgefallen - weil ihn nichts geprueft hat.
+//
+// DER GUARD IST EINE REGEL UEBER DEN BESTAND, KEINE LISTE VON DATEIEN. Eine
+// Allowlist deckt genau die Faelle, die schon richtig sind; die drei Locales
+// ohne Region (el, hu, vi) standen in keiner. Er liest `public/locales/` und
+// erfaehrt so von einer neuen Sprache, ohne dass jemand ihn nachtraegt.
+//
+// Die Gegenrichtung - jedes Preset nennt eine waehlbare Waehrung - steht schon
+// im ersten Test dieser Datei. Zusammen schliessen die beiden den Kreis, der
+// bei #297 offen war: eine Sprache ohne Region konnte keine Waehrung fordern,
+// und so fiel niemandem auf, dass ihre fehlte.
+// --------------------------------------------------------------------------
+
+test('jede ausgelieferte Sprache hat mindestens ein Region-Preset (#297)', async () => {
+  const dir = new URL('../public/locales/', import.meta.url);
+  const locales = (await readdir(dir))
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => name.replace(/\.json$/, ''));
+
+  assert.ok(locales.length > 0, 'public/locales/ muss Sprachdateien enthalten');
+
+  const languagesWithRegion = new Set(REGION_CODES.map((code) => code.split('-')[0]));
+  const orphans = locales.filter((locale) => !languagesWithRegion.has(locale));
+
+  assert.deepEqual(
+    orphans,
+    [],
+    'Ohne Region landet diese Sprache zwangslaeufig auf "Benutzerdefiniert" und muss '
+    + `Waehrung, Datum und Zeit einzeln raten: ${orphans.join(', ')}`,
+  );
+});

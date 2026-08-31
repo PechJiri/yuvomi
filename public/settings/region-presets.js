@@ -89,6 +89,17 @@ export const REGION_PRESETS = {
   // Intl.NumberFormat, es steht in keiner eigenen Tabelle.
   'he-IL': { currency: 'ILS', date_format: 'dmy', time_format: '24h' },
   'fa-IR': { currency: 'IRR', date_format: 'ymd', time_format: '24h' },
+  // #297: drei ausgelieferte Sprachen hatten keine einzige Region - wer die App
+  // auf Griechisch, Ungarisch oder Vietnamesisch stellte, landete zwangslaeufig
+  // auf "Benutzerdefiniert" und musste Waehrung, Datum und Zeit einzeln raten.
+  // Alle drei Tripel stammen aus dem CLDR-Default der Locale, nicht aus
+  // Schaetzung - zweimal ueberrascht das:
+  //   el-GR laeuft auf 12h (2:30 μ.μ.), obwohl ganz Europa ringsum 24h schreibt,
+  //   hu-HU schreibt das Jahr zuerst (2026. 11. 05.) und ist die erste Region
+  //   ueberhaupt auf `ymd_dot`.
+  'el-GR': { currency: 'EUR', date_format: 'dmy_slash', time_format: '12h' },
+  'hu-HU': { currency: 'HUF', date_format: 'ymd_dot', time_format: '24h' },
+  'vi-VN': { currency: 'VND', date_format: 'dmy_slash', time_format: '24h' },
 };
 
 export const REGION_CODES = Object.keys(REGION_PRESETS);

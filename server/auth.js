@@ -1008,6 +1008,31 @@ function isSplitExpenseGuest(userId, database = null) {
 }
 
 /**
+ * Gibt es ueberhaupt einen solchen Gast? (#962)
+ *
+ * Die Ausnahme oben ist eine Antwort auf eine Frage, die nur ein Haushalt mit
+ * geteilten Ausgaben stellt. Ohne einen einzigen Gast zeigt die Anmeldeseite
+ * sonst einen Weg hinein, den niemand gehen kann - und wer `AUTH_ALLOW_PASSWORD_LOGIN=false`
+ * gesetzt hat, liest ihn als Sicherheitsluecke statt als Ausnahme.
+ *
+ * Die Antwort ist EIN Bit und bleibt eins: sie sagt "es gibt welche", nie wer
+ * oder wie viele. `LIMIT 1` haelt bei der ersten Zeile an, `idx_split_guest_group`
+ * deckt die Tabelle.
+ *
+ * @param {object} [database]  fuer Tests; sonst die laufende Instanz
+ * @returns {boolean}
+ */
+export function hasSplitExpenseGuests(database = null) {
+  try {
+    return !!(database || db.get())
+      .prepare('SELECT 1 FROM split_expense_guest_users LIMIT 1').get();
+  } catch {
+    // Fehlt die Tabelle (aeltere Testschemata), gibt es auch keine Gaeste.
+    return false;
+  }
+}
+
+/**
  * POST /api/v1/auth/login
  * Body: { username: string, password: string }
  * Response: { user: { id, username, display_name, avatar_color, role, family_role } }
@@ -1502,17 +1527,27 @@ router.post('/logout', requireAuth, csrfMiddleware, (req, res) => {
  * GET /api/v1/auth/oidc/config
  * Öffentlicher Endpunkt — kein Auth, kein CSRF.
  * Beantwortet vollständig, welche Anmeldewege dieser Server anbietet.
- * Response: { enabled: boolean, password_login_enabled: boolean }
+ * Response: { enabled, password_login_enabled, guest_password_login_enabled }
  *
  * `password_login_enabled` liegt bewusst hier und nicht in `/version` (#847):
  * die Anmeldeseite wartet auf genau diese eine Antwort, bevor sie zeichnet, um
  * kein Formular einzublenden, das gleich wieder verschwindet. Ein zweiter
  * blockierender Aufruf waere ein zweiter Grund, warum die Seite haengt.
+ *
+ * `guest_password_login_enabled` beantwortet die Frage, die die Seite bisher
+ * nicht gestellt hat (#962): ob die Gast-Ausnahme aus #847 hier ueberhaupt
+ * jemanden betrifft. Die Kurzschluss-Reihenfolge ist Absicht - steht der
+ * Passwort-Login offen, ist die Frage gegenstandslos und die Gaeste-Abfrage
+ * laeuft gar nicht erst. Der oeffentliche Endpunkt verraet damit in der
+ * Normalkonfiguration nichts, was er nicht ohnehin sagt, und in der
+ * SSO-only-Konfiguration genau das eine Bit, das die Anzeige braucht.
  */
 router.get('/oidc/config', (_req, res) => {
+  const passwordLoginEnabled = isPasswordLoginEnabled();
   res.json({
     enabled: isOidcEnabled(),
-    password_login_enabled: isPasswordLoginEnabled(),
+    password_login_enabled: passwordLoginEnabled,
+    guest_password_login_enabled: !passwordLoginEnabled && hasSplitExpenseGuests(),
   });
 });
 

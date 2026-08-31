@@ -133,7 +133,12 @@ export function authPaths() {
         description: 'Public login-page bootstrap endpoint. Returns which ways in this server offers: '
           + 'whether OIDC is configured and enabled, and whether password login is allowed '
           + '(AUTH_ALLOW_PASSWORD_LOGIN, ignored unless OIDC is fully configured). The login page waits '
-          + 'for this single answer before painting, so it never shows a form that then disappears.',
+          + 'for this single answer before painting, so it never shows a form that then disappears. '
+          + 'guest_password_login_enabled is true only where password login is off AND the household '
+          + 'actually has split-expense guests, who are exempt from the switch (#847) because they are '
+          + 'external people with no account in the household identity provider. It is one bit and says '
+          + 'nothing about who or how many; where password login is open the question is moot and the '
+          + 'field is false.',
       }),
     },
     '/api/v1/auth/oidc/start': {
