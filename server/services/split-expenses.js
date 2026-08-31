@@ -3,6 +3,21 @@
  * Purpose: Money parsing, split allocation, ledger balance derivation, and debt simplification.
  */
 
+/**
+ * Die ISO-4217-Ausnahmen: Waehrungen, die NICHT mit zwei Nachkommastellen
+ * rechnen. Sie steht bewusst VOR der Auswahl - sechs dieser Codes (BHD, IQD,
+ * JOD, KWD, OMR, TND) sind heute gar nicht waehlbar. Das ist kein toter Code,
+ * sondern der Sinn der Tabelle: wer eine Waehrung zu `CURRENCY_CODES`
+ * hinzufuegt, soll ihre Nachkommastellen schon vorfinden statt sie zu vergessen
+ * und Betraege stillschweigend um Faktor 100 zu verschieben.
+ *
+ * NICHT AUF DEN CLDR UMSTELLEN. `Intl` liefert Anzeige-Konventionen, nicht die
+ * Rechen-Norm, und die beiden gehen auseinander: IQD steht im CLDR auf 0 und in
+ * ISO 4217 auf 3, COP/HUF/IDR/IRR zeigt der CLDR ohne Nachkommastellen,
+ * waehrend ISO ihnen zwei gibt. Was hier steht, entscheidet, wie ein Betrag in
+ * der Datenbank LIEGT - eine Anzeigekonvention darf das nicht bestimmen.
+ * (Geprueft beim Nachtragen von VND, #297.)
+ */
 const CURRENCY_MINOR_UNITS = {
   BHD: 3, IQD: 3, JOD: 3, KWD: 3, OMR: 3, TND: 3,
   CLP: 0, JPY: 0, KRW: 0, VND: 0,
