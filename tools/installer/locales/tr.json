@@ -11,7 +11,8 @@
     "copy": "Kopyala",
     "copied": "Kopyalandı ✓",
     "language": "Dil",
-    "copyRedirect": "Yönlendirme URI'sini kopyala"
+    "copyRedirect": "Yönlendirme URI'sini kopyala",
+    "opt": "(isteğe bağlı)"
   },
   "config": {
     "title": "Temel Yapılandırma",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Docker kılavuzu",
     "prereqLinkCompose": "podman-compose kılavuzu",
     "prereqRecheck": "Yeniden denetle",
-    "errSecureOverHttp": "Herkese açık adres http:// ile başlıyor, ancak bu seçim güvenli çerezleri zorunlu kılıyor - o zaman kimse oturum açamaz. \"Doğrudan erişim\" seç ya da https:// adresi kullan."
+    "errSecureOverHttp": "Herkese açık adres http:// ile başlıyor, ancak bu seçim güvenli çerezleri zorunlu kılıyor - o zaman kimse oturum açamaz. \"Doğrudan erişim\" seç ya da https:// adresi kullan.",
+    "errTz": "Geçersiz saat dilimi. Europe/Berlin gibi bir IANA adı bekleniyor."
   },
   "secrets": {
     "title": "Güvenlik Anahtarları",
@@ -37,7 +39,7 @@
     "dbLabel": "Veritabanı Şifreleme Anahtarı",
     "dbHint": "SQLite veritabanını beklemede şifreler.",
     "errBoth": "Her iki anahtar da gereklidir.",
-    "dangerWarn": "Bu anahtarları şimdi kaydedin. Kaybederseniz şifrelenmiş verileriniz kurtarılamaz — sıfırlama yoktur.",
+    "dangerWarn": "Bu anahtarları şimdi kaydedin. Kaybederseniz şifrelenmiş verileriniz kurtarılamaz — sıfırlama yoktur. Kurulumun sonunda her iki anahtarı içeren .env dosyasını indirebilirsiniz.",
     "preserved": "Mevcut anahtarların korunur, bu nedenle bu kurulum seni geçerli veritabanının dışında bırakmaz. Anahtarını korumak için bir alanı boş bırak; yeni bir değer girmek onu değiştirir.",
     "keepPlaceholder": "Mevcut anahtar korunuyor"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple kimliği (e-posta)",
     "applePassLabel": "Uygulamaya özel parola",
     "appleUrlLabel": "CalDAV URL'si",
-    "appleUrlOpt": "(isteğe bağlı)",
     "appleUrlHint": "Sağlayıcınız farklı bir CalDAV uç noktası kullanmıyorsa boş bırakın.",
     "outlook": "Outlook Takvimi (Microsoft Graph)",
     "outlookHint": "{{link}} adresinde ücretsiz bir Entra ID uygulama kaydı oluşturun (\"Yalnızca kişisel Microsoft hesapları\") - kurulum kılavuzuna bakın. Yönlendirme URI’si: {{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "Tarifler",
     "privateNetworkWebdav": "WebDAV belgeleri",
     "baseUrl": "Herkese açık adres",
-    "outlook": "Outlook Takvimi"
+    "outlook": "Outlook Takvimi",
+    "notEnabled": "etkin değil"
   },
   "docker": {
     "title": "Yuvomi başlatılıyor",
@@ -136,7 +138,8 @@
     "stalled": "Bu her zamankinden uzun sürüyor. Aşağıdaki günlük nedenini gösteriyor.",
     "showLogs": "Günlüğü göster",
     "hideLogs": "Günlüğü gizle",
-    "timedOut": "15 dakika sonra yanıt alınamadı. Günlüğü kontrol edip yeniden deneyin."
+    "timedOut": "15 dakika sonra yanıt alınamadı. Günlüğü kontrol edip yeniden deneyin.",
+    "logLabel": "Konteyner günlüğü"
   },
   "admin": {
     "title": "Yönetici Hesabı Oluştur",

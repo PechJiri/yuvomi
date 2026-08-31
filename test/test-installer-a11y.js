@@ -317,6 +317,63 @@ test('das Secret-Feld bekommt auf dem Handy die volle Zeile, nicht den Rest', ()
     + 'Ein 64-Zeichen-Schlüssel gehört auf eine eigene Zeile, die Buttons darunter.');
 });
 
+/* Die Pruefseite traegt unzerbrechliche Maschinenwerte (BASE_URL mit DDNS-Host,
+ * Nextcloud-WebDAV-URL) in einem Grid mit fester Schluesselspalte. Gemessen
+ * 2026-08-31: 534px body-scrollWidth bei 375px Viewport - die GANZE Seite
+ * scrollte seitlich, inklusive Sticky-Footer (WCAG 1.4.10), ausgerechnet auf
+ * dem Kontrollschirm vor dem irreversiblen Klick. Die damalige Suite mass nur
+ * die .secret-row; dieselbe Luecke gab es hier ohne Guard.
+ *
+ * Modelliert wird die WIRKUNG, nicht die Regel: wie breit wird die Seite mit
+ * einem 500px-Wert in der Wertspalte? `overflow-wrap: anywhere` senkt dessen
+ * min-content auf ~0 (anders als break-word, das die Messung nicht aendert),
+ * minmax(0, ...) erlaubt der Spur, unter min-content zu schrumpfen. */
+function reviewGridNeed(viewport, unbreakable) {
+  const media = appliesAt(viewport);
+  const columns = declared(sel => sel === '.review-grid', 'grid-template-columns', media) || '160px 1fr';
+  const tracks = columns.match(/minmax\([^)]*\)|\S+/g) || [];
+  const gapParts = (declared(sel => sel === '.review-grid', 'gap', media) || '0').trim().split(/\s+/);
+  const gapX = toPx(gapParts[1] ?? gapParts[0]) ?? 0;
+
+  const trackMin = track => {
+    const m = track.match(/minmax\(\s*([^,]+),/);
+    if (m) return toPx(m[1]) ?? 0;
+    if (/fr$/.test(track)) return null;   // auto-Minimum: der Inhalt bestimmt
+    return toPx(track) ?? 0;
+  };
+  const keyMin = trackMin(tracks[0] ?? '160px') ?? 0;
+
+  const wrap = (declared(sel => sel === '.review-grid > :not(.review-key)', 'overflow-wrap', media) || 'normal').trim();
+  // Nur `anywhere` geht in die min-content-Rechnung ein (CSS Text 3, §5.2).
+  const valueContentMin = wrap === 'anywhere' ? 0 : unbreakable;
+  const valueTrackMin = trackMin(tracks[1] ?? '1fr');
+  // Spur mindestens so breit wie ihr Minimum; Inhalt, der nicht umbricht,
+  // blutet ueber die Spur hinaus und verbreitert die Seite trotzdem.
+  return keyMin + gapX + Math.max(valueTrackMin ?? valueContentMin, valueContentMin);
+}
+
+test('ein unzerbrechlicher Wert verbreitert die Pruefseite nicht (WCAG 1.4.10)', () => {
+  const need = reviewGridNeed(MOBILE_VIEWPORT, 500);
+  const available = cardContentWidth(MOBILE_VIEWPORT);
+  assert.ok(need <= available,
+    `Das Review-Grid braucht mit einem 500px-Wert ${need.toFixed(0)}px von ${available.toFixed(0)}px `
+    + 'verfuegbarer Breite. Wertspalte minmax(0, ...) plus overflow-wrap: anywhere '
+    + 'auf den Wertzellen halten lange URLs in der Karte.');
+});
+
+test('Redirect-URIs in Hints brechen um, statt an der Kartenkante zu clippen', () => {
+  // Die drei Redirect-<code>-Knoten stehen in .hint-Absaetzen innerhalb von
+  // toggle-cards mit overflow: hidden - ohne Umbruch wird der zeichengenau zu
+  // kopierende Wert kommentarlos abgeschnitten (gemessen 472px Inhalt in einer
+  // 343px-Karte). word-break: break-all senkt die min-content-Breite auf ~0.
+  const rule = declared(sel => sel === '.hint code', 'word-break');
+  const breaks = rule === 'break-all'
+    || (declared(sel => sel === '.hint code', 'overflow-wrap') === 'anywhere');
+  assert.ok(breaks,
+    'Redirect-URIs (<code> in .hint) brauchen word-break: break-all oder '
+    + 'overflow-wrap: anywhere - sonst clippt overflow:hidden der Toggle-Card sie mobil.');
+});
+
 test('das Secret-Feld ist mindestens 14px gross (12px war unlesbar)', () => {
   const size = toPx(declared(sel => sel === '.secret-row input', 'font-size'));
   assert.ok(size >= 14, `Secret-Felder stehen auf ${size}px, mindestens 14px sind nötig`);
@@ -540,8 +597,14 @@ test('der Inline-Fallback stimmt Wert fuer Wert mit tokens.css ueberein', () => 
   // Die :root-Deklarationen des Fallbacks, je Theme.
   const fallbackVars = (from, to) => {
     const map = new Map();
-    for (const [, name, value] of html.slice(from, to).matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})/g)) {
-      map.set(name, value.toLowerCase());
+    // Nicht nur Hex: auch Werte, die mit einer Zahl beginnen (Schatten, Radien,
+    // Typo-Stufen), driften sonst stumm. Gemessen 2026-08-31: der Dark-
+    // Kantenring aus tokens.css (0 0 0 1px rgba(255,255,255,.06)) fehlte im
+    // Fallback, und dieser Guard blieb gruen, weil er nur Hex verglich - Guard
+    // prueft Schreibweise, nicht Sache. Verglichen wird weiterhin nur, was
+    // tokens.css als privates --_-Token fuehrt.
+    for (const [, name, value] of html.slice(from, to).matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8}|[\d.][^;]*)/g)) {
+      map.set(name, value.replace(/\s+/g, ' ').trim().toLowerCase());
     }
     return map;
   };
@@ -553,12 +616,13 @@ test('der Inline-Fallback stimmt Wert fuer Wert mit tokens.css ueberein', () => 
     for (const [name, value] of vars) {
       // tokens.css fuehrt die Basiswerte auf privaten --_-Variablen.
       const privateName = name.replace(/^--/, '--_');
-      const re = new RegExp(`${privateName}:\\s*(#[0-9a-fA-F]{3,8})`, 'g');
+      const re = new RegExp(`${privateName}:\\s*([^;]+);`, 'g');
       re.lastIndex = tokensFrom;
       const hit = re.exec(tokensCss);
       if (!hit) continue; // Token nur im Fallback - erlaubt
-      if (hit[1].toLowerCase() !== value) {
-        drift.push(`${theme}: ${name} = ${value}, tokens.css = ${hit[1].toLowerCase()}`);
+      const tokensValue = hit[1].replace(/\s+/g, ' ').trim().toLowerCase();
+      if (tokensValue !== value) {
+        drift.push(`${theme}: ${name} = ${value}, tokens.css = ${tokensValue}`);
       }
     }
   }

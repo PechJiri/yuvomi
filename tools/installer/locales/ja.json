@@ -11,7 +11,8 @@
     "copy": "コピー",
     "copied": "コピーしました ✓",
     "language": "言語",
-    "copyRedirect": "リダイレクト URI をコピー"
+    "copyRedirect": "リダイレクト URI をコピー",
+    "opt": "（任意）"
   },
   "config": {
     "title": "基本設定",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Docker のガイド",
     "prereqLinkCompose": "podman-compose のガイド",
     "prereqRecheck": "再確認する",
-    "errSecureOverHttp": "公開アドレスが http:// で始まっていますが、この選択はセキュア Cookie を強制します。その組み合わせではログインできません。「直接アクセス」を選ぶか、https:// のアドレスを使ってください。"
+    "errSecureOverHttp": "公開アドレスが http:// で始まっていますが、この選択はセキュア Cookie を強制します。その組み合わせではログインできません。「直接アクセス」を選ぶか、https:// のアドレスを使ってください。",
+    "errTz": "タイムゾーンが無効です。Europe/Berlin のような IANA 名を指定してください。"
   },
   "secrets": {
     "title": "セキュリティキー",
@@ -37,7 +39,7 @@
     "dbLabel": "データベース暗号化キー",
     "dbHint": "保存時に SQLite データベースを暗号化します。",
     "errBoth": "両方のキーが必要です。",
-    "dangerWarn": "これらのキーを今すぐ保存してください。失うと、暗号化されたデータは復元できません — リセットはありません。",
+    "dangerWarn": "これらのキーを今すぐ保存してください。失うと、暗号化されたデータは復元できません — リセットはありません。 セットアップの最後に、両方のキーを含む .env ファイルをダウンロードできます。",
     "preserved": "既存のキーは保持されるため、このセットアップで現在のデータベースにアクセスできなくなることはありません。キーを保持するにはフィールドを空のままにしてください。新しい値を入力すると置き換えられます。",
     "keepPlaceholder": "既存のキーを保持"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID（メール）",
     "applePassLabel": "App 用パスワード",
     "appleUrlLabel": "CalDAV URL",
-    "appleUrlOpt": "（任意）",
     "appleUrlHint": "プロバイダーが別の CalDAV エンドポイントを使用していない限り、空のままにしてください。",
     "outlook": "Outlook カレンダー (Microsoft Graph)",
     "outlookHint": "{{link}} で無料の Entra ID アプリ登録（「個人用 Microsoft アカウントのみ」）を作成します。詳しくはインストールガイドを参照してください。リダイレクト URI: {{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "レシピ",
     "privateNetworkWebdav": "WebDAV ドキュメント",
     "baseUrl": "公開アドレス",
-    "outlook": "Outlook カレンダー"
+    "outlook": "Outlook カレンダー",
+    "notEnabled": "未許可"
   },
   "docker": {
     "title": "Yuvomi を起動しています",
@@ -136,7 +138,8 @@
     "stalled": "いつもより時間がかかっています。下のログに理由が表示されます。",
     "showLogs": "ログを表示",
     "hideLogs": "ログを隠す",
-    "timedOut": "15 分たっても応答がありません。ログを確認してもう一度お試しください。"
+    "timedOut": "15 分たっても応答がありません。ログを確認してもう一度お試しください。",
+    "logLabel": "コンテナのログ"
   },
   "admin": {
     "title": "管理者アカウントを作成",

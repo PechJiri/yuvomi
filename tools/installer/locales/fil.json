@@ -11,7 +11,8 @@
     "copy": "Kopyahin",
     "copied": "Nakopya ✓",
     "language": "Wika",
-    "copyRedirect": "Kopyahin ang redirect URI"
+    "copyRedirect": "Kopyahin ang redirect URI",
+    "opt": "(opsyonal)"
   },
   "config": {
     "title": "Batayang Pagsasaayos",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Ang gabay sa Docker",
     "prereqLinkCompose": "Ang gabay sa podman-compose",
     "prereqRecheck": "Suriin muli",
-    "errSecureOverHttp": "Nagsisimula sa http:// ang pampublikong address, pero pinipilit ng piniling ito ang secure cookies - hindi makakapag-sign in ang sinuman. Piliin ang \"Direktang access\" o gumamit ng https:// address."
+    "errSecureOverHttp": "Nagsisimula sa http:// ang pampublikong address, pero pinipilit ng piniling ito ang secure cookies - hindi makakapag-sign in ang sinuman. Piliin ang \"Direktang access\" o gumamit ng https:// address.",
+    "errTz": "Hindi wastong time zone. Inaasahan ang isang IANA na pangalan tulad ng Europe/Berlin."
   },
   "secrets": {
     "title": "Mga Susi sa Seguridad",
@@ -37,7 +39,7 @@
     "dbLabel": "Susi sa Pag-encrypt ng Database",
     "dbHint": "Ineencrypt ang SQLite database habang nakaimbak.",
     "errBoth": "Kailangan ang dalawang susi.",
-    "dangerWarn": "I-save ang mga susing ito ngayon. Kapag nawala sila, hindi na mababawi ang iyong naka-encrypt na datos - walang pag-reset.",
+    "dangerWarn": "I-save ang mga susing ito ngayon. Kapag nawala sila, hindi na mababawi ang iyong naka-encrypt na datos - walang pag-reset. Sa pagtatapos ng setup, maaari mong i-download ang .env file na naglalaman ng dalawang susi.",
     "preserved": "Napapanatili ang iyong mga umiiral na susi, kaya hindi ka isasara ng setup na ito sa kasalukuyang database. Iwanang blangko ang field para panatilihin ang susi nito; pinapalitan ito ng bagong halaga.",
     "keepPlaceholder": "Napanatili ang umiiral na susi"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (email)",
     "applePassLabel": "Password na Tanging sa App",
     "appleUrlLabel": "URL ng CalDAV",
-    "appleUrlOpt": "(opsyonal)",
     "appleUrlHint": "Iwanang blangko maliban kung ibang CalDAV endpoint ang gamit ng iyong provider.",
     "outlook": "Outlook Calendar (Microsoft Graph)",
     "outlookHint": "Gumawa ng libreng Entra ID app registration (\"Personal Microsoft accounts only\") sa {{link}} - tingnan ang gabay sa pag-install. Redirect URI: {{redirect}}",
@@ -198,7 +199,8 @@
     "privateNetworkRecipes": "Mga resipe",
     "privateNetworkWebdav": "Mga dokumento sa WebDAV",
     "baseUrl": "Pampublikong address",
-    "outlook": "Outlook Calendar"
+    "outlook": "Outlook Calendar",
+    "notEnabled": "hindi pinagana"
   },
   "docker": {
     "title": "Sinisimulan ang Yuvomi",
@@ -216,7 +218,8 @@
     "stalled": "Mas matagal ito kaysa karaniwan. Ipinapakita ng log sa ibaba kung bakit.",
     "showLogs": "Ipakita ang log",
     "hideLogs": "Itago ang log",
-    "timedOut": "Walang tugon pagkatapos ng 15 minuto. Suriin ang log at subukang muli."
+    "timedOut": "Walang tugon pagkatapos ng 15 minuto. Suriin ang log at subukang muli.",
+    "logLabel": "Log ng container"
   },
   "admin": {
     "title": "Gumawa ng Admin Account",

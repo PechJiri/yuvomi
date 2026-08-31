@@ -11,7 +11,8 @@
     "copy": "Sao chép",
     "copied": "Đã sao chép ✓",
     "language": "Ngôn ngữ",
-    "copyRedirect": "Sao chép URI chuyển hướng"
+    "copyRedirect": "Sao chép URI chuyển hướng",
+    "opt": "(tùy chọn)"
   },
   "config": {
     "title": "Cấu hình cơ bản",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Hướng dẫn Docker",
     "prereqLinkCompose": "Hướng dẫn podman-compose",
     "prereqRecheck": "Kiểm tra lại",
-    "errSecureOverHttp": "Địa chỉ công khai bắt đầu bằng http://, nhưng lựa chọn này bắt buộc cookie bảo mật - khi đó không ai đăng nhập được. Hãy chọn \"Truy cập trực tiếp\" hoặc dùng địa chỉ https://."
+    "errSecureOverHttp": "Địa chỉ công khai bắt đầu bằng http://, nhưng lựa chọn này bắt buộc cookie bảo mật - khi đó không ai đăng nhập được. Hãy chọn \"Truy cập trực tiếp\" hoặc dùng địa chỉ https://.",
+    "errTz": "Múi giờ không hợp lệ. Cần một tên IANA như Europe/Berlin."
   },
   "secrets": {
     "title": "Khóa bảo mật",
@@ -37,7 +39,7 @@
     "dbLabel": "Khóa mã hóa cơ sở dữ liệu",
     "dbHint": "Mã hóa cơ sở dữ liệu SQLite khi lưu trữ.",
     "errBoth": "Cả hai khóa đều bắt buộc.",
-    "dangerWarn": "Hãy lưu các khóa này ngay. Nếu mất, dữ liệu được mã hóa của bạn sẽ không thể khôi phục — không có cách đặt lại.",
+    "dangerWarn": "Hãy lưu các khóa này ngay. Nếu mất, dữ liệu được mã hóa của bạn sẽ không thể khôi phục — không có cách đặt lại. Khi hoàn tất cài đặt, bạn có thể tải xuống tệp .env chứa cả hai khóa.",
     "preserved": "Các khóa hiện có của bạn được giữ nguyên, nên thiết lập này sẽ không khiến bạn mất quyền truy cập cơ sở dữ liệu hiện tại. Để trống một trường để giữ khóa của nó; nhập giá trị mới sẽ thay thế khóa đó.",
     "keepPlaceholder": "Giữ khóa hiện có"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (email)",
     "applePassLabel": "Mật khẩu dành riêng cho ứng dụng",
     "appleUrlLabel": "URL CalDAV",
-    "appleUrlOpt": "(tùy chọn)",
     "appleUrlHint": "Để trống trừ khi nhà cung cấp của bạn dùng điểm cuối CalDAV khác.",
     "outlook": "Lịch Outlook (Microsoft Graph)",
     "outlookHint": "Tạo đăng ký ứng dụng Entra ID miễn phí (\"Chỉ tài khoản Microsoft cá nhân\") tại {{link}} - xem hướng dẫn cài đặt. URI chuyển hướng: {{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "Công thức",
     "privateNetworkWebdav": "Tài liệu WebDAV",
     "baseUrl": "Địa chỉ công khai",
-    "outlook": "Lịch Outlook"
+    "outlook": "Lịch Outlook",
+    "notEnabled": "chưa bật"
   },
   "docker": {
     "title": "Đang khởi động Yuvomi",
@@ -136,7 +138,8 @@
     "stalled": "Việc này lâu hơn thường lệ. Nhật ký bên dưới cho biết lý do.",
     "showLogs": "Hiện nhật ký",
     "hideLogs": "Ẩn nhật ký",
-    "timedOut": "Không có phản hồi sau 15 phút. Hãy kiểm tra nhật ký và thử lại."
+    "timedOut": "Không có phản hồi sau 15 phút. Hãy kiểm tra nhật ký và thử lại.",
+    "logLabel": "Nhật ký container"
   },
   "admin": {
     "title": "Tạo tài khoản Admin",

@@ -11,7 +11,8 @@
     "copy": "Másolás",
     "copied": "Másolva ✓",
     "language": "Nyelv",
-    "copyRedirect": "Átirányítási URI másolása"
+    "copyRedirect": "Átirányítási URI másolása",
+    "opt": "(opcionális)"
   },
   "config": {
     "title": "Alapbeállítások",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Docker útmutató",
     "prereqLinkCompose": "podman-compose útmutató",
     "prereqRecheck": "Ellenőrzés újra",
-    "errSecureOverHttp": "A nyilvános cím http://-tel kezdődik, ez a választás viszont biztonságos sütiket követel meg - így senki sem tud bejelentkezni. Válaszd a „Közvetlen hozzáférés\" lehetőséget, vagy használj https:// címet."
+    "errSecureOverHttp": "A nyilvános cím http://-tel kezdődik, ez a választás viszont biztonságos sütiket követel meg - így senki sem tud bejelentkezni. Válaszd a „Közvetlen hozzáférés\" lehetőséget, vagy használj https:// címet.",
+    "errTz": "Érvénytelen időzóna. IANA-név szükséges, például Europe/Berlin."
   },
   "secrets": {
     "title": "Biztonsági kulcsok",
@@ -37,7 +39,7 @@
     "dbLabel": "Adatbázis titkosító kulcs",
     "dbHint": "Titkosítja az SQLite adatbázist nyugalmi állapotban.",
     "errBoth": "Mindkét kulcs megadása kötelező.",
-    "dangerWarn": "Mentsd el most ezeket a kulcsokat. Ha elveszíted őket, a titkosított adataid helyreállíthatatlanok — nincs visszaállítás.",
+    "dangerWarn": "Mentsd el most ezeket a kulcsokat. Ha elveszíted őket, a titkosított adataid helyreállíthatatlanok — nincs visszaállítás. A beállítás végén letöltheted a .env fájlt mindkét kulccsal.",
     "preserved": "A meglévő kulcsaid megmaradnak, így ez a beállítás nem zár ki a jelenlegi adatbázisból. Hagyj egy mezőt üresen a kulcs megtartásához; új érték megadása lecseréli.",
     "keepPlaceholder": "Meglévő kulcs megtartva"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (email)",
     "applePassLabel": "Alkalmazás-specifikus jelszó",
     "appleUrlLabel": "CalDAV URL",
-    "appleUrlOpt": "(opcionális)",
     "appleUrlHint": "Hagyja üresen, hacsak a szolgáltatója nem használ más CalDAV végpontot.",
     "outlook": "Outlook naptár (Microsoft Graph)",
     "outlookHint": "Hozzon létre ingyenes Entra ID alkalmazásregisztrációt („csak személyes Microsoft-fiókok\") itt: {{link}} - lásd a telepítési útmutatót. Átirányítási URI: {{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "Receptek",
     "privateNetworkWebdav": "WebDAV-dokumentumok",
     "baseUrl": "Nyilvános cím",
-    "outlook": "Outlook naptár"
+    "outlook": "Outlook naptár",
+    "notEnabled": "nincs engedélyezve"
   },
   "docker": {
     "title": "Yuvomi indítása",
@@ -136,7 +138,8 @@
     "stalled": "A szokásosnál tovább tart. Az alábbi napló megmutatja, miért.",
     "showLogs": "Napló megjelenítése",
     "hideLogs": "Napló elrejtése",
-    "timedOut": "15 perc után sem érkezett válasz. Nézd meg a naplót, és próbáld újra."
+    "timedOut": "15 perc után sem érkezett válasz. Nézd meg a naplót, és próbáld újra.",
+    "logLabel": "Konténernapló"
   },
   "admin": {
     "title": "Adminisztrátor fiók létrehozása",

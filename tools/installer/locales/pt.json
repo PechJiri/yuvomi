@@ -11,7 +11,8 @@
     "copy": "Copiar",
     "copied": "Copiado ✓",
     "language": "Idioma",
-    "copyRedirect": "Copiar URI de redirecionamento"
+    "copyRedirect": "Copiar URI de redirecionamento",
+    "opt": "(opcional)"
   },
   "config": {
     "title": "Configuração básica",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "O guia do Docker",
     "prereqLinkCompose": "O guia do podman-compose",
     "prereqRecheck": "Verificar novamente",
-    "errSecureOverHttp": "O endereço público começa com http://, mas esta opção exige cookies seguros - assim ninguém consegue entrar. Escolha \"Acesso direto\" ou use um endereço https://."
+    "errSecureOverHttp": "O endereço público começa com http://, mas esta opção exige cookies seguros - assim ninguém consegue entrar. Escolha \"Acesso direto\" ou use um endereço https://.",
+    "errTz": "Fuso horário inválido. É esperado um nome IANA como Europe/Berlin."
   },
   "secrets": {
     "title": "Chaves de segurança",
@@ -37,7 +39,7 @@
     "dbLabel": "Chave de criptografia do banco de dados",
     "dbHint": "Criptografa o banco de dados SQLite em repouso.",
     "errBoth": "Ambas as chaves são obrigatórias.",
-    "dangerWarn": "Guarda estas chaves agora. Se as perderes, os teus dados cifrados serão irrecuperáveis — não há reposição.",
+    "dangerWarn": "Guarda estas chaves agora. Se as perderes, os teus dados cifrados serão irrecuperáveis — não há reposição. No final da configuração podes transferir o ficheiro .env com as duas chaves.",
     "preserved": "As suas chaves existentes são mantidas, por isso esta instalação não o impedirá de aceder à base de dados atual. Deixe um campo vazio para manter a sua chave; introduzir um novo valor substitui-a.",
     "keepPlaceholder": "Chave existente mantida"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (e-mail)",
     "applePassLabel": "Senha específica do app",
     "appleUrlLabel": "URL do CalDAV",
-    "appleUrlOpt": "(opcional)",
     "appleUrlHint": "Deixe vazio, a menos que o seu provedor use um endpoint CalDAV diferente.",
     "outlook": "Calendário Outlook (Microsoft Graph)",
     "outlookHint": "Crie um registro de aplicativo do Entra ID gratuito (\"Somente contas Microsoft pessoais\") em {{link}} - veja o guia de instalação. URI de redirecionamento: {{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "Receitas",
     "privateNetworkWebdav": "Documentos WebDAV",
     "baseUrl": "Endereço público",
-    "outlook": "Calendário Outlook"
+    "outlook": "Calendário Outlook",
+    "notEnabled": "não ativado"
   },
   "docker": {
     "title": "Iniciando o Yuvomi",
@@ -136,7 +138,8 @@
     "stalled": "Está a demorar mais do que o habitual. O registo abaixo mostra porquê.",
     "showLogs": "Mostrar registo",
     "hideLogs": "Ocultar registo",
-    "timedOut": "Sem resposta ao fim de 15 minutos. Verifica o registo e tenta de novo."
+    "timedOut": "Sem resposta ao fim de 15 minutos. Verifica o registo e tenta de novo.",
+    "logLabel": "Registo do contentor"
   },
   "admin": {
     "title": "Criar conta de administrador",

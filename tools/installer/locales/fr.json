@@ -11,7 +11,8 @@
     "copy": "Copier",
     "copied": "Copié ✓",
     "language": "Langue",
-    "copyRedirect": "Copier l'URI de redirection"
+    "copyRedirect": "Copier l'URI de redirection",
+    "opt": "(facultatif)"
   },
   "config": {
     "title": "Configuration de base",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Le guide Docker",
     "prereqLinkCompose": "Le guide podman-compose",
     "prereqRecheck": "Vérifier à nouveau",
-    "errSecureOverHttp": "L'adresse publique commence par http://, mais ce choix impose des cookies sécurisés : personne ne peut alors se connecter. Choisis « Accès direct » ou utilise une adresse https://."
+    "errSecureOverHttp": "L'adresse publique commence par http://, mais ce choix impose des cookies sécurisés : personne ne peut alors se connecter. Choisis « Accès direct » ou utilise une adresse https://.",
+    "errTz": "Fuseau horaire non valide. Un nom IANA comme Europe/Berlin est attendu."
   },
   "secrets": {
     "title": "Clés de sécurité",
@@ -37,7 +39,7 @@
     "dbLabel": "Clé de chiffrement de la base de données",
     "dbHint": "Chiffre la base de données SQLite au repos.",
     "errBoth": "Les deux clés sont requises.",
-    "dangerWarn": "Enregistrez ces clés maintenant. Si vous les perdez, vos données chiffrées seront irrécupérables : aucune réinitialisation n’est possible.",
+    "dangerWarn": "Enregistrez ces clés maintenant. Si vous les perdez, vos données chiffrées seront irrécupérables : aucune réinitialisation n’est possible. À la fin de l'installation, vous pourrez télécharger le fichier .env contenant les deux clés.",
     "preserved": "Vos clés existantes sont conservées, cette installation ne vous coupera donc pas l'accès à la base de données actuelle. Laissez un champ vide pour conserver sa clé ; saisir une nouvelle valeur la remplace.",
     "keepPlaceholder": "Clé existante conservée"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Identifiant Apple (e-mail)",
     "applePassLabel": "Mot de passe spécifique à l'application",
     "appleUrlLabel": "URL CalDAV",
-    "appleUrlOpt": "(facultatif)",
     "appleUrlHint": "Laissez vide sauf si votre fournisseur utilise un autre point d'accès CalDAV.",
     "outlook": "Calendrier Outlook (Microsoft Graph)",
     "outlookHint": "Créez une inscription d’application Entra ID gratuite (« Comptes Microsoft personnels uniquement ») sur {{link}} - voir le guide d’installation. URI de redirection : {{redirect}}",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "Recettes",
     "privateNetworkWebdav": "Documents WebDAV",
     "baseUrl": "Adresse publique",
-    "outlook": "Calendrier Outlook"
+    "outlook": "Calendrier Outlook",
+    "notEnabled": "non activé"
   },
   "docker": {
     "title": "Démarrage d'Yuvomi",
@@ -136,7 +138,8 @@
     "stalled": "Cela prend plus de temps que d’habitude. Le journal ci-dessous en montre la raison.",
     "showLogs": "Afficher le journal",
     "hideLogs": "Masquer le journal",
-    "timedOut": "Aucune réponse après 15 minutes. Consultez le journal et réessayez."
+    "timedOut": "Aucune réponse après 15 minutes. Consultez le journal et réessayez.",
+    "logLabel": "Journal du conteneur"
   },
   "admin": {
     "title": "Créer un compte administrateur",

@@ -11,7 +11,8 @@
     "copy": "Copy",
     "copied": "Copied ✓",
     "language": "Language",
-    "copyRedirect": "Copy redirect URI"
+    "copyRedirect": "Copy redirect URI",
+    "opt": "(optional)"
   },
   "config": {
     "title": "Basic Configuration",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "The Docker guide",
     "prereqLinkCompose": "The podman-compose guide",
     "prereqRecheck": "Check again",
-    "errSecureOverHttp": "The public address starts with http://, but this choice enforces secure cookies - nobody can sign in that way. Pick \"Direct access\" or use an https:// address."
+    "errSecureOverHttp": "The public address starts with http://, but this choice enforces secure cookies - nobody can sign in that way. Pick \"Direct access\" or use an https:// address.",
+    "errTz": "Invalid timezone. Expected an IANA name like Europe/Berlin."
   },
   "secrets": {
     "title": "Security Keys",
@@ -37,7 +39,7 @@
     "dbLabel": "Database Encryption Key",
     "dbHint": "Encrypts the SQLite database at rest.",
     "errBoth": "Both keys are required.",
-    "dangerWarn": "Save these keys now. If you lose them, your encrypted data is unrecoverable - there is no reset.",
+    "dangerWarn": "Save these keys now. If you lose them, your encrypted data is unrecoverable - there is no reset. At the end of setup you can download the .env file with both keys.",
     "preserved": "Your existing keys are kept, so this setup will not lock you out of the current database. Leave a field empty to keep its key; entering a new value replaces it.",
     "keepPlaceholder": "Existing key kept"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (email)",
     "applePassLabel": "App-Specific Password",
     "appleUrlLabel": "CalDAV URL",
-    "appleUrlOpt": "(optional)",
     "appleUrlHint": "Leave empty unless your provider uses a different CalDAV endpoint.",
     "outlook": "Outlook Calendar (Microsoft Graph)",
     "outlookHint": "Create a free Entra ID app registration (\"Personal Microsoft accounts only\") at {{link}} - see the installation guide. Redirect URI: {{redirect}}",
@@ -108,8 +109,8 @@
     "on": "enabled",
     "off": "disabled",
     "documentGoogleDrive": "Google Drive documents",
-    "sessionSecret": "Session key",
-    "dbKey": "Database key",
+    "sessionSecret": "Session Secret",
+    "dbKey": "Database Encryption Key",
     "keyGenerated": "Newly generated",
     "keyPreserved": "Existing key is kept",
     "dataDir": "Data folder",
@@ -118,7 +119,8 @@
     "privateNetworkRecipes": "Recipes",
     "privateNetworkWebdav": "WebDAV documents",
     "baseUrl": "Public address",
-    "outlook": "Outlook Calendar"
+    "outlook": "Outlook Calendar",
+    "notEnabled": "not enabled"
   },
   "docker": {
     "title": "Starting Yuvomi",
@@ -136,7 +138,8 @@
     "stalled": "This is taking longer than usual. The log below shows why.",
     "showLogs": "Show log",
     "hideLogs": "Hide log",
-    "timedOut": "No response after 15 minutes. Check the log and try again."
+    "timedOut": "No response after 15 minutes. Check the log and try again.",
+    "logLabel": "Container log"
   },
   "admin": {
     "title": "Create Admin Account",

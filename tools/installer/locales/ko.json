@@ -11,7 +11,8 @@
     "copy": "복사",
     "copied": "복사됨 ✓",
     "language": "언어",
-    "copyRedirect": "리디렉션 URI 복사"
+    "copyRedirect": "리디렉션 URI 복사",
+    "opt": "(선택 사항)"
   },
   "config": {
     "title": "기본 구성",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Docker 안내서",
     "prereqLinkCompose": "podman-compose 안내서",
     "prereqRecheck": "다시 확인",
-    "errSecureOverHttp": "공개 주소가 http://로 시작하는데 이 선택은 보안 쿠키를 강제합니다. 그러면 아무도 로그인할 수 없습니다. \"직접 접근\"을 선택하거나 https:// 주소를 사용하세요."
+    "errSecureOverHttp": "공개 주소가 http://로 시작하는데 이 선택은 보안 쿠키를 강제합니다. 그러면 아무도 로그인할 수 없습니다. \"직접 접근\"을 선택하거나 https:// 주소를 사용하세요.",
+    "errTz": "시간대가 잘못되었습니다. Europe/Berlin 같은 IANA 이름이 필요합니다."
   },
   "secrets": {
     "title": "보안 키",
@@ -37,7 +39,7 @@
     "dbLabel": "데이터베이스 암호화 키",
     "dbHint": "유휴 상태의 SQLite 데이터베이스를 암호화합니다.",
     "errBoth": "두 키 모두 필요합니다.",
-    "dangerWarn": "이 키를 지금 저장하세요. 분실하면 암호화된 데이터를 복구할 수 없습니다 — 재설정은 없습니다.",
+    "dangerWarn": "이 키를 지금 저장하세요. 분실하면 암호화된 데이터를 복구할 수 없습니다 — 재설정은 없습니다. 설정이 끝나면 두 키가 포함된 .env 파일을 다운로드할 수 있습니다.",
     "preserved": "기존 키가 유지되므로 이 설치로 현재 데이터베이스에 접근하지 못하게 되는 일은 없습니다. 키를 유지하려면 필드를 비워 두세요. 새 값을 입력하면 교체됩니다.",
     "keepPlaceholder": "기존 키 유지"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (이메일)",
     "applePassLabel": "앱 전용 비밀번호",
     "appleUrlLabel": "CalDAV URL",
-    "appleUrlOpt": "(선택 사항)",
     "appleUrlHint": "제공자가 다른 CalDAV 엔드포인트를 사용하지 않는 한 비워 두세요.",
     "outlook": "Outlook 캘린더 (Microsoft Graph)",
     "outlookHint": "{{link}}에서 무료 Entra ID 앱 등록(\"개인 Microsoft 계정만\")을 만드세요 - 설치 가이드를 참고하세요. 리디렉션 URI: {{redirect}}",
@@ -198,7 +199,8 @@
     "privateNetworkRecipes": "레시피",
     "privateNetworkWebdav": "WebDAV 문서",
     "baseUrl": "공개 주소",
-    "outlook": "Outlook 캘린더"
+    "outlook": "Outlook 캘린더",
+    "notEnabled": "허용 안 함"
   },
   "docker": {
     "title": "Yuvomi 시작 중",
@@ -216,7 +218,8 @@
     "stalled": "평소보다 오래 걸리고 있습니다. 아래 로그에서 이유를 확인하세요.",
     "showLogs": "로그 표시",
     "hideLogs": "로그 숨기기",
-    "timedOut": "15분이 지나도 응답이 없습니다. 로그를 확인한 뒤 다시 시도하세요."
+    "timedOut": "15분이 지나도 응답이 없습니다. 로그를 확인한 뒤 다시 시도하세요.",
+    "logLabel": "컨테이너 로그"
   },
   "admin": {
     "title": "관리자 계정 만들기",

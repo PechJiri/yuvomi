@@ -11,7 +11,8 @@
     "copy": "Kopírovat",
     "copied": "Zkopírováno ✓",
     "language": "Jazyk",
-    "copyRedirect": "Kopírovat přesměrovací URI"
+    "copyRedirect": "Kopírovat přesměrovací URI",
+    "opt": "(volitelné)"
   },
   "config": {
     "title": "Základní konfigurace",
@@ -27,7 +28,8 @@
     "prereqLinkDocker": "Návod pro Docker",
     "prereqLinkCompose": "Návod pro podman-compose",
     "prereqRecheck": "Zkusit znovu",
-    "errSecureOverHttp": "Veřejná adresa začíná na http://, ale tato volba vynucuje zabezpečené cookies - přihlášení pak není možné. Zvol „Přímý přístup\" nebo použij adresu https://."
+    "errSecureOverHttp": "Veřejná adresa začíná na http://, ale tato volba vynucuje zabezpečené cookies - přihlášení pak není možné. Zvol „Přímý přístup\" nebo použij adresu https://.",
+    "errTz": "Neplatné časové pásmo. Očekává se název IANA, např. Europe/Berlin."
   },
   "secrets": {
     "title": "Bezpečnostní klíče",
@@ -37,7 +39,7 @@
     "dbLabel": "Šifrovací klíč databáze",
     "dbHint": "Šifruje databázi SQLite v klidovém stavu.",
     "errBoth": "Oba klíče jsou povinné.",
-    "dangerWarn": "Uložte tyto klíče hned. Pokud je ztratíte, vaše šifrovaná data budou nenávratně ztracena — neexistuje žádné obnovení.",
+    "dangerWarn": "Uložte tyto klíče hned. Pokud je ztratíte, vaše šifrovaná data budou nenávratně ztracena — neexistuje žádné obnovení. Na konci instalace si můžete stáhnout soubor .env s oběma klíči.",
     "preserved": "Vaše stávající klíče zůstanou zachovány, takže vás tato instalace neodřízne od současné databáze. Nechte pole prázdné, aby se klíč zachoval; zadání nové hodnoty jej nahradí.",
     "keepPlaceholder": "Stávající klíč zachován"
   },
@@ -71,7 +73,6 @@
     "appleUserLabel": "Apple ID (e-mail)",
     "applePassLabel": "Heslo pro aplikaci",
     "appleUrlLabel": "URL CalDAV",
-    "appleUrlOpt": "(volitelné)",
     "appleUrlHint": "Nechej prázdné, pokud tvůj poskytovatel nepoužívá jiný koncový bod CalDAV.",
     "outlook": "Kalendář Outlook (Microsoft Graph)",
     "outlookHint": "Vytvoř bezplatnou registraci aplikace Entra ID („pouze osobní účty Microsoft\") na {{link}} - viz instalační příručka. Přesměrovací URI: {{redirect}}",
@@ -198,7 +199,8 @@
     "privateNetworkRecipes": "Recepty",
     "privateNetworkWebdav": "Dokumenty WebDAV",
     "baseUrl": "Veřejná adresa",
-    "outlook": "Kalendář Outlook"
+    "outlook": "Kalendář Outlook",
+    "notEnabled": "nepovoleno"
   },
   "docker": {
     "title": "Spouštění Yuvomi",
@@ -216,7 +218,8 @@
     "stalled": "Trvá to déle než obvykle. Protokol níže ukazuje proč.",
     "showLogs": "Zobrazit protokol",
     "hideLogs": "Skrýt protokol",
-    "timedOut": "Po 15 minutách žádná odpověď. Zkontrolujte protokol a zkuste to znovu."
+    "timedOut": "Po 15 minutách žádná odpověď. Zkontrolujte protokol a zkuste to znovu.",
+    "logLabel": "Protokol kontejneru"
   },
   "admin": {
     "title": "Vytvoření účtu správce",
