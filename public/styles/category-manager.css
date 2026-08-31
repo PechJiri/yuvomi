@@ -255,7 +255,9 @@
   padding-inline: var(--space-2);
   margin-inline: calc(var(--space-1) * -1);
   border-radius: var(--radius-xs);
-  color: var(--color-text-quaternary);
+  /* Tertiär statt Quaternary: interaktive Grafik braucht 3:1 (WCAG 1.4.11),
+   * Quaternary misst 2.94:1 auf dem Well. */
+  color: var(--color-text-tertiary);
   cursor: grab;
   touch-action: none;
 }

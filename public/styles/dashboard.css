@@ -4830,7 +4830,10 @@ svg.weather-forecast__icon {
 .quick-link-manage-row__handle {
   display: grid;
   place-items: center;
-  color: var(--color-text-quaternary);
+  /* Tertiär statt Quaternary: der Griff ist interaktive Grafik und braucht
+   * 3:1 (WCAG 1.4.11) - Quaternary misst 2.94:1 auf dem Well. Ruhezustand
+   * tertiär ist zugleich die sanktionierte Ruhe-Stufe der Zeilenaktionen. */
+  color: var(--color-text-tertiary);
   cursor: grab;
   touch-action: none;
 }
@@ -4864,7 +4867,10 @@ svg.weather-forecast__icon {
 
 .quick-link-manage-row__locked {
   font-size: var(--text-xs);
-  color: var(--color-text-quaternary);
+  /* Tertiär statt Quaternary: das ist ein informativer Hinweis (quickLinks.
+   * notYours), kein Dekor - Quaternary dokumentiert sich in tokens.css selbst
+   * als „nie für Fließtext" und misst hier nur 3.53:1. */
+  color: var(--color-text-tertiary);
 }
 
 .quick-link-manage-empty {

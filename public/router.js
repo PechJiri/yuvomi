@@ -1276,8 +1276,12 @@ function paintMoreSheetBadges(sheet) {
     if (count > 0) {
       if (existing) existing.replaceWith(moreBadgeEl(count));
       else item.appendChild(moreBadgeEl(count));
+      // Ansage am Link, nicht am Badge - siehe moreBadgeEl.
+      const labelText = item.querySelector('.more-item__label')?.textContent;
+      if (labelText) item.setAttribute('aria-label', `${labelText}, ${t('nav.moreBadge', { count })}`);
     } else {
       existing?.remove();
+      item.removeAttribute('aria-label');
     }
   });
 }
@@ -3721,21 +3725,27 @@ function moreItemEl({ path, navHref, label, icon, module: mod, accent, navId }) 
   // einen gibt. Die Kachel bleibt ohne ihn vollstaendig - ein Badge ist eine
   // Zugabe, kein Bestandteil.
   const count = _moduleCounts[navId ?? mod];
-  if (count > 0) a.appendChild(moreBadgeEl(count));
+  if (count > 0) {
+    a.appendChild(moreBadgeEl(count));
+    a.setAttribute('aria-label', `${label}, ${t('nav.moreBadge', { count })}`);
+  }
   return a;
 }
 
 /**
  * Zaehlbadge einer Modulkachel: „was wartet", nie „was existiert".
- * Die nackte Ziffer im Text traegt fuer sich keine Bedeutung - der Screenreader
- * laese „Aufgaben 3". Das aria-label sagt, was die 3 ist; den Modulnamen hat
- * die Vorlesekette aus dem Label daneben bereits.
+ * Die nackte Ziffer haengt sich sonst an den Kachelnamen („Belohnungen1"):
+ * ein aria-label auf dem <span> zaehlt bei der Namensberechnung des Links
+ * NICHT (Rolle generic traegt keinen Namen), sein Ziffern-Text aber schon.
+ * Deshalb ist das Badge aria-hidden, und die Ansage steht als aria-label auf
+ * der Kachel selbst („Belohnungen, 1 offen") - dasselbe Muster wie
+ * nav-badges.js und setSubTabBadge.
  */
 function moreBadgeEl(count) {
   const badge = document.createElement('span');
   badge.className = 'more-item__badge';
   badge.textContent = count > 99 ? '99+' : String(count);
-  badge.setAttribute('aria-label', t('nav.moreBadge', { count }));
+  badge.setAttribute('aria-hidden', 'true');
   return badge;
 }
 

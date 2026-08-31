@@ -12,7 +12,10 @@
 
 html {
   font-family: var(--font-sans);
-  font-size: 16px;
+  /* 100% statt 16px: die rem-Skala folgt damit der Schriftgrößen-EINSTELLUNG
+   * des Browsers (WCAG 1.4.4), nicht nur dem Seitenzoom; der Default bleibt
+   * 16px und ändert nichts am gerenderten Standardbild. */
+  font-size: 100%;
   line-height: var(--line-height-base);
   color: var(--color-text-primary);
   background-color: var(--color-bg);

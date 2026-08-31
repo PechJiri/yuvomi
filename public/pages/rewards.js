@@ -607,7 +607,7 @@ async function openRedeemModal(memberId, presetItemId = null) {
           <label class="label" for="rw-redeem-note">${esc(t('rewards.noteOptional'))}</label>
           <input class="input" id="rw-redeem-note" maxlength="500" placeholder="${esc(t('rewards.notePlaceholder'))}">
         </div>
-        <div id="rw-redeem-error" class="form-error" hidden></div>
+        <div id="rw-redeem-error" class="form-error" role="alert" hidden></div>
         <div class="modal-panel__footer modal-panel__footer--plain">
           <button type="submit" class="btn btn--primary" id="rw-redeem-submit">${esc(isAdmin() ? t('rewards.confirmRedeem') : t('rewards.requestAction'))}</button>
         </div>
@@ -710,7 +710,7 @@ function openBonusModal() {
           <label class="label" for="rw-bonus-reason">${esc(t('rewards.reasonOptional'))}</label>
           <input class="input" id="rw-bonus-reason" maxlength="200" placeholder="${esc(t('rewards.reasonPlaceholder'))}">
         </div>
-        <div id="rw-bonus-error" class="form-error" hidden></div>
+        <div id="rw-bonus-error" class="form-error" role="alert" hidden></div>
         <div class="modal-panel__footer modal-panel__footer--plain">
           <button type="submit" class="btn btn--primary" id="rw-bonus-submit">${esc(t('common.save'))}</button>
         </div>
@@ -771,7 +771,7 @@ function openRewardModal(item) {
             <input type="checkbox" id="rw-reward-active" ${item.is_active !== 0 ? 'checked' : ''}>
             <span>${esc(t('rewards.activeLabel'))}</span>
           </label>` : ''}
-        <div id="rw-reward-error" class="form-error" hidden></div>
+        <div id="rw-reward-error" class="form-error" role="alert" hidden></div>
         <div class="modal-panel__footer modal-panel__footer--plain">
           ${isEdit ? `<button type="button" class="btn btn--danger" id="rw-reward-delete">${esc(t('common.delete'))}</button>` : ''}
           <button type="submit" class="btn btn--primary" id="rw-reward-submit">${isEdit ? esc(t('common.save')) : esc(t('common.create'))}</button>
@@ -842,7 +842,7 @@ async function openParticipantsModal() {
             </label>
           </li>`).join('')}
       </ul>
-      <div id="rw-participants-error" class="form-error" hidden></div>
+      <div id="rw-participants-error" class="form-error" role="alert" hidden></div>
       <div class="modal-panel__footer modal-panel__footer--plain">
         <button type="button" class="btn btn--primary" id="rw-participants-done">${esc(t('rewards.done'))}</button>
       </div>`,

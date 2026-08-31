@@ -7,7 +7,8 @@
  * Erlaubt:
  *   - var(--…) (auch mit Fallback)
  *   - 0, normal, inherit
- *   - reset.css: die 1rem-Basis (font-size: 16px) — Fundament der rem-Skala
+ *   - reset.css: die 1rem-Basis (font-size: 100%) — Fundament der rem-Skala,
+ *     folgt der Browser-Schriftgrößen-Einstellung (WCAG 1.4.4)
  *   - tokens.css: die Token-Definitionen selbst
  */
 import { test } from 'node:test';

@@ -82,10 +82,11 @@ yuvomi-datepicker {
   background: var(--color-surface-hover);
 }
 
+/* Kein eigener Fokus-Stil: der globale Ring aus reset.css übernimmt. Der
+ * frühere accent-light-Glow maß ~1.05:1 gegen Weiß und trug nichts
+ * (Audit 2026-08-31); nur der Farbwechsel bleibt als Zusatzsignal. */
 .ydp__trigger:focus-visible {
-  outline: none;
   color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
 .ydp__trigger svg,
@@ -206,11 +207,6 @@ yuvomi-datepicker[disabled] .ydp__trigger {
   background: var(--color-surface-hover);
 }
 
-.ydp-navbtn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--color-accent-light);
-}
-
 .ydp-navbtn svg,
 .ydp-navbtn [data-lucide] {
   width: 18px;
@@ -280,11 +276,6 @@ yuvomi-datepicker[disabled] .ydp__trigger {
   background: transparent;
 }
 
-.ydp-cal__day:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--color-accent-light);
-}
-
 .ydp-cal__foot {
   display: flex;
   align-items: center;
@@ -316,11 +307,6 @@ yuvomi-datepicker[disabled] .ydp__trigger {
 
 .ydp-textbtn:hover {
   background: var(--color-surface-hover);
-}
-
-.ydp-textbtn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
 /* --------------------------------------------------------
