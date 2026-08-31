@@ -926,7 +926,7 @@ test('der Install-Nachlauf haengt am gerenderten Banner, nicht an seiner Existen
  * JS UND CSS SCHALTEN AN DERSELBEN SCHWELLE.
  *
  * Der Kalender fragte viermal `(max-width: 639px)` ab, waehrend
- * `calendar.css` bei `max-width: 640px` schaltet. Bei GENAU 640px war die
+ * `calendar.css` bei `max-width: 640px` schaltete. Bei GENAU 640px war die
  * Seite in zwei Zustaenden zugleich: das CSS hatte die Termin-Chips schon auf
  * Punkte reduziert, das JS hielt noch die Desktop-Klicklogik - ein Tap musste
  * einen 10px-Punkt treffen statt die ganze Zelle.
@@ -937,16 +937,29 @@ test('der Install-Nachlauf haengt am gerenderten Banner, nicht an seiner Existen
  * Schwelle, an der sie auseinanderlaufen.
  */
 test('jede matchMedia-Grenze einer Seite kennt ihr CSS auch', () => {
-  // SEITENWEISE, NICHT UEBER ALLE STYLESHEETS - und das ist die Lehre aus der
-  // ersten Fassung dieses Guards. Sie sammelte die Grenzen aller Dateien in
-  // EINEN Satz; damit war `639px` „gedeckt", weil schedule.css und
-  // split-expenses.css es fuehren, und der Guard blieb gruen, als ich den
-  // Fehler zur Gegenprobe wieder einbaute. Ein Breakpoint ist nur dort eine
-  // Deckung, wo er auf DIESELBEN Elemente wirkt.
+  // SEITENWEISE, NICHT UEBER ALLE STYLESHEETS - die erste Lehre aus diesem
+  // Guard. Die Urfassung sammelte die Grenzen aller Dateien in EINEN Satz;
+  // damit war `639px` „gedeckt", weil schedule.css und split-expenses.css es
+  // fuehren, und der Guard blieb gruen, als ich den Fehler zur Gegenprobe
+  // wieder einbaute. Ein Breakpoint ist nur dort eine Deckung, wo er auf
+  // DIESELBEN Elemente wirkt - deshalb baut `own` je Seite auf.
+  //
+  // GEZAEHLT WIRD DIE SCHWELLE, NICHT DIE ZAHL - die zweite Lehre.
+  // `max-width: 639px` und `min-width: 640px` sind DIESELBE Schwelle (die
+  // Grenze gehoert der grossen Seite, siehe test:typography);
+  // `max-width: 640px` ist dagegen die Schwelle 641, die kein Stylesheet
+  // fuehrt. Die Vorfassung sammelte nackte Zahlen: als der Breakpoint-Sweep
+  // das CSS auf die Paarung 639 zog und die matchMedia-Aufrufe von Kalender,
+  // Essensplan und Dokumenten bei 640 stehen blieben, deckte ausgerechnet das
+  // `min-width: 640px` aus layout.css die falsche Zahl ab. Der Guard blieb
+  // gruen an genau dem Fehler, gegen den er geschrieben wurde.
+  const threshold = (kind, px) => (kind === 'max' ? Number(px) + 1 : Number(px));
+  const BOUNDARY = /\(\s*(min|max)-width:\s*(\d+)px\s*\)/g;
+
   const shared = new Set();
   for (const file of ['layout.css', 'tokens.css', 'list-row.css', 'panel.css', 'sub-tabs.css']) {
-    for (const m of read(`../public/styles/${file}`).matchAll(/\(\s*(?:min|max)-width:\s*(\d+)px\s*\)/g)) {
-      shared.add(m[1]);
+    for (const m of read(`../public/styles/${file}`).matchAll(BOUNDARY)) {
+      shared.add(threshold(m[1], m[2]));
     }
   }
 
@@ -956,7 +969,7 @@ test('jede matchMedia-Grenze einer Seite kennt ihr CSS auch', () => {
     const cssPath = `../public/styles/${page}.css`;
     const own = new Set(shared);
     if (existsSync(new URL(cssPath, import.meta.url))) {
-      for (const m of read(cssPath).matchAll(/\(\s*(?:min|max)-width:\s*(\d+)px\s*\)/g)) own.add(m[1]);
+      for (const m of read(cssPath).matchAll(BOUNDARY)) own.add(threshold(m[1], m[2]));
     }
 
     // JEDES Media-Query-LITERAL der Datei, nicht nur die direkt an
@@ -966,9 +979,9 @@ test('jede matchMedia-Grenze einer Seite kennt ihr CSS auch', () => {
     // durch die Aufraeumarbeit, die dieser Guard absichern soll. Beide
     // Gegenproben (639px, 641px) blieben gruen. Ein Guard, der die gute Form
     // nicht mehr prueft, prueft nichts.
-    for (const m of withoutBlockComments(read(path)).matchAll(/['"`]\(\s*(?:min|max)-width:\s*(\d+)px\s*\)['"`]/g)) {
-      if (!own.has(m[1])) {
-        offenders.push(`${path}: schaltet bei ${m[1]}px, aber weder ${page}.css noch die geteilten Stylesheets kennen diese Grenze`);
+    for (const m of withoutBlockComments(read(path)).matchAll(/['"`]\(\s*(min|max)-width:\s*(\d+)px\s*\)['"`]/g)) {
+      if (!own.has(threshold(m[1], m[2]))) {
+        offenders.push(`${path}: schaltet an der Schwelle ${threshold(m[1], m[2])}px (${m[1]}-width: ${m[2]}px), aber weder ${page}.css noch die geteilten Stylesheets kennen diese Schwelle`);
       }
     }
   }

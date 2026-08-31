@@ -74,7 +74,7 @@ let state = {
   // gespeicherte Wahl gewinnt auf jedem Geraet; 640px ist die kanonische
   // Mobile-Grenze (tokens.css §11c).
   view: localStorage.getItem('yuvomi-documents-view')
-    || (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 640px)').matches ? 'list' : 'grid'),
+    || (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 639px)').matches ? 'list' : 'grid'),
   sort: SORTS.includes(localStorage.getItem('yuvomi-documents-sort'))
     ? localStorage.getItem('yuvomi-documents-sort')
     : 'updated',

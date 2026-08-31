@@ -159,19 +159,27 @@ test('die kanonischen Breakpoint-Tokens existieren in tokens.css', () => {
  * dieser Breite beide Seiten zugleich gelten - gemessen bei 640px: mobile
  * Kompaktregeln UND 3-Spalten-Kanban gleichzeitig (Audit 2026-08-31; 33
  * Fundstellen in 15 Dateien, waehrend 768/1024 laengst korrekt als 767/1023
- * gepaart waren). Regel statt Liste: kein Stylesheet darf ein max-width auf
+ * gepaart waren). Regel statt Liste: keine Media-Query darf ein max-width auf
  * einem der vier Kanonwerte fuehren.
+ *
+ * NUR IM PRELUDE, UND DAS IST DIE KORREKTUR AN DIESEM GUARD SELBST. Die erste
+ * Fassung suchte `max-width: 640px` IRGENDWO im Stylesheet und traf damit zwei
+ * Deklarationen, die keine Schwelle sind: `.budget-tab-panel--reading` und
+ * `.perm-matrix` fuehren eine Lesespaltenbreite. Bei denen gibt es keine zweite
+ * Seite, mit der sie sich ueberlappen koennten - die Paarungsregel gilt fuer
+ * Viewport-Grenzen, nicht fuer Elementbreiten. Der Sweep hat beide auf 639px
+ * gezogen, WEIL der Guard sie rot faerbte; ein Guard, der beim Richtigstellen
+ * rot wird, prueft die Schreibweise statt der Sache.
  */
-test('kein max-width sitzt exakt auf einem Breakpoint-Kanonwert', () => {
+test('kein max-width einer Media-Query sitzt exakt auf einem Breakpoint-Kanonwert', () => {
   const violations = [];
   for (const file of cssFiles) {
     const css = stripComments(readFileSync(new URL(file, STYLES_DIR), 'utf8'));
-    for (const bp of [640, 768, 1024, 1440]) {
-      const re = new RegExp(`max-width:\\s*${bp}px`, 'g');
-      let m;
-      while ((m = re.exec(css)) !== null) {
-        const line = css.slice(0, m.index).split('\n').length;
-        violations.push(`${file}:${line} → max-width: ${bp}px (Paarung: ${bp - 1}px)`);
+    for (const at of css.matchAll(/@media([^{]*)\{/g)) {
+      for (const bp of [640, 768, 1024, 1440]) {
+        if (!new RegExp(`max-width:\\s*${bp}px`).test(at[1])) continue;
+        const line = css.slice(0, at.index).split('\n').length;
+        violations.push(`${file}:${line} → @media max-width: ${bp}px (Paarung: ${bp - 1}px)`);
       }
     }
   }

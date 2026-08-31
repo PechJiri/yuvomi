@@ -281,7 +281,7 @@
  * max-width auf einem einzigen Tab: so ist die Ausnahme benannt und für den
  * nächsten Formular-Tab wiederverwendbar. */
 .budget-tab-panel--reading {
-  max-width: 639px;
+  max-width: 640px;
   margin-inline: auto;
   width: 100%;
 }

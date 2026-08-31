@@ -334,17 +334,25 @@ const PEOPLE_FILTER_KEY   = 'yuvomi:calendar:people';
 /* DIE MOBIL-GRENZE STEHT EINMAL, UND SIE FOLGT DEM CSS.
  *
  * Sie stand viermal als `(max-width: 639px)` im JS, waehrend calendar.css an
- * drei Stellen bei `max-width: 640px` schaltet. Bei GENAU 640px war die App
+ * drei Stellen bei `max-width: 640px` schaltete. Bei GENAU 640px war die App
  * deshalb in zwei Zustaenden zugleich: das CSS hatte die Termin-Chips schon
  * auf Punkte reduziert, das JS hielt noch die Desktop-Klicklogik - ein Tap
  * musste einen 10px-Punkt treffen, statt die ganze Zelle als Ziel zu haben.
  * Verifiziert bei 640px: `cssMobile: true`, `jsMobile: false`.
  *
- * Ein Guard haelt beide Seiten zusammen (`test:frontend-audit`): jede
- * matchMedia-Grenze dieser Datei muss eine Media-Query-Grenze in calendar.css
- * sein. Zwei Zahlen fuer dieselbe Schwelle sind genau die Bauart, an der
- * dieser Fehler entstanden ist. */
-const MOBILE_MEDIA_QUERY = '(max-width: 640px)';
+ * Der Wert ist seither ZWEIMAL gewandert, und beide Male wanderte nur eine
+ * Seite: erst zog das JS auf die CSS-Zahl 640, dann zog der Breakpoint-Sweep
+ * das CSS auf die Paarung 639 - und liess das JS wieder allein bei 640 stehen,
+ * mit demselben Zwei-Zustaende-Bild bei genau 640px, nur seitenverkehrt. Ein
+ * Guard, der Zahlen ohne ihre Richtung vergleicht, sah beide Male nichts:
+ * `min-width: 640px` in layout.css deckte die JS-640 scheinbar ab.
+ *
+ * Der Guard vergleicht deshalb nicht mehr Zahlen, sondern SCHWELLEN (`test:
+ * frontend-audit`): `max-width: 639px` und `min-width: 640px` sind dieselbe
+ * Schwelle 640, `max-width: 640px` ist die Schwelle 641 - und die kennt kein
+ * Stylesheet. Zwei Zahlen fuer dieselbe Schwelle sind genau die Bauart, an der
+ * dieser Fehler zweimal entstanden ist. */
+const MOBILE_MEDIA_QUERY = '(max-width: 639px)';
 
 const HOLIDAY_PUBLIC_FALLBACK = '#FF3B30';
 const HOLIDAY_SCHOOL_FALLBACK = '#34C759';

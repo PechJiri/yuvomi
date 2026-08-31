@@ -2825,7 +2825,7 @@
 .perm-empty { padding: var(--space-6) 0; }
 
 /* Fokussierte Spalte: Label und Control nah beieinander statt breit gestreckt. */
-.perm-matrix { max-width: 639px; }
+.perm-matrix { max-width: 640px; }
 
 /* Abweichungs-Überblick: die Form einer Rolle auf einen Blick. */
 .perm-summary {
