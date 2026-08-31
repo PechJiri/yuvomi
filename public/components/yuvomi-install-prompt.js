@@ -7,7 +7,9 @@
  *   - Chrome/Android: Fängt beforeinstallprompt ab, zeigt Install-Banner
  *   - iOS (Safari): Zeigt Anleitung "Zum Home-Bildschirm"
  *   - Standalone-Modus: Zeigt nichts an
- *   - Dismiss: 7 Tage via localStorage gespeichert
+ *   - Dismiss (X): 30 Tage via localStorage gespeichert
+ *   - Jede tatsaechliche Anzeige: 24h Ruhe (SEEN_KEY) - sonst kam das Banner
+ *     bei jedem Seitenwechsel wieder
  *   - Timing: Banner erst nach 2 Nutzer-Interaktionen anzeigen
  */
 
@@ -47,6 +49,21 @@ const DISMISS_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 Tage
 const INTERACTION_KEY = 'yuvomi-install-interactions';
 const INTERACTION_THRESHOLD = 2;
 
+// EIN Blick pro Tag statt einer je Navigation: das Bauteil wird bei jedem
+// Seitenwechsel neu eingehaengt und legte sich damit auf JEDER Route erneut
+// ueber Daumenzone und FAB (~110px), bis X gedrueckt war (Critique 2026-08-31,
+// P2). Jede TATSAECHLICHE Anzeige startet deshalb eine 24h-Ruhe - das deckt
+// die laufende Sitzung gleich mit ab. Das ausdrueckliche X behaelt seine
+// 30 Tage (DISMISS_DURATION_MS oben).
+const SEEN_KEY = 'yuvomi-install-seen';
+const SEEN_QUIET_MS = 24 * 60 * 60 * 1000; // 24 Stunden
+
+// Auto-Hide als Soft-Dismiss: das Bauteil ist PERSISTENT (index.html, ausserhalb
+// des Seiten-Swaps) - ein einmal gezeigtes Banner stuende sonst die GANZE
+// Sitzung auf jeder Route ueber Daumenzone und FAB. 15s reichen, um auch die
+// iOS-Anleitung zu lesen; die 24h-Ruhe ist beim Anzeigen laengst geschrieben.
+const AUTO_HIDE_MS = 15000;
+
 class YuvomiInstallPrompt extends HTMLElement {
   constructor() {
     super();
@@ -63,6 +80,12 @@ class YuvomiInstallPrompt extends HTMLElement {
     // Dismiss noch aktiv?
     const dismissed = localStorage.getItem(DISMISS_KEY);
     if (dismissed && Date.now() - Number(dismissed) < DISMISS_DURATION_MS) {
+      return;
+    }
+
+    // Heute schon gesehen? Dann Ruhe bis morgen (siehe SEEN_KEY oben).
+    const seen = localStorage.getItem(SEEN_KEY);
+    if (seen && Date.now() - Number(seen) < SEEN_QUIET_MS) {
       return;
     }
 
@@ -100,6 +123,7 @@ class YuvomiInstallPrompt extends HTMLElement {
    * das sehen, weil beide Fassungen fuer sich richtig aussahen.
    */
   disconnectedCallback() {
+    clearTimeout(this._autoHideTimer);
     window.removeEventListener('beforeinstallprompt', this._onBeforeInstall);
     if (this._offInteraction) this._offInteraction();
     if (this._offInstallState) this._offInstallState();
@@ -393,6 +417,13 @@ class YuvomiInstallPrompt extends HTMLElement {
     // Ab hier belegt das Bauteil wirklich Flaeche - erst jetzt darf der
     // Nachlauf der Scrollports sie einrechnen (siehe SHOWN_ATTR oben).
     this.setAttribute(SHOWN_ATTR, '');
+    // Erst die ECHTE Anzeige startet die 24h-Ruhe - nicht das Einhaengen
+    // (das passiert auch, wenn Interaktionsschwelle oder beforeinstallprompt
+    // das Banner nie zeigen).
+    localStorage.setItem(SEEN_KEY, String(Date.now()));
+    // Reset statt Stapeln: _showBanner laeuft bei locale-changed erneut.
+    clearTimeout(this._autoHideTimer);
+    this._autoHideTimer = setTimeout(() => this._remove(), AUTO_HIDE_MS);
 
     // DER BANNER MELDET SEINE HOEHE AN DIE SHELL.
     //
