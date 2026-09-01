@@ -18,7 +18,8 @@ import { readFileSync } from 'node:fs';
 const { withoutBlockComments } = await import('./source-text.js');
 
 const { truncateRuleBefore, shiftSeriesStart, shiftEndForStart,
-        isLocalRecurringSeries, isExternalRecurringSeries } =
+        isLocalRecurringSeries, isExternalRecurringSeries,
+        followingMeansWholeSeries } =
   await import('../public/utils/recurrence-scope.js');
 const { expandRecurringEvents } = await import('../server/services/calendar-events.js');
 
@@ -345,4 +346,69 @@ test('truncateRuleBefore behaelt "am letzten Tag des Monats" (#960)', async () =
   // des zurueckbleibenden Teils.
   const { RRULE_RE } = await import('../server/middleware/validate.js');
   assert.ok(RRULE_RE.test(truncateRuleBefore('FREQ=MONTHLY;BYMONTHDAY=-1', '2026-05-31')));
+});
+
+test('followingMeansWholeSeries: der Anfang ist kein Schnitt', () => {
+  // Der Master selbst (kein expandiertes Vorkommen).
+  assert.equal(followingMeansWholeSeries({ is_recurring_instance: 0 }), true);
+  // Eine spaetere Instanz: hier wird wirklich geschnitten.
+  assert.equal(followingMeansWholeSeries({ is_recurring_instance: 1, is_series_start: 0 }), false);
+  // DER FALL, UM DEN ES GEHT: erstes Vorkommen, das vom gespeicherten Datum
+  // abweicht - abweichend UND trotzdem der Anfang.
+  assert.equal(followingMeansWholeSeries({ is_recurring_instance: 1, is_series_start: 1 }), true);
+  // Ohne das Feld (aeltere Antwort) bleibt es beim vorherigen Verhalten.
+  assert.equal(followingMeansWholeSeries({ is_recurring_instance: 1 }), false);
+});
+
+test('Die Expansion markiert das erste Vorkommen, auch wenn es vom Start abweicht', () => {
+  const base = {
+    id: 1, title: 'Monatsletzter', all_day: 0,
+    start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T09:15',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  };
+  const inst = expandRecurringEvents([base], '2026-01-01', '2026-04-30');
+  const tage = inst.map((e) => e.start_datetime.slice(0, 10));
+  assert.deepEqual(tage, ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30']);
+  // Der 31. Januar weicht vom gespeicherten 15. ab UND ist der Serienanfang.
+  assert.equal(inst[0].is_recurring_instance, 1, 'weicht vom gespeicherten Datum ab');
+  assert.equal(inst[0].is_series_start, 1, 'und ist trotzdem das erste Vorkommen');
+  assert.equal(inst[1].is_series_start, 0, 'der zweite ist es nicht');
+});
+
+test('Ein Schnitt am ersten Vorkommen wuerde die Serie leeren - deshalb die Regel', () => {
+  // DER BELEG FUER DIE REGEL, NICHT NUR IHRE WIEDERHOLUNG. Wer am ersten
+  // Vorkommen \"diesen und alle folgenden\" waehlt und trotzdem kuerzt, baut ein
+  // UNTIL vor den Anfang: eine Serie ohne jedes Vorkommen. Der Server lehnt
+  // sie ab, und der erste sichtbare Termin liesse sich weder loeschen noch
+  // bearbeiten.
+  const base = {
+    id: 1, title: 'Monatsletzter', all_day: 0,
+    start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T09:15',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  };
+  const erste = expandRecurringEvents([base], '2026-01-01', '2026-04-30')[0];
+  assert.equal(followingMeansWholeSeries(erste), true, 'die Regel greift hier');
+
+  const gekuerzt = truncateRuleBefore(base.recurrence_rule, erste.start_datetime.slice(0, 10));
+  const uebrig = expandRecurringEvents(
+    [{ ...base, recurrence_rule: gekuerzt }], '2026-01-01', '2027-12-31'
+  );
+  assert.equal(uebrig.length, 0, `der Schnitt liesse nichts stehen: ${gekuerzt}`);
+});
+
+test('Jeder Schnitt der Regel nimmt den Serienanfang aus', () => {
+  // ALS REGEL UEBER ALLE AUFRUFSTELLEN, NICHT ALS LISTE VON ZWEIEN. Bearbeiten
+  // und Loeschen hatten dieselbe Annahme doppelt stehen ("erstes Vorkommen ==
+  // gespeichertes Datum"), und der Fix traf beide - eine dritte Stelle wuerde
+  // ihn genauso brauchen. Der Guard prueft deshalb, was fuer jede gilt.
+  const bloecke = calendarSrc.split(/\n(?=(?:async )?function )/);
+  const schnitte = bloecke.filter((b) => b.includes('truncateRuleBefore('));
+  assert.ok(schnitte.length >= 2,
+    `erwartet mindestens zwei Schnittstellen (Bearbeiten + Loeschen), gefunden ${schnitte.length}`);
+  for (const b of schnitte) {
+    const name = (b.match(/^(?:async )?function (\w+)/) || [, '(anonym)'])[1];
+    assert.ok(b.includes('followingMeansWholeSeries('),
+      `${name}: kuerzt die Regel, ohne den Serienanfang auszunehmen - am ersten `
+      + 'Vorkommen entstuende eine leere Serie, die der Server ablehnt');
+  }
 });
