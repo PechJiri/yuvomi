@@ -14744,3 +14744,76 @@ test('jede auf Touch ausgeblendete Karten-Aktion hat einen Weg in der Leseansich
     `der Anlege-Knopf haengt nicht mehr an "${gate[1]}" - der Guard misst dann eine `
     + 'Bedingung, die den Knopf gar nicht mehr gattert');
 });
+
+/**
+ * DER AUSSCHNITT VON `createIcons({ el })` IST GELIEHEN, NICHT EINGEBAUT.
+ *
+ * Über zweihundert Aufrufstellen übergeben `{ el }` und nehmen an, nur unter
+ * diesem Knoten werde gezeichnet. Die gebündelte Lucide-Fassung kennt den
+ * Parameter nicht - sie sucht `[data-lucide]` im ganzen Dokument, egal was man
+ * ihr übergibt. Erst `public/lucide-scope.js` biegt die Funktion um (Audit
+ * 2026-08-31, P2); ohne diese Datei ist der Parameter genau die Lüge, für die
+ * ihn beim Lesen jeder hält.
+ *
+ * Der Patch hängt an einer Reihenfolge, die man ihm nicht ansieht: er steigt
+ * still aus, wenn `window.lucide` bei seinem Lauf noch fehlt. Rutscht er vor
+ * das Bundle, verliert er sein `defer` oder fällt er ganz weg, dann fallen alle
+ * Aufrufstellen gleichzeitig auf den Volldokument-Scan zurück - ohne Fehler,
+ * ohne sichtbaren Unterschied, nur langsamer. Ein Kommentar kann das nicht
+ * halten, weil ihn die Datei, die ihn bricht, gar nicht enthält.
+ */
+test('der Lucide-Ausschnitt läuft nach dem Bundle und vor jedem Modul, das ihn braucht', () => {
+  const scope = read('../public/lucide-scope.js');
+
+  // Reichweiten-Nachweis: ohne Aufrufer prüft dieser Guard nichts.
+  const callers = walkJsFiles('../public/')
+    .filter((file) => !/lucide(\.min)?\.js$/.test(file) && !file.includes('/vendor/'))
+    .filter((file) => /createIcons\(\{\s*el/.test(read(file)));
+  assert.ok(callers.length >= 30,
+    `Nur ${callers.length} Dateien rufen createIcons({ el }) - das Muster greift nicht mehr`);
+
+  // Der Patch muss tun, was die Aufrufstellen annehmen: unter `el` bleiben.
+  assert.match(scope, /lucide\.createIcons\s*=/,
+    'lucide-scope.js biegt createIcons nicht mehr um - der el-Parameter ist dann wieder wirkungslos');
+  assert.match(scope, /\bel\.querySelectorAll\(/,
+    'lucide-scope.js sucht nicht mehr unter `el` - dann ist der Ausschnitt keiner');
+
+  const scripts = [...read('../public/index.html').matchAll(/<script\b[^>]*>/g)]
+    .map((m) => ({ tag: m[0], src: m[0].match(/\bsrc=["']([^"']+)["']/)?.[1] }))
+    .filter((s) => s.src);
+  const isModule = (s) => /\btype=["']module["']/.test(s.tag);
+
+  const bundle = scripts.findIndex((s) => s.src === '/lucide.min.js');
+  const patch = scripts.findIndex((s) => s.src === '/lucide-scope.js');
+  assert.ok(bundle > -1, 'index.html lädt /lucide.min.js nicht mehr');
+  assert.ok(patch > -1,
+    'index.html lädt /lucide-scope.js nicht mehr - createIcons({ el }) durchsucht dann wieder '
+    + 'das ganze Dokument, und zwar an allen Aufrufstellen auf einmal');
+  assert.ok(patch > bundle,
+    'lucide-scope.js steht vor lucide.min.js. Es findet `window.lucide` dann noch nicht und '
+    + 'steigt still aus - der Ausschnitt ist wirkungslos, ohne dass irgendwo etwas bricht');
+
+  // Beide klassisch mit `defer`: ohne defer liefe der Patch sofort beim Parsen,
+  // also vor dem deferred Bundle - derselbe stille Ausstieg.
+  for (const i of [bundle, patch]) {
+    assert.match(scripts[i].tag, /\bdefer\b/,
+      `${scripts[i].src} trägt kein defer mehr - die Reihenfolge zwischen Bundle und Patch `
+      + 'ist damit nicht mehr garantiert');
+  }
+
+  // Module laufen zwar nach den defer-Skripten, aber untereinander in
+  // Dokumentreihenfolge: eines vor dem Patch bekäme beim ersten createIcons
+  // noch das ungepatchte Original.
+  assert.deepEqual(
+    scripts.filter((s, i) => i < patch && isModule(s)).map((s) => s.src), [],
+    'Diese Module stehen in index.html vor lucide-scope.js und laufen damit vor dem Patch');
+
+  // Und die klassischen Skripte davor laufen ohne defer sofort beim Parsen,
+  // lange vor dem Bundle: dort ist jeder createIcons-Aufruf ungescopt.
+  const early = scripts
+    .filter((s, i) => i < patch && !isModule(s) && !/\bdefer\b/.test(s.tag))
+    .filter((s) => existsSync(new URL(`../public${s.src}`, import.meta.url)))
+    .filter((s) => /createIcons/.test(read(`../public${s.src}`)));
+  assert.deepEqual(early.map((s) => s.src), [],
+    'Diese Skripte laufen vor dem Patch und rufen createIcons - der Aufruf ist dort ungescopt');
+});

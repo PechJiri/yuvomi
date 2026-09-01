@@ -82,8 +82,10 @@ function monogram(name) {
  * GIBT DOM UND KEINE ZEICHENKETTE. Das Symbol kommt als fertiges `<svg>` von
  * `iconElement()`; als Markup zurückgegeben müsste es erst wieder geparst
  * werden, und der Weg dorthin führte über `data-lucide` plus einen
- * `createIcons()`-Lauf, der - anders als seine 213 Aufrufstellen glauben -
- * kein Ausschnittsargument kennt und jedes Mal das ganze Dokument absucht.
+ * `createIcons()`-Lauf, den der Aufrufer nach jedem Einfügen selbst nachholen
+ * muss. Diese zweite Pflicht fällt genau dann aus, wenn eine Kachel abseits des
+ * gewohnten Renderwegs entsteht - der Knopf bleibt leer bis zum Reload (#668).
+ * `iconElement()` hat sie nicht: das Zeichen ist fertig, wenn es zurückkommt.
  *
  * KENNT LUCIDE DEN NAMEN NICHT, GILT DER BUCHSTABE. Ein Symbolname steht in
  * der Datenbank und überlebt ein Lucide-Update, das ihn umbenennt; die Kachel

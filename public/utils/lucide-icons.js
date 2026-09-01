@@ -9,11 +9,19 @@
  * beantwortet die andere Frage, die es vorher nicht gab: ein Symbol, dessen
  * Name erst zur Laufzeit feststeht, weil ihn jemand ausgesucht hat.
  *
- * DESHALB `createElement` UND NICHT `createIcons`. Der zweite Weg kennt keinen
- * Ausschnitt - er sucht `[data-lucide]` im ganzen Dokument, egal was man ihm
- * übergibt. Für ein Raster mit 120 Kacheln wären das 120 volle Dokumentläufe
- * für 120 Symbole. `createElement` liefert das fertige `<svg>` direkt und
- * fasst nichts an, was nicht danach gefragt hat.
+ * DESHALB `createElement` UND NICHT `createIcons`. Der zweite Weg ersetzt
+ * Platzhalter: erst muss ein `<i data-lucide>` im Baum stehen, dann läuft
+ * `createIcons` darüber. Wer ein einzelnes Zeichen braucht, dessen Name gerade
+ * erst feststeht, will diesen Umweg nicht - `createElement` liefert das fertige
+ * `<svg>` direkt und fasst nichts an, was nicht danach gefragt hat.
+ *
+ * DER AUSSCHNITT IST INZWISCHEN ECHT, UND DAS ÄNDERT DIE WAHL NICHT. Bis zum
+ * Audit 2026-08-31 durchsuchte `createIcons({ el })` das ganze Dokument, egal
+ * was man ihm übergab - für ein Raster mit 120 Kacheln wären das 120 volle
+ * Dokumentläufe gewesen. `lucide-scope.js` (lädt direkt nach dem Bundle) hält
+ * den Lauf seither unter `el`. Der Größenvorteil ist damit weg, der Grund
+ * oben bleibt: ein Platzhalter, den niemand sehen soll, ist ein Umweg und
+ * keine Ersparnis.
  *
  * DIE NAMENSFORM IST GEPRUEFT, NICHT GERATEN. Lucide führt seine Symbole in
  * PascalCase (`AlarmClock`), die App schreibt sie mit Bindestrich

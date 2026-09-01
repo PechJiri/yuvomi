@@ -28,6 +28,10 @@
  *     Modulgraph oben sieht nur JS; CSS hängt an keinem `import`, und so lagen
  *     11 der 18 eager geladenen Stylesheets außerhalb des Precache, ohne dass
  *     eine Zeile dieser Datei das bemerken konnte
+ *   - jedes von index.html geladene Skript ist precacht. Der Modulgraph oben
+ *     beginnt erst bei den Einträgen der Precache-Liste; ein Skript, das dort
+ *     fehlt, wird von keinem `import` erreicht und fällt deshalb durch beide
+ *     Netze
  *   - Precache-Bucket und fetch-Routing stimmen überein (ein im SHELL_CACHE
  *     abgelegtes Modul darf nicht aus dem PAGES_CACHE bedient werden)
  *   - keine Doppeleinträge zwischen den Listen
@@ -173,6 +177,30 @@ test('jedes eager geladene Stylesheet aus index.html ist precacht', () => {
     missing, [],
     'Diese Stylesheets lädt index.html eager, der Service Worker precacht sie aber nicht. '
     + `Der allererste Offline-Start rendert damit ungestylt:\n  ${missing.join('\n  ')}`,
+  );
+});
+
+// Dieselbe Lücke wie oben, nur für JS: der Modulgraph-Test folgt `import`-Kanten
+// ab der Precache-Liste und sieht deshalb nie, was index.html per <script> lädt
+// und die Liste vergisst. `lucide-scope.js` ist genau so ein Fall - es hängt an
+// keinem Import, sondern gibt `createIcons({ el })` an über zweihundert
+// Aufrufstellen seinen Ausschnitt (siehe Dateikopf). Offline fehlte es, und die
+// App liefe sichtbar unverändert weiter, nur langsamer.
+test('jedes von index.html geladene Skript ist precacht', () => {
+  const html = readFileSync(PUBLIC_DIR + 'index.html', 'utf8');
+  const scripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/g)]
+    .map((m) => m[1])
+    .filter((src) => src.startsWith('/')); // fremde Herkunft precacht der SW nicht
+
+  // Reichweiten-Nachweis: findet das Muster nichts, prüft die Assertion nichts.
+  assert.ok(scripts.length >= 5, `Nur ${scripts.length} Skripte gefunden - das Muster greift nicht mehr`);
+
+  const shell = new Set(APP_SHELL);
+  const missing = scripts.filter((src) => !shell.has(src));
+  assert.deepEqual(
+    missing, [],
+    'Diese Skripte lädt index.html, der Service Worker precacht sie aber nicht. '
+    + `Offline fehlen sie ersatzlos:\n  ${missing.join('\n  ')}`,
   );
 });
 
