@@ -34,6 +34,7 @@ import activitiesRouter from '../server/routes/health/activities.js';
 import exportRouter from '../server/routes/health/export.js';
 import cycleRouter from '../server/routes/health/cycle.js';
 import caregiversRouter from '../server/routes/health/caregivers.js';
+import visibilityDefaultsRouter from '../server/routes/health/visibility-defaults.js';
 
 /** Sammelt rekursiv alle {METHOD path}-Paare eines Express-Routers (inkl. gemounteter Sub-Router). */
 function collectRoutes(router) {
@@ -113,18 +114,22 @@ const EXPECTED = [
   'GET /caregivers/me',
   'GET /caregivers',
   'PUT /caregivers/:subjectId',
+  // Persoenliche Standard-Sichtbarkeit je Bereich (#958)
+  'GET /visibility-defaults',
+  'PUT /visibility-defaults',
+  'PATCH /visibility-defaults/apply',
 ];
 
-test('Orchestrator ergibt exakt die erwartete Routentabelle (47 Routen)', () => {
+test('Orchestrator ergibt exakt die erwartete Routentabelle (50 Routen)', () => {
   const actual = collectRoutes(healthRouter).sort();
   assert.deepEqual(actual, [...EXPECTED].sort());
-  assert.equal(actual.length, 47);
+  assert.equal(actual.length, 50);
 });
 
 test('die Cluster-Router zusammen ergeben genau die Orchestrator-Routen (keine verlorene/doppelte Route)', () => {
   const perModule = [
     vitalsRouter, medicationsRouter, labsRouter, activitiesRouter, exportRouter, cycleRouter,
-    caregiversRouter,
+    caregiversRouter, visibilityDefaultsRouter,
   ].flatMap(collectRoutes);
   // keine Route kommt in mehr als einem Cluster-Router vor
   const seen = new Set();

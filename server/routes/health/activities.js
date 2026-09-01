@@ -6,6 +6,7 @@
 import express from 'express';
 import * as db from '../../db.js';
 import * as v from '../../middleware/validate.js';
+import { defaultVisibilityFor } from './visibility-defaults.js';
 import {
   log, VISIBILITIES, MAX_UNIT,
   viewerId, careAwareClause, applyUpdate, badRequest,
@@ -60,7 +61,8 @@ router.post('/activities', (req, res) => {
       INSERT INTO health_activities (user_id, type, duration_min, distance_km, intensity, calories, performed_at, note, visibility)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(owner.ownerId, type.value, duration.value, distance.value, intensity.value, calories.value,
-           performedAt.value, note.value, visibility.value || 'private');
+           performedAt.value, note.value,
+           visibility.value || defaultVisibilityFor(db.get(), owner.ownerId, 'activities'));
 
     const row = db.get().prepare('SELECT * FROM health_activities WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ data: row });

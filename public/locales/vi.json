@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "chưa thiết lập",
         "memberSsoOnlyLabel": "Chỉ đăng nhập bằng SSO",
         "memberSsoOnlyHint": "Tài khoản không nhận mật khẩu. Thành viên chỉ có thể đăng nhập qua SSO.",
-        "memberSsoOnlyEditHint": "Khi bật, tài khoản mất mật khẩu và chỉ vào được qua SSO. Để tắt, cần đặt một mật khẩu mới."
+        "memberSsoOnlyEditHint": "Khi bật, tài khoản mất mật khẩu và chỉ vào được qua SSO. Để tắt, cần đặt một mật khẩu mới.",
+        "healthVisibilityTitle": "Hiển thị mặc định",
+        "healthVisibilityHint": "Giá trị khởi đầu của mục mới. Bạn vẫn có thể đổi ở từng mục.",
+        "healthVisibilityOther": "Khu vực khác",
+        "healthVisibilityApply": "Đổi cả các mục hiện có",
+        "healthVisibilityApplyHint": "Đã lưu. Có đổi cả các mục hiện có trong {{area}} không?",
+        "healthVisibilityApplied": "Đã đổi {{count}} mục.",
+        "healthVisibilityApplied_one": "Đã đổi một mục."
     },
     "login": {
         "tagline": "Chào mừng bạn trở lại trình lập kế hoạch gia đình.",

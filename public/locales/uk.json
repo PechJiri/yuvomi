@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "не налаштовано",
         "memberSsoOnlyLabel": "Лише вхід через SSO",
         "memberSsoOnlyHint": "Обліковий запис не отримує пароля. Учасник може увійти лише через SSO.",
-        "memberSsoOnlyEditHint": "З увімкненим перемикачем обліковий запис втрачає свій пароль і заходить лише через SSO. Щоб вимкнути його, потрібно задати новий пароль."
+        "memberSsoOnlyEditHint": "З увімкненим перемикачем обліковий запис втрачає свій пароль і заходить лише через SSO. Щоб вимкнути його, потрібно задати новий пароль.",
+        "healthVisibilityTitle": "Видимість за умовчанням",
+        "healthVisibilityHint": "З чим створюються нові записи. Для кожного запису це можна змінити.",
+        "healthVisibilityOther": "Інші розділи",
+        "healthVisibilityApply": "Змінити й наявні записи",
+        "healthVisibilityApplyHint": "Збережено. Змінити також наявні записи в розділі {{area}}?",
+        "healthVisibilityApplied": "Змінено записів: {{count}}.",
+        "healthVisibilityApplied_one": "Змінено один запис."
     },
     "login": {
         "tagline": "З поверненням до вашого сімейного планувальника.",

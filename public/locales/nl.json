@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "niet ingesteld",
         "memberSsoOnlyLabel": "Alleen SSO-aanmelding",
         "memberSsoOnlyHint": "Het account krijgt geen wachtwoord. Het lid kan zich alleen via SSO aanmelden.",
-        "memberSsoOnlyEditHint": "Staat de schakelaar aan, dan verliest het account zijn wachtwoord en komt het alleen nog via SSO binnen. Uitschakelen vereist een nieuw wachtwoord."
+        "memberSsoOnlyEditHint": "Staat de schakelaar aan, dan verliest het account zijn wachtwoord en komt het alleen nog via SSO binnen. Uitschakelen vereist een nieuw wachtwoord.",
+        "healthVisibilityTitle": "Standaardzichtbaarheid",
+        "healthVisibilityHint": "Waarmee nieuwe items beginnen. Je kunt het bij elk item nog wijzigen.",
+        "healthVisibilityOther": "Andere onderdelen",
+        "healthVisibilityApply": "Bestaande items ook aanpassen",
+        "healthVisibilityApplyHint": "Opgeslagen. Moeten de bestaande items onder {{area}} ook worden aangepast?",
+        "healthVisibilityApplied": "{{count}} items aangepast.",
+        "healthVisibilityApplied_one": "Eén item aangepast."
     },
     "login": {
         "tagline": "Welkom terug bij je gezinsplanner.",

@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "not set up",
         "memberSsoOnlyLabel": "SSO sign-in only",
         "memberSsoOnlyHint": "The account gets no password. The member can only sign in through SSO.",
-        "memberSsoOnlyEditHint": "With this on, the account loses its password and only gets in through SSO. Turning it off requires setting a new password."
+        "memberSsoOnlyEditHint": "With this on, the account loses its password and only gets in through SSO. Turning it off requires setting a new password.",
+        "healthVisibilityTitle": "Default visibility",
+        "healthVisibilityHint": "What new entries start as. You can still change it on every entry.",
+        "healthVisibilityOther": "Other areas",
+        "healthVisibilityApply": "Move existing entries too",
+        "healthVisibilityApplyHint": "Saved. Should the existing entries under {{area}} be changed as well?",
+        "healthVisibilityApplied": "{{count}} entries changed.",
+        "healthVisibilityApplied_one": "One entry changed."
     },
     "login": {
         "tagline": "Welcome back to your family planner.",

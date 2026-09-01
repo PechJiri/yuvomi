@@ -2544,7 +2544,14 @@
         "twoFactorMemberOff": "설정 안 됨",
         "memberSsoOnlyLabel": "SSO 로그인만 허용",
         "memberSsoOnlyHint": "이 계정에는 비밀번호가 없습니다. 구성원은 SSO로만 로그인할 수 있습니다.",
-        "memberSsoOnlyEditHint": "켜면 계정은 비밀번호를 잃고 SSO로만 들어옵니다. 끄려면 새 비밀번호를 설정해야 합니다."
+        "memberSsoOnlyEditHint": "켜면 계정은 비밀번호를 잃고 SSO로만 들어옵니다. 끄려면 새 비밀번호를 설정해야 합니다.",
+        "healthVisibilityTitle": "기본 공개 범위",
+        "healthVisibilityHint": "새 기록이 시작하는 값입니다. 기록마다 바꿀 수 있습니다.",
+        "healthVisibilityOther": "기타 영역",
+        "healthVisibilityApply": "기존 기록도 변경",
+        "healthVisibilityApplyHint": "저장했습니다. {{area}}의 기존 기록도 변경할까요?",
+        "healthVisibilityApplied": "기록 {{count}}건을 변경했습니다.",
+        "healthVisibilityApplied_one": "기록 1건을 변경했습니다."
     },
     "login": {
         "tagline": "가족 플래너에 다시 오신 것을 환영합니다.",

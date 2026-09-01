@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "sin configurar",
         "memberSsoOnlyLabel": "Solo inicio de sesión con SSO",
         "memberSsoOnlyHint": "La cuenta no recibe contraseña. El miembro solo puede iniciar sesión con SSO.",
-        "memberSsoOnlyEditHint": "Con el interruptor activado, la cuenta pierde su contraseña y solo entra mediante SSO. Para desactivarlo hay que establecer una contraseña nueva."
+        "memberSsoOnlyEditHint": "Con el interruptor activado, la cuenta pierde su contraseña y solo entra mediante SSO. Para desactivarlo hay que establecer una contraseña nueva.",
+        "healthVisibilityTitle": "Visibilidad predeterminada",
+        "healthVisibilityHint": "Con qué valor se crean las entradas nuevas. Puedes cambiarlo en cada entrada.",
+        "healthVisibilityOther": "Otras áreas",
+        "healthVisibilityApply": "Cambiar también las existentes",
+        "healthVisibilityApplyHint": "Guardado. ¿Cambiar también las entradas existentes de {{area}}?",
+        "healthVisibilityApplied": "{{count}} entradas cambiadas.",
+        "healthVisibilityApplied_one": "Una entrada cambiada."
     },
     "login": {
         "tagline": "Bienvenido de nuevo a tu planificador familiar.",

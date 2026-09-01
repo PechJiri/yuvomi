@@ -2544,7 +2544,14 @@
         "twoFactorMemberOff": "belum disiapkan",
         "memberSsoOnlyLabel": "Hanya masuk dengan SSO",
         "memberSsoOnlyHint": "Akun tidak mendapatkan kata sandi. Anggota hanya dapat masuk melalui SSO.",
-        "memberSsoOnlyEditHint": "Jika sakelar aktif, akun kehilangan kata sandinya dan hanya masuk melalui SSO. Untuk mematikannya, kata sandi baru harus ditetapkan."
+        "memberSsoOnlyEditHint": "Jika sakelar aktif, akun kehilangan kata sandinya dan hanya masuk melalui SSO. Untuk mematikannya, kata sandi baru harus ditetapkan.",
+        "healthVisibilityTitle": "Visibilitas bawaan",
+        "healthVisibilityHint": "Nilai awal untuk entri baru. Kamu masih bisa mengubahnya di tiap entri.",
+        "healthVisibilityOther": "Area lain",
+        "healthVisibilityApply": "Ubah juga entri yang ada",
+        "healthVisibilityApplyHint": "Tersimpan. Ubah juga entri yang ada di {{area}}?",
+        "healthVisibilityApplied": "{{count}} entri diubah.",
+        "healthVisibilityApplied_one": "Satu entri diubah."
     },
     "login": {
         "tagline": "Selamat datang kembali di perencana keluarga Anda.",

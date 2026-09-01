@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "nenastaveno",
         "memberSsoOnlyLabel": "Pouze přihlášení přes SSO",
         "memberSsoOnlyHint": "Účet nedostane žádné heslo. Člen se může přihlásit pouze přes SSO.",
-        "memberSsoOnlyEditHint": "Je-li přepínač zapnutý, účet ztratí své heslo a dostane se dovnitř jen přes SSO. K vypnutí je nutné nastavit nové heslo."
+        "memberSsoOnlyEditHint": "Je-li přepínač zapnutý, účet ztratí své heslo a dostane se dovnitř jen přes SSO. K vypnutí je nutné nastavit nové heslo.",
+        "healthVisibilityTitle": "Výchozí viditelnost",
+        "healthVisibilityHint": "S čím nové záznamy začínají. U každého záznamu to můžeš změnit.",
+        "healthVisibilityOther": "Další oblasti",
+        "healthVisibilityApply": "Upravit i stávající záznamy",
+        "healthVisibilityApplyHint": "Uloženo. Mají se upravit i stávající záznamy v oblasti {{area}}?",
+        "healthVisibilityApplied": "Upraveno záznamů: {{count}}.",
+        "healthVisibilityApplied_one": "Upraven jeden záznam."
     },
     "login": {
         "tagline": "Vítejte zpět ve svém rodinném plánovači.",

@@ -1022,6 +1022,18 @@ const MIGRATIONS_SQL = {
   171: `
     ALTER TABLE invites ADD COLUMN permissions TEXT;
   `,
+
+  // SQL-String für Migration v172 (gespiegelt aus db.js MIGRATIONS):
+  // Persoenliche Standard-Sichtbarkeit je Gesundheitsbereich (#958).
+  172: `
+    CREATE TABLE IF NOT EXISTS health_visibility_defaults (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      scope_key  TEXT    NOT NULL,
+      visibility TEXT    NOT NULL CHECK(visibility IN ('private', 'family')),
+      updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+      PRIMARY KEY (user_id, scope_key)
+    );
+  `,
 };
 
 export { MIGRATIONS_SQL };

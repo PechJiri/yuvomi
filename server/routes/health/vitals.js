@@ -6,6 +6,7 @@
 import express from 'express';
 import * as db from '../../db.js';
 import * as v from '../../middleware/validate.js';
+import { defaultVisibilityFor, vitalScopeKey } from './visibility-defaults.js';
 import {
   log, VISIBILITIES, MAX_UNIT,
   viewerId, careAwareClause, applyUpdate, badRequest,
@@ -60,7 +61,10 @@ router.post('/vitals', (req, res) => {
       INSERT INTO health_vitals (user_id, type, value_num, value_num2, value_num3, unit, measured_at, note, visibility)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(owner.ownerId, type.value, valueNum.value, valueNum2.value, valueNum3.value,
-           unit.value, measuredAt.value, note.value, visibility.value || 'private');
+           unit.value, measuredAt.value, note.value,
+           // Fehlt das Feld, gilt die Wahl des EIGENTUEMERS fuer diese Metrik
+           // (#958) - nicht die der erfassenden Person: die Zeile gehoert ihm.
+           visibility.value || defaultVisibilityFor(db.get(), owner.ownerId, vitalScopeKey(type.value)));
 
     const row = db.get().prepare('SELECT * FROM health_vitals WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ data: row });

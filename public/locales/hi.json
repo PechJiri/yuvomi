@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "सेट नहीं है",
         "memberSsoOnlyLabel": "केवल SSO साइन-इन",
         "memberSsoOnlyHint": "इस खाते को कोई पासवर्ड नहीं मिलेगा। सदस्य केवल SSO से ही साइन इन कर सकता है।",
-        "memberSsoOnlyEditHint": "स्विच चालू होने पर खाता अपना पासवर्ड खो देता है और केवल SSO से ही अंदर आता है। बंद करने के लिए नया पासवर्ड सेट करना होगा।"
+        "memberSsoOnlyEditHint": "स्विच चालू होने पर खाता अपना पासवर्ड खो देता है और केवल SSO से ही अंदर आता है। बंद करने के लिए नया पासवर्ड सेट करना होगा।",
+        "healthVisibilityTitle": "डिफ़ॉल्ट दृश्यता",
+        "healthVisibilityHint": "नई प्रविष्टियाँ किस मान से शुरू होती हैं। हर प्रविष्टि पर इसे बदला जा सकता है।",
+        "healthVisibilityOther": "अन्य क्षेत्र",
+        "healthVisibilityApply": "मौजूदा प्रविष्टियाँ भी बदलें",
+        "healthVisibilityApplyHint": "सहेजा गया। क्या {{area}} की मौजूदा प्रविष्टियाँ भी बदली जाएँ?",
+        "healthVisibilityApplied": "{{count}} प्रविष्टियाँ बदली गईं।",
+        "healthVisibilityApplied_one": "एक प्रविष्टि बदली गई।"
     },
     "login": {
         "tagline": "अपने पारिवारिक प्लानर में फिर से आपका स्वागत है।",

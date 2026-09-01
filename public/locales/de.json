@@ -2544,7 +2544,14 @@
         "twoFactorMemberOff": "nicht eingerichtet",
         "memberSsoOnlyLabel": "Nur SSO-Anmeldung",
         "memberSsoOnlyHint": "Das Konto bekommt kein Passwort. Anmelden kann sich das Mitglied nur über SSO.",
-        "memberSsoOnlyEditHint": "Ist der Schalter an, verliert das Konto sein Passwort und kommt nur noch über SSO herein. Zum Ausschalten muss ein neues Passwort gesetzt werden."
+        "memberSsoOnlyEditHint": "Ist der Schalter an, verliert das Konto sein Passwort und kommt nur noch über SSO herein. Zum Ausschalten muss ein neues Passwort gesetzt werden.",
+        "healthVisibilityTitle": "Standard-Sichtbarkeit",
+        "healthVisibilityHint": "Womit neue Einträge vorbelegt werden. Beim Eintragen lässt sich das jedes Mal ändern.",
+        "healthVisibilityOther": "Weitere Bereiche",
+        "healthVisibilityApply": "Bestehende Einträge mitziehen",
+        "healthVisibilityApplyHint": "Gespeichert. Sollen die vorhandenen Einträge unter {{area}} auch umgestellt werden?",
+        "healthVisibilityApplied": "{{count}} Einträge umgestellt.",
+        "healthVisibilityApplied_one": "Ein Eintrag umgestellt."
     },
     "login": {
         "tagline": "Willkommen zurück bei deinem Familienplaner.",

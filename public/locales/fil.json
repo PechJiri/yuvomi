@@ -2544,7 +2544,14 @@
         "twoFactorMemberOff": "hindi naka-set up",
         "memberSsoOnlyLabel": "Pag-sign in sa SSO lamang",
         "memberSsoOnlyHint": "Walang password na makukuha ang account. Makakapag-sign in lang ang miyembro sa pamamagitan ng SSO.",
-        "memberSsoOnlyEditHint": "Kapag naka-on ito, mawawala ang password ng account at sa SSO na lang ito papasok. Para i-off, kailangang magtakda ng bagong password."
+        "memberSsoOnlyEditHint": "Kapag naka-on ito, mawawala ang password ng account at sa SSO na lang ito papasok. Para i-off, kailangang magtakda ng bagong password.",
+        "healthVisibilityTitle": "Default na visibility",
+        "healthVisibilityHint": "Kung ano ang panimulang halaga ng bagong entry. Mababago mo pa ito sa bawat entry.",
+        "healthVisibilityOther": "Iba pang bahagi",
+        "healthVisibilityApply": "Baguhin din ang mga umiiral na entry",
+        "healthVisibilityApplyHint": "Nai-save. Baguhin din ba ang mga umiiral na entry sa {{area}}?",
+        "healthVisibilityApplied": "{{count}} entry ang binago.",
+        "healthVisibilityApplied_one": "Isang entry ang binago."
     },
     "login": {
         "tagline": "Maligayang pagbabalik sa iyong family planner.",

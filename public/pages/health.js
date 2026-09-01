@@ -92,6 +92,33 @@ async function loadHealthPrefs() {
   }
 }
 
+// Die persoenliche Standard-Sichtbarkeit je Bereich (#958). Wie `careFor`
+// einmal je Seitenaufruf geladen und von allen vier Tabs geteilt: sie haengt an
+// der Person, nicht am Tab.
+//
+// SPARSE wie serverseitig - was hier fehlt, ist 'private'. Faellt die Abfrage
+// aus, bleibt die Karte leer und jedes Formular steht auf 'privat': der engere
+// Wert ist der richtige Ausgang, wenn man die Wahl gerade nicht kennt.
+let visibilityDefaults = {};
+
+/** Was das Formular dieses Bereichs vorauswaehlt. */
+function defaultVisibility(scopeKey) {
+  return visibilityDefaults[scopeKey] === 'family' ? 'family' : 'private';
+}
+
+/** Scope-Schluessel einer Vitalmetrik - dieselbe Schreibweise wie im Server. */
+function vitalScopeKey(type) {
+  return `vital:${String(type || '')}`;
+}
+
+async function loadVisibilityDefaults() {
+  try {
+    visibilityDefaults = (await api.get('/health/visibility-defaults'))?.data?.defaults || {};
+  } catch {
+    visibilityDefaults = {};
+  }
+}
+
 // Personen, für die diese Person eintragen darf (#584). Einmal je Seitenaufruf
 // geladen und für alle Tabs geteilt - die Betreuung hängt am Nutzer, nicht am Tab.
 let careFor = [];
@@ -335,7 +362,7 @@ export async function render(container, ctx = {}) {
   overview.meId = ctx.user?.id ?? overview.meId;
   overview.root = null;
   overview.loaded = false;
-  await Promise.all([loadHealthPrefs(), loadCareGrants()]);
+  await Promise.all([loadHealthPrefs(), loadCareGrants(), loadVisibilityDefaults()]);
   const activeRoute = normalizeHealthPath(window.location.pathname);
   const panels = PANELS().filter((panel) => cycleEnabled || panel.route !== '/health/cycle');
 
@@ -1067,8 +1094,8 @@ function openVitalModal(opts = {}) {
           <div class="form-field">
             <label class="label" for="vital-visibility">${esc(t('health.vitals.field.visibility'))}</label>
             <select class="input" id="vital-visibility">
-              <option value="private">${esc(t('health.vitals.visibility.private'))}</option>
-              <option value="family">${esc(t('health.vitals.visibility.family'))}</option>
+              <option value="private"${defaultVisibility(vitalScopeKey(vitals.selectedType)) === 'family' ? '' : ' selected'}>${esc(t('health.vitals.visibility.private'))}</option>
+              <option value="family"${defaultVisibility(vitalScopeKey(vitals.selectedType)) === 'family' ? ' selected' : ''}>${esc(t('health.vitals.visibility.family'))}</option>
             </select>
           </div>
         </div>
@@ -1096,10 +1123,22 @@ function openVitalModal(opts = {}) {
       };
       paintFields();
 
+      // Die Voreinstellung haengt an der METRIK (#958): Blutdruck kann
+      // familiensichtbar sein und die Stimmung privat. Beim Typwechsel zieht
+      // das Feld deshalb mit - aber NUR, solange niemand es selbst angefasst
+      // hat. Eine bewusst getroffene Wahl darf ein Typwechsel nicht
+      // zurueckdrehen; sie waere sonst weg, ohne dass es jemand sieht.
+      const visibilitySelect = panel.querySelector('#vital-visibility');
+      let visibilityTouched = false;
+      visibilitySelect?.addEventListener('change', () => { visibilityTouched = true; });
+
       typeSelect.addEventListener('change', () => {
         fieldsHost.replaceChildren();
         fieldsHost.insertAdjacentHTML('beforeend', valueFieldsMarkup(typeSelect.value));
         paintFields();
+        if (!visibilityTouched && visibilitySelect) {
+          visibilitySelect.value = defaultVisibility(vitalScopeKey(typeSelect.value));
+        }
       });
 
       panel.querySelector('[data-action="cancel"]')?.addEventListener('click', () => closeModal({ force: true }));
@@ -2212,8 +2251,8 @@ function openMedModal(med) {
         <div class="form-field">
           <label class="label" for="med-visibility">${esc(t('health.meds.field.visibility'))}</label>
           <select class="input" id="med-visibility">
-            <option value="private" ${med?.visibility === 'family' ? '' : 'selected'}>${esc(t('health.meds.visibility.private'))}</option>
-            <option value="family" ${med?.visibility === 'family' ? 'selected' : ''}>${esc(t('health.meds.visibility.family'))}</option>
+            <option value="private" ${(med?.visibility || defaultVisibility('meds')) === 'family' ? '' : 'selected'}>${esc(t('health.meds.visibility.private'))}</option>
+            <option value="family" ${(med?.visibility || defaultVisibility('meds')) === 'family' ? 'selected' : ''}>${esc(t('health.meds.visibility.family'))}</option>
           </select>
         </div>
         <div class="form-field">
@@ -2859,8 +2898,8 @@ function openLabModal(report) {
         <div class="form-field">
           <label class="label" for="lab-visibility">${esc(t('health.labs.field.visibility'))}</label>
           <select class="input" id="lab-visibility">
-            <option value="private" ${report?.visibility === 'family' ? '' : 'selected'}>${esc(t('health.labs.visibility.private'))}</option>
-            <option value="family" ${report?.visibility === 'family' ? 'selected' : ''}>${esc(t('health.labs.visibility.family'))}</option>
+            <option value="private" ${(report?.visibility || defaultVisibility('labs')) === 'family' ? '' : 'selected'}>${esc(t('health.labs.visibility.private'))}</option>
+            <option value="family" ${(report?.visibility || defaultVisibility('labs')) === 'family' ? 'selected' : ''}>${esc(t('health.labs.visibility.family'))}</option>
           </select>
         </div>
         <div class="form-field">
@@ -3430,8 +3469,8 @@ function openActivityModal(row, opts = {}) {
           <div class="form-field">
             <label class="label" for="activity-visibility">${esc(t('health.activity.field.visibility'))}</label>
             <select class="input" id="activity-visibility">
-              <option value="private" ${row?.visibility === 'family' ? '' : 'selected'}>${esc(t('health.activity.visibility.private'))}</option>
-              <option value="family" ${row?.visibility === 'family' ? 'selected' : ''}>${esc(t('health.activity.visibility.family'))}</option>
+              <option value="private" ${(row?.visibility || defaultVisibility('activities')) === 'family' ? '' : 'selected'}>${esc(t('health.activity.visibility.private'))}</option>
+              <option value="family" ${(row?.visibility || defaultVisibility('activities')) === 'family' ? 'selected' : ''}>${esc(t('health.activity.visibility.family'))}</option>
             </select>
           </div>
         </div>

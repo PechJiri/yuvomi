@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "inte inställd",
         "memberSsoOnlyLabel": "Endast SSO-inloggning",
         "memberSsoOnlyHint": "Kontot får inget lösenord. Medlemmen kan bara logga in via SSO.",
-        "memberSsoOnlyEditHint": "Med reglaget på förlorar kontot sitt lösenord och kommer bara in via SSO. För att stänga av det måste ett nytt lösenord anges."
+        "memberSsoOnlyEditHint": "Med reglaget på förlorar kontot sitt lösenord och kommer bara in via SSO. För att stänga av det måste ett nytt lösenord anges.",
+        "healthVisibilityTitle": "Standardsynlighet",
+        "healthVisibilityHint": "Vad nya poster börjar som. Du kan ändra det för varje post.",
+        "healthVisibilityOther": "Andra områden",
+        "healthVisibilityApply": "Ändra även befintliga poster",
+        "healthVisibilityApplyHint": "Sparat. Ska de befintliga posterna under {{area}} också ändras?",
+        "healthVisibilityApplied": "{{count}} poster ändrade.",
+        "healthVisibilityApplied_one": "En post ändrad."
     },
     "login": {
         "tagline": "Välkommen tillbaka till din familjeplanerare.",

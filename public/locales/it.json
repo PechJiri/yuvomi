@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "non configurato",
         "memberSsoOnlyLabel": "Solo accesso con SSO",
         "memberSsoOnlyHint": "L'account non riceve alcuna password. Il membro può accedere solo tramite SSO.",
-        "memberSsoOnlyEditHint": "Con l'interruttore attivo l'account perde la sua password ed entra solo tramite SSO. Per disattivarlo occorre impostare una nuova password."
+        "memberSsoOnlyEditHint": "Con l'interruttore attivo l'account perde la sua password ed entra solo tramite SSO. Per disattivarlo occorre impostare una nuova password.",
+        "healthVisibilityTitle": "Visibilità predefinita",
+        "healthVisibilityHint": "Come nascono le nuove voci. Puoi cambiarlo per ogni voce.",
+        "healthVisibilityOther": "Altre aree",
+        "healthVisibilityApply": "Aggiorna anche le voci esistenti",
+        "healthVisibilityApplyHint": "Salvato. Vuoi aggiornare anche le voci esistenti in {{area}}?",
+        "healthVisibilityApplied": "{{count}} voci aggiornate.",
+        "healthVisibilityApplied_one": "Una voce aggiornata."
     },
     "login": {
         "tagline": "Bentornato nel tuo pianificatore familiare.",

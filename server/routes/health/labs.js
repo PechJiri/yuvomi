@@ -7,6 +7,7 @@
 import express from 'express';
 import * as db from '../../db.js';
 import * as v from '../../middleware/validate.js';
+import { defaultVisibilityFor } from './visibility-defaults.js';
 import {
   log, VISIBILITIES, MAX_UNIT,
   viewerId, careAwareClause, applyUpdate, badRequest, deriveFlag, attachResults,
@@ -127,7 +128,8 @@ router.post('/labs', (req, res) => {
     `);
 
     const tx = db.get().transaction(() => {
-      const rep = insertReport.run(owner.ownerId, reportDate.value, labName.value, note.value, visibility.value || 'private');
+      const rep = insertReport.run(owner.ownerId, reportDate.value, labName.value, note.value,
+        visibility.value || defaultVisibilityFor(db.get(), owner.ownerId, 'labs'));
       const reportId = rep.lastInsertRowid;
       for (const r of preparedResults) {
         insertResult.run(reportId, r.analyte, r.value_num, r.unit, r.ref_low, r.ref_high, r.flag);

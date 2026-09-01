@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "未设置",
         "memberSsoOnlyLabel": "仅通过 SSO 登录",
         "memberSsoOnlyHint": "该账户不会设置密码，成员只能通过 SSO 登录。",
-        "memberSsoOnlyEditHint": "开关打开时，账户将失去密码，只能通过 SSO 进入。关闭时必须设置新密码。"
+        "memberSsoOnlyEditHint": "开关打开时，账户将失去密码，只能通过 SSO 进入。关闭时必须设置新密码。",
+        "healthVisibilityTitle": "默认可见范围",
+        "healthVisibilityHint": "新记录的初始值。每次记录时仍可更改。",
+        "healthVisibilityOther": "其他板块",
+        "healthVisibilityApply": "同时修改已有记录",
+        "healthVisibilityApplyHint": "已保存。是否也修改 {{area}} 中的已有记录？",
+        "healthVisibilityApplied": "已修改 {{count}} 条记录。",
+        "healthVisibilityApplied_one": "已修改 1 条记录。"
     },
     "login": {
         "tagline": "欢迎回到您的家庭计划工具。",

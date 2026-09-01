@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "غير مُعَدّ",
         "memberSsoOnlyLabel": "تسجيل الدخول بـ SSO فقط",
         "memberSsoOnlyHint": "لن يحصل الحساب على كلمة مرور. لا يمكن للعضو تسجيل الدخول إلا عبر SSO.",
-        "memberSsoOnlyEditHint": "عند تفعيل هذا الخيار يفقد الحساب كلمة مروره ولا يدخل إلا عبر SSO. لإيقافه يجب تعيين كلمة مرور جديدة."
+        "memberSsoOnlyEditHint": "عند تفعيل هذا الخيار يفقد الحساب كلمة مروره ولا يدخل إلا عبر SSO. لإيقافه يجب تعيين كلمة مرور جديدة.",
+        "healthVisibilityTitle": "الظهور الافتراضي",
+        "healthVisibilityHint": "القيمة التي تبدأ بها الإدخالات الجديدة. يمكنك تغييرها مع كل إدخال.",
+        "healthVisibilityOther": "مجالات أخرى",
+        "healthVisibilityApply": "غيّر الإدخالات الموجودة أيضاً",
+        "healthVisibilityApplyHint": "تم الحفظ. هل تُغيَّر أيضاً الإدخالات الموجودة في {{area}}؟",
+        "healthVisibilityApplied": "تم تغيير {{count}} إدخالاً.",
+        "healthVisibilityApplied_one": "تم تغيير إدخال واحد."
     },
     "login": {
         "tagline": "مرحبًا بعودتك إلى منظّم عائلتك.",

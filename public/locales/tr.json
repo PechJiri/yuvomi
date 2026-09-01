@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "kurulmadı",
         "memberSsoOnlyLabel": "Yalnızca SSO ile giriş",
         "memberSsoOnlyHint": "Hesap şifre almaz. Üye yalnızca SSO ile giriş yapabilir.",
-        "memberSsoOnlyEditHint": "Anahtar açıkken hesap şifresini kaybeder ve yalnızca SSO ile girer. Kapatmak için yeni bir şifre belirlenmelidir."
+        "memberSsoOnlyEditHint": "Anahtar açıkken hesap şifresini kaybeder ve yalnızca SSO ile girer. Kapatmak için yeni bir şifre belirlenmelidir.",
+        "healthVisibilityTitle": "Varsayılan görünürlük",
+        "healthVisibilityHint": "Yeni kayıtların hangi değerle başlayacağı. Her kayıtta değiştirebilirsin.",
+        "healthVisibilityOther": "Diğer alanlar",
+        "healthVisibilityApply": "Mevcut kayıtları da değiştir",
+        "healthVisibilityApplyHint": "Kaydedildi. {{area}} altındaki mevcut kayıtlar da değiştirilsin mi?",
+        "healthVisibilityApplied": "{{count}} kayıt değiştirildi.",
+        "healthVisibilityApplied_one": "Bir kayıt değiştirildi."
     },
     "login": {
         "tagline": "Aile planlayıcına tekrar hoş geldin.",

@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "nincs beállítva",
         "memberSsoOnlyLabel": "Csak SSO-bejelentkezés",
         "memberSsoOnlyHint": "A fiók nem kap jelszót. A tag csak SSO-val tud bejelentkezni.",
-        "memberSsoOnlyEditHint": "Bekapcsolt kapcsolóval a fiók elveszíti a jelszavát, és csak SSO-val jut be. A kikapcsoláshoz új jelszót kell megadni."
+        "memberSsoOnlyEditHint": "Bekapcsolt kapcsolóval a fiók elveszíti a jelszavát, és csak SSO-val jut be. A kikapcsoláshoz új jelszót kell megadni.",
+        "healthVisibilityTitle": "Alapértelmezett láthatóság",
+        "healthVisibilityHint": "Milyen értékkel indulnak az új bejegyzések. Minden bejegyzésnél módosíthatod.",
+        "healthVisibilityOther": "További területek",
+        "healthVisibilityApply": "A meglévő bejegyzések is változzanak",
+        "healthVisibilityApplyHint": "Mentve. A(z) {{area}} meglévő bejegyzései is változzanak?",
+        "healthVisibilityApplied": "{{count}} bejegyzés módosítva.",
+        "healthVisibilityApplied_one": "Egy bejegyzés módosítva."
     },
     "login": {
         "tagline": "Üdv újra a családi tervezőben.",

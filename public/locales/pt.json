@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "não configurado",
         "memberSsoOnlyLabel": "Apenas início de sessão com SSO",
         "memberSsoOnlyHint": "A conta não recebe senha. O membro só pode iniciar sessão através de SSO.",
-        "memberSsoOnlyEditHint": "Com o interruptor ligado, a conta perde a sua senha e só entra através de SSO. Para o desligar é preciso definir uma nova senha."
+        "memberSsoOnlyEditHint": "Com o interruptor ligado, a conta perde a sua senha e só entra através de SSO. Para o desligar é preciso definir uma nova senha.",
+        "healthVisibilityTitle": "Visibilidade padrão",
+        "healthVisibilityHint": "Como as novas entradas começam. Podes alterar isso em cada entrada.",
+        "healthVisibilityOther": "Outras áreas",
+        "healthVisibilityApply": "Alterar também as existentes",
+        "healthVisibilityApplyHint": "Guardado. Queres alterar também as entradas existentes em {{area}}?",
+        "healthVisibilityApplied": "{{count}} entradas alteradas.",
+        "healthVisibilityApplied_one": "Uma entrada alterada."
     },
     "login": {
         "tagline": "Bem-vindo de volta ao teu planeador familiar.",

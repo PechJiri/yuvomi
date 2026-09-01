@@ -2532,7 +2532,14 @@
         "twoFactorMemberOff": "non configuré",
         "memberSsoOnlyLabel": "Connexion SSO uniquement",
         "memberSsoOnlyHint": "Le compte ne reçoit pas de mot de passe. Le membre ne peut se connecter que via le SSO.",
-        "memberSsoOnlyEditHint": "Lorsque l'option est activée, le compte perd son mot de passe et n'entre plus que via le SSO. Pour la désactiver, il faut définir un nouveau mot de passe."
+        "memberSsoOnlyEditHint": "Lorsque l'option est activée, le compte perd son mot de passe et n'entre plus que via le SSO. Pour la désactiver, il faut définir un nouveau mot de passe.",
+        "healthVisibilityTitle": "Visibilité par défaut",
+        "healthVisibilityHint": "Ce que sont les nouvelles entrées au départ. Tu peux le changer à chaque saisie.",
+        "healthVisibilityOther": "Autres domaines",
+        "healthVisibilityApply": "Modifier aussi les entrées existantes",
+        "healthVisibilityApplyHint": "Enregistré. Faut-il aussi modifier les entrées existantes de {{area}} ?",
+        "healthVisibilityApplied": "{{count}} entrées modifiées.",
+        "healthVisibilityApplied_one": "Une entrée modifiée."
     },
     "login": {
         "tagline": "Bon retour sur votre planificateur familial.",

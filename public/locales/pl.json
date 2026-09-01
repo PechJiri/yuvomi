@@ -2544,7 +2544,14 @@
         "twoFactorMemberOff": "nieskonfigurowane",
         "memberSsoOnlyLabel": "Tylko logowanie przez SSO",
         "memberSsoOnlyHint": "Konto nie otrzyma hasła. Członek może zalogować się wyłącznie przez SSO.",
-        "memberSsoOnlyEditHint": "Przy włączonym przełączniku konto traci hasło i wchodzi już tylko przez SSO. Aby go wyłączyć, trzeba ustawić nowe hasło."
+        "memberSsoOnlyEditHint": "Przy włączonym przełączniku konto traci hasło i wchodzi już tylko przez SSO. Aby go wyłączyć, trzeba ustawić nowe hasło.",
+        "healthVisibilityTitle": "Domyślna widoczność",
+        "healthVisibilityHint": "Z czym startują nowe wpisy. Przy każdym wpisie możesz to zmienić.",
+        "healthVisibilityOther": "Pozostałe obszary",
+        "healthVisibilityApply": "Zmień też istniejące wpisy",
+        "healthVisibilityApplyHint": "Zapisano. Czy zmienić także istniejące wpisy w obszarze {{area}}?",
+        "healthVisibilityApplied": "Zmieniono wpisów: {{count}}.",
+        "healthVisibilityApplied_one": "Zmieniono jeden wpis."
     },
     "login": {
         "tagline": "Witaj ponownie w swoim planerze rodzinnym.",

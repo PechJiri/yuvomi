@@ -2544,7 +2544,14 @@
         "twoFactorMemberOff": "تنظیم‌نشده",
         "memberSsoOnlyLabel": "فقط ورود با SSO",
         "memberSsoOnlyHint": "این حساب رمز عبوری دریافت نمی‌کند. عضو تنها می‌تواند از طریق SSO وارد شود.",
-        "memberSsoOnlyEditHint": "با روشن بودن این کلید، حساب رمز عبور خود را از دست می‌دهد و فقط از طریق SSO وارد می‌شود. برای خاموش کردن باید رمز عبور جدیدی تعیین شود."
+        "memberSsoOnlyEditHint": "با روشن بودن این کلید، حساب رمز عبور خود را از دست می‌دهد و فقط از طریق SSO وارد می‌شود. برای خاموش کردن باید رمز عبور جدیدی تعیین شود.",
+        "healthVisibilityTitle": "نمایش پیش‌فرض",
+        "healthVisibilityHint": "مقداری که ورودی‌های تازه با آن آغاز می‌شوند. در هر ورودی قابل تغییر است.",
+        "healthVisibilityOther": "بخش‌های دیگر",
+        "healthVisibilityApply": "ورودی‌های موجود هم تغییر کنند",
+        "healthVisibilityApplyHint": "ذخیره شد. ورودی‌های موجود در {{area}} هم تغییر کنند؟",
+        "healthVisibilityApplied": "{{count}} ورودی تغییر کرد.",
+        "healthVisibilityApplied_one": "یک ورودی تغییر کرد."
     },
     "login": {
         "tagline": "دوباره به برنامه‌ریز خانوادگی‌تان خوش آمدید.",

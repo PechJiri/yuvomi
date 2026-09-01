@@ -8,6 +8,7 @@
 import express from 'express';
 import * as db from '../../db.js';
 import * as v from '../../middleware/validate.js';
+import { defaultVisibilityFor } from './visibility-defaults.js';
 import {
   log, VISIBILITIES, LOG_STATUS, MAX_UNIT,
   viewerId, careAwareClause, toBit, applyUpdate, badRequest,
@@ -120,7 +121,8 @@ router.post('/medications', (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(owner.ownerId, name.value, dosageText.value, form.value,
            active === undefined ? 1 : active, prn === undefined ? 0 : prn,
-           stockQty.value, stockUnit.value, refill.value, note.value, visibility.value || 'private',
+           stockQty.value, stockUnit.value, refill.value, note.value,
+           visibility.value || defaultVisibilityFor(db.get(), owner.ownerId, 'meds'),
            interval.value, prnDoseQty.value);
 
     const row = db.get().prepare('SELECT * FROM medications WHERE id = ?').get(result.lastInsertRowid);
