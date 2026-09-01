@@ -1280,11 +1280,6 @@
   transition: background-color var(--transition-fast);
 }
 
-.kanban-col__body--over {
-  background-color: var(--color-accent-light);
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-}
-
 .kanban-card {
   background-color: var(--color-surface);
   border-radius: var(--radius-sm);
@@ -1300,16 +1295,26 @@
   box-shadow: var(--shadow-md);
 }
 
-.kanban-card--dragging {
-  opacity: 0.4;
+/* Die drei Zustände eines Zugs heißen seit #808 auch hier, wie sie überall im
+ * Haus heißen: SortableJS setzt `sortable-chosen` auf die aufgenommene Karte,
+ * `sortable-ghost` auf den Platzhalter an der Zielstelle und `sortable-drag`
+ * auf das mitgeführte Abbild. Vorher trug das Board eigene Namen für dieselben
+ * drei Dinge, weil es einen eigenen Drag hatte. */
+.kanban-card.sortable-chosen {
   cursor: grabbing;
-  transform: rotate(1.5deg);
 }
 
-.kanban-card--ghost {
-  position: fixed;
-  z-index: var(--z-drag);
-  pointer-events: none;
+/* Der Platzhalter zeigt, WO die Karte landet - er ist die Zielmarke, die vorher
+ * ein eigenes leeres div (`.kanban-drop-placeholder`) und eine eingefärbte
+ * Spalte übernommen haben. Er steht an der genaueren Stelle als beide. */
+.kanban-card.sortable-ghost {
+  opacity: 0.4;
+  border: var(--space-px) dashed var(--module-accent, var(--color-accent));
+  background-color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-state), transparent);
+  box-shadow: none;
+}
+
+.kanban-card.sortable-drag {
   opacity: 0.88;
   box-shadow: var(--shadow-xl);
   transform: rotate(2deg) scale(1.03);
@@ -1380,14 +1385,6 @@
   pointer-events: none;
 }
 
-.kanban-drop-placeholder {
-  height: 60px;
-  border: 2px dashed var(--color-accent);
-  border-radius: var(--radius-sm);
-  background-color: var(--color-accent-light);
-  opacity: 0.5;
-}
-
 /* Leere Spalte: ruhiger Hinweis, dass hier (noch) nichts liegt - statt einer
  * stummen Lücke (Audit P3). Beim Ziehen einer Karte wird die Spalte zur sichtbaren
  * Ablagefläche ("Hierher ziehen"), damit auch leere Spalten als Ziel erkennbar
@@ -1412,19 +1409,24 @@
 }
 
 /* Während ein Karten-Drag läuft: leere Spalten laden aktiv zum Ablegen ein.
+ * Die Frage "wird gerade gezogen?" beantwortet das DOM selbst - `sortable-chosen`
+ * hängt an der aufgenommenen Karte und verschwindet mit ihr. Vorher setzte der
+ * eigene Drag-Code dafür eine Klasse am Board und musste sie in jedem Ausgang
+ * wieder abräumen, auch im folgenlosen; ein vergessener Pfad hätte die Spalten
+ * für immer leuchten lassen.
  * Modul-Akzent (grün auf der Aufgaben-Seite), damit die Affordanz zur restlichen
  * Modulfarbe passt statt zum globalen Akzent. */
-.kanban-board--dragging .kanban-col__empty {
+.kanban-board:has(.sortable-chosen) .kanban-col__empty {
   border-color: var(--module-accent, var(--color-accent));
   color: var(--module-accent, var(--color-accent));
   background-color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-state), transparent);
 }
 
-.kanban-board--dragging .kanban-col__empty-idle {
+.kanban-board:has(.sortable-chosen) .kanban-col__empty-idle {
   display: none;
 }
 
-.kanban-board--dragging .kanban-col__empty-drop {
+.kanban-board:has(.sortable-chosen) .kanban-col__empty-drop {
   display: inline;
 }
 

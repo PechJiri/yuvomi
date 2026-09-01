@@ -40,6 +40,22 @@ function caption(photo) {
 }
 
 async function start() {
+  // A running kitchen timer (#844) keeps the screensaver away. A countdown that
+  // disappears behind a photo is not a timer, and the wall tablet is exactly
+  // where both of these live. The attribute is the one source, set by
+  // components/wall-timer.js; it is dropped the moment the timer rings, so a
+  // finished timer nobody acknowledged does not block the screensaver forever.
+  if (document.documentElement.hasAttribute('data-wall-timer')) {
+    // Knock again instead of consuming the only scheduled attempt. `start()` is
+    // called from a one-shot idle timeout; returning here without rescheduling
+    // left the screensaver off until the next pointer, key or visibility event -
+    // and on a wall tablet, "the next event" can be hours away. This way the
+    // timer only postpones the screensaver, it does not switch it off.
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(start, IDLE_MS);
+    return false;
+  }
+
   const currentRun = ++run;
   try {
     const payload = await api.get('/screensaver/photos');

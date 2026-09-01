@@ -29,7 +29,8 @@ import {
 } from '/utils/dashboard-widgets.js';
 import { whoMark } from '/utils/seal-pair.js';
 import { MODULE_ICON, moduleIconHTML } from '/nav-icons.js';
-import { exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
+import { enterWallMode, exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
+import { renderWallTimer, wireWallTimer } from '/components/wall-timer.js';
 import { rememberLayoutHint, layoutHintSizes, layoutHintQuery } from '/utils/dashboard-layout-hint.js';
 import { emptyHintHTML } from '/utils/empty-state.js';
 import { quickLinkHost } from '/utils/quick-link-url.js';
@@ -2295,6 +2296,28 @@ function renderDashboardOverview(user, editing = false, weather = null, updatedA
             <button class="btn btn--secondary" id="dashboard-customize-cancel">${t('common.cancel')}</button>
             <button class="btn btn--primary" id="dashboard-customize-save">${t('common.save')}</button>
           </div>` : ''}
+          <!-- DER EINSTIEG SITZT DA, WO DER AUSSTIEG SITZT (#915). Der Wandmodus
+               liess sich nur unter Einstellungen -> Persoenlich -> Darstellung
+               einschalten, verlassen aber hier auf der Uebersicht - man ging
+               dort hinaus, wo man nicht hineinkam.
+
+               Kein eigener Schalter dafuer, ob dieser Knopf erscheint: er
+               laege in denselben Einstellungen, in denen der Modus selbst
+               schon steht, und waere ein zweiter Schalter fuer eine Sache.
+               Auch keine Regel nach Geraeteform - ein falsch versteckter
+               Einstieg ist wieder unauffindbar und verschoebe das Problem nur.
+               Er ist ein Icon-Knopf wie der daneben und traegt sich so leise
+               wie der.
+
+               Im Anpassen-Modus faellt er weg: dort geht es um die Anordnung
+               der Kacheln, und ein Moduswechsel mittendrin wuerfe eine
+               ungespeicherte Bearbeitung weg. -->
+          ${editing ? '' : `
+          <button class="dashboard-icon-btn" id="dashboard-wall-enter"
+                  aria-label="${t('dashboard.wallEnter')}"
+                  title="${t('dashboard.wallEnter')}">
+            <i data-lucide="maximize-2" aria-hidden="true"></i>
+          </button>`}
           <button class="dashboard-icon-btn" id="dashboard-customize-btn"
                   aria-label="${editing ? t('dashboard.customizeExit') : t('dashboard.customize')}"
                   title="${editing ? t('dashboard.customizeExit') : t('dashboard.customize')}"
@@ -3376,15 +3399,22 @@ function renderWallSurface(data, weather, { failed = false, loading = false, upd
     ? `<p class="wall__updated">${esc(t('dashboard.updatedAt', { time: formatTime(updatedAt) }))}</p>`
     : '<p class="wall__updated"></p>';
 
+  // Der Kuechentimer (#844). Er wird auch im Lade- und Fehlerzustand gebaut: er
+  // haengt an nichts, was geladen werden koennte, und ein laufender Timer, der
+  // beim naechsten Netzfehler verschwaende, waere schlimmer als gar keiner.
+  const timer = renderWallTimer();
+
   return `
     <div class="wall">
       ${renderClockWidget({ wall: true })}
       <div class="wall__stage${failed || loading ? ' wall__stage--single' : ''}">${main}</div>
+      ${timer.display}
       <div class="wall__foot">
         ${stamp}
-        <button type="button" class="wall__exit" id="wall-exit" aria-label="${esc(t('dashboard.wallExit'))}">
+        ${timer.controls}
+        <button type="button" class="wall__foot-btn" id="wall-exit" aria-label="${esc(t('dashboard.wallExit'))}">
           <i data-lucide="minimize-2" aria-hidden="true"></i>
-          <span class="wall__exit-label" aria-hidden="true">${esc(t('dashboard.wallExit'))}</span>
+          <span class="wall__foot-btn-label" aria-hidden="true">${esc(t('dashboard.wallExit'))}</span>
         </button>
       </div>
     </div>`;
@@ -3412,20 +3442,43 @@ function wireWallSurface(container, rerender, signal) {
   }
   signal.addEventListener('abort', () => clearTimeout(awakeTimer));
 
+  wireWallTimer(wall, rerender, signal);
+}
+
+/**
+ * Der Ausstieg - datenunabhaengig, und deshalb getrennt vom Rest.
+ *
+ * Er stand bis zum Review in `wireWallSurface` und wurde damit erst verdrahtet,
+ * wenn die Dashboard-Daten da waren. Auf der Ladeflaeche ist der Knopf sichtbar,
+ * aber tot; haengt die Anfrage, kommt niemand mehr aus dem Wandmodus heraus -
+ * in der installierten PWA ohne Browserleiste heisst das: gar nicht mehr.
+ *
+ * Er haengt am CONTAINER, nicht am Knopf: `setHtml` tauscht dessen Inhalt aus,
+ * der Container selbst bleibt. So ueberlebt die eine Verdrahtung beide Renders,
+ * und es braucht keinen zweiten Aufruf, der Escape ein zweites Mal registrierte.
+ */
+function wireWallExit(container, rerender, signal) {
   const leave = () => {
     exitWallMode();
-    // Der Toast sagt, WO der Schalter sitzt - wer versehentlich aussteigt, soll
-    // nicht suchen muessen. Die beiden Namen kommen aus ihren eigenen
-    // Schluesseln statt aus dem Satz: sonst driftet die Wegbeschreibung, sobald
-    // das Blatt umbenannt wird.
+    // Der Toast sagt, WO der Weg zurueck liegt - wer versehentlich aussteigt,
+    // soll nicht suchen muessen. Der Name kommt aus dem Schluessel des Knopfes
+    // statt aus dem Satz: sonst driftet die Wegbeschreibung, sobald der Knopf
+    // umbenannt wird.
+    //
+    // Er zeigte bis #915 in die Einstellungen, weil der Modus dort als einziges
+    // eingeschaltet werden konnte. Das war nie falsch, aber seit der Einstieg in
+    // der Werkzeugzeile steht, waere es der Umweg - und ein Hinweis, der den
+    // Umweg nennt, waehrend der kurze Weg sichtbar danebenliegt, ist eine
+    // schlechtere Auskunft als gar keiner.
     window.yuvomi?.showToast(t('dashboard.wallExited', {
-      settings: t('nav.settings'),
-      page: t('settings.pageAppearance'),
+      action: t('dashboard.wallEnter'),
     }), 'success', 6000);
     rerender();
   };
 
-  container.querySelector('#wall-exit')?.addEventListener('click', leave, { signal });
+  container.addEventListener('click', (event) => {
+    if (event.target.closest('#wall-exit')) leave();
+  }, { signal });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') leave();
   }, { signal });
@@ -3734,6 +3787,26 @@ export async function render(container, { user }) {
     ${wallMode ? '' : renderFab()}
   `);
 
+  const rerender = () => render(container, { user });
+
+  // DER TIMER HAENGT NICHT AN DEN DATEN (Review zu #844). Die Wandflaeche wird
+  // erst verdrahtet, wenn das Dashboard geladen hat - der Timer aber ist von
+  // diesen Daten unabhaengig, und ein Neuzeichnen bricht den vorigen Controller
+  // sofort ab. Startete jemand einen Timer, waehrend die Anfrage haengt, waeren
+  // Takt und `data-wall-timer` weg, bis die Antwort kommt: die Anzeige stuende
+  // still, es laeutete nicht, und der Screensaver duerfte sich darueberlegen.
+  //
+  // Er wird deshalb verdrahtet, sobald die Flaeche im DOM steht. Der Aufruf
+  // nach dem Laden bleibt und ersetzt diesen hier - `wireWallTimer` raeumt
+  // seinen vorigen Takt selbst ab.
+  if (wallMode) {
+    wireWallTimer(container.querySelector('.wall'), rerender, _fabController.signal);
+    // Der Ausstieg gehoert zur selben Sorte: er haengt an nichts, was geladen
+    // wird. Einmal verdrahtet, ueber den Container - er ueberlebt das zweite
+    // Rendern und braucht keinen zweiten Aufruf.
+    wireWallExit(container, rerender, _fabController.signal);
+  }
+
   let data         = { upcomingEvents: [], urgentTasks: [], todayMeals: [], pinnedNotes: [], shoppingLists: [], birthdays: [], countdowns: [], users: [], budget: {}, rewards: {}, health: {}, housekeeping: {} };
   // Ein Stand von vorhin darf keine Kachel versprechen: erst nach dem Laden
   // wieder wahr (siehe die Notiz an `countdownAvailable`).
@@ -3850,7 +3923,6 @@ export async function render(container, { user }) {
     await ensureCycleSlice();
   }
 
-  const rerender = () => render(container, { user });
 
   // Einziger Persist-Pfad für Inline- UND Modal-Speichern. Legt vor dem Schreiben
   // einen Schnappschuss an und bietet — wenn sich etwas geändert hat — im Toast ein
@@ -4225,6 +4297,10 @@ export async function render(container, { user }) {
       weather = updatedWeather;
       rebuildDashboard(cfg);
     });
+    container.querySelector('#dashboard-wall-enter')?.addEventListener('click', () => {
+      enterWallMode();
+      rerender();
+    }, { signal: _fabController.signal });
     container.querySelector('#dashboard-customize-btn')?.addEventListener('click', () => {
       isCustomizing = !isCustomizing;
       if (!isCustomizing) {
@@ -4373,7 +4449,7 @@ export async function render(container, { user }) {
   }
 }
 
-export const __test = { buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWallWeather, relativeDateLabel };
+export const __test = { buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, renderDashboardOverview, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWallWeather, relativeDateLabel };
 
 function wireWeatherRefresh(container, onUpdated = null) {
   const refreshBtn = container.querySelector('#weather-refresh-btn');

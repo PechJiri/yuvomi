@@ -10398,7 +10398,55 @@ test('Jeder Sortable-Nutzer hat einen tastaturbedienbaren Reorder-Pfad', () => {
   // Als Pfad zählt eine Tastenbehandlung, die die Reihenfolge ändert: entweder
   // Auf/Ab-Bedienelemente (Kategorie-Manager) oder Pfeiltasten an einem
   // fokussierbaren Griff (Einkaufsliste, #678).
+  //
   const violations = [];
+
+  // DRITTER FALL SEIT #808: eine Liste, die gar nicht sortiert (`sort: false`),
+  // hat keine Reihenfolge, die eine Pfeiltaste ändern könnte. Das Aufgabenboard
+  // schiebt Karten zwischen Spalten, und sein Tastaturweg ist der
+  // Weiterschalt-Knopf auf jeder Karte. Der Guard hätte ihn nicht erkannt und
+  // wäre beim Richtigstellen rot geworden - dann liegt der Guard falsch, nicht
+  // der Code.
+  //
+  // Geprüft wird die Sache statt der Schreibweise, und zwar genau die, die der
+  // Kopf von sortable.js verlangt: ein Pfad, "der DENSELBEN Persistenz-Handler
+  // aufruft". Zwei getrennte Wege, die dasselbe zu tun behaupten, laufen
+  // auseinander, sobald einer einen Sonderfall bekommt.
+  //
+  // DIE ERSTE FASSUNG WAR EINE FREIKARTE MIT UMWEG (Review zu #808). Sie schnitt
+  // alle namensähnlichen Tokens des ersten onEnd-Blocks mit denen aller
+  // Klick-Handler der Datei: `api.patch()` an zwei unabhängigen Stellen ergab
+  // den geteilten Namen `patch`, `String()` war nicht ausgeschlossen, und EIN
+  // `sort: false` irgendwo in der Datei befreite jeden anderen Sortable darin.
+  // Deshalb jetzt: je makeSortable-Aufruf einzeln, nur im Datei-eigenen
+  // Funktionsnamen, und keine Methodenaufrufe.
+
+  /** Der Argument-Block eines Aufrufs ab `(`, über Klammerbalance abgegrenzt. */
+  function callBlock(source, openParen) {
+    let depth = 0;
+    for (let i = openParen; i < source.length; i++) {
+      if (source[i] === '(') depth++;
+      else if (source[i] === ')') { depth--; if (depth === 0) return source.slice(openParen, i + 1); }
+    }
+    return source.slice(openParen);
+  }
+
+  /**
+   * Namen, die in DIESEM Block aufgerufen werden und in der Datei auch als
+   * Funktion stehen. Ein `x.foo()` zählt nicht: der Name gehört dann einem
+   * fremden Objekt, und zwei Aufrufe von `api.patch()` sind kein geteilter Pfad.
+   */
+  function localCallsIn(block, source) {
+    const defined = new Set([
+      ...[...source.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]),
+      ...[...source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|function\b)/g)].map((m) => m[1]),
+    ]);
+    return new Set(
+      [...block.matchAll(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g)]
+        .map((m) => m[2])
+        .filter((name) => defined.has(name))
+    );
+  }
 
   for (const file of [...walkJsFiles('../public/pages/'), ...walkJsFiles('../public/components/')]) {
     const source = read(file);
@@ -10408,6 +10456,23 @@ test('Jeder Sortable-Nutzer hat einen tastaturbedienbaren Reorder-Pfad', () => {
     const hasMoveButtons = /data-action="(up|down)"/.test(source)
       || /'(up|down)'/.test(source) && /addEventListener\(\s*['"]click['"]/.test(source);
     if (hasArrowKeys || hasMoveButtons) continue;
+
+    // Was aus den Klick-Handlern der Datei heraus läuft - einmal gesammelt.
+    const clickNames = new Set();
+    for (const m of source.matchAll(/addEventListener\(\s*['"]click['"]/g)) {
+      const block = source.slice(m.index, m.index + 2500);
+      for (const name of localCallsIn(block, source)) clickNames.add(name);
+    }
+
+    // Jeder makeSortable-Aufruf muss FÜR SICH bestehen.
+    const offen = [];
+    for (const m of source.matchAll(/\bmakeSortable\s*\(/g)) {
+      const block = callBlock(source, m.index + m[0].length - 1);
+      if (!/sort:\s*false/.test(block)) { offen.push(m.index); continue; }
+      const geteilt = [...localCallsIn(block, source)].filter((n) => clickNames.has(n));
+      if (!geteilt.length) offen.push(m.index);
+    }
+    if (!offen.length) continue;
 
     violations.push(file);
   }

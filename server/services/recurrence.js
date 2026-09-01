@@ -98,11 +98,31 @@ function nextOccurrence(baseDateStr, rrule) {
     }
 
   } else if (freq === 'MONTHLY') {
+    // DIE KLEMMUNG MUSS VOR DEM MONATSWECHSEL STEHEN, NICHT DANACH.
+    //
+    // Vorher lief hier `setUTCMonth(+interval)` auf einem Datum, das noch den
+    // 31. trug - und ein 31. Februar rollt in JavaScript still auf den 3. März
+    // weiter. Die Korrektur danach griff deshalb nie: `lastDay` wurde für den
+    // Monat gerechnet, in den der Überlauf schon geraten war. Der kurze Monat
+    // fiel nicht auf seinen letzten Tag, er fiel ganz aus. Eine monatliche
+    // Aufgabe am 31. kam in sieben von zwölf Monaten, und bei INTERVAL=2 kippte
+    // obendrein der Takt: vom 31. Juli ging es drei Monate weiter auf den
+    // 31. Oktober, weil der übersprungene September den Rhythmus verschob.
+    //
+    // `Date.UTC` normalisiert einen Monatsindex jenseits von 11 von sich aus,
+    // deshalb braucht der Jahreswechsel keine eigene Zeile - und `(month + 1, 0)`
+    // ist der letzte Tag von `month`, gerechnet BEVOR irgendetwas überläuft.
+    //
+    // WAS DAS NICHT BEHEBT: die Klemmung ist ein Wegwerf-Ergebnis. Das nächste
+    // Vorkommen wird vom geklemmten Datum aus weitergerechnet, also bleibt eine
+    // am 31. Januar begonnene Serie ab dem Februar dauerhaft auf dem 28. Dafür
+    // müsste die Regel den gemeinten Tag tragen (BYMONTHDAY, #960) oder die
+    // Serie ihren Ursprung kennen; beides ist mehr als eine Rechenkorrektur.
     const targetDay = base.getUTCDate();
-    next.setUTCMonth(next.getUTCMonth() + interval);
-    // Monatsüberlauf korrigieren (z.B. 31. März + 1 Monat → 30. April)
-    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-    next.setUTCDate(Math.min(targetDay, lastDay));
+    const year      = base.getUTCFullYear();
+    const month     = base.getUTCMonth() + interval;
+    const lastDay   = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    next.setTime(Date.UTC(year, month, Math.min(targetDay, lastDay)));
 
   } else if (freq === 'YEARLY') {
     const targetMonth = base.getUTCMonth();

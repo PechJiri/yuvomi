@@ -23,6 +23,7 @@ import '/components/tag-manager.js';
 import { findPageFab } from '/utils/fab.js';
 import { isSoloHousehold } from '/utils/household.js';
 import { todayKey, parseLocalDateKey } from '/utils/date.js';
+import { makeSortable } from '/utils/sortable.js';
 import { zonedDateKey } from '/utils/timezone.js';
 import { historyDayLabel } from '/utils/day-label.js';
 import {
@@ -792,6 +793,12 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
    * eine gekuerzte Notiz im Summary waere eine schlechtere Notiz. Sie steht
    * deshalb OBEN beim Titel - Titel und Notiz sichtbar, alles andere hinter
    * einem Einstieg, genau wie Apple Erinnerungen es haelt. */
+  // Der Anfangswert des Statusfelds. Ein Bestandswert ausserhalb der Liste
+  // (bis v1.86.2 stand 'archived' darin) faellt auf den ersten Status zurueck -
+  // vorher waehlte in dem Fall der Browser die erste Option, waehrend die
+  // Zusammenfassung noch den alten Wert nannte.
+  const statusValue = STATUSES().find((s) => s.value === task?.status)?.value ?? STATUSES()[0].value;
+
   const advancedSummary = [];
   if (isEdit && task.priority && task.priority !== 'none') {
     advancedSummary.push(PRIORITY_LABELS()[task.priority] ?? task.priority);
@@ -809,8 +816,8 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
   // Regel vorbei. Sie stehen jetzt darin, und gesetzte Werte nennt die
   // Zusammenfassung, wie bei allen anderen. (Sync-Ziel fehlt in der Summary:
   // sein Anzeigename kommt asynchron aus /tasks/sync-targets.)
-  if (isEdit && task.status && task.status !== 'open') {
-    advancedSummary.push(STATUSES().find((s) => s.value === task.status)?.label ?? task.status);
+  if (statusValue !== STATUSES()[0].value) {
+    advancedSummary.push(STATUSES().find((s) => s.value === statusValue).label);
   }
   if (!isSoloHousehold() && visibility !== 'all') advancedSummary.push(t(`common.visibility.${visibility}`));
   if (!isSoloHousehold() && task?.locked) advancedSummary.push(t('tasks.lockedBadge'));
@@ -867,15 +874,20 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
         <p class="task-field-hint">${t('tasks.tagsHint')}</p>
       </div>
 
-      ${isEdit ? `
-        <div class="form-group" style="margin-top:var(--space-4)">
-          <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
-          <select class="input" id="task-status" name="status">
-            ${STATUSES().map((s) =>
-              `<option value="${s.value}" ${task.status === s.value ? 'selected' : ''}>${s.label}</option>`
-            ).join('')}
-          </select>
-        </div>` : ''}
+      <!-- DAS FELD STAND BIS #807 NUR IM BEARBEITEN-ZWEIG. Vergessen war es
+           nicht, aber die Annahme darunter stimmte nicht: notiert wird oft
+           etwas, das laengst laeuft, und dafuer brauchte es bisher zwei
+           Schritte - anlegen, wieder oeffnen, umstellen. Die Vorauswahl bleibt
+           der erste Status, damit ein Anlegen, das das Feld nicht beruehrt,
+           sich genau wie vorher verhaelt. -->
+      <div class="form-group" style="margin-top:var(--space-4)">
+        <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
+        <select class="input" id="task-status" name="status">
+          ${STATUSES().map((s) =>
+            `<option value="${s.value}" ${statusValue === s.value ? 'selected' : ''}>${s.label}</option>`
+          ).join('')}
+        </select>
+      </div>
 ${syncTargetFieldHtml(task)}
       <!-- EINE QUELLE, NICHT ZWEI: die Bedingung war "users.length > 1" und
            beantwortete dieselbe Frage wie der Solo-Schalter, nur aus einer
@@ -1063,7 +1075,6 @@ let state = {
   // Eingeklappte Gruppen (#812), als "<modus>:<gruppen-id>" - derselbe Name
   // kann in beiden Gruppierungen vorkommen und meint dort Verschiedenes.
   collapsedGroups: new Set(),
-  dragTaskId:      null,
   filterPanelOpen: false,
   bulkSelectMode:  false,
   selectedTaskIds: new Set(),
@@ -1812,7 +1823,7 @@ function renderKanbanCard(task) {
         : t('tasks.kanbanMoveToOpen');
   return `
     <div class="kanban-card ${task.status === 'done' ? 'kanban-card--done' : ''}"
-         data-task-id="${task.id}" draggable="true">
+         data-task-id="${task.id}">
       <!-- Button statt div: einziger Tastaturweg in die Kartendetails; der
            Board-Klick-Handler fängt ihn über den umschließenden [draggable]. -->
       <button type="button" class="kanban-card__title u-card-title u-compact">${esc(task.title)}</button>
@@ -1895,7 +1906,6 @@ function renderKanban(container) {
                    <span class="kanban-col__empty-idle">${t('tasks.kanbanColEmpty')}</span>
                    <span class="kanban-col__empty-drop">${t('tasks.kanbanDropHint')}</span>
                  </div>`}
-            <div class="kanban-drop-placeholder" hidden></div>
           </div>
         </div>
       `).join('')}
@@ -1904,198 +1914,119 @@ function renderKanban(container) {
   listEl.insertAdjacentHTML('beforeend', kanbanHtml);
 
   if (window.lucide) window.lucide.createIcons({ el: listEl });
-  wireKanbanDrag(container);
-  wireKanbanTouch(container);
+  wireKanbanSortable(container);
+  wireKanbanClicks(container);
 }
 
-function wireKanbanDrag(container) {
+/**
+ * Die Karten des Boards, gezogen ueber den projektweiten Sortable-Wrapper.
+ *
+ * VORHER STANDEN HIER ZWEI IMPLEMENTIERUNGEN: natives HTML5-DnD fuer die Maus
+ * und eine eigene Touch-Simulation mit selbstgebautem Ghost-Element daneben.
+ * Die Touch-Haelfte war der Grund fuer #808 - sie hatte eine Schwelle, aber die
+ * falsche Sorte: acht Pixel Weg und KEINE Zeit. Wer auf dem Telefon ueber einer
+ * Karte scrollte, hatte die acht Pixel nach einem Wimpernschlag zusammen, und
+ * `preventDefault()` nahm der Geste danach das Scrollen weg. Die Karte fuhr mit.
+ *
+ * Der Wrapper macht seit jeher genau die Unterscheidung, die der Melder
+ * vorgeschlagen hat: `delay: 120` mit `delayOnTouchOnly` - halten greift,
+ * Wischen bleibt Scrollen, und die Maus zieht unveraendert sofort.
+ *
+ * ZWEI DINGE, DIE DIE UMSTELLUNG MITTRAGEN MUSSTE:
+ *
+ * 1. Der Drop haengt an mehr als der Geste. Zwischen den Spalten liegt ein
+ *    Statuswechsel, und die vierte Spalte ist gar kein Status, sondern die
+ *    Ablage (#688). Beides entscheidet unveraendert `runColumnMove` - der eine
+ *    Weg, den auch der Weiterschalt-Knopf geht. Hier wird nur noch die Spalte
+ *    abgelesen.
+ * 2. `sort: false`. Das Board speichert KEINE Reihenfolge innerhalb einer
+ *    Spalte, und was es nicht speichert, darf es nicht anbieten: eine
+ *    umsortierte Karte bliebe sonst an ihrem neuen Platz liegen, bis
+ *    irgendetwas anderes neu zeichnet. Zwischen den Spalten bleibt der Zug
+ *    erlaubt - genau das ist `sort: false` mit `group`.
+ */
+let kanbanSortables = [];
+
+function destroyKanbanSortables() {
+  kanbanSortables.forEach((inst) => { try { inst.destroy(); } catch { /* schon abgeraeumt */ } });
+  kanbanSortables = [];
+}
+
+function wireKanbanSortable(container) {
+  const board = container.querySelector('.kanban-board');
+  if (!board) return;
+  // renderKanban() baut die Spalten bei jedem Zug neu. Ohne das Abraeumen
+  // haengen die alten Instanzen an Knoten, die es nicht mehr gibt.
+  destroyKanbanSortables();
+
+  board.querySelectorAll('[data-drop-zone]').forEach((zone) => {
+    makeSortable(zone, {
+      // Ohne `draggable` waeren auch der Leerzustands-Hinweis und alles andere
+      // im Spaltenkoerper ziehbar.
+      draggable: '.kanban-card',
+      // DER WEITERSCHALT-KNOPF WIRD NICHT ZUM GRIFF. Der alte Touch-Handler nahm
+      // ihn ausdruecklich aus (`e.target.closest('[data-next-status]')`), und
+      // beim Umstellen ging genau diese Zeile verloren: ohne Filter kennt
+      // SortableJS nur `a` und `img`, also haette ein Druck auf den Knopf, der
+      // laenger als 120 ms dauert und dabei fuenf Pixel wandert, die Karte
+      // aufgenommen statt sie weiterzuschalten - und sie womoeglich in einer
+      // anderen Spalte abgelegt. Der Knopf ist zugleich der Tastaturweg des
+      // Boards; er darf am wenigsten von allem zur Drag-Flaeche werden.
+      //
+      // Der Titel bleibt greifbar: an ihm nimmt man die Karte auf, das war
+      // vorher so und ist die einzige grosse Flaeche, die dafuer taugt.
+      filter: '[data-next-status]',
+      group: 'kanban-board',
+      sort: false,
+      onEnd: (evt) => {
+        const column = evt.to?.dataset.dropZone;
+        const task = state.tasks.find((t) => String(t.id) === String(evt.item?.dataset.taskId));
+        if (!column || !task || kanbanColumnOf(task) === column) return;
+        runColumnMove(task, column, container);
+      },
+    }).then((inst) => { if (inst) kanbanSortables.push(inst); })
+      .catch(() => { /* ohne SortableJS bleibt der Weiterschalt-Knopf jeder Karte */ });
+  });
+}
+
+/**
+ * Die Klicks des Boards: Weiterschalten und Kartendetails.
+ *
+ * Sie standen bis #808 im Drag-Verdrahter, weil beides am selben Board hing.
+ * Der Test auf eine Karte lief ueber `[draggable]` - ein Attribut, das der
+ * Wrapper nicht mehr setzt. Ein Selektor, der die Karte an ihrer Ziehbarkeit
+ * erkennt, haette die Details beim Umstellen lautlos verschlossen.
+ */
+function wireKanbanClicks(container) {
   const board = container.querySelector('.kanban-board');
   if (!board) return;
 
-  board.addEventListener('dragstart', (e) => {
-    const card = e.target.closest('.kanban-card[data-task-id]');
-    if (!card) return;
-    state.dragTaskId = card.dataset.taskId;
-    card.classList.add('kanban-card--dragging');
-    board.classList.add('kanban-board--dragging');
-    e.dataTransfer.effectAllowed = 'move';
-  });
-
-  board.addEventListener('dragend', (e) => {
-    const card = e.target.closest('.kanban-card[data-task-id]');
-    if (card) card.classList.remove('kanban-card--dragging');
-    board.classList.remove('kanban-board--dragging');
-    board.querySelectorAll('.kanban-drop-placeholder').forEach((el) => el.hidden = true);
-    board.querySelectorAll('.kanban-col__body--over').forEach((el) =>
-      el.classList.remove('kanban-col__body--over')
-    );
-    state.dragTaskId = null;
-  });
-
-  board.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const zone = e.target.closest('[data-drop-zone]');
-    if (!zone) return;
-    board.querySelectorAll('.kanban-col__body--over').forEach((el) =>
-      el.classList.remove('kanban-col__body--over')
-    );
-    zone.classList.add('kanban-col__body--over');
-  });
-
-  board.addEventListener('dragleave', (e) => {
-    const zone = e.target.closest('[data-drop-zone]');
-    if (zone && !zone.contains(e.relatedTarget)) {
-      zone.classList.remove('kanban-col__body--over');
-    }
-  });
-
-  board.addEventListener('drop', async (e) => {
-    e.preventDefault();
-    const zone = e.target.closest('[data-drop-zone]');
-    if (!zone || !state.dragTaskId) return;
-    zone.classList.remove('kanban-col__body--over');
-
-    const column = zone.dataset.dropZone;
-    const task   = state.tasks.find((t) => String(t.id) === String(state.dragTaskId));
-    if (!task || kanbanColumnOf(task) === column) return;
-
-    await runColumnMove(task, column, container);
-  });
-
-  // Klick auf Status-Button: Status ohne Modal wechseln
   board.addEventListener('click', async (e) => {
     const statusBtn = e.target.closest('[data-next-status]');
     if (statusBtn) {
       e.stopPropagation();
-      const card      = statusBtn.closest('.kanban-card[data-task-id]');
+      const card = statusBtn.closest('.kanban-card[data-task-id]');
       if (!card) return;
       const task = state.tasks.find((t) => String(t.id) === String(card.dataset.taskId));
       if (!task) return;
-      // Der Knopf einer abgelegten Karte holt zurück, statt weiterzuschalten -
-      // sein data-next-status trägt dann den Status, den die Aufgabe behalten hat.
+      // Der Knopf einer abgelegten Karte holt zurueck, statt weiterzuschalten -
+      // sein data-next-status traegt dann den Status, den die Aufgabe behalten hat.
       await runColumnMove(task, statusBtn.dataset.nextStatus, container);
       return;
     }
 
-    // Klick auf Kanban-Card öffnet Edit-Modal
-    if (e.target.closest('[draggable]')) {
-      const card = e.target.closest('.kanban-card[data-task-id]');
-      if (!card) return;
-      try {
-        const [task, reminder] = await Promise.all([
-          loadTaskForEdit(card.dataset.taskId),
-          loadReminderForTask(card.dataset.taskId),
-        ]);
-        openTaskView(task, reminder, container);
-      } catch (err) {
-        window.yuvomi.showToast(t('tasks.loadError'), 'danger');
-      }
+    const card = e.target.closest('.kanban-card[data-task-id]');
+    if (!card) return;
+    try {
+      const [task, reminder] = await Promise.all([
+        loadTaskForEdit(card.dataset.taskId),
+        loadReminderForTask(card.dataset.taskId),
+      ]);
+      openTaskView(task, reminder, container);
+    } catch (err) {
+      window.yuvomi.showToast(t('tasks.loadError'), 'danger');
     }
   });
-}
-
-// --------------------------------------------------------
-// Kanban-Touch-Drag (Mobile)
-// --------------------------------------------------------
-
-function wireKanbanTouch(container) {
-  const board = container.querySelector('.kanban-board');
-  if (!board) return;
-
-  let dragging = null;
-  let ghost = null;
-  let taskId = null;
-  let originX = 0, originY = 0;
-  let originLeft = 0, originTop = 0;
-  let activeZone = null;
-  let started = false;
-
-  function cleanup() {
-    ghost?.remove();
-    ghost = null;
-    board.classList.remove('kanban-board--dragging');
-    if (dragging) {
-      dragging.classList.remove('kanban-card--dragging');
-      dragging = null;
-    }
-    board.querySelectorAll('.kanban-col__body--over').forEach((el) =>
-      el.classList.remove('kanban-col__body--over')
-    );
-    activeZone = null;
-    started = false;
-    taskId = null;
-  }
-
-  board.addEventListener('touchstart', (e) => {
-    const card = e.target.closest('.kanban-card[data-task-id]');
-    if (!card || e.target.closest('[data-next-status]')) return;
-    dragging = card;
-    taskId = card.dataset.taskId;
-    const touch = e.touches[0];
-    originX = touch.clientX;
-    originY = touch.clientY;
-    const rect = card.getBoundingClientRect();
-    originLeft = rect.left;
-    originTop = rect.top;
-    started = false;
-  }, { passive: true });
-
-  board.addEventListener('touchmove', (e) => {
-    if (!dragging) return;
-    const touch = e.touches[0];
-    const dx = touch.clientX - originX;
-    const dy = touch.clientY - originY;
-
-    if (!started && Math.sqrt(dx * dx + dy * dy) < 8) return;
-
-    if (!started) {
-      started = true;
-      ghost = dragging.cloneNode(true);
-      ghost.className = 'kanban-card kanban-card--ghost';
-      ghost.style.width = dragging.getBoundingClientRect().width + 'px';
-      ghost.style.left = originLeft + 'px';
-      ghost.style.top = originTop + 'px';
-      document.body.appendChild(ghost);
-      dragging.classList.add('kanban-card--dragging');
-      board.classList.add('kanban-board--dragging');
-    }
-
-    e.preventDefault();
-    ghost.style.left = (originLeft + dx) + 'px';
-    ghost.style.top = (originTop + dy) + 'px';
-
-    ghost.style.visibility = 'hidden';
-    const el = document.elementFromPoint(touch.clientX, touch.clientY);
-    ghost.style.visibility = '';
-
-    const zone = el?.closest('[data-drop-zone]');
-    board.querySelectorAll('.kanban-col__body--over').forEach((z) =>
-      z.classList.remove('kanban-col__body--over')
-    );
-    if (zone) {
-      zone.classList.add('kanban-col__body--over');
-      activeZone = zone;
-    } else {
-      activeZone = null;
-    }
-  }, { passive: false });
-
-  board.addEventListener('touchend', async () => {
-    if (!dragging) return;
-    const zone = activeZone;
-    const tid = taskId;
-    const task = state.tasks.find((tk) => String(tk.id) === String(tid));
-    cleanup();
-
-    if (!zone || !task) return;
-    const column = zone.dataset.dropZone;
-    if (kanbanColumnOf(task) === column) return;
-
-    await runColumnMove(task, column, container);
-  }, { passive: true });
-
-  board.addEventListener('touchcancel', cleanup, { passive: true });
 }
 
 // --------------------------------------------------------
