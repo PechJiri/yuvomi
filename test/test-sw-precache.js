@@ -28,6 +28,10 @@
  *     Modulgraph oben sieht nur JS; CSS hängt an keinem `import`, und so lagen
  *     11 der 18 eager geladenen Stylesheets außerhalb des Precache, ohne dass
  *     eine Zeile dieser Datei das bemerken konnte
+ *   - jedes von index.html geladene Skript ist precacht. Der Modulgraph oben
+ *     beginnt erst bei den Einträgen der Precache-Liste; ein Skript, das dort
+ *     fehlt, wird von keinem `import` erreicht und fällt deshalb durch beide
+ *     Netze
  *   - Precache-Bucket und fetch-Routing stimmen überein (ein im SHELL_CACHE
  *     abgelegtes Modul darf nicht aus dem PAGES_CACHE bedient werden)
  *   - keine Doppeleinträge zwischen den Listen
@@ -38,6 +42,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createContext, runInContext } from 'node:vm';
 import { posix } from 'node:path';
+import { withoutHtmlComments } from './source-text.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const SRC = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
@@ -158,10 +163,17 @@ test('jedes eager geladene Stylesheet aus index.html ist precacht', () => {
   // Nur `rel="stylesheet"` ohne `media`/`onload`-Umweg: das sind die, die den
   // ersten Render blockieren. Ein per Router nachgeladenes Seiten-CSS zählt
   // nicht - es kommt erst, wenn die Shell schon steht.
-  const eager = [...html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/g)]
+  // Schreibungstoleranz durchgehend, und "durchgehend" heisst JEDER Schritt.
+  // Sobald der Regex `<LINK REL=...>` findet, muessen die Ausschluesse `MEDIA=`
+  // /`ONLOAD=` genauso finden - sonst zaehlt ein grossgeschriebenes
+  // Print-Stylesheet als eager. Und `HREF=` muss es auch: ein Treffer, dessen
+  // Adresse nicht gelesen wird, faellt hier als `undefined` durch `filter(Boolean)`
+  // und wird nie gegen APP_SHELL geprueft - der Guard verliert ihn lautlos,
+  // waehrend die Reichweiten-Schwelle darunter weiter erfuellt ist.
+  const eager = [...html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi)]
     .map((m) => m[0])
-    .filter((tag) => !/\bmedia=/.test(tag) && !/\bonload=/.test(tag))
-    .map((tag) => tag.match(/\bhref=["']([^"']+)["']/)?.[1])
+    .filter((tag) => !/\bmedia=/i.test(tag) && !/\bonload=/i.test(tag))
+    .map((tag) => tag.match(/\bhref=["']([^"']+)["']/i)?.[1])
     .filter(Boolean);
 
   // Reichweiten-Nachweis: findet das Muster nichts, prüft die Assertion nichts.
@@ -173,6 +185,39 @@ test('jedes eager geladene Stylesheet aus index.html ist precacht', () => {
     missing, [],
     'Diese Stylesheets lädt index.html eager, der Service Worker precacht sie aber nicht. '
     + `Der allererste Offline-Start rendert damit ungestylt:\n  ${missing.join('\n  ')}`,
+  );
+});
+
+// Dieselbe Lücke wie oben, nur für JS: der Modulgraph-Test folgt `import`-Kanten
+// ab der Precache-Liste und sieht deshalb nie, was index.html per <script> lädt
+// und die Liste vergisst. `lucide-scope.js` ist genau so ein Fall - es hängt an
+// keinem Import, sondern gibt `createIcons({ el })` an über zweihundert
+// Aufrufstellen seinen Ausschnitt (siehe Dateikopf). Offline fehlte es, und die
+// App liefe sichtbar unverändert weiter, nur langsamer.
+test('jedes von index.html geladene Skript ist precacht', () => {
+  // `i`, weil Tagname und Attribute in HTML schreibungsegal sind: eine
+  // grossgeschriebene Fassung faende der Guard sonst nicht und meldete gruen,
+  // obwohl er nichts gesehen hat (CodeQL js/bad-tag-filter). Und ohne
+  // Kommentare, damit ein auskommentiertes Tag nicht als geladen zaehlt.
+  const html = withoutHtmlComments(readFileSync(PUBLIC_DIR + 'index.html', 'utf8'));
+  const scripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
+    .map((m) => m[1])
+    // Ausgeschlossen wird nur echte Fremdherkunft (Schema oder protokollrelativ).
+    // Ein relatives `src="analytics.js"` ist same-origin und muss genauso
+    // precacht sein; ein Filter auf fuehrenden Slash haette es stillschweigend
+    // uebersprungen und den Guard fuer genau diesen Fall gruen gelassen.
+    .filter((src) => !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src))
+    .map((src) => (src.startsWith('/') ? src : posix.resolve('/', src)));
+
+  // Reichweiten-Nachweis: findet das Muster nichts, prüft die Assertion nichts.
+  assert.ok(scripts.length >= 5, `Nur ${scripts.length} Skripte gefunden - das Muster greift nicht mehr`);
+
+  const shell = new Set(APP_SHELL);
+  const missing = scripts.filter((src) => !shell.has(src));
+  assert.deepEqual(
+    missing, [],
+    'Diese Skripte lädt index.html, der Service Worker precacht sie aber nicht. '
+    + `Offline fehlen sie ersatzlos:\n  ${missing.join('\n  ')}`,
   );
 });
 
