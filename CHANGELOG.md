@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A same-version deployment now invalidates the installed PWA shell.** The served service worker
+  receives a build-specific revision, so acceptance builds and rebuilt images no longer reuse an
+  older cache merely because the application version has not changed.
+
 - **An `allowScripts` pin no longer points at a version that is not installed.** The field names
   every package allowed to run install scripts, with an exact version, because the permission
   applies to the reviewed build rather than to the name. Dependabot raises the dependency and the
