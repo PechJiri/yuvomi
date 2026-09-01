@@ -292,6 +292,26 @@ test('Testsetup: vibrate-Mock ist einsatzbereit', () => {
 // still verfallen: die oberste Karte in die naechste Spalte.
 // --------------------------------------------------------
 
+/**
+ * Der Argument-Block eines Aufrufs, ueber Klammerbalance abgegrenzt.
+ *
+ * Nicht ueber eine Zeichenzahl: die erste Fassung schnitt 700 Zeichen ab dem
+ * Aufruf heraus und wurde rot, als ein Kommentar dazukam - ein Test, der beim
+ * Kommentieren bricht, misst die Laenge und nicht die Sache.
+ */
+function callBlockOf(source, needle) {
+  const at = source.indexOf(needle);
+  assert.ok(at >= 0, `Reichweite: "${needle}" gefunden`);
+  // Die Klammer des Aufrufs selbst, nicht die naechste im Text danach.
+  const open = source.indexOf('(', at);
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '(') depth++;
+    else if (source[i] === ')') { depth--; if (depth === 0) return source.slice(open, i + 1); }
+  }
+  return source.slice(open);
+}
+
 /** Faengt die Optionen ab, mit denen der Wrapper Sortable.create() ruft. */
 function onEndOf() {
   const source = read('../public/utils/sortable.js');
@@ -342,7 +362,7 @@ test('tasks: das Board zieht ueber den Wrapper, nicht mehr ueber natives DnD', (
 
 test('tasks: das Board bietet keine Reihenfolge an, die es nicht speichert', () => {
   const source = read('../public/pages/tasks.js');
-  const call = source.slice(source.indexOf('makeSortable(zone, {'), source.indexOf('makeSortable(zone, {') + 700);
+  const call = callBlockOf(source, 'makeSortable(zone, {');
   assert.match(call, /sort:\s*false/,
     'innerhalb einer Spalte gibt es keinen Rang - eine umsortierte Karte bliebe sonst liegen, bis etwas anderes neu zeichnet');
   assert.match(call, /group:/, 'zwischen den Spalten bleibt der Zug erlaubt');
@@ -360,4 +380,25 @@ test('tasks: Drag-Ende und Weiterschalt-Knopf gehen denselben Weg', () => {
   assert.match(drop, /runColumnMove\(/, 'der Drop laeuft durch runColumnMove');
   const clicks = source.slice(source.indexOf('function wireKanbanClicks'));
   assert.match(clicks, /runColumnMove\(/, 'der Knopf ebenfalls');
+});
+
+test('tasks: der Weiterschalt-Knopf wird nicht zum Griff (Review zu #808)', () => {
+  const source = read('../public/pages/tasks.js');
+  const call = callBlockOf(source, 'makeSortable(zone, {');
+  // Der alte Touch-Handler nahm den Knopf ausdruecklich aus; beim Umstellen ging
+  // die Zeile verloren. Ohne Filter kennt SortableJS nur `a` und `img`, also
+  // haette ein langer Druck auf den Knopf die Karte aufgenommen statt sie
+  // weiterzuschalten - ausgerechnet an dem Element, das der Tastaturweg ist.
+  assert.match(call, /filter:\s*'\[data-next-status\]'/,
+    'der Statusknopf ist vom Ziehen ausgenommen');
+});
+
+test('sortable.js: Filtern heisst nicht ziehen, nicht: nicht bedienen', () => {
+  const source = read('../public/utils/sortable.js');
+  // SortableJS ruft mit seinem Standard ein preventDefault() auf dem
+  // Aufsetz-Ereignis; auf Touch nimmt das dem gefilterten Element auch den
+  // Klick. Ein Knopf, den man vom Ziehen ausnimmt, waere damit tot statt
+  // geschuetzt - und der Filter versprechen genau das nicht.
+  assert.match(source, /preventOnFilter:\s*false/,
+    'ein gefiltertes Element bleibt bedienbar');
 });

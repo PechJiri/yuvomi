@@ -52,8 +52,10 @@ function prefersReducedMotion() {
  * @param {string} opts.handle - CSS-Selektor des Drag-Handles innerhalb jeder Zeile
  * @param {string} [opts.draggable] - CSS-Selektor der tatsächlich sortierbaren Zeilen
  *        (z. B. wenn eine Add-Zeile im selben Container mitgerendert wird)
- * @param {string} [opts.filter] - CSS-Selektor der Zeilen, die NICHT gezogen werden
- *        dürfen, obwohl sie zu `draggable` passen (z. B. bereits abgehakte)
+ * @param {string} [opts.filter] - CSS-Selektor dessen, was NICHT gezogen werden
+ *        darf, obwohl es zu `draggable` passt: ganze Zeilen (z. B. bereits
+ *        abgehakte) ebenso wie einzelne Bedienelemente INNERHALB einer Zeile
+ *        (z. B. ein Knopf, der beim langen Druck sonst die Zeile aufnähme)
  * @param {string|object} [opts.group] - Verbund mehrerer Listen, zwischen denen
  *        gezogen werden darf (SortableJS-`group`). Ohne Angabe bleibt jede Liste
  *        für sich - der Normalfall, denn ein Zug in eine fremde Liste ist meist
@@ -74,6 +76,13 @@ export async function makeSortable(listEl, { handle, draggable, filter, group, s
     handle,
     draggable,
     filter,
+    // FILTERN HEISST "NICHT ZIEHEN", NICHT "NICHT BEDIENEN". SortableJS ruft mit
+    // seinem Standard `preventOnFilter: true` ein preventDefault() auf dem
+    // Aufsetz-Ereignis, und auf einem Touchgerät nimmt das dem gefilterten
+    // Element auch den Klick - ein Knopf, den man vom Ziehen ausnimmt, wäre
+    // damit tot statt geschützt. Der Wrapper verspricht in `filter` nur das
+    // eine, also tut er auch nur das eine.
+    preventOnFilter: false,
     group,
     sort,
     animation: reduced ? 0 : 150,

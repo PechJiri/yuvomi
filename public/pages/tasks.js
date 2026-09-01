@@ -1964,6 +1964,18 @@ function wireKanbanSortable(container) {
       // Ohne `draggable` waeren auch der Leerzustands-Hinweis und alles andere
       // im Spaltenkoerper ziehbar.
       draggable: '.kanban-card',
+      // DER WEITERSCHALT-KNOPF WIRD NICHT ZUM GRIFF. Der alte Touch-Handler nahm
+      // ihn ausdruecklich aus (`e.target.closest('[data-next-status]')`), und
+      // beim Umstellen ging genau diese Zeile verloren: ohne Filter kennt
+      // SortableJS nur `a` und `img`, also haette ein Druck auf den Knopf, der
+      // laenger als 120 ms dauert und dabei fuenf Pixel wandert, die Karte
+      // aufgenommen statt sie weiterzuschalten - und sie womoeglich in einer
+      // anderen Spalte abgelegt. Der Knopf ist zugleich der Tastaturweg des
+      // Boards; er darf am wenigsten von allem zur Drag-Flaeche werden.
+      //
+      // Der Titel bleibt greifbar: an ihm nimmt man die Karte auf, das war
+      // vorher so und ist die einzige grosse Flaeche, die dafuer taugt.
+      filter: '[data-next-status]',
       group: 'kanban-board',
       sort: false,
       onEnd: (evt) => {
