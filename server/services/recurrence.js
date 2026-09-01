@@ -355,9 +355,25 @@ function nextOccurrenceAfter(baseDateStr, rrule, notBeforeStr, { seriesStart = n
   let current = nextOccurrence(start, rrule, { anchor: seriesStart });
   // Vergleich per lexikografischem YYYY-MM-DD-String (Format ist fix, daher sicher).
   let guard = 0;
-  while (current && notBeforeStr && current < notBeforeStr && guard++ < CATCH_UP_STEPS) {
+  // AUFHOLEN HEISST: BIS ALLE FILTER PASSEN, NICHT NUR BIS ZUR SCHRANKE.
+  // `BYMONTHDAY=-1` zusammen mit `BYDAY=MO` meint die Schnittmenge, aber
+  // `nextOccurrence` springt nur von Monatsletztem zu Monatsletztem - ohne die
+  // zweite Bedingung kam ein Mittwoch zurueck, waehrend die Kalender-Expansion
+  // (die `matchesRRuleByday` anwendet) den naechsten Montag zeigte. Zwei
+  // Antworten auf dieselbe Frage, je nachdem wer fragt. `seriesStartFor` laeuft
+  // aus demselben Grund bis zum Treffer.
+  while (
+    current
+    && guard++ < CATCH_UP_STEPS
+    && ((notBeforeStr && current < notBeforeStr) || !matchesRRuleByday(current, rrule))
+  ) {
     current = nextOccurrence(current, rrule, { anchor: seriesStart });
   }
+  // OHNE TREFFER LIEBER NICHTS ALS DAS FALSCHE DATUM. Es gibt Kombinationen
+  // ohne jedes Vorkommen (ein 31., der ein Sonntag ist, mit INTERVAL); ein
+  // Datum zurueckzugeben, das die eigene Regel verfehlt, waere genau der
+  // Fehler, den diese Schleife gerade behebt.
+  if (current && !matchesRRuleByday(current, rrule)) return null;
   if (current && lastAllowed && current > lastAllowed) return null;
   return current;
 }
@@ -526,12 +542,13 @@ export function rruleLine(rule) {
  * liegt hinter dem UNTIL. Die Routen lehnen die Eingabe deshalb ab, statt eine
  * Serie zu speichern, die nie stattfindet.
  */
-function hasAnyOccurrence(dateKey, rrule) {
+function hasAnyOccurrence(dateKey, rrule, { utcDiffersFromLocal = false } = {}) {
   if (!dateKey || !rrule) return true;
   const tag = String(dateKey).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tag)) return true;
   if (parseRRule(rrule)?.bymonthday !== -1) return true;
-  return seriesStartFor(tag, rrule) !== tag || matchesRRuleByday(tag, rrule);
+  return seriesStartFor(tag, rrule, { utcDiffersFromLocal }) !== tag
+    || matchesRRuleByday(tag, rrule, { utcDiffersFromLocal });
 }
 
 /**
@@ -556,7 +573,7 @@ function hasAnyOccurrence(dateKey, rrule) {
  * @param {string} rrule
  * @returns {string} derselbe Tag, wenn er passt - sonst der naechste, der passt
  */
-function seriesStartFor(dateKey, rrule) {
+function seriesStartFor(dateKey, rrule, { utcDiffersFromLocal = false } = {}) {
   if (!dateKey || !rrule) return dateKey;
   const tag = String(dateKey).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tag)) return dateKey;
@@ -568,7 +585,7 @@ function seriesStartFor(dateKey, rrule) {
   // um die Angabe, die Yuvomi selbst erzeugt und die sonst nach draussen
   // uneindeutig waere.
   if (parseRRule(rrule)?.bymonthday !== -1) return dateKey;
-  if (matchesRRuleByday(tag, rrule)) return dateKey;
+  if (matchesRRuleByday(tag, rrule, { utcDiffersFromLocal })) return dateKey;
 
   // BIS ALLE FILTER PASSEN, NICHT NUR EINEN SCHRITT WEIT. `BYMONTHDAY=-1`
   // zusammen mit `BYDAY=MO` ist gueltig und meint die Schnittmenge: der erste
@@ -586,7 +603,7 @@ function seriesStartFor(dateKey, rrule) {
     const next = nextOccurrence(kandidat, rrule, { anchor: tag });
     if (!next || next <= kandidat) return dateKey;
     kandidat = next;
-    if (matchesRRuleByday(kandidat, rrule)) return String(dateKey).replace(tag, kandidat);
+    if (matchesRRuleByday(kandidat, rrule, { utcDiffersFromLocal })) return String(dateKey).replace(tag, kandidat);
   }
   return dateKey;
 }

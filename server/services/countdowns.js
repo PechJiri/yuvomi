@@ -161,8 +161,20 @@ export function nextEventDate(event, todayKey, exceptions = null, { graceDays = 
   // und der unveraenderte 15. saehe aus wie einer. "Nicht bewegt" und "nichts
   // gefunden" sind vom Rueckgabewert her nicht zu unterscheiden, deshalb wird
   // vorher gefragt.
-  if (!hasAnyOccurrence(startKey, event.recurrence_rule)) return null;
-  const ersterTreffer = seriesStartFor(startKey, event.recurrence_rule);
+  // DIESELBE ZONENFRAGE WIE IN DER EXPANSION, SONST WIDERSPRECHEN SIE SICH.
+  // Ein Termin mit eigener Zone kann in UTC an einem anderen Kalendertag liegen
+  // als vor Ort: 31. Januar 20:00 in New York ist gespeichert als 1. Februar
+  // 01:00 UTC. Die Monatsletzten-Pruefung sah dort den Ersten, fand kein
+  // Vorkommen und gab `null` zurueck - der Kalender zeigte den Termin, die
+  // Kachel verschwieg ihn. `expandRecurringEvents` setzt die Pruefung in genau
+  // diesem Fall aus (`zonenUnsicher`); hier gilt dieselbe Ruecknahme, sonst
+  // beantworten zwei Stellen dieselbe Frage verschieden.
+  const wandUhr = event.tzid ? utcToWall(String(event.start_datetime ?? ''), event.tzid) : null;
+  const zonenUnsicher = !!event.tzid
+    && !(wandUhr && wandUhr.date === String(event.start_datetime ?? '').slice(0, 10));
+
+  if (!hasAnyOccurrence(startKey, event.recurrence_rule, { utcDiffersFromLocal: zonenUnsicher })) return null;
+  const ersterTreffer = seriesStartFor(startKey, event.recurrence_rule, { utcDiffersFromLocal: zonenUnsicher });
   let candidate = ersterTreffer >= todayKey
     ? ersterTreffer
     : nextOccurrenceAfter(ersterTreffer, event.recurrence_rule, todayKey, { seriesStart: startKey });
@@ -274,6 +286,11 @@ function eventCountdowns(d, userId, todayKey) {
   const tz = householdTimeZone(d);
   const rows = d.prepare(`
     SELECT e.id, e.title, e.start_datetime, e.recurrence_rule, e.icon, e.color, e.all_day,
+           -- tzid gehoert zur Frage "welcher Kalendertag ist das?": ohne die
+           -- Spalte kann nextEventDate die Zonenruecknahme nicht treffen und
+           -- verschweigt Termine, die der Kalender zeigt. (Keine Backticks in
+           -- diesem Kommentar - er steht in einem Template-Literal.)
+           e.tzid,
            e.assigned_to,
            -- Die geliehene Farbe braucht dieselben drei Quellen wie im Kalender
            -- (#891). Hier reicht EINE Person statt des ganzen Avatar-Stacks: die

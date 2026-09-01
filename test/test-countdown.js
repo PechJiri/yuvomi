@@ -391,6 +391,27 @@ test('ein Termin mit Uhrzeit zählt auf SEINEN Kalendertag, nicht auf den UTC-Ta
   );
 });
 
+test('eine Serie mit eigener Zone wird nicht verschwiegen', () => {
+  // 31. Januar 20:00 in New York liegt in UTC schon am 1. Februar. Fuer "am
+  // letzten Tag des Monats" zaehlt der Ortstag, also der 31. - die Serie ist
+  // gueltig, und der Kalender zeigt sie. Die Kachel fragte dagegen ohne
+  // Zonenhinweis, sah den Ersten, fand kein Vorkommen und gab null zurueck:
+  // ein Termin, den eine Stelle anzeigt und die andere verschweigt.
+  const ev = {
+    id: 1, title: 'NY', all_day: 0, tzid: 'America/New_York',
+    start_datetime: '2026-02-01T01:00:00Z',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260220',
+  };
+  assert.equal(nextEventDate(ev, '2026-01-15'), '2026-02-01');
+
+  // GEGENPROBE IN DIE ANDERE RICHTUNG: ohne eigene Zone bleibt die Pruefung
+  // scharf. Sonst waere der Fix eine Abschaltung mit Umweg - dieselbe Regel
+  // haette dann gar keine Wirkung mehr.
+  const ohneZone = { ...ev, tzid: null };
+  assert.equal(nextEventDate(ohneZone, '2026-01-15'), null,
+    'ohne Zonenhinweis ist der 1. Februar kein Monatsletzter');
+});
+
 test('nextEventDate gibt für einen vergangenen Einzeltermin nichts zurück', () => {
   assert.equal(nextEventDate({ start_datetime: '2026-08-16' }, '2026-08-17'), null);
   assert.equal(nextEventDate({ start_datetime: '2026-08-17' }, '2026-08-17'), '2026-08-17');

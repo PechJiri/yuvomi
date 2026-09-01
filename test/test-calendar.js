@@ -1263,6 +1263,35 @@ test('seriesStartFor sucht weiter, bis ALLE Filter passen', () => {
   assert(d.getUTCDate() === letzter, `${treffer} muss der Monatsletzte sein`);
 });
 
+test('nextOccurrenceAfter holt auf, bis ALLE Filter passen', () => {
+  // GEGENSTUECK ZUM TEST DARUEBER, UND ZWAR DAS NOETIGE: `seriesStartFor` fand
+  // den ersten Treffer bereits richtig - direkt danach verlor der Countdown den
+  // BYDAY-Filter wieder, weil `nextOccurrence` bei `BYMONTHDAY=-1` nur von
+  // Monatsletztem zu Monatsletztem springt. Die Kalender-Expansion filtert
+  // zusaetzlich, der Countdown nicht: dieselbe Serie, zwei Antworten.
+  const R = 'FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=-1';
+  const start = '2026-01-15';
+  const erster = seriesStartFor(start, R);
+  const treffer = nextOccurrenceAfter(erster, R, '2026-09-01', { seriesStart: start });
+  assert(treffer, 'die Serie laeuft weiter');
+  const d = new Date(`${treffer}T00:00:00Z`);
+  assert(d.getUTCDay() === 1, `${treffer} muss ein Montag sein`);
+  const letzter = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  assert(d.getUTCDate() === letzter, `${treffer} muss der Monatsletzte sein`);
+  // UND DIESELBE ANTWORT WIE DIE EXPANSION. Der eigentliche Schaden war nicht
+  // das falsche Datum an sich, sondern dass Kachel und Kalender auseinanderliefen.
+  let lauf = erster;
+  let expandiert = null;
+  for (let i = 0; i < 60; i++) {
+    const n = nextOccurrence(lauf, R);
+    if (!n || n <= lauf) break;
+    lauf = n;
+    if (lauf >= '2026-09-01' && matchesRRuleByday(lauf, R)) { expandiert = lauf; break; }
+  }
+  assert(treffer === expandiert,
+    `Countdown ${treffer} muss der Expansion ${expandiert} folgen`);
+});
+
 test('matchesRRuleByday filtert nicht, wo UTC- und Ortsdatum auseinanderfallen', () => {
   // Ein Termin am 31. Januar um 20:00 New Yorker Zeit liegt in UTC schon am
   // 1. Februar. Die Pruefung saehe dort den ersten statt des letzten Tages und

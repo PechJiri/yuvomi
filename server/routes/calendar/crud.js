@@ -9,6 +9,7 @@ import * as db from '../../db.js';
 import { str, color, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
 import { normalizeVisibility, visibilityWhere } from '../../services/visibility.js';
 import { hasAnyOccurrence } from '../../services/recurrence.js';
+import { utcToWall } from '../../utils/timezone.js';
 import {
   StorageError,
   cleanupStagedUpload,
@@ -321,7 +322,19 @@ router.put('/:id', async (req, res) => {
       : event.start_datetime;
     const serieBeruehrt = regelDanach !== event.recurrence_rule
       || String(startDanach ?? '').slice(0, 10) !== String(event.start_datetime ?? '').slice(0, 10);
-    if (serieBeruehrt && !hasAnyOccurrence(startDanach, regelDanach)) {
+    // DER GUARD MUSS DENSELBEN KALENDERTAG MEINEN WIE DIE EXPANSION. Ein
+    // eingelesener Termin kann eine eigene Zone tragen: 31. Januar 20:00 in New
+    // York steht als 1. Februar 01:00 UTC in der Zeile. Fuer "am letzten Tag des
+    // Monats" zaehlt der Ortstag, also der 31. - ohne den Hinweis sah der Guard
+    // den Ersten, hielt die Serie fuer leer und wies eine gueltige Bearbeitung
+    // mit 400 ab. `expandRecurringEvents` nimmt die Pruefung im selben Fall
+    // zurueck (`zonenUnsicher`); nur `tzid` kann diesen Zustand erzeugen, die
+    // Route selbst nimmt das Feld nicht entgegen.
+    const wandUhr = event.tzid ? utcToWall(String(startDanach ?? ''), event.tzid) : null;
+    const zonenUnsicher = !!event.tzid
+      && !(wandUhr && wandUhr.date === String(startDanach ?? '').slice(0, 10));
+    if (serieBeruehrt
+      && !hasAnyOccurrence(startDanach, regelDanach, { utcDiffersFromLocal: zonenUnsicher })) {
       return res.status(400).json({
         error: 'recurrence_rule: the rule has no occurrence on or after the start date.',
         code: 400,

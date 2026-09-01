@@ -1073,3 +1073,29 @@ test('PUT / — die Wiederholung abschalten wird nicht gegen die alte Regel gepr
   assert.equal(aus.body.data.recurrence_rule, null, 'die Regel ist geloescht');
   assert.match(aus.body.data.start_datetime, /^2026-01-16/, 'und das neue Datum steht');
 });
+
+test('PUT / — eine Serie mit eigener Zone wird an ihrem Ortstag geprueft', async () => {
+  // 31. Januar 20:00 in New York steht als 1. Februar 01:00 UTC in der Zeile.
+  // Fuer "am letzten Tag des Monats" zaehlt der Ortstag, also der 31.: die
+  // Serie hat ein Vorkommen und ist gueltig. Ohne Zonenhinweis sah der Guard
+  // den Ersten, hielt sie fuer leer und wies die Bearbeitung ab - fuer einen
+  // Termin, den der Kalender daneben anzeigte.
+  const id = insertEvent({ title: 'NY-Serie', start_datetime: '2026-02-01T01:00:00Z' });
+  db.prepare('UPDATE calendar_events SET tzid = ? WHERE id = ?').run('America/New_York', id);
+
+  const res = await call('PUT', `/${id}`, { body: {
+    title: 'NY-Serie', start_datetime: '2026-02-01T01:00:00Z',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260220',
+  } });
+  assert.equal(res.status, 200, `erwartet 200, bekommen ${res.status}`);
+
+  // GEGENPROBE IM TEST SELBST: ohne eigene Zone ist der 1. Februar wirklich
+  // kein Monatsletzter, und der Guard greift weiter. Sonst waere der Fix eine
+  // Abschaltung mit Umweg.
+  const ohne = insertEvent({ title: 'Ohne Zone', start_datetime: '2026-02-01T01:00:00Z' });
+  const res2 = await call('PUT', `/${ohne}`, { body: {
+    title: 'Ohne Zone', start_datetime: '2026-02-01T01:00:00Z',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260220',
+  } });
+  assert.equal(res2.status, 400, `ohne Zone erwartet 400, bekommen ${res2.status}`);
+});
