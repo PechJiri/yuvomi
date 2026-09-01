@@ -29,7 +29,7 @@ export function tasksPaths() {
           { name: 'include_future', in: 'query', required: false, schema: { type: 'string' }, description: 'Any non-empty value also returns tasks whose start date lies in the future.' },
         ],
       }),
-      post: op({ summary: 'Create task', tag: 'Tasks', stateChanging: true, requestBody: jsonBody(null), description: 'Body accepts `locked: true` to close the task definition to everyone but its creator and administrators (#830). A subtask under a locked parent inherits the lock, and adding one requires the same rights.' }),
+      post: op({ summary: 'Create task', tag: 'Tasks', stateChanging: true, requestBody: jsonBody(null), description: 'Body accepts `locked: true` to close the task definition to everyone but its creator and administrators (#830). A subtask under a locked parent inherits the lock, and adding one requires the same rights. `status` may be set on creation (#807); it runs through the same transition handling as PUT and PATCH, so creating a task as `done` books its points and writes its completion entry. `null`, an empty string and `archived` all fall back to `open` - filing a task away is a separate axis and not something a creation can do.' }),
     },
     '/api/v1/tasks/meta/options': { get: op({ summary: 'Get task metadata', tag: 'Tasks' }) },
     '/api/v1/tasks/completions': {

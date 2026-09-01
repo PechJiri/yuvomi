@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.60.0] - 2026-09-01
+
+### Added
+
+- **The status is available when creating a task, not just when editing one** (#807). @thesoundhead
+  pointed out that the new-task dialog offers no status, although what people write down is often
+  something they have already started. The field was not forgotten - it sat behind the edit branch.
+
+  **The second half of the problem was on the server, and it was the more unpleasant one.** `POST
+  /tasks` has validated a supplied status against the allowed values since forever, and never wrote
+  it. A value that is checked and then silently discarded is the worse half of both: opening up the
+  form alone would have changed nothing, and nothing anywhere would have said so.
+
+  Creating with a status *is* a status change - it merely starts from `open` instead of from a
+  stored value. It therefore runs through the same transition handling as editing and ticking off:
+  reward ledger, completion history, and the follow-up instance of a recurring series. Filling only
+  the column would have given the point ledger and the history two sets of books, where the same
+  finished task counted differently depending on whether it was created done or ticked off done.
+  Sending `archived` on creation falls back to the first status rather than filing the task away:
+  the archive has been its own axis since #688, and creating a task in order to put it away in the
+  same breath is not creating a task.
+
+- **The wall mode can be started where it ends** (#915). It could only be switched on under
+  Settings, Personal, Appearance - but it was left on the overview. You walked out where you could
+  not walk in. The entry point now sits in the overview toolbar as an icon button, the literal
+  counterpart to the exit on the wall surface. The settings route stays: it is the long way with an
+  explanation beside it, this is the short one at the place where it takes effect.
+
+  There is deliberately no switch governing whether that button appears. It would sit in the same
+  settings the mode itself already lives in - two switches for one thing, and you would have to find
+  the second one to be rid of the first. There is no device-shape rule either: a wrongly hidden
+  entry point is unfindable again and would only move the problem. The exit toast, which used to
+  point into the settings because that was the only way back, now names the button instead.
+
+- **A kitchen timer on the wall** (#844). @Gensokian asked for a timer plus a cross-device
+  notification and then scaled the wish back himself: "honestly just the timer on the wall". That
+  notification is precisely what would have forced a server-side timer, because a phone suspends the
+  page as soon as the screen locks. What remains runs in the browser of the device that hangs on the
+  wall anyway and does not go to sleep: no endpoint, no table, no migration. Five presets, no number
+  field - from two metres a keypad is not operable - and a chime built from three synthesised tones
+  rather than an audio file that would have to be vendored, served and cached.
+
+  **The screensaver had to come along.** It covers the surface after five idle minutes, and a
+  countdown that expires behind a photo is not a timer. It now reads the same attribute the timer
+  sets, one source and two readers; the attribute drops the moment the timer rings, so an
+  unacknowledged timer cannot disable the screensaver for good.
+
+  The mode was built as a display-only surface, and that promise turns out to be narrower than its
+  name: the exit has been there since day one, so it was never button-free - it leads nowhere and
+  changes nothing in the household. The timer does not break that, it marks its edge. `wall-mode.js`
+  therefore gained an admission rule rather than a named exception - a control may go on the wall
+  when it does not navigate, changes nothing server-side, stays on this device, and is operable from
+  two metres - because an expiry date on something meant to stay would be a lie in a comment.
+
+### Fixed
+
+- **A monthly series on the 29th to 31st no longer skips a month.** Found while looking into a
+  request for "last day of the month", and it is not the bug the request suggested. The clamp that
+  was supposed to move a 31 March onto 30 April never took effect: `setUTCMonth()` had already
+  rolled over on a date still carrying the 31st - a 31 February silently becomes 3 March in
+  JavaScript - and the last-day correction was then computed for the month the overflow had landed
+  in.
+
+  So the short month did not fall back to its last day. **It fell out entirely.** A monthly task on
+  the 31st arrived in seven months out of twelve; on the 30th and the 29th, February was missing.
+  With an interval of two months the rhythm broke on top of that, because the skipped month shifted
+  it: from 31 July it went three months on instead of two. It affected tasks and calendar events
+  alike, since both walk the same function occurrence by occurrence.
+
+  Existing series need no migration and compute correctly from their next occurrence onwards. This
+  does move dates in existing installations, in the direction the user meant. What it does not fix,
+  and what now says so in the code: because the next occurrence is computed from the clamped date, a
+  series begun on 31 January stays on the 28th from February onwards, and a yearly series on 29
+  February never returns to the 29th (#978). For that the rule itself would have to carry the
+  intended day.
+
+- **Scrolling the task board on a phone no longer drags cards along** (#808). @thesoundhead
+  suggested distinguishing a long press from a short one - which is exactly what the app's shared
+  drag wrapper has done all along for the shopping list and the category manager. The board did not
+  use it: it carried two drag implementations of its own, native drag-and-drop for the mouse and a
+  hand-written touch simulation beside it. The touch half did have a threshold, just the wrong kind:
+  eight pixels of distance and no time at all. Anyone scrolling had those eight pixels within a
+  blink, and the gesture then lost its scrolling. Both are gone; holding picks a card up, swiping
+  stays scrolling, and the mouse still drags immediately.
+
+  The advance-status button on each card is excluded from dragging - it was excluded in the old
+  touch handler too, and that single line was the easiest thing to lose in the switch. Of everything
+  on a card it can least afford to become a drag surface, because it is also the board's keyboard
+  path.
+
 ## [2.59.0] - 2026-08-31
 
 ### Added
