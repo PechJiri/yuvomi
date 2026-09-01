@@ -330,8 +330,14 @@ router.put('/:id', async (req, res) => {
     // `null` heisst dabei "nicht anfassen", nicht "leer": der Validator laesst
     // es durch, und das UPDATE unten behandelt es ueber COALESCE ebenso. Der
     // Tagesvergleich reicht, weil `hasAnyOccurrence` ohnehin nur den Tag liest.
-    const regelDanach = recurrence_rule !== undefined && recurrence_rule !== null
-      ? recurrence_rule
+    // DIESELBE FORMEL WIE DAS UPDATE UNTEN, sonst prueft der Guard einen
+    // Zustand, den es nie geben wird. `recurrence_rule` steht NICHT unter
+    // COALESCE: `null` loescht die Regel, statt sie stehen zu lassen. Wer die
+    // Wiederholung abschaltet und dabei das Startdatum aendert, wurde sonst
+    // gegen die ALTE Regel geprueft und mit 400 abgewiesen - fuer eine Serie,
+    // die es nach dem Speichern gar nicht mehr gibt.
+    const regelDanach = recurrence_rule !== undefined
+      ? (recurrence_rule || null)
       : event.recurrence_rule;
     const startDanach = start_datetime !== undefined && start_datetime !== null
       ? start_datetime

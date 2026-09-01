@@ -990,3 +990,23 @@ test('PUT / — ein Titel-Edit laesst eine eingelesene Serie in Ruhe (#756)', as
   assert.match(nurTitel.body.data.start_datetime, /^2026-01-15/,
     `der Start darf sich nicht bewegen: ${nurTitel.body.data.start_datetime}`);
 });
+
+test('PUT / — die Wiederholung abschalten wird nicht gegen die alte Regel geprueft', async () => {
+  // `recurrence_rule` steht als einziges der Serienfelder NICHT unter COALESCE:
+  // `null` loescht die Regel. Wurde der Guard trotzdem gegen die gespeicherte
+  // Regel gerechnet, wies er das Abschalten mit 400 ab - fuer eine Serie, die
+  // es nach dem Speichern gar nicht mehr gibt.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Abschalten', start_datetime: '2026-01-15T09:00' },
+  });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
+
+  const aus = await call('PUT', `/${id}`, {
+    body: { recurrence_rule: null, start_datetime: '2026-01-16T09:00' },
+  });
+  assert.equal(aus.status, 200, `das Abschalten darf nicht scheitern, bekommen ${aus.status}`);
+  assert.equal(aus.body.data.recurrence_rule, null, 'die Regel ist geloescht');
+  assert.match(aus.body.data.start_datetime, /^2026-01-16/, 'und das neue Datum steht');
+});

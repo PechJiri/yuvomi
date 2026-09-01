@@ -1116,7 +1116,14 @@ router.put('/:id', (req, res) => {
     // die Frage nicht; verglichen werden die WERTE gegen den Datensatz. Sonst
     // liesse sich an einer vorher schon leeren Serie nicht einmal mehr der
     // Titel aendern.
-    const serieBeruehrt = due_date !== task.due_date || recurrence_rule !== task.recurrence_rule;
+    // DAS EINSCHALTEN ZAEHLT MIT. Eine Aufgabe kann eine Regel tragen, ohne
+    // dass `is_recurring` gesetzt ist - der POST-Pfad nimmt das an. Ein
+    // partielles PUT mit nur `is_recurring: 1` aendert dann weder Regel noch
+    // Datum und kaeme am Guard vorbei: uebrig bliebe eine aktive Serie, die
+    // nie faellig wird.
+    const serieBeruehrt = due_date !== task.due_date
+      || recurrence_rule !== task.recurrence_rule
+      || (is_recurring ? 1 : 0) !== (task.is_recurring ? 1 : 0);
     if (is_recurring && serieBeruehrt && !hasAnyOccurrence(due_date, recurrence_rule)) {
       return res.status(400).json({
         error: 'recurrence_rule: the rule has no occurrence on or after the due date.',

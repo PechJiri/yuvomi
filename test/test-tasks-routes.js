@@ -1007,3 +1007,24 @@ test('PUT: ein Titel-Edit laesst eine eingelesene Serie in Ruhe (#756)', async (
   assert.equal(nurTitel.status, 200);
   assert.equal(nurTitel.body.data.due_date, '2026-01-15', 'die Faelligkeit darf sich nicht bewegen');
 });
+
+test('PUT: das Einschalten der Wiederholung wird selbst geprueft', async () => {
+  // Eine Aufgabe kann eine Regel tragen, ohne dass `is_recurring` gesetzt ist.
+  // Ein partielles PUT mit nur `is_recurring: 1` aendert dann weder Regel noch
+  // Datum - und kaeme an einem Guard vorbei, der nur diese beiden vergleicht.
+  // Uebrig bliebe eine aktive Serie, die nie faellig wird.
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Ruhende Regel', due_date: '2026-01-15' } });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE tasks SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
+
+  const ein = await call('PUT', `/${id}`, { as: admin, body: { is_recurring: 1 } });
+  assert.equal(ein.status, 400, `das Einschalten muss geprueft werden, bekommen ${ein.status}`);
+
+  // Eine Regel MIT Vorkommen laesst sich dagegen einschalten.
+  db.prepare('UPDATE tasks SET recurrence_rule = ? WHERE id = ?').run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
+  const ok = await call('PUT', `/${id}`, { as: admin, body: { is_recurring: 1 } });
+  assert.equal(ok.status, 200, `erwartet 200, bekommen ${ok.status}`);
+  assert.equal(ok.body.data.due_date, '2026-01-15', 'und das Datum bleibt stehen');
+});

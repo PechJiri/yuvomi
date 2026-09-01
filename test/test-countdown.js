@@ -726,3 +726,17 @@ test('der Countdown zeigt kein Datum, an dem die Serie kein Vorkommen hat (#960)
   assert.equal(nextEventDate({ ...ev, recurrence_rule: 'FREQ=MONTHLY' }, '2026-01-01', null, GRACE),
     '2026-01-15');
 });
+
+test('eine Serie ohne jedes Vorkommen liefert kein Countdown-Datum (#960)', () => {
+  // `seriesStartFor` gibt ohne Treffer das Datum zurueck, das es bekommen hat -
+  // "nicht bewegt" und "nichts gefunden" sehen am Rueckgabewert gleich aus. Bei
+  // BYMONTHDAY=-1 mit einem UNTIL vor dem ersten Monatsletzten waere der
+  // unveraenderte Start als naechster Termin durchgegangen, obwohl die
+  // Kalenderansicht nichts zeigt.
+  const leer = { start_datetime: '2026-01-15', recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120' };
+  assert.equal(nextEventDate(leer, '2026-01-01', null, GRACE), null);
+
+  // Dieselbe Regel mit Luft nach hinten hat ein Vorkommen und liefert es.
+  const voll = { ...leer, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260215' };
+  assert.equal(nextEventDate(voll, '2026-01-01', null, GRACE), '2026-01-31');
+});

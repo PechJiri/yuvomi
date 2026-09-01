@@ -36,7 +36,7 @@
  * die dieses Widget je hat.
  */
 
-import { nextOccurrenceAfter, seriesStartFor } from './recurrence.js';
+import { hasAnyOccurrence, nextOccurrenceAfter, seriesStartFor } from './recurrence.js';
 import { loadEventExceptions } from './calendar-events.js';
 import { visibilityWhere } from './visibility.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
@@ -153,6 +153,15 @@ export function nextEventDate(event, todayKey, exceptions = null, { graceDays = 
   // Startdatum ungeprueft durchreicht, sobald es in der Zukunft liegt. Das
   // gespeicherte Datum bleibt dabei unangetastet - gefragt wird nur, welcher
   // Tag der erste ist.
+  //
+  // OHNE TREFFER GIBT `seriesStartFor` DAS DATUM ZURUECK, DAS ES BEKOMMEN HAT.
+  // Das ist der richtige Umgang fuer eine Funktion, die nichts erfinden soll -
+  // hier waere es aber genau der Fehler von oben: bei
+  // `BYMONTHDAY=-1;UNTIL=20260120` ab dem 15. Januar gibt es kein Vorkommen,
+  // und der unveraenderte 15. saehe aus wie einer. "Nicht bewegt" und "nichts
+  // gefunden" sind vom Rueckgabewert her nicht zu unterscheiden, deshalb wird
+  // vorher gefragt.
+  if (!hasAnyOccurrence(startKey, event.recurrence_rule)) return null;
   const ersterTreffer = seriesStartFor(startKey, event.recurrence_rule);
   let candidate = ersterTreffer >= todayKey
     ? ersterTreffer
