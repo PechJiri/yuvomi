@@ -2612,6 +2612,7 @@
         "labelRepeat": "重复",
         "labelEvery": "每",
         "labelOnDays": "在这些天",
+        "lastDayOfMonth": "在每月最后一天",
         "labelUntil": "结束日期（可选）",
         "labelEnds": "结束",
         "endNever": "永不",

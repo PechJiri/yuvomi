@@ -2612,6 +2612,7 @@
         "labelRepeat": "Herhaling",
         "labelEvery": "Elke",
         "labelOnDays": "Op deze dagen",
+        "lastDayOfMonth": "Op de laatste dag van de maand",
         "labelUntil": "Eindigt op (optioneel)",
         "labelEnds": "Eindigt",
         "endNever": "Nooit",

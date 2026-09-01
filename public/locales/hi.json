@@ -2612,6 +2612,7 @@
         "labelRepeat": "दोहराव",
         "labelEvery": "हर",
         "labelOnDays": "इन दिनों",
+        "lastDayOfMonth": "महीने के अंतिम दिन",
         "labelUntil": "समाप्त होता है (वैकल्पिक)",
         "labelEnds": "समाप्त",
         "endNever": "कभी नहीं",

@@ -470,6 +470,16 @@ function rruleToGraphRecurrence(rrule, startDate, tz = outlookTimeZone()) {
       : [GRAPH_DAYS[start.getUTCDay()]];
     pattern = { type: 'weekly', interval: parsed.interval, daysOfWeek: days, firstDayOfWeek: 'monday' };
   } else if (parsed.freq === 'MONTHLY') {
+    // "AM LETZTEN TAG DES MONATS" (#960) HAT IN GRAPH KEINE ENTSPRECHUNG, und
+    // der naheliegende Ersatz ist keiner: `relativeMonthly` mit `index: 'last'`
+    // ueber alle sieben Wochentage liest sich wie "der letzte Tag", trifft ihn
+    // aber nicht - Graph nimmt bei mehreren `daysOfWeek` den ersten passenden
+    // Tag des Musters, nicht den spaetesten. Und zurueck ueber ICS kaeme ein
+    // BYSETPOS-Muster, das diese Engine gar nicht liest.
+    //
+    // Also lieber GAR KEINE Wiederholung als eine andere: ein Einzeltermin ist
+    // sichtbar unvollstaendig, eine Serie am falschen Tag nicht.
+    if (parsed.bymonthday === -1) return null;
     pattern = { type: 'absoluteMonthly', interval: parsed.interval, dayOfMonth: start.getUTCDate() };
   } else if (parsed.freq === 'YEARLY') {
     pattern = {
@@ -553,7 +563,14 @@ function localEventToGraph(event, assigneeNames = [], tz = outlookTimeZone()) {
 
   if (event.recurrence_rule) {
     const recurrence = rruleToGraphRecurrence(event.recurrence_rule, event.start_datetime.slice(0, 10), tz);
-    if (recurrence) payload.recurrence = recurrence;
+    // EIN AUSGELASSENES FELD LOESCHT NICHTS. Der Sync aktualisiert bestehende
+    // Verknuepfungen per PATCH, und was dort fehlt, bleibt drueben unveraendert:
+    // eine Serie, die hier auf eine nicht abbildbare Regel umgestellt wurde,
+    // liefe in Outlook mit ihrer ALTEN Wiederholung weiter, waehrend der
+    // Inhalts-Hash so gespeichert wird, als sei alles zusammengelaufen. `null`
+    // sagt Graph ausdruecklich "keine Wiederholung" und macht daraus einen
+    // Einzeltermin - sichtbar unvollstaendig statt unsichtbar falsch.
+    payload.recurrence = recurrence ?? null;
   }
 
   return payload;

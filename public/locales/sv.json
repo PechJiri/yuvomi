@@ -2612,6 +2612,7 @@
         "labelRepeat": "Upprepning",
         "labelEvery": "Varje",
         "labelOnDays": "På dessa dagar",
+        "lastDayOfMonth": "Den sista dagen i månaden",
         "labelUntil": "Slutar på (valfritt)",
         "labelEnds": "Slutar",
         "endNever": "Aldrig",

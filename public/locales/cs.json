@@ -3253,6 +3253,7 @@
         "labelRepeat": "Opakování",
         "labelEvery": "Každý",
         "labelOnDays": "V tyto dny",
+        "lastDayOfMonth": "Poslední den v měsíci",
         "labelUntil": "Končí dne (volitelné)",
         "labelEnds": "Končí",
         "endNever": "Nikdy",

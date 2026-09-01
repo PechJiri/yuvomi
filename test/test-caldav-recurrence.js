@@ -202,5 +202,77 @@ test('TZID-Serie: Instanz bleibt am korrekten Wochentag (Mi, Tag-24-Master)', ()
   assert(inst[0].start_datetime.slice(0, 10) === '2025-12-10', `Datum: ${inst[0].start_datetime}`);
 });
 
+// --------------------------------------------------------
+// Der Anker ueber den ganzen Weg (#978, #960)
+//
+// Die Unit-Tests in test-calendar.js pruefen nextOccurrence direkt. Diese hier
+// pruefen, dass die Expansion den Anker AUCH DURCHREICHT - genau die Stelle, an
+// der ein fehlendes Argument nichts rot werden liess.
+// --------------------------------------------------------
+
+test('jaehrliche Serie am 29. Februar kehrt im Schaltjahr zurueck', () => {
+  const tage = occDays(VCAL('UID:yearly-leap@x\r\nSUMMARY:Serie\r\nDTSTART;VALUE=DATE:20240229\r\nDTEND;VALUE=DATE:20240301\r\nRRULE:FREQ=YEARLY'),
+    '2024-01-01', '2028-12-31');
+  assert(tage.includes('2024-02-29'), `Start fehlt: ${tage.join(', ')}`);
+  assert(tage.includes('2025-02-28'), `im Nicht-Schaltjahr geklemmt: ${tage.join(', ')}`);
+  assert(tage.includes('2028-02-29'), `2028 ist ein Schaltjahr, bekommen: ${tage.join(', ')}`);
+});
+
+test('monatliche Serie am 31. behaelt ihren Tag ueber den Februar hinweg', () => {
+  const tage = occDays(VCAL('UID:monthly-31@x\r\nSUMMARY:Serie\r\nDTSTART;VALUE=DATE:20260131\r\nDTEND;VALUE=DATE:20260201\r\nRRULE:FREQ=MONTHLY'),
+    '2026-01-01', '2026-06-30');
+  assert(tage.includes('2026-02-28'), `der kurze Monat wird geklemmt: ${tage.join(', ')}`);
+  assert(tage.includes('2026-03-31'), `und der 31. kommt zurueck: ${tage.join(', ')}`);
+  assert(tage.includes('2026-05-31'), `auch spaeter noch: ${tage.join(', ')}`);
+  // Kein Monat faellt aus - die Regel, nicht die Datumsliste.
+  const monate = new Set(tage.map((d) => d.slice(0, 7)));
+  assert(monate.size === 6, `sechs Monate erwartet, bekommen ${monate.size}: ${[...monate].join(', ')}`);
+});
+
+test('BYMONTHDAY=-1 trifft ueber den ganzen Weg den letzten Tag', () => {
+  const tage = occDays(VCAL('UID:monthly-last@x\r\nSUMMARY:Serie\r\nDTSTART;VALUE=DATE:20260115\r\nDTEND;VALUE=DATE:20260116\r\nRRULE:FREQ=MONTHLY;BYMONTHDAY=-1'),
+    '2026-02-01', '2026-05-31');
+  assert(tage.length >= 4, `zu wenige Vorkommen: ${tage.join(', ')}`);
+  for (const d of tage) {
+    const [y, m, day] = d.split('-').map(Number);
+    assert(day === new Date(Date.UTC(y, m, 0)).getUTCDate(), `${d} ist nicht der letzte Tag`);
+  }
+});
+
+// --------------------------------------------------------
+// COUNT zaehlt nur, was die Serie wirklich hat (#513, Review zu #960)
+// --------------------------------------------------------
+
+test('COUNT zaehlt keine Tage, die BYDAY herausfiltert', () => {
+  // Ein Tag ausserhalb des BYDAY-Musters ist GAR KEIN Vorkommen der Serie und
+  // darf nicht gegen COUNT zaehlen. Vorher standen BYDAY-Filter und
+  // EXDATE-Pruefung in EINER Bedingung nach dem Hochzaehlen, also verbrauchte
+  // jeder uebersprungene Wochentag ein Vorkommen: der 31.08.2026 ist ein
+  // Montag, der 30.09. ein Mittwoch - und der verbrauchte den zweiten Zaehler,
+  // ohne je zu erscheinen. Vorbestehend, aber durch BYMONTHDAY leichter zu
+  // treffen.
+  const tage = occDays(VCAL('UID:byday-count@x\r\nSUMMARY:Serie\r\n'
+    + 'DTSTART;VALUE=DATE:20260831\r\nDTEND;VALUE=DATE:20260901\r\n'
+    + 'RRULE:FREQ=MONTHLY;BYDAY=MO;COUNT=2'), '2026-01-01', '2027-12-31');
+  assert(tage.length === 2, `zwei Vorkommen erwartet, bekommen ${tage.length}: ${tage.join(', ')}`);
+  assert(tage[0] === '2026-08-31', `erstes: ${tage[0]}`);
+});
+
+test('COUNT zaehlt ein ausgenommenes Vorkommen weiterhin mit (RFC 5545, #513)', () => {
+  // Die Gegenrichtung, damit die Aufteilung nicht die andere Haelfte kippt:
+  // EXDATE nimmt ein Vorkommen aus der ANZEIGE, nicht aus der ZAEHLUNG. Der
+  // occDays-Helfer reicht keine Ausnahmen durch, deshalb hier direkt mit der
+  // Map, die der Leseweg auch benutzt.
+  const ev = {
+    id: 7, start_datetime: '2026-09-01', end_datetime: '2026-09-02',
+    all_day: 1, recurrence_rule: 'FREQ=DAILY;COUNT=3',
+  };
+  const tage = expandRecurringEvents([ev], '2026-01-01', '2027-12-31',
+    new Map([[7, new Set(['2026-09-02'])]])).map((e) => e.start_datetime.slice(0, 10));
+  assert(tage.length === 2, `drei gezaehlt, eines ausgenommen -> zwei sichtbar, bekommen ${tage.join(', ')}`);
+  assert(!tage.includes('2026-09-02'), 'das ausgenommene erscheint nicht');
+  assert(tage.includes('2026-09-03'), 'und das dritte erscheint, statt der Ausnahme zum Opfer zu fallen');
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

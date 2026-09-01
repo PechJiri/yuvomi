@@ -40,7 +40,7 @@ const WEEKDAYS = () => [
  * @returns {{ freq: string, interval: number, byday: string[], until: string, count: number|null }}
  */
 export function parseRRule(rule) {
-  const result = { freq: '', interval: 1, byday: [], until: '', count: null };
+  const result = { freq: '', interval: 1, byday: [], until: '', count: null, lastDay: false };
   if (!rule) return result;
 
   for (const segment of String(rule).replace(/^RRULE:/i, '').split(';')) {
@@ -61,6 +61,12 @@ export function parseRRule(rule) {
       const n = parseInt(val, 10);
       if (Number.isInteger(n) && n > 0) result.count = n;
     }
+    // NUR `-1`. Jeder andere BYMONTHDAY bleibt fuer dieses Formular eine fremde
+    // Angabe: er wird nicht gelesen, also auch nicht neu gebaut, und faellt damit
+    // unter die Wortlaut-Regel unten - "am 15." kommt aus einem Fremdkalender
+    // unveraendert zurueck, statt hier zu einem Haken zu werden, den niemand
+    // gesetzt hat.
+    if (key === 'BYMONTHDAY' && val.trim() === '-1') result.lastDay = true;
   }
   return result;
 }
@@ -71,7 +77,7 @@ export function parseRRule(rule) {
  * @param {{ freq: string, interval: number, byday: string[], until: string, count?: number|null }} opts
  * @returns {string|null} - RRULE-String oder null (keine Wiederholung)
  */
-export function buildRRule({ freq, interval, byday, until, count = null }) {
+export function buildRRule({ freq, interval, byday, until, count = null, lastDay = false }) {
   if (!freq) return null;
 
   const parts = [`FREQ=${freq}`];
@@ -79,6 +85,9 @@ export function buildRRule({ freq, interval, byday, until, count = null }) {
   if (freq === 'WEEKLY' && byday.length > 0) {
     parts.push(`BYDAY=${byday.join(',')}`);
   }
+  // Nur monatlich: "am letzten Tag des Jahres" waere jeder 31. Dezember und
+  // damit ein fester Tag - die Angabe traegt dort nichts bei (#960).
+  if (freq === 'MONTHLY' && lastDay) parts.push('BYMONTHDAY=-1');
   if (count && count > 0) {
     parts.push(`COUNT=${count}`);
   } else if (until) {
@@ -194,6 +203,21 @@ export function renderRRuleFields(prefix, existingRule, opts = {}) {
           <div class="rrule-day-grid">${dayBtns}</div>
         </div>
 
+        <!-- DIE EINE ANGABE, DIE SICH NICHT ALS DATUM SCHREIBEN LAESST (#960).
+             "Am 15." braucht kein Feld - dafuer legt man die Serie am 15. an.
+             "Am letzten Tag" dagegen meint in jedem Monat einen anderen und ist
+             aus einem Startdatum allein nicht ableitbar: eine am 31. Januar
+             begonnene Serie sah aus wie "letzter Tag" und verlor das im ersten
+             kurzen Monat. Nur bei MONTHLY sichtbar, aus demselben Grund, aus
+             dem buildRRule sie nur dort schreibt. -->
+        <div class="rrule-monthday" id="${prefix}-rrule-monthday" ${parsed.freq === 'MONTHLY' ? '' : 'hidden'}>
+          <label class="toggle" style="margin:0">
+            <input type="checkbox" id="${prefix}-rrule-last-day" ${parsed.lastDay ? 'checked' : ''}>
+            <span class="toggle__track"></span>
+            <span>${t('rrule.lastDayOfMonth')}</span>
+          </label>
+        </div>
+
         ${allowFromCompletion ? `
         <div class="rrule-anchor">
           <label class="toggle" style="margin:0">
@@ -266,6 +290,13 @@ export function describeRRule(rule, opts = {}) {
     if (days.length) parts.push(`(${days.join(', ')})`);
   }
 
+  // Der letzte Tag gehört in die Zusammenfassung, sonst liest sich eine am 15.
+  // begonnene Serie wie „monatlich" und sieht damit aus wie eine, die auch am
+  // 15. wiederkommt - während ihr nächstes Vorkommen der 28. Februar ist. Die
+  // Angabe steht in der Klammer, wo bei WEEKLY die Wochentage stehen: beide
+  // beantworten dieselbe Frage.
+  if (p.freq === 'MONTHLY' && p.lastDay) parts.push(`(${t('rrule.lastDayOfMonth')})`);
+
   // Die Endebedingung ist eine eigene Aussage und bekommt einen Trenner:
   // „Alle 2 Monate 5 Termine" las sich wie ein verunglückter Satz.
   let rhythm = parts.join(' ');
@@ -299,6 +330,7 @@ export function bindRRuleEvents(root, prefix) {
   const freqSelect  = root.querySelector(`#${prefix}-rrule-freq`);
   const details     = root.querySelector(`#${prefix}-rrule-details`);
   const weekdays    = root.querySelector(`#${prefix}-rrule-weekdays`);
+  const monthday    = root.querySelector(`#${prefix}-rrule-monthday`);
   const unitEl      = root.querySelector(`#${prefix}-rrule-unit`);
   const intervalEl  = root.querySelector(`#${prefix}-rrule-interval`);
   const endSelect   = root.querySelector(`#${prefix}-rrule-end`);
@@ -312,6 +344,7 @@ export function bindRRuleEvents(root, prefix) {
     const freq = freqSelect.value;
     if (details)  details.hidden  = !freq;
     if (weekdays) weekdays.hidden = freq !== 'WEEKLY';
+    if (monthday) monthday.hidden = freq !== 'MONTHLY';
     // Der Hinweis ist die Umkehrung des Detailbereichs: er beantwortet die Frage
     // "sind das die einzigen vier Takte?", und sobald der Takt sichtbar danebensteht,
     // hat sie sich erledigt (#862). Die Beschreibung des Auswahlfelds geht mit -
@@ -370,7 +403,9 @@ export function getRRuleValues(root, prefix) {
     byday.push(btn.dataset.day);
   });
 
-  const built = buildRRule({ freq, interval, byday, until, count });
+  const lastDay = !!root.querySelector(`#${prefix}-rrule-last-day`)?.checked;
+
+  const built = buildRRule({ freq, interval, byday, until, count, lastDay });
 
   // WER NICHTS ÄNDERT, ÄNDERT NICHTS: Dieses Formular kennt nur einen Ausschnitt
   // von RFC 5545 (FREQ, INTERVAL, BYDAY, UNTIL, COUNT). Eine aus einem

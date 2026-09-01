@@ -2612,6 +2612,7 @@
         "labelRepeat": "Recurrence",
         "labelEvery": "Every",
         "labelOnDays": "On these days",
+        "lastDayOfMonth": "On the last day of the month",
         "labelUntil": "Ends on (optional)",
         "labelEnds": "Ends",
         "endNever": "Never",

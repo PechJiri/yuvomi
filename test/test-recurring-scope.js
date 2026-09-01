@@ -324,3 +324,25 @@ test('Die Schlüssel beider Rückfragen stehen in allen Locales', () => {
     }
   }
 });
+
+test('truncateRuleBefore behaelt "am letzten Tag des Monats" (#960)', async () => {
+  // Der Schnitt baut die Regel aus ihren Teilen NEU. Was er dabei nicht kennt,
+  // faellt weg - und der zurueckbleibende Teil der Serie lief danach auf dem
+  // Tag seines Startdatums statt am Monatsende. Dieselbe stille Umschreibung,
+  // die die Wortlaut-Regel aus #756 an anderer Stelle verhindert.
+  assert.equal(truncateRuleBefore('FREQ=MONTHLY;BYMONTHDAY=-1', '2026-05-31'),
+    'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260530');
+  assert.equal(truncateRuleBefore('FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=-1;COUNT=9', '2026-05-31'),
+    'FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=-1;UNTIL=20260530');
+
+  // Nur bei MONTHLY, und nur `-1` - der Validator nimmt nichts anderes an.
+  assert.equal(truncateRuleBefore('FREQ=YEARLY;BYMONTHDAY=-1', '2026-05-31'),
+    'FREQ=YEARLY;UNTIL=20260530');
+  assert.equal(truncateRuleBefore('FREQ=MONTHLY;BYMONTHDAY=15', '2026-05-31'),
+    'FREQ=MONTHLY;UNTIL=20260530');
+
+  // Und das Ergebnis muss der Server annehmen, sonst scheitert das Speichern
+  // des zurueckbleibenden Teils.
+  const { RRULE_RE } = await import('../server/middleware/validate.js');
+  assert.ok(RRULE_RE.test(truncateRuleBefore('FREQ=MONTHLY;BYMONTHDAY=-1', '2026-05-31')));
+});

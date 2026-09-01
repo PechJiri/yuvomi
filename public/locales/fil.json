@@ -2624,6 +2624,7 @@
         "labelRepeat": "Pag-uulit",
         "labelEvery": "Tuwing",
         "labelOnDays": "Sa mga araw na ito",
+        "lastDayOfMonth": "Sa huling araw ng buwan",
         "labelUntil": "Nagtatapos sa (opsyonal)",
         "labelEnds": "Nagtatapos",
         "endNever": "Hindi kailanman",

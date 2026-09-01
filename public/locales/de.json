@@ -2624,6 +2624,7 @@
         "labelRepeat": "Wiederholung",
         "labelEvery": "Alle",
         "labelOnDays": "An diesen Tagen",
+        "lastDayOfMonth": "Am letzten Tag des Monats",
         "labelUntil": "Endet am (optional)",
         "labelEnds": "Endet",
         "endNever": "Nie",

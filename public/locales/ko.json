@@ -2624,6 +2624,7 @@
         "labelRepeat": "반복",
         "labelEvery": "매",
         "labelOnDays": "해당 요일에",
+        "lastDayOfMonth": "매월 마지막 날",
         "labelUntil": "종료일 (선택 사항)",
         "labelEnds": "종료",
         "endNever": "없음",

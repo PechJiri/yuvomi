@@ -2624,6 +2624,7 @@
         "labelRepeat": "Pengulangan",
         "labelEvery": "Setiap",
         "labelOnDays": "Pada hari-hari ini",
+        "lastDayOfMonth": "Pada hari terakhir bulan",
         "labelUntil": "Berakhir pada (opsional)",
         "labelEnds": "Berakhir",
         "endNever": "Tidak pernah",

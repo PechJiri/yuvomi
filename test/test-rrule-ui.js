@@ -256,11 +256,113 @@ test('ohne Ausgangsregel entsteht die Regel wie bisher aus den Feldern', () => {
 // 3. Was der Server annehmen muss
 // --------------------------------------------------------
 
-test('eine neu gebaute Regel besteht weiterhin den Server-Validator', () => {
-  // Derselbe Ausdruck wie in server/middleware/validate.js: Er kennt kein
-  // Präfix. Deshalb darf der Unverändert-Rückgriff nur greifen, wenn die Regel
-  // wirklich unverändert ist - alles andere muss durch diese Prüfung passen.
-  const RRULE_RE = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
-  const built = buildRRule({ freq: 'WEEKLY', interval: 2, byday: ['MO', 'TH'], until: '', count: 5 });
-  assert.match(built, RRULE_RE);
+test('eine neu gebaute Regel besteht weiterhin den Server-Validator', async () => {
+  // DER ECHTE AUSDRUCK, NICHT SEINE KOPIE. Hier stand bis #960 ein
+  // handabgeschriebenes Duplikat von `server/middleware/validate.js` - und als
+  // der Validator um BYMONTHDAY erweitert wurde, prüfte der Test weiter gegen
+  // die alte Fassung, ohne rot zu werden. Ein Guard, der eine Kopie der Regel
+  // hält, prüft ab dem ersten Auseinanderlaufen sich selbst.
+  const { RRULE_RE } = await import('../server/middleware/validate.js');
+  const gebaut = [
+    buildRRule({ freq: 'WEEKLY', interval: 2, byday: ['MO', 'TH'], until: '', count: 5 }),
+    buildRRule({ freq: 'MONTHLY', interval: 1, byday: [], until: '', lastDay: true }),
+    buildRRule({ freq: 'MONTHLY', interval: 3, byday: [], until: '2027-01-31', lastDay: true }),
+  ];
+  assert.equal(gebaut.filter(Boolean).length, 3, 'Reichweite: drei Regeln gebaut');
+  for (const rule of gebaut) assert.match(rule, RRULE_RE, `Server lehnt ab: ${rule}`);
+});
+
+// --------------------------------------------------------
+// "Am letzten Tag des Monats" (#960)
+// --------------------------------------------------------
+
+test('die Wahl wird als BYMONTHDAY=-1 geschrieben, und nur bei MONTHLY', () => {
+  assert.equal(buildRRule({ freq: 'MONTHLY', interval: 1, byday: [], until: '', lastDay: true }),
+    'FREQ=MONTHLY;BYMONTHDAY=-1');
+  // Bei YEARLY waere "letzter Tag" jeder 31. Dezember - ein fester Tag, den das
+  // Startdatum schon traegt.
+  assert.equal(buildRRule({ freq: 'YEARLY', interval: 1, byday: [], until: '', lastDay: true }),
+    'FREQ=YEARLY');
+  assert.equal(buildRRule({ freq: 'MONTHLY', interval: 1, byday: [], until: '' }),
+    'FREQ=MONTHLY', 'ohne die Wahl bleibt die Regel wie bisher');
+});
+
+test('gelesen wird nur -1; jeder andere BYMONTHDAY bleibt eine fremde Angabe', () => {
+  assert.equal(parseRRule('FREQ=MONTHLY;BYMONTHDAY=-1').lastDay, true);
+  assert.equal(parseRRule('FREQ=MONTHLY;BYMONTHDAY=15').lastDay, false,
+    '"am 15." ist kein Haken in diesem Formular');
+  assert.equal(parseRRule('FREQ=MONTHLY').lastDay, false);
+});
+
+test('eine fremde BYMONTHDAY-Regel kommt im Wortlaut zurueck, statt zu verschwinden', () => {
+  // Die Wortlaut-Regel aus #756: was dieses Formular nicht liest, baut es auch
+  // nicht neu - sonst wuerde aus "am 15." beim Aendern des Titels stillschweigend
+  // "jeden Monat". Genau deshalb wird `15` nicht gelesen.
+  const fremd = 'FREQ=MONTHLY;BYMONTHDAY=15';
+  assert.notEqual(buildRRule(parseRRule(fremd)), fremd,
+    'die Uebersetzung trifft die fremde Regel NICHT - damit greift der Wortlaut-Rueckgriff');
+
+  // Die eigene dagegen uebersetzt sich stabil, sonst schluege der Vergleich bei
+  // jedem Speichern an und die Regel gaelte faelschlich als veraendert.
+  const eigen = 'FREQ=MONTHLY;BYMONTHDAY=-1';
+  assert.equal(buildRRule(parseRRule(eigen)), eigen);
+});
+
+// --------------------------------------------------------
+// Was der Review zu #960 gefunden hat
+// --------------------------------------------------------
+
+test('der Schalter traegt die Spur der geteilten Toggle-Komponente', () => {
+  // `.toggle` blendet das native Kaestchen aus und zeigt Zustand UND Fokus
+  // ausschliesslich ueber `.toggle__track`. Ohne die Spur stand da nur Text:
+  // kein sichtbares An/Aus, kein Fokusring. Der Nachbar-Schalter in derselben
+  // Datei hat sie, meiner nicht - eine Komponente halb zu benutzen ist
+  // schlimmer, als sie gar nicht zu benutzen.
+  const html = renderRRuleFields('probe', 'FREQ=MONTHLY', {});
+  const block = html.slice(html.indexOf('probe-rrule-monthday'));
+  const label = block.slice(0, block.indexOf('</label>'));
+  assert.match(label, /class="toggle__track"/,
+    'ohne Spur ist der Schalter zustands- und fokuslos');
+  assert.match(label, /id="probe-rrule-last-day"/, 'Reichweite: es ist der richtige Schalter');
+});
+
+test('die Zusammenfassung nennt den letzten Tag', () => {
+  // Sonst liest sich eine am 15. begonnene Serie wie "monatlich" und sieht aus
+  // wie eine, die auch am 15. wiederkommt - waehrend ihr naechstes Vorkommen
+  // der 28. Februar ist.
+  const mit  = describeRRule('FREQ=MONTHLY;BYMONTHDAY=-1');
+  const ohne = describeRRule('FREQ=MONTHLY');
+  assert.notEqual(mit, ohne, 'die beiden Serien duerfen sich nicht gleich lesen');
+  assert.match(mit, /\(/, 'die Angabe steht in der Klammer, wie die Wochentage bei WEEKLY');
+  // Und nur dort, wo sie etwas bedeutet.
+  assert.equal(describeRRule('FREQ=YEARLY;BYMONTHDAY=-1'), describeRRule('FREQ=YEARLY'));
+});
+
+test('der Server nimmt nur BYMONTHDAY=-1 an, nichts Weiteres (#960)', async () => {
+  // WAS DIE ENGINE NICHT BEDIENT, DARF DER VALIDATOR NICHT ANNEHMEN. Die erste
+  // Fassung liess den vollen RFC-Bereich durch: `FREQ=WEEKLY;BYMONTHDAY=15`
+  // liess sich speichern und lief danach woechentlich, ohne den angenommenen
+  // Monatstag je anzuwenden - eine Regel, die etwas anderes tut, als sie sagt.
+  const { RRULE_RE } = await import('../server/middleware/validate.js');
+  assert.ok(RRULE_RE.test('FREQ=MONTHLY;BYMONTHDAY=-1'), 'die eine unterstuetzte Form');
+  assert.ok(RRULE_RE.test('FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=-1;COUNT=5'));
+  for (const wert of ['15', '31', '-2', '-31', '0', '1,15']) {
+    assert.ok(!RRULE_RE.test(`FREQ=MONTHLY;BYMONTHDAY=${wert}`),
+      `BYMONTHDAY=${wert} darf nicht angenommen werden - die Engine bedient es nicht`);
+  }
+
+  // UND NUR UNTER MONTHLY. Die erste Fassung dieses Tests prueste nur
+  // MONTHLY-Regeln und war damit blind fuer den eigentlichen Fehler: die
+  // optionale Gruppe stand NEBEN der Frequenz-Alternation, also nahm der
+  // Ausdruck auch `FREQ=WEEKLY;BYMONTHDAY=-1` an - eine Regel, die parseRRule
+  // danach ignoriert. Genau das "angenommen, aber nie beachtet", gegen das die
+  // Verengung gebaut ist, nur eine Ebene hoeher.
+  for (const freq of ['DAILY', 'WEEKLY', 'YEARLY']) {
+    assert.ok(!RRULE_RE.test(`FREQ=${freq};BYMONTHDAY=-1`),
+      `${freq} kennt die Angabe nicht und darf sie nicht annehmen`);
+    // Gegenprobe, dass die Frequenz selbst weiterhin gilt.
+    assert.ok(RRULE_RE.test(`FREQ=${freq}`), `${freq} bleibt gueltig`);
+  }
+  assert.ok(RRULE_RE.test('FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=-1'),
+    'unter MONTHLY bleibt sie erlaubt, auch neben BYDAY');
 });

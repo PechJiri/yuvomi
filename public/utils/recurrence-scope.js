@@ -67,6 +67,7 @@ export function truncateRuleBefore(rule, occurrenceDateKey) {
   let freq = null;
   let interval = null;
   let byday = null;
+  let monthday = null;
   for (const segment of raw.split(';')) {
     const eq = segment.indexOf('=');
     if (eq === -1) continue;
@@ -75,12 +76,21 @@ export function truncateRuleBefore(rule, occurrenceDateKey) {
     if (key === 'FREQ') freq = val;
     else if (key === 'INTERVAL') interval = val;
     else if (key === 'BYDAY') byday = val;
+    // "Am letzten Tag des Monats" (#960) gehoert zur Aussage der Serie, nicht zu
+    // ihrer Laenge. Ohne diese Zeile verlor der zurueckbleibende Teil beim
+    // "diesen und alle folgenden"-Schnitt seinen Monatsletzten und lief danach
+    // auf dem Tag seines Startdatums weiter - dieselbe stille Umschreibung, die
+    // die Wortlaut-Regel in #756 an anderer Stelle verhindert.
+    else if (key === 'BYMONTHDAY' && val.trim() === '-1') monthday = '-1';
     // UNTIL/COUNT werden bewusst verworfen und durch das neue UNTIL ersetzt.
   }
   if (!freq) return null;
   keep.push(`FREQ=${freq}`);
   if (interval && interval !== '1') keep.push(`INTERVAL=${interval}`);
   if (byday) keep.push(`BYDAY=${byday}`);
+  // Nur bei MONTHLY, wie ueberall sonst auch: der Validator nimmt die Angabe
+  // unter keiner anderen Frequenz an.
+  if (monthday && String(freq).toUpperCase() === 'MONTHLY') keep.push('BYMONTHDAY=-1');
   const untilKey = addLocalDays(occurrenceDateKey.slice(0, 10), -1); // Vortag, inklusiv
   keep.push(`UNTIL=${untilKey.replace(/-/g, '')}`);
   return keep.join(';');

@@ -82,7 +82,11 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
     const wall = (event.tzid && !isAllDay) ? utcToWall(event.start_datetime, event.tzid) : null;
     const tzAware = wall && wall.date === event.start_datetime.slice(0, 10);
 
-    let currentDate = event.start_datetime.slice(0, 10); // YYYY-MM-DD
+    // DTSTART ist zugleich Startpunkt und ANKER: ohne ihn leitet nextOccurrence
+    // den gemeinten Tag aus dem vorigen Vorkommen ab, und eine Klemmung in einem
+    // kurzen Monat wuerde damit festgeschrieben (#978).
+    const seriesStart = event.start_datetime.slice(0, 10);
+    let currentDate = seriesStart; // YYYY-MM-DD
     let iterations  = 0;
     const MAX_ITER  = 1000; // Sicherheitsgrenze
     const exceptions = exceptionsByEvent?.get(event.id) ?? null; // ausgenommene Instanz-Daten (#489)
@@ -94,13 +98,30 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
 
     while (currentDate <= to && iterations < MAX_ITER) {
       iterations++;
+
+      // BYDAY-FILTER VOR DEM ZAEHLEN, EXDATE DANACH - die beiden sehen gleich
+      // aus und sind es nicht. Ein Tag ausserhalb des BYDAY-Musters ist GAR KEIN
+      // Vorkommen der Serie (#549: DTSTART am Wochenende bei BYDAY=MO..FR), also
+      // darf er auch nicht gegen COUNT zaehlen. Ein ausgenommenes Vorkommen
+      // dagegen ist eines und zaehlt mit, erzeugt aber keine Instanz (RFC 5545,
+      // #513).
+      //
+      // Beide standen bis hierher in EINER Bedingung nach `occurrence++`, und
+      // damit verbrauchte jeder uebersprungene Wochentag ein Vorkommen:
+      // `FREQ=MONTHLY;BYDAY=MO;COUNT=2` lieferte genau einen Termin, weil der
+      // zweite Zaehler an einen Mittwoch ging, den niemand je zu sehen bekam.
+      if (!matchesRRuleByday(currentDate, event.recurrence_rule)) {
+        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart });
+        if (!next || next <= currentDate) break;
+        currentDate = next;
+        continue;
+      }
+
       if (maxCount !== null && occurrence >= maxCount) break;
       occurrence++;
 
-      // Ausgenommenes Vorkommen (EXDATE, #489) oder Tag außerhalb des BYDAY-Musters
-      // (#549: DTSTART am Wochenende bei BYDAY=MO..FR): überspringen, Serie weiterlaufen lassen.
-      if (exceptions?.has(currentDate) || !matchesRRuleByday(currentDate, event.recurrence_rule)) {
-        const next = nextOccurrence(currentDate, event.recurrence_rule);
+      if (exceptions?.has(currentDate)) {
+        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart });
         if (!next || next <= currentDate) break;
         currentDate = next;
         continue;
@@ -142,7 +163,7 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
         });
       }
 
-      const next = nextOccurrence(currentDate, event.recurrence_rule);
+      const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart });
       if (!next || next <= currentDate) break;
       currentDate = next;
     }
