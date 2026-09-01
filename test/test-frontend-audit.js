@@ -14885,12 +14885,28 @@ const COMPOSITION_MODES = ['reading', 'data', 'dashboard', 'form', 'split', 'ful
  * dahinter und muss ihn erfuellen. Eine morgen angelegte Seite ist an dem Tag
  * erfasst, an dem sie eine Route bekommt.
  */
-function pagesBehindAppShell() {
+function routerPageRows() {
   const router = read('../public/router.js');
   const rows = [...router.matchAll(
-    /page:\s*'\/pages\/([\w-]+)\.js'[^}]*?requiresAuth:\s*(true|false)/g)];
-  const shell = new Set(rows.filter((r) => r[2] === 'true').map((r) => `${r[1]}.js`));
-  const standalone = new Set(rows.filter((r) => r[2] === 'false').map((r) => `${r[1]}.js`));
+    /page:\s*'\/pages\/([\w-]+)\.js'[^}]*?requiresAuth:\s*(true|false)/g)]
+    .map((r) => ({ name: `${r[1]}.js`, auth: r[2] === 'true' }));
+  // DER AUSDRUCK MUSS SELBST ETWAS GELESEN HABEN, bevor das Dateisystem dazu
+  // kommt. Sonst kippt der Geltungsbereich beim Tod des Ausdrucks nicht auf
+  // null, sondern auf ALLES: `standalone` ist leer, die Schleife unten nimmt
+  // jede Datei, Login und Setup eingeschlossen, und jede `>=`-Untergrenze in
+  // PAGE-000 bleibt gruen - der Nachweis haette den Fall, fuer den er
+  // geschrieben wurde, nie gesehen (claude-review, zweite Runde an #995).
+  if (!rows.some((r) => !r.auth)) {
+    throw new Error('Der Router-Ausdruck liest keine Route mit requiresAuth: false mehr - '
+      + 'hat sich die Routentabelle in public/router.js umformatiert?');
+  }
+  return rows;
+}
+
+function pagesBehindAppShell() {
+  const rows = routerPageRows();
+  const shell = new Set(rows.filter((r) => r.auth).map((r) => r.name));
+  const standalone = new Set(rows.filter((r) => !r.auth).map((r) => r.name));
   // Unterseiten ohne eigene Route (budget-stats, split-expenses ...) werden von
   // einer App-Route nachgeladen und gehoeren damit ebenfalls hinter die Shell.
   for (const file of walkJsFiles('../public/pages/')) {
@@ -14938,11 +14954,19 @@ const COMPOSITION_NEGATIVE_MARGIN = /margin(?:-inline|-left|-right|-inline-start
 test('PAGE-000: der Geltungsbereich ist nicht leer und deckt fast alle Seiten', () => {
   // REICHWEITEN-NACHWEIS. Ohne ihn koennte jede Regel darunter gruen sein, weil
   // sie ueber null Dateien laeuft - ein Tippfehler im Router-Regex genuegt.
+  const rows = routerPageRows();
+  const standalone = rows.filter((r) => !r.auth).length;
+  assert.ok(rows.length >= 20,
+    `Der Router-Ausdruck liest nur ${rows.length} Routen - ohne ihn kommt der Bereich aus dem Dateisystem und ist zu GROSS, nicht leer`);
+  assert.ok(standalone >= 4,
+    `Nur ${standalone} Routen ohne App-Shell erkannt (Login, Setup, Einladung, Reset) - der Ausdruck liest requiresAuth nicht mehr`);
   const shell = pagesBehindAppShell();
   const scope = compositionScope();
   const all = walkJsFiles('../public/pages/').length;
   assert.ok(shell.length >= 20,
     `Nur ${shell.length} Seiten hinter der App-Shell erkannt - liest der Router-Ausdruck noch?`);
+  assert.ok(!shell.includes('login.js') && !shell.includes('setup.js'),
+    'Login und Setup zeichnen ohne App-Shell und gehoeren nicht in den Geltungsbereich');
   assert.ok(scope.length >= 15,
     `Nur ${scope.length} Seiten im Geltungsbereich - die Regeln pruefen fast nichts`);
   assert.ok(scope.length >= all - 8,
@@ -15105,7 +15129,7 @@ test('PAGE-007: page-layout helpers export the contract surface', () => {
 
 test('PAGE-006b: a page without a measure does not narrow its header', () => {
   // `.page-toolbar--narrow` zieht das Zeilenende des Kopfes auf --page-measure.
-  // In `full` und `split` gibt es dieses Mass nicht (`--page-measure: none`),
+  // In `full` und `split` gibt es dieses Mass nicht (`--page-measure: 100%`),
   // der Koerper laeuft ueber die Nutzbreite. Ein statisch gesetzter Modifier
   // faellt dort auf den Rueckfall (720px) zurueck und der Kopf endet neben
   // seinem Koerper - so kam #929 bei den Notizen an: Kopf bei 720px, das
@@ -15172,10 +15196,53 @@ test('PAGE-008: DESIGN.md points at the composition system', () => {
 
 test('PAGE-009: composition mode owns responsive split/full behaviour', () => {
   const layout = read('../public/styles/layout.css');
-  assert.match(layout, /\.app-page--split[\s\S]*?@media \(min-width: 1024px\)|\.app-page--split \{[\s\S]*?grid-template-columns/,
-    'PAGE-009: split mode must define its responsive grid in layout.css');
-  assert.match(layout, /\.app-page--full[\s\S]*?--page-measure:\s*none/,
-    'PAGE-009: full mode clears page measure');
+  // Das Split-Raster liegt am KOERPER. renderAppPage() legt Kopf und Koerper
+  // als Geschwister unter die Wurzel; ein Raster an der Wurzel setzte den Kopf
+  // in die linke Spalte und den ganzen Koerper in die rechte (Codex, zweite
+  // Runde an #995). Die Regel muss in der 1024px-Query stehen und auf
+  // `> .app-page__body` zielen; die Wurzel selbst darf kein Raster werden.
+  const splitGrid = layout.match(/@media \(min-width: 1024px\) \{\s*\.app-page--split > \.app-page__body \{([^}]*)\}/);
+  assert.ok(splitGrid, 'PAGE-009: split mode must put its two-column grid on > .app-page__body inside the 1024px query');
+  assert.match(splitGrid[1], /display:\s*grid/, 'PAGE-009: the split body is a grid');
+  assert.match(splitGrid[1], /grid-template-columns:\s*minmax\(0, var\(--layout-reading\)\) minmax\(0, 1fr\)/,
+    'PAGE-009: master rail on the reading measure, detail takes the rest');
+  for (const rule of layout.matchAll(/\.app-page--split\s*(?:,[^{]*)?\{([^}]*)\}/g)) {
+    assert.doesNotMatch(rule[1], /display:\s*grid|grid-template-columns/,
+      'PAGE-009: .app-page--split itself must not be a grid - header and body would become its two cells');
+  }
+  // Ohne Mass heisst `100%`, nicht `none`: die Kopf-Formeln rechnen mit der
+  // Variable, und `none` ist in calc() kein Wert (siehe layout.css).
+  assert.match(layout, /\.app-page--split,\s*\n\.app-page--full \{\s*--page-measure:\s*100%;/,
+    'PAGE-009: full/split set --page-measure: 100% (a length the header formulas can subtract)');
+  assert.doesNotMatch(layout, /--page-measure:\s*none/,
+    'PAGE-009: --page-measure: none makes every calc() that reads it invalid');
+});
+
+test('PAGE-013: a narrow header follows the measure of ITS page, and full/split roots take the shell height', () => {
+  const layout = read('../public/styles/layout.css');
+  // Der Bar-Kopf deckelt ueber sein Padding. Die erste Fassung rechnete mit
+  // `--content-max-width-narrow` und deckelte den Kopf der Hauswirtschaft
+  // (`data`, 960px) auf 720px - Titel und Reiter endeten 240px vor den Karten
+  // (Codex an housekeeping.js:170). Die Formel liest das Mass der Seite.
+  const bar = layout.match(/\.page-toolbar--narrow:has\(> \.page-toolbar__bar\) \{([^}]*)\}/);
+  assert.ok(bar, 'PAGE-013: the bar-header rule is missing');
+  assert.match(bar[1], /calc\(100% - var\(--page-measure, var\(--content-max-width-narrow\)\) - var\(--page-inline-pad\)\)/,
+    'PAGE-013: the bar header must subtract --page-measure, not the reading width');
+  // Und jede Kopf-Formel, die ein Mass abzieht, zieht --page-measure ab:
+  // ein weiterer Literalwert waere derselbe Fehler an der naechsten Stelle.
+  const headFormulas = [...layout.matchAll(/\.page-toolbar--narrow[^{]*\{([^}]*)\}/g)]
+    .map((m) => m[1]).filter((body) => /calc\(100% -/.test(body));
+  assert.ok(headFormulas.length >= 2, `PAGE-013: only ${headFormulas.length} header formulas found - the scan is blind`);
+  for (const body of headFormulas) {
+    assert.doesNotMatch(body, /calc\(100% - var\(--(?:content-max-width-narrow|layout-reading)\)/,
+      'PAGE-013: a header formula subtracts a literal width instead of --page-measure');
+  }
+  // `flex: 1` an .app-page wirkt nicht - .page-transition ist ein Block. Damit
+  // ein `flex: 1`-Koerper in `full`/`split` etwas zu fuellen hat, stellt die
+  // Shell die Hoehe an Helper-Wurzeln bereit; Kernseiten mit eigenem
+  // `height: 100%` (Kalender, Notizen) bleiben unberuehrt.
+  assert.match(layout, /\.app-page--full:has\(> \.app-page__body\),\s*\n\.app-page--split:has\(> \.app-page__body\) \{\s*height:\s*100%;/,
+    'PAGE-013: full/split roots built by renderAppPage() must take the shell height');
 });
 
 test('PAGE-010: full-bleed is an explicit --bleed declaration', () => {

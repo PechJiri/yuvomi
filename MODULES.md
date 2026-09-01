@@ -69,7 +69,9 @@ Optional fields:
   header and body with `/utils/page-layout.js`.
 - `page.width`: semantic width (`reading` | `content` | `wide`); defaults from composition and
   refines the measure inside `reading`, `form`, `data` and `dashboard`. `split` and `full` own
-  their width and ignore it.
+  their width and ignore it. In `split`, the first two children of the body are the master and
+  detail rails from 1024px (stacked below); `full` and `split` roots take the shell height, so
+  a body section can scroll internally without your CSS sizing the page.
 - `page.navigation` / `page.responsive`: currently `standard` only.
 
 ## Client Entry

@@ -159,7 +159,17 @@ Mode modifiers set `--page-measure`:
 - `reading`, `form` → `--layout-reading`
 - `data` → `--layout-content`
 - `dashboard` → `--layout-wide`
-- `split`, `full` → none (mode rules apply)
+- `split`, `full` → `100%` (no measure; a length rather than `none`, because the
+  header formulas in `.page-toolbar--narrow` subtract it in `calc()` - with `100%`
+  they resolve to zero, so a narrow header is a no-op on these pages instead of an
+  invalid declaration)
+
+`split` puts the two-column grid on `.app-page__body` from 1024px: the body's
+first child is the master rail (up to `--layout-reading`), the second the detail
+rail; the header stays a full row above. Below 1024px the body stacks. `full`
+and `split` roots built with `renderAppPage()` take the shell height
+(`height: 100%`), so a `flex: 1` body can host an internal scrollport without
+module CSS sizing the page.
 
 ### JavaScript helpers
 
@@ -259,7 +269,7 @@ overflow checks. Not wired into CI yet.
 |----------|--------|
 | Is Budget the layout reference? | **No.** There is no reference page. Budget is an offender; the rules are the contract. |
 | Must every page use `page-layout.js`? | Every page behind the app shell must declare a mode. Deep helper migration follows page by page; the three pending pages are named in the guard. |
-| Why still `page-toolbar--narrow`? | Large-Title / wrap CSS still keys off direct toolbar children. Measured rail uses `display: contents` with narrow so the edge stays correct without rewriting every selector. |
+| Why still `page-toolbar--narrow`? | Large-Title / wrap CSS and the head seal (`:scope > .page-toolbar__title`) key off direct toolbar children. With `narrow` there is no rail element at all - `::after` holds the edge - so those selectors keep working; the rail box exists only without `narrow`. |
 | Why `--layout-*` and `--content-max-width-narrow`? | `--layout-*` is the contract; narrow is a one-cycle alias. |
 | Can extensions invent width? | **No.** Declare `page.composition` and use helpers / `.app-page--*`. |
 | What about shopping / meals / settings / auth? | Documented v1 exceptions - do not force composition modes yet. |
@@ -274,7 +284,8 @@ overflow checks. Not wired into CI yet.
 | Reference | `reading` | **birthdays** | **Done (helpers + CSS)** |
 | A | `reading` | contacts, rewards, pantry, recipes | Mode declared |
 | B | `data` | inventory, schedule, documents, housekeeping | Mode declared |
-| C | budget family | budget + stats/plans/subscriptions/split | Mode declared; metric-grid on measure |
+| C | budget family | budget + stats/plans | Mode declared; metric-grid on measure |
+| C' | `full` / `split` | subscriptions (`full`), split-expenses (`split`) | Mode declared; content not on a measure yet (analytics grid / two-column layout own their width) |
 | D | `dashboard` / `full` | calendar, tasks, notes, health, dashboard | Mode declared |
 
 After v1, every layout question becomes: *which composition mode, and which contract clause is violated?*

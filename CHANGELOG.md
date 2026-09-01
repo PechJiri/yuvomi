@@ -40,7 +40,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Three of the new guards were green without seeing anything: the breakpoint check let the
   spec's own forbidden example through, the negative-margin check did not know `calc(-1 * ...)`,
   and the inline-width check read the whole `style` attribute instead of the value. Each of
-  them now has a counter-proof.
+  them now has a counter-proof. A second round found the header formula for a tab bar still
+  subtracting the reading width by name, so the housekeeping header (a `data` page) stopped
+  240px before its cards; it now subtracts the measure of its own page, and pages without one
+  (`full`, `split`) set that measure to `100%` rather than `none`, because `none` inside a
+  `calc()` does not degrade, it invalidates. The split grid sat on the page root, where the
+  helper's header and body would have become its two cells; it sits on the body now, and
+  `full`/`split` roots built by the helper take the shell height so a body can scroll on its
+  own. Subscriptions was declared `reading` while its analytics grid and list never met the
+  measure - only the KPI band did, and the page acquired a width jump; it is `full` until its
+  sections follow one measure, and split-expenses, a header over a two-column layout, is
+  `split`. The reach proof of the audit could not catch the failure it was written for: with a
+  dead router expression the scope did not shrink to nothing but widened to every page, login
+  included, and every lower bound stayed green; the expression now has to have read the
+  standalone routes before the file walk is allowed to add anything.
 
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from
