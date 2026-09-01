@@ -2612,6 +2612,7 @@
         "labelRepeat": "Tekrar",
         "labelEvery": "Her",
         "labelOnDays": "Bu günlerde",
+        "lastDayOfMonth": "Ayın son gününde",
         "labelUntil": "Bitiş tarihi (isteğe bağlı)",
         "labelEnds": "Biter",
         "endNever": "Asla",

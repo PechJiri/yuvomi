@@ -2612,6 +2612,7 @@
         "labelRepeat": "Lặp lại",
         "labelEvery": "Mỗi",
         "labelOnDays": "Vào những ngày này",
+        "lastDayOfMonth": "Vào ngày cuối cùng của tháng",
         "labelUntil": "Kết thúc vào (tùy chọn)",
         "labelEnds": "Kết thúc",
         "endNever": "Không bao giờ",

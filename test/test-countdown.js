@@ -587,10 +587,17 @@ test('der Sprung beim Aufholen liefert dasselbe wie das Zaehlen (#877)', () => {
   //
   // Also gegengerechnet: Schritt fuer Schritt vom Serienstart aus, ohne jede
   // Abkuerzung, und das Ergebnis muss gleich sein.
+  //
+  // DER ANKER GEHOERT IN BEIDE RECHNUNGEN (#978). `nextEventDate` kennt den
+  // Serienstart und reicht ihn durch, damit eine Klemmung in einem kurzen Monat
+  // den gemeinten Tag nicht dauerhaft umschreibt. Zaehlte die Gegenrechnung
+  // ohne ihn, verglichen wir zwei verschiedene Serien und der Test meldete einen
+  // Sprungfehler, wo nur die Referenz eine andere Frage beantwortet - `startKey`
+  // IST der Serienstart, also derselbe Anker.
   const langsam = (startKey, rule, todayKey) => {
     let current = startKey;
     for (let i = 0; i < 20000 && current < todayKey; i += 1) {
-      const next = nextOccurrence(current, rule);
+      const next = nextOccurrence(current, rule, { anchor: startKey });
       if (!next || next <= current) return null;
       current = next;
     }

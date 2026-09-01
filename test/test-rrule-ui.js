@@ -256,11 +256,54 @@ test('ohne Ausgangsregel entsteht die Regel wie bisher aus den Feldern', () => {
 // 3. Was der Server annehmen muss
 // --------------------------------------------------------
 
-test('eine neu gebaute Regel besteht weiterhin den Server-Validator', () => {
-  // Derselbe Ausdruck wie in server/middleware/validate.js: Er kennt kein
-  // Präfix. Deshalb darf der Unverändert-Rückgriff nur greifen, wenn die Regel
-  // wirklich unverändert ist - alles andere muss durch diese Prüfung passen.
-  const RRULE_RE = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
-  const built = buildRRule({ freq: 'WEEKLY', interval: 2, byday: ['MO', 'TH'], until: '', count: 5 });
-  assert.match(built, RRULE_RE);
+test('eine neu gebaute Regel besteht weiterhin den Server-Validator', async () => {
+  // DER ECHTE AUSDRUCK, NICHT SEINE KOPIE. Hier stand bis #960 ein
+  // handabgeschriebenes Duplikat von `server/middleware/validate.js` - und als
+  // der Validator um BYMONTHDAY erweitert wurde, prüfte der Test weiter gegen
+  // die alte Fassung, ohne rot zu werden. Ein Guard, der eine Kopie der Regel
+  // hält, prüft ab dem ersten Auseinanderlaufen sich selbst.
+  const { RRULE_RE } = await import('../server/middleware/validate.js');
+  const gebaut = [
+    buildRRule({ freq: 'WEEKLY', interval: 2, byday: ['MO', 'TH'], until: '', count: 5 }),
+    buildRRule({ freq: 'MONTHLY', interval: 1, byday: [], until: '', lastDay: true }),
+    buildRRule({ freq: 'MONTHLY', interval: 3, byday: [], until: '2027-01-31', lastDay: true }),
+  ];
+  assert.equal(gebaut.filter(Boolean).length, 3, 'Reichweite: drei Regeln gebaut');
+  for (const rule of gebaut) assert.match(rule, RRULE_RE, `Server lehnt ab: ${rule}`);
+});
+
+// --------------------------------------------------------
+// "Am letzten Tag des Monats" (#960)
+// --------------------------------------------------------
+
+test('die Wahl wird als BYMONTHDAY=-1 geschrieben, und nur bei MONTHLY', () => {
+  assert.equal(buildRRule({ freq: 'MONTHLY', interval: 1, byday: [], until: '', lastDay: true }),
+    'FREQ=MONTHLY;BYMONTHDAY=-1');
+  // Bei YEARLY waere "letzter Tag" jeder 31. Dezember - ein fester Tag, den das
+  // Startdatum schon traegt.
+  assert.equal(buildRRule({ freq: 'YEARLY', interval: 1, byday: [], until: '', lastDay: true }),
+    'FREQ=YEARLY');
+  assert.equal(buildRRule({ freq: 'MONTHLY', interval: 1, byday: [], until: '' }),
+    'FREQ=MONTHLY', 'ohne die Wahl bleibt die Regel wie bisher');
+});
+
+test('gelesen wird nur -1; jeder andere BYMONTHDAY bleibt eine fremde Angabe', () => {
+  assert.equal(parseRRule('FREQ=MONTHLY;BYMONTHDAY=-1').lastDay, true);
+  assert.equal(parseRRule('FREQ=MONTHLY;BYMONTHDAY=15').lastDay, false,
+    '"am 15." ist kein Haken in diesem Formular');
+  assert.equal(parseRRule('FREQ=MONTHLY').lastDay, false);
+});
+
+test('eine fremde BYMONTHDAY-Regel kommt im Wortlaut zurueck, statt zu verschwinden', () => {
+  // Die Wortlaut-Regel aus #756: was dieses Formular nicht liest, baut es auch
+  // nicht neu - sonst wuerde aus "am 15." beim Aendern des Titels stillschweigend
+  // "jeden Monat". Genau deshalb wird `15` nicht gelesen.
+  const fremd = 'FREQ=MONTHLY;BYMONTHDAY=15';
+  assert.notEqual(buildRRule(parseRRule(fremd)), fremd,
+    'die Uebersetzung trifft die fremde Regel NICHT - damit greift der Wortlaut-Rueckgriff');
+
+  // Die eigene dagegen uebersetzt sich stabil, sonst schluege der Vergleich bei
+  // jedem Speichern an und die Regel gaelte faelschlich als veraendert.
+  const eigen = 'FREQ=MONTHLY;BYMONTHDAY=-1';
+  assert.equal(buildRRule(parseRRule(eigen)), eigen);
 });

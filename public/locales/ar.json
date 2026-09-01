@@ -2612,6 +2612,7 @@
         "labelRepeat": "التكرار",
         "labelEvery": "كل",
         "labelOnDays": "في هذه الأيام",
+        "lastDayOfMonth": "في اليوم الأخير من الشهر",
         "labelUntil": "ينتهي في (اختياري)",
         "labelEnds": "ينتهي",
         "endNever": "أبدًا",

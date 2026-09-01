@@ -375,7 +375,9 @@ function expandRRULE(vevent, windowStart, windowEnd) {
         color: vevent.color,
       });
     }
-    const next = nextOccurrence(current, vevent.rrule);
+    // startDate ist DTSTART und damit der Anker: ohne ihn schreibt eine
+    // Klemmung in einem kurzen Monat den Tag der Serie um (#978).
+    const next = nextOccurrence(current, vevent.rrule, { anchor: startDate });
     if (!next || next <= current) break;
     current = next;
   }

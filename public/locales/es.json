@@ -2612,6 +2612,7 @@
         "labelRepeat": "Repetición",
         "labelEvery": "Cada",
         "labelOnDays": "En estos días",
+        "lastDayOfMonth": "El último día del mes",
         "labelUntil": "Termina el (opcional)",
         "labelEnds": "Termina",
         "endNever": "Nunca",

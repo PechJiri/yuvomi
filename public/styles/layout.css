@@ -5748,6 +5748,14 @@ textarea::placeholder {
 
 /* Ankerschalter „ab Erledigung" (#658). Sitzt unter dem Takt, weil er ihn
  * verankert und nicht selbst einer ist: erst „jede Woche", dann „ab wann". */
+/* "Am letzten Tag des Monats" (#960) steht dort, wo bei WEEKLY die Wochentage
+ * stehen: beide beantworten dieselbe Frage - WANN im Takt -, und beide gibt es
+ * nur bei ihrer Frequenz. Kein Trennstrich wie beim Anker darunter, der eine
+ * andere Frage stellt (woran haengt der Takt). */
+.rrule-monthday {
+  margin-top: var(--space-3);
+}
+
 .rrule-anchor {
   border-top: 1px solid var(--color-border-subtle);
   padding-top: var(--space-3);

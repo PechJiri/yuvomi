@@ -202,5 +202,42 @@ test('TZID-Serie: Instanz bleibt am korrekten Wochentag (Mi, Tag-24-Master)', ()
   assert(inst[0].start_datetime.slice(0, 10) === '2025-12-10', `Datum: ${inst[0].start_datetime}`);
 });
 
+// --------------------------------------------------------
+// Der Anker ueber den ganzen Weg (#978, #960)
+//
+// Die Unit-Tests in test-calendar.js pruefen nextOccurrence direkt. Diese hier
+// pruefen, dass die Expansion den Anker AUCH DURCHREICHT - genau die Stelle, an
+// der ein fehlendes Argument nichts rot werden liess.
+// --------------------------------------------------------
+
+test('jaehrliche Serie am 29. Februar kehrt im Schaltjahr zurueck', () => {
+  const tage = occDays(VCAL('UID:yearly-leap@x\r\nSUMMARY:Serie\r\nDTSTART;VALUE=DATE:20240229\r\nDTEND;VALUE=DATE:20240301\r\nRRULE:FREQ=YEARLY'),
+    '2024-01-01', '2028-12-31');
+  assert(tage.includes('2024-02-29'), `Start fehlt: ${tage.join(', ')}`);
+  assert(tage.includes('2025-02-28'), `im Nicht-Schaltjahr geklemmt: ${tage.join(', ')}`);
+  assert(tage.includes('2028-02-29'), `2028 ist ein Schaltjahr, bekommen: ${tage.join(', ')}`);
+});
+
+test('monatliche Serie am 31. behaelt ihren Tag ueber den Februar hinweg', () => {
+  const tage = occDays(VCAL('UID:monthly-31@x\r\nSUMMARY:Serie\r\nDTSTART;VALUE=DATE:20260131\r\nDTEND;VALUE=DATE:20260201\r\nRRULE:FREQ=MONTHLY'),
+    '2026-01-01', '2026-06-30');
+  assert(tage.includes('2026-02-28'), `der kurze Monat wird geklemmt: ${tage.join(', ')}`);
+  assert(tage.includes('2026-03-31'), `und der 31. kommt zurueck: ${tage.join(', ')}`);
+  assert(tage.includes('2026-05-31'), `auch spaeter noch: ${tage.join(', ')}`);
+  // Kein Monat faellt aus - die Regel, nicht die Datumsliste.
+  const monate = new Set(tage.map((d) => d.slice(0, 7)));
+  assert(monate.size === 6, `sechs Monate erwartet, bekommen ${monate.size}: ${[...monate].join(', ')}`);
+});
+
+test('BYMONTHDAY=-1 trifft ueber den ganzen Weg den letzten Tag', () => {
+  const tage = occDays(VCAL('UID:monthly-last@x\r\nSUMMARY:Serie\r\nDTSTART;VALUE=DATE:20260115\r\nDTEND;VALUE=DATE:20260116\r\nRRULE:FREQ=MONTHLY;BYMONTHDAY=-1'),
+    '2026-02-01', '2026-05-31');
+  assert(tage.length >= 4, `zu wenige Vorkommen: ${tage.join(', ')}`);
+  for (const d of tage) {
+    const [y, m, day] = d.split('-').map(Number);
+    assert(day === new Date(Date.UTC(y, m, 0)).getUTCDate(), `${d} ist nicht der letzte Tag`);
+  }
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

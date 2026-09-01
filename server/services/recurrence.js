@@ -35,10 +35,21 @@ function parseRRule(rule) {
   // übernimmt die Expansion (expandRecurringEvents), die von DTSTART zählt.
   const countRaw = parts.COUNT ? parseInt(parts.COUNT, 10) : null;
   const count    = Number.isInteger(countRaw) && countRaw > 0 ? countRaw : null;
+  // BYMONTHDAY traegt den gemeinten Tag IN DER REGEL, statt ihn aus dem letzten
+  // Vorkommen abzuleiten. Die Oberflaeche erzeugt nur `-1` ("letzter Tag des
+  // Monats", #960); gelesen wird der ganze Wertebereich, weil Fremdkalender ihn
+  // liefern und weil ein positiver Wert dieselbe Rolle spielt wie ein Anker.
+  // Mehrere Werte (`BYMONTHDAY=1,15`) sind ausserhalb des Subsets: der erste
+  // gilt, der Rest wird ignoriert - eine Regel, die zwei Tage meint, wuerde von
+  // dieser Funktion sonst still zu einem einzigen.
+  const bmdRaw = parts.BYMONTHDAY ? parseInt(String(parts.BYMONTHDAY).split(',')[0], 10) : null;
+  const bymonthday = Number.isInteger(bmdRaw) && bmdRaw !== 0 && bmdRaw >= -31 && bmdRaw <= 31
+    ? bmdRaw
+    : null;
 
   if (!['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return null;
 
-  return { freq, interval, byday, until, count };
+  return { freq, interval, byday, until, count, bymonthday };
 }
 
 function parseUntilDate(str) {
@@ -52,16 +63,43 @@ function parseUntilDate(str) {
 
 /**
  * Berechnet das nächste Fälligkeitsdatum nach dem gegebenen Basisdatum.
+ *
+ * ── DER ANKER, UND WARUM ES IHN GIBT ──────────────────────────────────────
+ *
+ * Ohne ihn ist der gemeinte Tag der des VORIGEN Vorkommens - und weil ein
+ * kurzer Monat ihn klemmt, ist er danach ein anderer. Eine am 31. Januar
+ * begonnene Serie fiel so ab dem Februar dauerhaft auf den 28., und eine
+ * jährliche am 29. Februar kam auch im nächsten Schaltjahr nicht zurück
+ * (#978). Die Klemmung ist ein Wegwerf-Ergebnis; wer sie als Ausgangspunkt
+ * nimmt, schreibt sie fest.
+ *
+ * Zwei Wege führen aus dem Kreis, und beide sind hier drin:
+ *  - Die REGEL trägt den Tag (`BYMONTHDAY`, #960). Sie sticht alles andere,
+ *    weil sie eine Aussage ist und kein Nebenprodukt.
+ *  - Der AUFRUFER trägt ihn: wer DTSTART kennt, reicht es als `anchor` durch.
+ *    Kalender-Expansion, ICS-Parser und die Serienrechnung tun das; sie
+ *    iterieren ohnehin ab dem Serienstart. `nextDueAfterCompletion` kann es
+ *    nicht - eine Aufgabenserie ist eine Kette einzelner Zeilen und kennt
+ *    ihren Ursprung nicht -, und dort bleibt es beim bisherigen Verhalten.
+ *
  * @param {string} baseDateStr - ISO-Datums-String (YYYY-MM-DD)
  * @param {string} rrule       - RRULE-String
+ * @param {object} [opts]
+ * @param {string} [opts.anchor] - DTSTART der Serie (YYYY-MM-DD). Bestimmt Tag
+ *        (und bei YEARLY den Monat), wenn die Regel selbst keinen nennt.
  * @returns {string|null}      - Nächstes Datum als YYYY-MM-DD oder null (Ende der Serie)
  */
-function nextOccurrence(baseDateStr, rrule) {
+function nextOccurrence(baseDateStr, rrule, { anchor = null } = {}) {
   const parsed = parseRRule(rrule);
   if (!parsed || !baseDateStr) return null;
 
   const base = new Date(baseDateStr + 'T00:00:00Z');
   if (isNaN(base.getTime())) return null;
+
+  // Ein unlesbarer Anker ist kein Anker: lieber das bisherige Verhalten als ein
+  // NaN, das sich als Datum durch die ganze Serie zieht.
+  const anchorDate = anchor ? new Date(anchor + 'T00:00:00Z') : null;
+  const anchorDay = anchorDate && !isNaN(anchorDate.getTime()) ? anchorDate.getUTCDate() : null;
 
   const { freq, interval, byday, until } = parsed;
   const next = new Date(base);
@@ -118,20 +156,28 @@ function nextOccurrence(baseDateStr, rrule) {
     // am 31. Januar begonnene Serie ab dem Februar dauerhaft auf dem 28. Dafür
     // müsste die Regel den gemeinten Tag tragen (BYMONTHDAY, #960) oder die
     // Serie ihren Ursprung kennen; beides ist mehr als eine Rechenkorrektur.
-    const targetDay = base.getUTCDate();
-    const year      = base.getUTCFullYear();
-    const month     = base.getUTCMonth() + interval;
-    const lastDay   = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    next.setTime(Date.UTC(year, month, Math.min(targetDay, lastDay)));
+    const year    = base.getUTCFullYear();
+    const month   = base.getUTCMonth() + interval;
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    // `BYMONTHDAY=-1` heisst "letzter Tag", und zwar der des ZIELMONATS - das
+    // ist die eine Angabe, die sich nicht als fester Tag schreiben laesst und
+    // deshalb ueberhaupt in die Regel gehoert (#960).
+    const targetDay = parsed.bymonthday === -1
+      ? lastDay
+      : (parsed.bymonthday ?? anchorDay ?? base.getUTCDate());
+    next.setTime(Date.UTC(year, month, Math.min(Math.max(targetDay, 1), lastDay)));
 
   } else if (freq === 'YEARLY') {
-    const targetMonth = base.getUTCMonth();
-    const targetDay   = base.getUTCDate();
-    next.setUTCFullYear(next.getUTCFullYear() + interval);
-    // Feb 29 in non-leap year → Feb 28
-    next.setUTCMonth(targetMonth);
-    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), targetMonth + 1, 0)).getUTCDate();
-    next.setUTCDate(Math.min(targetDay, lastDay));
+    // Monat UND Tag kommen aus dem Anker, wenn es einen gibt: sonst ist der 29.
+    // Februar nach dem ersten Nicht-Schaltjahr fuer immer der 28. (#978).
+    const targetMonth = anchorDate ? anchorDate.getUTCMonth() : base.getUTCMonth();
+    const year        = base.getUTCFullYear() + interval;
+    const lastDay     = new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate();
+    const targetDay   = parsed.bymonthday === -1
+      ? lastDay
+      : (parsed.bymonthday ?? anchorDay ?? base.getUTCDate());
+    // Feb 29 in einem Nicht-Schaltjahr → Feb 28, aber ohne den Anker zu verlieren.
+    next.setTime(Date.UTC(year, targetMonth, Math.min(Math.max(targetDay, 1), lastDay)));
   }
 
   // UNTIL-Grenze prüfen
@@ -255,11 +301,11 @@ function nextOccurrenceAfter(baseDateStr, rrule, notBeforeStr, { seriesStart = n
   if (lastAllowed && notBeforeStr && lastAllowed < notBeforeStr) return null;
 
   const start = notBeforeStr ? fastForward(baseDateStr, parsed, notBeforeStr) : baseDateStr;
-  let current = nextOccurrence(start, rrule);
+  let current = nextOccurrence(start, rrule, { anchor: seriesStart });
   // Vergleich per lexikografischem YYYY-MM-DD-String (Format ist fix, daher sicher).
   let guard = 0;
   while (current && notBeforeStr && current < notBeforeStr && guard++ < CATCH_UP_STEPS) {
-    current = nextOccurrence(current, rrule);
+    current = nextOccurrence(current, rrule, { anchor: seriesStart });
   }
   if (current && lastAllowed && current > lastAllowed) return null;
   return current;

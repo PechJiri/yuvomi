@@ -2612,6 +2612,7 @@
         "labelRepeat": "Повторення",
         "labelEvery": "Кожні",
         "labelOnDays": "У ці дні",
+        "lastDayOfMonth": "В останній день місяця",
         "labelUntil": "Закінчується (необов'язково)",
         "labelEnds": "Завершується",
         "endNever": "Ніколи",

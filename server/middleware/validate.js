@@ -18,7 +18,10 @@ const DATETIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(?:\.\d+)?)?(?:Z|[+-]
 const COLOR_RE    = /^#[0-9A-Fa-f]{6}$/;
 const MONTH_RE    = /^\d{4}-\d{2}$/;
 // UNTIL und COUNT schließen sich laut RFC 5545 gegenseitig aus (#513).
-const RRULE_RE    = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
+// BYMONTHDAY steht zwischen BYDAY und der Endbedingung, weil die Oberflaeche
+// die Regel in dieser Reihenfolge baut. Erlaubt ist der volle RFC-Bereich
+// (-31..-1, 1..31); erzeugt wird aus dem Formular nur `-1` (#960).
+const RRULE_RE    = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;BYMONTHDAY=-?(3[01]|[12]\d|[1-9]))?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
 
 /**
  * Bereinigt und validiert einen Pflicht-String.
@@ -237,5 +240,5 @@ function bool(val, field) {
 export {
   str, oneOf, date, time, datetime, month, num, color, url, rrule, id, bool, collectErrors,
   MAX_TITLE, MAX_TEXT, MAX_SHORT, MAX_RRULE, MAX_URL,
-  DATE_RE, TIME_RE, DATETIME_RE, COLOR_RE, MONTH_RE,
+  DATE_RE, TIME_RE, DATETIME_RE, COLOR_RE, MONTH_RE, RRULE_RE,
 };

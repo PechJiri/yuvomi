@@ -2612,6 +2612,7 @@
         "labelRepeat": "Ismétlés",
         "labelEvery": "Minden",
         "labelOnDays": "Ezeken a napokon",
+        "lastDayOfMonth": "A hónap utolsó napján",
         "labelUntil": "Befejezés (opcionális)",
         "labelEnds": "Véget ér",
         "endNever": "Soha",

@@ -2612,6 +2612,7 @@
         "labelRepeat": "繰り返し",
         "labelEvery": "毎",
         "labelOnDays": "曜日",
+        "lastDayOfMonth": "毎月の最終日",
         "labelUntil": "終了日（任意）",
         "labelEnds": "終了",
         "endNever": "なし",
