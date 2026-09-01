@@ -10,6 +10,15 @@
  *     `access_permissions`. Fehlt eine Zeile → Modul 'write', Widget 'allow'.
  *     Dadurch verhalten sich Bestands-Installationen nach Migration v74
  *     unverändert (kein Zwangs-Lockout).
+ *   - Dieser Standard ist für die MIGRATION entschieden, nicht für die
+ *     EINLADUNG. Dass ein Konto ohne Zeilen alles sieht, ist für einen
+ *     bestehenden Haushalt richtig und für ein neu eingeladenes Mitglied nur
+ *     geerbt (#869). Die Antwort dort liegt bewusst NICHT hier: wer den
+ *     Standard umdreht, um sie zu geben, sperrt beim nächsten Update genau die
+ *     Haushalte aus, die v74 schützen sollte. Sie liegt in der Vorauswahl des
+ *     Einladungsformulars (settings/pages/admin-family.js), die eng startet
+ *     und zeigt, was die gewählte Rolle darf - eine Formular-Voreinstellung,
+ *     kein gespeicherter Standard.
  *   - Admins (users.role = 'admin') umgehen das System vollständig: immer
  *     Vollzugriff, kein Scoping. So kann sich niemand selbst aussperren.
  *   - Auflösungsreihenfolge für ein Mitglied: Mitglied-Override ?? Rollen-Profil
