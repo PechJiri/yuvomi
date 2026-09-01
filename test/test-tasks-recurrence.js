@@ -762,3 +762,26 @@ test('Enthaken einer Subtask der erledigten Instanz lässt die Folgeinstanz voll
     'die Unteraufgabe der Folgeinstanz gehört dem neuen Durchlauf, nicht dem alten Haken',
   );
 });
+
+test('"ab Erledigung" behaelt sein Intervall, auch mit BYMONTHDAY=-1 (#960)', () => {
+  // nextDueAfterCompletion reicht bei diesem Anker den Tag des Abhakens herein -
+  // ein beliebiges Datum, das die Serie gar nicht kennt. Die Abkuerzung fuer
+  // einen unsynchronisierten Serienstart darf dort nicht greifen, sonst wird
+  // aus "alle drei Monate, erledigt am 10. Maerz" der 31. Maerz statt des
+  // 30. Juni.
+  assert.equal(nextDueAfterCompletion({
+    anchorDate: '2026-01-31', rule: 'FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1',
+    completedOn: '2026-03-10', fromCompletion: true,
+  }), '2026-06-30');
+
+  assert.equal(nextDueAfterCompletion({
+    anchorDate: '2026-01-31', rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    completedOn: '2026-01-30', fromCompletion: true,
+  }), '2026-02-28', 'ohne Intervall einen Monat weiter, nicht einen Tag');
+
+  // Der andere Anker bleibt unveraendert: dort IST das Basisdatum ein Vorkommen.
+  assert.equal(nextDueAfterCompletion({
+    anchorDate: '2026-01-31', rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    completedOn: '2026-02-02', fromCompletion: false,
+  }), '2026-02-28');
+});

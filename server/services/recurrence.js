@@ -110,7 +110,7 @@ function parseUntilDate(str) {
  *        (und bei YEARLY den Monat), wenn die Regel selbst keinen nennt.
  * @returns {string|null}      - Nächstes Datum als YYYY-MM-DD oder null (Ende der Serie)
  */
-function nextOccurrence(baseDateStr, rrule, { anchor = null } = {}) {
+function nextOccurrence(baseDateStr, rrule, { anchor = null, fromArbitraryDate = false } = {}) {
   const parsed = parseRRule(rrule);
   if (!parsed || !baseDateStr) return null;
 
@@ -183,9 +183,15 @@ function nextOccurrence(baseDateStr, rrule, { anchor = null } = {}) {
     // Fall entsteht, sobald DTSTART nicht selbst auf der Regel liegt: eine am
     // 15. angelegte Serie lief bis hierher vom 15. Januar direkt auf den
     // 28. Februar, und der 31. Januar wurde nie erzeugt.
+    //
+    // NUR WENN `base` EIN VORKOMMEN SEIN SOLL. `nextDueAfterCompletion` reicht
+    // bei "ab Erledigung" (#658) den Tag des Abhakens herein - ein beliebiges
+    // Datum, das die Serie gar nicht kennt. Dort faengt das Intervall an diesem
+    // Tag NEU an; die Abkuerzung wuerde es verschlucken und aus "alle drei
+    // Monate, erledigt am 10. Maerz" den 31. Maerz machen statt des 30. Juni.
     const year  = base.getUTCFullYear();
     let   month = base.getUTCMonth() + interval;
-    if (parsed.bymonthday === -1) {
+    if (parsed.bymonthday === -1 && !fromArbitraryDate) {
       const letzterImBasismonat = new Date(Date.UTC(year, base.getUTCMonth() + 1, 0)).getUTCDate();
       if (base.getUTCDate() < letzterImBasismonat) month = base.getUTCMonth();
     }
@@ -427,7 +433,9 @@ function lastOccurrenceOf(seriesStart, parsed) {
  * @returns {string|null} Nächstes Datum als YYYY-MM-DD oder null (Serienende)
  */
 function nextDueAfterCompletion({ anchorDate, rule, completedOn, fromCompletion = false }) {
-  if (fromCompletion) return completedOn ? nextOccurrence(completedOn, rule) : null;
+  if (fromCompletion) {
+    return completedOn ? nextOccurrence(completedOn, rule, { fromArbitraryDate: true }) : null;
+  }
   return nextOccurrenceAfter(anchorDate, rule, completedOn);
 }
 
@@ -440,7 +448,7 @@ function nextDueAfterCompletion({ anchorDate, rule, completedOn, fromCompletion 
  * @param {string} rrule   - RRULE-String
  * @returns {boolean}
  */
-function matchesRRuleByday(dateStr, rrule) {
+function matchesRRuleByday(dateStr, rrule, { utcDiffersFromLocal = false } = {}) {
   const parsed = parseRRule(rrule);
   if (!parsed) return true;
   const day = new Date(dateStr + 'T00:00:00Z');
@@ -451,7 +459,15 @@ function matchesRRuleByday(dateStr, rrule) {
   // geprueft wurde, ging ein DTSTART, das nicht auf der Regel liegt, als
   // Vorkommen durch - eine am 15. angelegte Monatsletzten-Serie zeigte den
   // 15. Januar als ersten Termin, obwohl er keiner ist.
-  if (parsed.bymonthday === -1) {
+  //
+  // NICHT AUF EINEM DATUM, DAS NICHT DAS LOKALE IST. Ein Termin am 31. Januar
+  // um 20:00 New Yorker Zeit liegt in UTC schon am 1. Februar; die Pruefung
+  // saehe dort den ersten statt des letzten Tages und wuerfe das Vorkommen
+  // still weg. Wo der Aufrufer weiss, dass die beiden Kalendertage
+  // auseinanderfallen koennen, wird nicht gefiltert - lieber ein Vorkommen zu
+  // viel als eines, das lautlos verschwindet. (Der BYDAY-Zweig darunter hat
+  // dieselbe Schwaeche seit jeher; sie wird hier nicht verschlimmert.)
+  if (parsed.bymonthday === -1 && !utcDiffersFromLocal) {
     const letzter = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0)).getUTCDate();
     if (day.getUTCDate() !== letzter) return false;
   }
@@ -519,10 +535,26 @@ function seriesStartFor(dateKey, rrule) {
   // uneindeutig waere.
   if (parseRRule(rrule)?.bymonthday !== -1) return dateKey;
   if (matchesRRuleByday(tag, rrule)) return dateKey;
-  const next = nextOccurrence(tag, rrule, { anchor: tag });
-  // Kein naechstes Vorkommen (Serie schon vorbei): lieber das Datum lassen als
-  // eines zu erfinden.
-  return next ? String(dateKey).replace(tag, next) : dateKey;
+
+  // BIS ALLE FILTER PASSEN, NICHT NUR EINEN SCHRITT WEIT. `BYMONTHDAY=-1`
+  // zusammen mit `BYDAY=MO` ist gueltig und meint die Schnittmenge: der erste
+  // Monatsletzte kann ein Samstag sein, dann ist er kein Vorkommen und es geht
+  // weiter. Ein einzelner Aufruf haette wieder ein Datum geliefert, das seine
+  // eigene Regel verfehlt - denselben Fehler, gegen den diese Funktion gebaut
+  // ist, nur eine Runde spaeter.
+  //
+  // Die Obergrenze ist ein Sicherheitsnetz, keine Reichweite: eine Kombination
+  // ohne Treffer (es gibt sie, etwa jeder 31. der ein Sonntag ist, mit
+  // INTERVAL) laeuft sonst bis zum Zeitlimit. Ohne Treffer bleibt das Datum
+  // stehen - lieber unveraendert als erfunden.
+  let kandidat = tag;
+  for (let i = 0; i < 120; i++) {
+    const next = nextOccurrence(kandidat, rrule, { anchor: tag });
+    if (!next || next <= kandidat) return dateKey;
+    kandidat = next;
+    if (matchesRRuleByday(kandidat, rrule)) return String(dateKey).replace(tag, kandidat);
+  }
+  return dateKey;
 }
 
 export {

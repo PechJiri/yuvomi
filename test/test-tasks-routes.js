@@ -965,3 +965,19 @@ test('PUT: auch beim Bearbeiten wandert die Faelligkeit auf die Regel (#960)', a
   assert.equal(bearbeitet.status, 200);
   assert.equal(bearbeitet.body.data.due_date, '2026-01-31', 'nachtraeglich angekreuzt');
 });
+
+test('POST: wandert die Faelligkeit, wandert der Vorlauf mit (#647)', async () => {
+  // Eine Aufgabe, die am 10. beginnt und am 15. faellig ist, hat fuenf Tage
+  // Vorlauf. Bliebe der Start stehen, waeren es einundzwanzig - und
+  // shiftedStartDate traegt genau diesen Abstand in JEDE Folgeinstanz weiter.
+  const r = await call('POST', '/', {
+    as: { id: ALICE, role: 'admin' },
+    body: {
+      title: 'Mit Vorlauf', start_date: '2026-01-10', due_date: '2026-01-15',
+      is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    },
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.due_date, '2026-01-31');
+  assert.equal(r.body.data.start_date, '2026-01-26', 'fuenf Tage Vorlauf, wie vorher');
+});

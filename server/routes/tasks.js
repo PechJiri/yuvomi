@@ -973,6 +973,12 @@ router.post('/', (req, res) => {
     // CalDAV-Push. Ein Start, der nicht auf seiner Regel liegt, laesst fremde
     // Clients etwas anderes rechnen als uns.
     const faellig = is_recurring ? seriesStartFor(due_date, recurrence_rule) : due_date;
+    // DER VORLAUF GEHOERT ZUM DURCHLAUF (#647). Wandert die Faelligkeit, muss
+    // das Startdatum mit: eine Aufgabe, die am 10. beginnt und am 15. faellig
+    // ist, hat fuenf Tage Vorlauf - bliebe der Start stehen, waeren es
+    // ploetzlich einundzwanzig, und `shiftedStartDate` traegt genau diesen
+    // Abstand in JEDE Folgeinstanz weiter.
+    const startMit = verschobenerStart(start_date, due_date, faellig);
 
     const userIds  = parseAssignedTo(req.body.assigned_to);
     const firstUid = userIds[0] ?? null;
@@ -1010,7 +1016,7 @@ router.post('/', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         title.trim(), description, category, priority, status,
-        start_date, faellig, due_time, firstUid, req.authUserId || req.session.userId, parent_task_id,
+        startMit, faellig, due_time, firstUid, req.authUserId || req.session.userId, parent_task_id,
         is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0, points, visibility,
         countdown ? 1 : 0, req.body.locked ? 1 : 0
       );
@@ -1104,6 +1110,7 @@ router.put('/:id', (req, res) => {
     // ein Faelligkeitsdatum behalten, das nicht auf seiner Regel liegt, und es
     // als DTSTART in den CalDAV-Push geschickt.
     const faelligDanach = is_recurring ? seriesStartFor(due_date, recurrence_rule) : due_date;
+    const startDanach = verschobenerStart(start_date, due_date, faelligDanach);
 
     const points = req.body.points !== undefined ? clampPoints(req.body.points) : task.points;
     const visibility = req.body.visibility !== undefined
@@ -1205,7 +1212,7 @@ router.put('/:id', (req, res) => {
           points = ?, visibility = ?, countdown = ?, locked = ?
         WHERE id = ?
       `).run(title.trim(), description, category, priority,
-             status, start_date, faelligDanach, due_time, firstUid,
+             status, startDanach, faelligDanach, due_time, firstUid,
              is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0,
              points, visibility, countdown ? 1 : 0, locked, req.params.id);
       setAssignments(db.get(), task.id, userIds);
@@ -1373,6 +1380,21 @@ function discardRecurrenceFollowup(taskId) {
  * auch ohne Fälligkeitsdatum weiter, und dann fehlt der Bezugspunkt, an dem ein
  * Vorlauf gemessen wäre.
  */
+/**
+ * Das Startdatum um denselben Versatz wie die Faelligkeit verschieben.
+ *
+ * Ohne Start oder ohne Bewegung bleibt alles, wie es ist. Gerechnet wird in
+ * ganzen Tagen ueber UTC-Mitternacht, wie ueberall in diesem Modul.
+ */
+function verschobenerStart(startDate, dueVorher, dueNachher) {
+  if (!startDate || !dueVorher || dueVorher === dueNachher) return startDate;
+  const versatz = Date.parse(`${String(dueNachher).slice(0, 10)}T00:00:00Z`)
+    - Date.parse(`${String(dueVorher).slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(versatz) || !versatz) return startDate;
+  const neu = new Date(Date.parse(`${String(startDate).slice(0, 10)}T00:00:00Z`) + versatz);
+  return isNaN(neu.getTime()) ? startDate : neu.toISOString().slice(0, 10);
+}
+
 function shiftedStartDate(startDate, dueDate, nextDue) {
   if (!startDate || !dueDate) return null;
   const lead = Date.parse(`${dueDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`);

@@ -360,7 +360,7 @@ function expandRRULE(vevent, windowStart, windowEnd) {
     // zaehlte bis dahin die SCHLEIFE selbst (`iterations > maxCount`), also
     // jeder Kandidat - `FREQ=MONTHLY;BYDAY=MO;COUNT=2` lieferte einen Termin
     // statt zwei. (Dieselbe Aufteilung wie in services/calendar-events.js.)
-    if (!matchesRRuleByday(current, vevent.rrule)) {
+    if (!matchesRRuleByday(current, vevent.rrule, { utcDiffersFromLocal: !!vevent.tzid && !tzAware })) {
       const skip = nextOccurrence(current, vevent.rrule, { anchor: startDate });
       if (!skip || skip <= current) break;
       current = skip;

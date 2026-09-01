@@ -110,7 +110,11 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
       // damit verbrauchte jeder uebersprungene Wochentag ein Vorkommen:
       // `FREQ=MONTHLY;BYDAY=MO;COUNT=2` lieferte genau einen Termin, weil der
       // zweite Zaehler an einen Mittwoch ging, den niemand je zu sehen bekam.
-      if (!matchesRRuleByday(currentDate, event.recurrence_rule)) {
+      // Ein Termin mit eigener Zone kann in UTC an einem anderen Kalendertag
+      // liegen als vor Ort (#549 nutzt dieselbe Unterscheidung fuer die
+      // Uhrzeit). Die Monatsletzten-Pruefung wird dort ausgesetzt, statt ein
+      // Vorkommen still zu verlieren.
+      if (!matchesRRuleByday(currentDate, event.recurrence_rule, { utcDiffersFromLocal: !!event.tzid && !tzAware })) {
         const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart });
         if (!next || next <= currentDate) break;
         currentDate = next;

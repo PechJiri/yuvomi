@@ -319,7 +319,7 @@ test('Deep-Link-Instanz: expandiertes Event mit gleichem Datum wird bevorzugt', 
 // --------------------------------------------------------
 // nextOccurrence: INTERVAL-Korrektheit mit BYDAY
 // --------------------------------------------------------
-import { nextOccurrence, nextOccurrenceAfter, seriesStartFor } from '../server/services/recurrence.js';
+import { nextOccurrence, nextOccurrenceAfter, seriesStartFor, matchesRRuleByday } from '../server/services/recurrence.js';
 
 test('nextOccurrence: WEEKLY BYDAY=MO,TU,WE,TH,FR INTERVAL=2 — kein täglicher Übergang', () => {
   const rule = 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=2';
@@ -1245,6 +1245,28 @@ test('lastOccurrenceOf: COUNT=1 bezieht sich auf das erste VORKOMMEN, nicht auf 
     { seriesStart: '2026-01-15' });
   assert(q('2026-01-20') === '2026-01-31', `das eine Vorkommen bleibt: ${q('2026-01-20')}`);
   assert(q('2026-02-05') === null, 'danach ist die Serie vorbei');
+});
+
+test('seriesStartFor sucht weiter, bis ALLE Filter passen', () => {
+  // `BYMONTHDAY=-1` mit `BYDAY=MO` ist gueltig und meint die Schnittmenge: der
+  // erste Monatsletzte kann ein Samstag sein. Ein einzelner Schritt lieferte
+  // wieder ein Datum, das seine eigene Regel verfehlt - derselbe Fehler, gegen
+  // den diese Funktion gebaut ist, nur eine Runde spaeter.
+  const treffer = seriesStartFor('2026-01-15', 'FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=-1');
+  const d = new Date(`${treffer}T00:00:00Z`);
+  assert(d.getUTCDay() === 1, `${treffer} muss ein Montag sein`);
+  const letzter = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  assert(d.getUTCDate() === letzter, `${treffer} muss der Monatsletzte sein`);
+});
+
+test('matchesRRuleByday filtert nicht, wo UTC- und Ortsdatum auseinanderfallen', () => {
+  // Ein Termin am 31. Januar um 20:00 New Yorker Zeit liegt in UTC schon am
+  // 1. Februar. Die Pruefung saehe dort den ersten statt des letzten Tages und
+  // wuerfe das Vorkommen still weg.
+  const R = 'FREQ=MONTHLY;BYMONTHDAY=-1';
+  assert(matchesRRuleByday('2026-02-01', R) === false, 'ohne Zonenhinweis wird gefiltert');
+  assert(matchesRRuleByday('2026-02-01', R, { utcDiffersFromLocal: true }) === true,
+    'mit Zonenhinweis nicht - lieber ein Vorkommen zu viel als eines lautlos verloren');
 });
 
 // --------------------------------------------------------

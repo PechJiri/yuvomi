@@ -294,5 +294,22 @@ test('ein DTSTART, das die Regel nicht erfuellt, ist kein Vorkommen', () => {
   assert(synchron.join(',') === tage.join(','), `synchron: ${synchron.join(', ')}`);
 });
 
+test('eine Serie mit eigener Zone verliert ihr Monatsende nicht', () => {
+  // Ein Termin am 31. Januar um 20:00 New Yorker Zeit liegt in UTC schon am
+  // 1. Februar. Die Monatsletzten-Pruefung saehe dort den ersten statt des
+  // letzten Tages und wuerfe jedes Vorkommen still weg - die Serie waere leer.
+  //
+  // Geprueft wird ueber expandRecurringEvents, nicht ueber die Filterfunktion
+  // direkt: dass sie den Zonenhinweis KENNT, sagt nichts darueber, ob der
+  // Aufrufer ihn auch durchreicht. Genau das fiel beim ersten Wurf durch.
+  const ev = {
+    id: 42, tzid: 'America/New_York',
+    start_datetime: '2026-02-01T01:00:00Z', end_datetime: '2026-02-01T02:00:00Z',
+    all_day: 0, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  };
+  const inst = expandRecurringEvents([ev], '2026-01-01', '2026-03-31');
+  assert(inst.length >= 3, `die Serie darf nicht leer werden, bekommen ${inst.length}`);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);
