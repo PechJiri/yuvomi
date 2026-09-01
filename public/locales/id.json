@@ -1,4 +1,21 @@
 {
+    "noteCategories": {
+        "categories": "Kategori",
+        "filterLabel": "Filter berdasarkan kategori",
+        "empty": "Belum ada kategori.",
+        "personal": "Pribadi",
+        "household": "Rumah tangga",
+        "noResults": "Tidak ada catatan yang termasuk dalam semua kategori terpilih.",
+        "deleteDetail": "Kategori dihapus dari semua catatan dan filter dasbor. Catatan itu sendiri tidak berubah.",
+        "widgetHint": "Jika beberapa kategori dipilih, hanya catatan yang termasuk dalam semuanya yang ditampilkan. Tanpa pilihan, semua catatan ditampilkan.",
+        "permissionLabel": "Kelola kategori catatan rumah tangga",
+        "searchPlaceholder": "Cari atau buat kategori...",
+        "searchResultsLabel": "Saran kategori",
+        "removeAction": "Hapus kategori {{name}}",
+        "createAction": "Buat dan tetapkan “{{name}}”",
+        "scopeLabel": "Jenis kategori",
+        "scopeHelp": "Hanya Anda yang dapat melihat dan mengelola kategori pribadi. Semua anggota rumah tangga dapat memakai kategori rumah tangga; izin mengatur siapa yang dapat mengelolanya."
+    },
     "common": {
         "swipeSidesSwapped": "Arah geser telah ditukar - tindakan utama kini ada di sisi lain.",
         "apply": "Tambahkan",
@@ -2235,6 +2252,9 @@
         "permAccessWrite": "Penuh",
         "permWidgetBlocked": "Diblokir",
         "permWidgetAllowed": "Tersedia",
+        "permCapabilitiesHeading": "Izin tambahan",
+        "permCapabilityBlocked": "Tidak diizinkan",
+        "permCapabilityAllowed": "Diizinkan",
         "permInherit": "Warisi",
         "permInheritedHint": "Diwarisi: {{value}}",
         "permModuleLockedHint": "Modul terkunci",

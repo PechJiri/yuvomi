@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Notes can now belong to multiple personal or household categories.** Every member can create,
+  rename, order and delete their own categories. Everyone can use existing household categories;
+  creating, renaming, ordering and deleting the shared catalog follows the new role/member
+  permission and remains available to administrators. Notes may stay uncategorized, and selecting
+  several category chips filters with AND semantics.
+- **The dashboard notes widget can use the same category filter.** Its category choices stay inside
+  the widget-options dialog so the compact widget itself does not spend space on controls.
+
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from
   #919 - widgets, `ext:<module-id>` permissions, an API prefix, a locale chain - is a promise made

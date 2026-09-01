@@ -1,4 +1,21 @@
 {
+    "noteCategories": {
+        "categories": "Categorieën",
+        "filterLabel": "Filteren op categorieën",
+        "empty": "Nog geen categorieën.",
+        "personal": "Persoonlijk",
+        "household": "Huishouden",
+        "noResults": "Geen enkele notitie hoort bij alle geselecteerde categorieën.",
+        "deleteDetail": "De categorie wordt uit alle notities en dashboardfilters verwijderd. De notities zelf blijven ongewijzigd.",
+        "widgetHint": "Bij meerdere categorieën worden alleen notities getoond die bij alle categorieën horen. Zonder selectie worden alle notities getoond.",
+        "permissionLabel": "Huishoudcategorieën voor notities beheren",
+        "searchPlaceholder": "Categorie zoeken of maken...",
+        "searchResultsLabel": "Categoriesuggesties",
+        "removeAction": "Categorie {{name}} verwijderen",
+        "createAction": "‘{{name}}’ maken en toewijzen",
+        "scopeLabel": "Categorietype",
+        "scopeHelp": "Alleen jij kunt persoonlijke categorieën zien en beheren. Alle huishoudleden kunnen huishoudcategorieën gebruiken; rechten bepalen wie ze mag beheren."
+    },
     "common": {
         "swipeSidesSwapped": "De veegrichtingen zijn verwisseld - de hoofdactie staat nu aan de andere kant.",
         "apply": "Toevoegen",
@@ -2223,6 +2240,9 @@
         "permAccessWrite": "Volledig",
         "permWidgetBlocked": "Geblokkeerd",
         "permWidgetAllowed": "Beschikbaar",
+        "permCapabilitiesHeading": "Aanvullende rechten",
+        "permCapabilityBlocked": "Niet toegestaan",
+        "permCapabilityAllowed": "Toegestaan",
         "permInherit": "Overnemen",
         "permInheritedHint": "Overgenomen: {{value}}",
         "permModuleLockedHint": "Module vergrendeld",

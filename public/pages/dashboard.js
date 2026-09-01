@@ -50,6 +50,11 @@ import { attachOverlay } from '/utils/overlay-history.js';
 // Hält den AbortController des aktuellen FAB-Listeners - wird bei jedem render() erneuert.
 let _fabController = null;
 
+const noteCategoryName = (category) => String(category?.name || '');
+const noteCategoryScope = (category) => t(
+  category?.scope === 'personal' ? 'noteCategories.personal' : 'noteCategories.household',
+);
+
 
 // ── Onboarding ──────────────────────────────────────────────────────────────
 
@@ -279,7 +284,7 @@ function maybeHintCustomize(container) {
 // Wieder-Einblenden-Leiste dieselbe Sichtbarkeitsregel teilen.
 const MODULE_FOR_WIDGET = { tasks: 'tasks', calendar: 'calendar', shopping: 'shopping', meals: 'meals', notes: 'notes', birthdays: 'birthdays', budget: 'budget', rewards: 'rewards', health: 'health', cycle: 'health', housekeeping: 'housekeeping' };
 
-const WIDGETS_WITH_OPTIONS = new Set(['calendar', 'tasks']);
+const WIDGETS_WITH_OPTIONS = new Set(['calendar', 'tasks', 'notes']);
 
 const _extensionWidgetModules = new Map();
 
@@ -1273,6 +1278,9 @@ function renderPinnedNotes(allNotes, size) {
          ${n.color ? `style="--note-color:${esc(n.color)};"` : ''}>
       ${n.title ? `<div class="note-item__title">${esc(n.title)}</div>` : ''}
       <div class="note-item__content">${renderMarkdownLight(excerpt(n.content))}</div>
+      ${(n.categories || []).length ? `<div class="note-item__categories">
+        ${n.categories.map((category) => `<span>${esc(noteCategoryName(category))}<span class="sr-only"> (${esc(noteCategoryScope(category))})</span></span>`).join('')}
+      </div>` : ''}
     </div>
   `).join('');
 
@@ -2429,7 +2437,6 @@ function renderSizeMiniGridCells(size) {
  * Lehre aus dem alten Groessen-Select, Critique P1). Der Knopf oeffnet, was
  * Platz braucht.
  */
-
 /* Das Etikett einer Kategorie - dieselbe Regel wie im Aufgabenmodul
  * (`catLabel` in pages/tasks.js): die mitgelieferten Kategorien tragen einen
  * i18n-Schluessel, die selbst angelegten ihren Namen. Wer hier `key` anzeigt,
@@ -2524,13 +2531,24 @@ async function openExtensionWidgetOptions(id, meta, current = {}) {
   });
 }
 
+async function loadNoteCategories() {
+  try {
+    const res = await api.get('/notes/categories');
+    return Array.isArray(res?.data) ? res.data : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Der Optionen-Dialog eines Widgets. Aufloesen mit den neuen Optionen oder null. */
 async function openWidgetOptions(id, current = {}) {
   const extMeta = getExtensionWidgetMeta(id);
   if (extMeta?.optionsSchema) return openExtensionWidgetOptions(id, extMeta, current);
 
   const options = { ...current };
-  const categories = id === 'tasks' ? await loadTaskCategories() : [];
+  const categories = id === 'tasks'
+    ? await loadTaskCategories()
+    : id === 'notes' ? await loadNoteCategories() : [];
 
   const body = id === 'calendar'
     ? `
@@ -2553,7 +2571,7 @@ async function openWidgetOptions(id, current = {}) {
           <span>${t('calendar.toggleBirthdays')}</span>
         </label>
       </fieldset>`
-    : `
+    : id === 'tasks' ? `
       <fieldset class="form-group widget-options__group">
         <legend class="form-label">${t('dashboard.optionTaskCategories')}</legend>
         <p class="widget-options__hint">${t('dashboard.optionTaskCategoriesHint')}</p>
@@ -2563,6 +2581,17 @@ async function openWidgetOptions(id, current = {}) {
                  ${(options.categories ?? []).includes(c.key) ? 'checked' : ''}>
           <span>${esc(taskCategoryLabel(c))}</span>
         </label>`).join('') : `<p class="widget-options__hint">${t('dashboard.optionTaskCategoriesEmpty')}</p>`}
+      </fieldset>`
+    : `
+      <fieldset class="form-group widget-options__group">
+        <legend class="form-label">${t('noteCategories.categories')}</legend>
+        <p class="widget-options__hint">${t('noteCategories.widgetHint')}</p>
+        ${categories.length ? categories.map((category) => `
+        <label class="widget-options__choice">
+          <input type="checkbox" name="note-category" value="${category.id}"
+                 ${(options.categories ?? []).map(Number).includes(Number(category.id)) ? 'checked' : ''}>
+          <span><i data-lucide="${category.scope === 'personal' ? 'user' : 'home'}" aria-hidden="true"></i>${esc(noteCategoryName(category))}<span class="sr-only"> (${esc(noteCategoryScope(category))})</span></span>
+        </label>`).join('') : `<p class="widget-options__hint">${t('noteCategories.empty')}</p>`}
       </fieldset>`;
 
   return new Promise((resolve) => {
@@ -2598,10 +2627,14 @@ async function openWidgetOptions(id, current = {}) {
             // Dasselbe eine Zeile tiefer, nur andersherum notiert: gespeichert
             // wird das ABWAEHLEN, nicht das Haekchen (#927).
             if (!panel.querySelector('input[name="cal-birthdays"]')?.checked) next.birthdays = 'hide';
-          } else {
+          } else if (id === 'tasks') {
             const picked = [...panel.querySelectorAll('input[name="task-category"]:checked')].map((el) => el.value);
             // Keine Auswahl heisst „alle" - eine leere Liste als Filter waere
             // ein leeres Dashboard fuer jemanden, der nur den Dialog geoeffnet hat.
+            if (picked.length) next.categories = picked;
+          } else {
+            const picked = [...panel.querySelectorAll('input[name="note-category"]:checked')]
+              .map((el) => el.value);
             if (picked.length) next.categories = picked;
           }
           finish(next);

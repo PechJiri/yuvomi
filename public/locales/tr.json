@@ -1,4 +1,21 @@
 {
+    "noteCategories": {
+        "categories": "Kategoriler",
+        "filterLabel": "Kategorilere göre filtrele",
+        "empty": "Henüz kategori yok.",
+        "personal": "Kişisel",
+        "household": "Hane",
+        "noResults": "Tüm seçili kategorilere ait bir not yok.",
+        "deleteDetail": "Kategori tüm notlardan ve pano filtrelerinden kaldırılır. Notların kendisi değişmez.",
+        "widgetHint": "Birden fazla kategori seçildiğinde yalnızca hepsine ait notlar gösterilir. Seçim yapılmazsa tüm notlar gösterilir.",
+        "permissionLabel": "Hane not kategorilerini yönet",
+        "searchPlaceholder": "Kategori ara veya oluştur...",
+        "searchResultsLabel": "Kategori önerileri",
+        "removeAction": "{{name}} kategorisini kaldır",
+        "createAction": "“{{name}}” oluştur ve ata",
+        "scopeLabel": "Kategori türü",
+        "scopeHelp": "Kişisel kategorileri yalnızca siz görebilir ve yönetebilirsiniz. Hane kategorilerini tüm üyeler kullanabilir; kimlerin yönetebileceğini izinler belirler."
+    },
     "common": {
         "swipeSidesSwapped": "Kaydırma yönleri değiştirildi - ana eylem artık diğer tarafta.",
         "apply": "Ekle",
@@ -2223,6 +2240,9 @@
         "permAccessWrite": "Tam",
         "permWidgetBlocked": "Engellendi",
         "permWidgetAllowed": "Kullanılabilir",
+        "permCapabilitiesHeading": "Ek izinler",
+        "permCapabilityBlocked": "İzin yok",
+        "permCapabilityAllowed": "İzin var",
         "permInherit": "Devral",
         "permInheritedHint": "Devralındı: {{value}}",
         "permModuleLockedHint": "Modül kilitli",
