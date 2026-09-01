@@ -149,6 +149,7 @@ const APP_SHELL = [
   '/utils/money.js',
   '/utils/nav-badges.js',
   '/utils/overlay-history.js',
+  '/utils/page-layout.js',
   '/utils/page-search.js',
   '/utils/pantry-locations.js',
   '/utils/pantry-status.js',
