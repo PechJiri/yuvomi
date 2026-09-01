@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Deleting a document folder can now either keep its documents unfiled or delete the confirmed
+  subtree together with its documents.** The dialog previews exact folder and document counts and
+  offers destructive deletion only when the user may delete every affected document. The server
+  binds confirmation to the previewed identities, locks them against concurrent moves while
+  external storage is changing, and preserves the folder structure when storage deletion fails.
+
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from
   #919 - widgets, `ext:<module-id>` permissions, an API prefix, a locale chain - is a promise made

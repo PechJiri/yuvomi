@@ -137,15 +137,41 @@ export function documentsPaths() {
     },
     '/api/v1/documents/folders': {
       get: op({ summary: 'List document folders', tag: 'Documents' }),
-      post: op({ summary: 'Create document folder', tag: 'Documents', stateChanging: true, requestBody: jsonBody(null) }),
+      post: op({
+        summary: 'Create document folder',
+        tag: 'Documents',
+        stateChanging: true,
+        requestBody: jsonBody(null),
+        responses: {
+          201: { description: 'Document folder created' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          409: { description: 'Sibling name conflict or the parent folder is in an active deletion batch' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
     },
     '/api/v1/documents/folders/{id}': {
-      put: op({ summary: 'Rename document folder', tag: 'Documents', params: [idParam()], stateChanging: true, requestBody: jsonBody(null) }),
+      put: op({
+        summary: 'Rename or move document folder',
+        tag: 'Documents',
+        params: [idParam()],
+        stateChanging: true,
+        requestBody: jsonBody(null),
+        responses: {
+          200: { description: 'Document folder updated' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { description: 'Folder not found' },
+          409: { description: 'Sibling name conflict or the folder is in an active deletion batch' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
       delete: op({
         summary: 'Delete a document folder subtree',
         tag: 'Documents',
         stateChanging: true,
-        description: 'Deletes the folder and all subfolders. `documents=unfile` keeps document rows and clears their folder links; `documents=delete` sequentially deletes document content and rows. The destructive mode is rejected before any deletion when the caller does not own every affected document and is not an admin. If a storage deletion fails, the remaining folder structure is retained and a 207 response reports per-document failures.',
+        description: 'Deletes the folder and all subfolders. `documents=unfile` keeps document rows and clears their folder links; `documents=delete` requires the identity-bound snapshot from the latest delete-impact response, then sequentially deletes document content and rows while locking the previewed identities against concurrent moves. The destructive mode is rejected before any deletion when the previewed identities changed or the caller is neither an admin nor the owner of every affected document. If a storage deletion fails, the remaining folder structure is retained and a 207 response reports per-document failures.',
         params: [
           idParam(),
           {
@@ -168,6 +194,13 @@ export function documentsPaths() {
             description: 'Folder count from the latest delete-impact response. A mismatch rejects the request before deletion.',
             schema: { type: 'integer', minimum: 0 },
           },
+          {
+            name: 'expected_snapshot',
+            in: 'query',
+            required: false,
+            description: 'Identity-bound snapshot from the latest delete-impact response. Required when documents=delete; a mismatch rejects the request before deletion.',
+            schema: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+          },
         ],
         responses: {
           200: { description: 'Folder subtree deleted' },
@@ -176,7 +209,7 @@ export function documentsPaths() {
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
           404: { description: 'Folder not found' },
-          409: { description: 'Folder contents changed after the impact preview' },
+          409: { description: 'Folder contents changed after the impact preview or the subtree overlaps an active deletion batch' },
           500: { $ref: '#/components/responses/InternalServerError' },
         },
       }),
@@ -185,7 +218,7 @@ export function documentsPaths() {
       get: op({
         summary: 'Preview the impact of deleting a document folder subtree',
         tag: 'Documents',
-        description: 'Returns exact document and folder counts across the subtree and whether the caller may use destructive document deletion.',
+        description: 'Returns exact document and folder counts across the subtree, an identity-bound snapshot for destructive confirmation, and whether the caller may delete every affected document.',
         params: [idParam()],
         responses: {
           200: { description: 'Folder deletion impact' },
@@ -261,6 +294,7 @@ export function documentsPaths() {
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
           404: { description: 'Document not found' },
+          409: { description: 'Document is part of an active folder deletion batch' },
           500: { $ref: '#/components/responses/InternalServerError' },
         },
       }),
@@ -275,6 +309,7 @@ export function documentsPaths() {
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
           404: { description: 'Document not found' },
+          409: { description: 'Document is part of an active folder deletion batch' },
           502: { description: 'Remote document deletion failed; the database row remains', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
           500: { $ref: '#/components/responses/InternalServerError' },
         },

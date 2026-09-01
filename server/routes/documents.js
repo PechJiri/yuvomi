@@ -5,6 +5,7 @@
  */
 
 import express from 'express';
+import { createHash } from 'node:crypto';
 import * as db from '../db.js';
 import { createLogger } from '../logger.js';
 import { str, collectErrors, id as validateId, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
@@ -47,6 +48,21 @@ class DmsDocumentUnavailableError extends Error {}
 
 const log = createLogger('Documents');
 const router = express.Router();
+
+// External storage deletion yields back to Express between documents. Keep the
+// exact previewed identities stable during that window so a later request
+// cannot move a confirmed document or child folder out from under the batch.
+// Yuvomi runs one Node process per instance; the database remains the durable
+// source of truth, while these sets serialize in-flight route mutations.
+const activeDocumentDeletes = new Set();
+const activeFolderTreeDeletes = new Set();
+
+function deletionInProgress(res) {
+  return res.status(409).json({
+    error: 'The document folder is currently being deleted. Try again when the operation finishes.',
+    code: 409,
+  });
+}
 
 const CATEGORIES = ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'];
 const VISIBILITIES = ['family', 'restricted', 'private'];
@@ -496,6 +512,16 @@ function allFolders() {
   return db.get().prepare('SELECT id, name, parent_id FROM family_document_folders').all();
 }
 
+/** Bind a destructive confirmation to exact folder and document identities. */
+function folderDeleteSnapshot(folderIds, documentIds) {
+  const numericSort = (a, b) => a - b;
+  const payload = JSON.stringify({
+    folders: Array.from(folderIds || [], Number).sort(numericSort),
+    documents: Array.from(documentIds || [], Number).sort(numericSort),
+  });
+  return createHash('sha256').update(payload).digest('hex');
+}
+
 /** Die Absage der Baumpruefung als Satz, den jemand lesen kann. */
 const MOVE_ISSUE_MESSAGES = {
   'self':           'A folder cannot be inside itself.',
@@ -559,7 +585,7 @@ router.get('/folders/:id/delete-impact', (req, res) => {
     const folderParams = Object.fromEntries(subtree.map((value, i) => [`f${i}`, value]));
     const folderPlaceholders = subtree.map((_v, i) => `@f${i}`).join(',');
     const documents = db.get()
-      .prepare(`SELECT created_by FROM family_documents WHERE folder_id IN (${folderPlaceholders})`)
+      .prepare(`SELECT id, created_by FROM family_documents WHERE folder_id IN (${folderPlaceholders})`)
       .all(folderParams);
 
     res.json({ data: {
@@ -567,6 +593,7 @@ router.get('/folders/:id/delete-impact', (req, res) => {
       removed_folders: subtree.length,
       documents: documents.length,
       can_delete_documents: isAdmin(req) || documents.every((document) => document.created_by === userId(req)),
+      snapshot: folderDeleteSnapshot(subtree, documents.map((document) => document.id)),
     } });
   } catch (err) {
     log.error('GET /folders/:id/delete-impact error:', err);
@@ -583,6 +610,9 @@ router.post('/folders', (req, res) => {
     if (vName.error) return res.status(400).json({ error: vName.error, code: 400 });
     const vParent = parentId(req.body.parent_id);
     if (vParent.error) return res.status(400).json({ error: vParent.error, code: 400 });
+    if (vParent.value !== null && activeFolderTreeDeletes.has(vParent.value)) {
+      return deletionInProgress(res);
+    }
 
     const moveError = folderMoveError(null, vParent.value);
     if (moveError) return res.status(400).json({ error: moveError, code: 400 });
@@ -609,6 +639,7 @@ router.put('/folders/:id', (req, res) => {
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid folder id.', code: 400 });
     }
+    if (activeFolderTreeDeletes.has(id)) return deletionInProgress(res);
     const existing = db.get().prepare('SELECT id, name, parent_id FROM family_document_folders WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Folder not found.', code: 404 });
 
@@ -646,6 +677,7 @@ router.put('/folders/:id', (req, res) => {
 });
 
 router.delete('/folders/:id', async (req, res) => {
+  let deletionLock = null;
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -662,8 +694,14 @@ router.delete('/folders/:id', async (req, res) => {
     };
     const expectedDocuments = parseExpectedCount(req.query.expected_documents);
     const expectedFolders = parseExpectedCount(req.query.expected_folders);
+    const expectedSnapshot = req.query.expected_snapshot === undefined
+      ? null
+      : String(req.query.expected_snapshot);
     if (Number.isNaN(expectedDocuments) || Number.isNaN(expectedFolders)) {
       return res.status(400).json({ error: 'Invalid expected folder impact.', code: 400 });
+    }
+    if (expectedSnapshot !== null && !/^[a-f0-9]{64}$/.test(expectedSnapshot)) {
+      return res.status(400).json({ error: 'Invalid expected folder snapshot.', code: 400 });
     }
     const existing = db.get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Folder not found.', code: 404 });
@@ -694,11 +732,22 @@ router.delete('/folders/:id', async (req, res) => {
       .all(folderParams);
     const deleteDocuments = documentAction === 'delete';
 
-    // Der Dialog bestaetigt konkrete Zahlen. Hat sich der Zweig seit seinem
-    // Impact-GET veraendert, darf der folgende Klick nicht still mehr loeschen
-    // als angezeigt wurde. Alte Clients ohne Erwartungswerte bleiben kompatibel.
+    if (deleteDocuments && expectedSnapshot === null) {
+      return res.status(400).json({
+        error: 'A current folder deletion preview is required.',
+        code: 400,
+      });
+    }
+
+    // Der Dialog bestaetigt konkrete Zahlen UND Identitaeten. Hat sich der
+    // Zweig seit seinem Impact-GET veraendert, darf der folgende Klick nicht
+    // still andere Inhalte loeschen als angezeigt. Der destruktive Modus ist
+    // neu und verlangt den Snapshot; der sichere Unfile-Default bleibt fuer
+    // alte Clients ohne Erwartungswerte kompatibel.
+    const currentSnapshot = folderDeleteSnapshot(subtree, documents.map((document) => document.id));
     if ((expectedDocuments !== null && expectedDocuments !== documents.length)
-        || (expectedFolders !== null && expectedFolders !== subtree.length)) {
+        || (expectedFolders !== null && expectedFolders !== subtree.length)
+        || (expectedSnapshot !== null && expectedSnapshot !== currentSnapshot)) {
       return res.status(409).json({
         error: 'Folder contents changed. Review the deletion impact and try again.',
         code: 409,
@@ -711,6 +760,19 @@ router.delete('/folders/:id', async (req, res) => {
     if (deleteDocuments && !isAdmin(req)
         && documents.some((document) => document.created_by !== userId(req))) {
       return res.status(403).json({ error: 'Not authorized to delete every document in this folder.', code: 403 });
+    }
+
+    const overlapsActiveDeletion = subtree.some((folderId) => activeFolderTreeDeletes.has(folderId))
+      || documents.some((document) => activeDocumentDeletes.has(document.id));
+    if (overlapsActiveDeletion) return deletionInProgress(res);
+
+    if (deleteDocuments) {
+      deletionLock = {
+        folderIds: [...subtree],
+        documentIds: documents.map((document) => document.id),
+      };
+      deletionLock.folderIds.forEach((folderId) => activeFolderTreeDeletes.add(folderId));
+      deletionLock.documentIds.forEach((documentId) => activeDocumentDeletes.add(documentId));
     }
 
     if (deleteDocuments) {
@@ -791,6 +853,9 @@ router.delete('/folders/:id', async (req, res) => {
   } catch (err) {
     log.error('DELETE /folders/:id error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });
+  } finally {
+    deletionLock?.folderIds.forEach((folderId) => activeFolderTreeDeletes.delete(folderId));
+    deletionLock?.documentIds.forEach((documentId) => activeDocumentDeletes.delete(documentId));
   }
 });
 
@@ -937,6 +1002,7 @@ router.put('/:id', (req, res) => {
     const existing = getVisibleDocument(id, req);
     if (!existing) return res.status(404).json({ error: 'Document not found.', code: 404 });
     if (existing.created_by !== userId(req) && !isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
+    if (activeDocumentDeletes.has(id)) return deletionInProgress(res);
 
     const vName = req.body.name !== undefined ? str(req.body.name, 'Name', { max: MAX_TITLE }) : { value: null };
     const vDescription = req.body.description !== undefined ? str(req.body.description, 'Description', { max: MAX_TEXT, required: false }) : { value: null };
@@ -1081,11 +1147,15 @@ router.get('/:id/download', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+  let lockedId = null;
   try {
     const id = Number(req.params.id);
     const existing = getVisibleDocument(id, req, true);
     if (!existing) return res.status(404).json({ error: 'Document not found.', code: 404 });
     if (existing.created_by !== userId(req) && !isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
+    if (activeDocumentDeletes.has(id)) return deletionInProgress(res);
+    activeDocumentDeletes.add(id);
+    lockedId = id;
     await deleteDocumentContent(existing);
     db.get().prepare('DELETE FROM family_documents WHERE id = ?').run(id);
     res.status(204).end();
@@ -1093,6 +1163,8 @@ router.delete('/:id', async (req, res) => {
     log.error('DELETE /:id error:', err);
     if (sendStorageError(res, err, 'Document storage delete failed.')) return;
     res.status(500).json({ error: 'Internal server error.', code: 500 });
+  } finally {
+    if (lockedId !== null) activeDocumentDeletes.delete(lockedId);
   }
 });
 

@@ -1117,7 +1117,8 @@ async function deleteFolder(folder) {
     const selectedSubtree = folderSubtree(folder.id);
     const response = await api.delete(
       `/documents/folders/${folder.id}?documents=${choice}`
-      + `&expected_documents=${impact.documents}&expected_folders=${impact.removed_folders}`,
+      + `&expected_documents=${impact.documents}&expected_folders=${impact.removed_folders}`
+      + `&expected_snapshot=${encodeURIComponent(impact.snapshot)}`,
     );
     const result = response.data;
     if (result.folder_deleted === false) {

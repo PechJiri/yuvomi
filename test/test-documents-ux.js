@@ -7,7 +7,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -240,6 +240,7 @@ test('Ordnerlöschung bietet Behalten oder Mitlöschen mit exakten Server-Zahlen
   assert.match(block, /documents=\$\{choice\}/);
   assert.match(block, /expected_documents=\$\{impact\.documents\}/);
   assert.match(block, /expected_folders=\$\{impact\.removed_folders\}/);
+  assert.match(block, /expected_snapshot=\$\{encodeURIComponent\(impact\.snapshot\)\}/);
   assert.match(block, /err\?\.status === 409[\s\S]*await deleteFolder\(folder\)/);
   assert.ok(block.includes("t('documents.deleteFolderKeepDocuments'"));
   assert.ok(block.includes("t('documents.deleteFolderWithDocuments'"));
