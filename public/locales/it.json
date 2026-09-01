@@ -3367,7 +3367,9 @@
         "mobileNavigate": "Naviga utilizzando la barra in basso e la voce „Altro“.",
         "mobileCreate": "Usa il pulsante + in basso a destra per creare un nuovo elemento.",
         "mobileSearch": "Apri la ricerca da „Altro“ → Cerca.",
-        "mobileSettings": "Trovi le impostazioni sotto la voce „Altro“."
+        "mobileSettings": "Trovi le impostazioni sotto la voce „Altro“.",
+        "guideLink": "Manuale utente",
+        "guideHint": "Curato dalla community, in un repository proprio: può essere indietro rispetto a una versione."
     },
     "changelog": {
         "title": "Novità",

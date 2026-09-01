@@ -215,6 +215,10 @@ kein Abo, keinen Upsell und keine Bezahlstufe.
 
 [Installation](docs/installation.md) &nbsp;·&nbsp; [Spezifikation &amp; Datenmodell](docs/SPEC.md) &nbsp;·&nbsp; [Fremdmodule](MODULES.md) &nbsp;·&nbsp; [Benachrichtigungs-Webhooks](docs/notification-webhooks.md) &nbsp;·&nbsp; [Immich-Bildschirmschoner](docs/immich-screensaver.md) &nbsp;·&nbsp; [Mitwirken](CONTRIBUTING.md) &nbsp;·&nbsp; [Sicherheit](SECURITY.md) &nbsp;·&nbsp; [Changelog](CHANGELOG.md) &nbsp;·&nbsp; [Backlog](BACKLOG.md)
 
+**Nutzerhandbuch (aus der Community):** @Kyrodan schreibt eine [Nutzerdokumentation](https://kyrodan.github.io/yuvomi-docs/)
+in seinem eigenen Repository. Sie gehört nicht zu diesem Projekt und kann hinter einem Release
+zurückliegen; wo sie und die Quellen oben sich widersprechen, gelten die oben.
+
 Wenn du Yuvomi im DSGVO-Kontext betreibst (EU/EWR, Verarbeitung fremder Daten), lies vorher
 [Datenschutz für Selfhoster](docs/PRIVACY-FOR-SELFHOSTERS.md). Dort stehen Drittlandsbewertungen für
 jeden externen Dienst, Hinweise zur Auftragsverarbeitung, Empfehlungen zur Log-Aufbewahrung und eine

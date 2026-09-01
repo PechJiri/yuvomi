@@ -3367,7 +3367,9 @@
         "mobileNavigate": "通过底部栏和“更多”进行导航。",
         "mobileCreate": "用右下角的 + 按钮创建新内容。",
         "mobileSearch": "通过“更多”→搜索打开搜索。",
-        "mobileSettings": "设置在“更多”中。"
+        "mobileSettings": "设置在“更多”中。",
+        "guideLink": "用户手册",
+        "guideHint": "由社区在独立仓库维护，可能落后于某个版本。"
     },
     "changelog": {
         "title": "更新日志",

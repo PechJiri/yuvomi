@@ -3367,7 +3367,9 @@
         "mobileNavigate": "Navegue pela barra inferior e por “Mais”.",
         "mobileCreate": "Use o botão + no canto inferior direito para criar algo novo.",
         "mobileSearch": "Abra a busca em “Mais” → Pesquisar.",
-        "mobileSettings": "As configurações ficam em “Mais”."
+        "mobileSettings": "As configurações ficam em “Mais”.",
+        "guideLink": "Manual do utilizador",
+        "guideHint": "Mantido pela comunidade, num repositório próprio - pode estar atrasado face a uma versão."
     },
     "changelog": {
         "title": "Alterações",

@@ -3367,7 +3367,9 @@
         "mobileNavigate": "Điều hướng qua thanh bên dưới và “Thêm”.",
         "mobileCreate": "Tạo mục mới bằng nút + ở dưới cùng bên phải.",
         "mobileSearch": "Mở tìm kiếm qua “Thêm” → Tìm kiếm.",
-        "mobileSettings": "Bạn tìm thấy cài đặt trong “Thêm”."
+        "mobileSettings": "Bạn tìm thấy cài đặt trong “Thêm”.",
+        "guideLink": "Hướng dẫn sử dụng",
+        "guideHint": "Do cộng đồng duy trì, trong kho riêng - có thể chậm hơn một bản phát hành."
     },
     "changelog": {
         "title": "Nhật ký thay đổi",

@@ -2504,6 +2504,16 @@ function showHelpModal() {
     </div>
     <div class="modal-panel__body">
       <div class="shortcuts-list">${rows}</div>
+      <!-- Nutzerhandbuch aus der Community (#799). Es lebt in einem fremden
+           Repository und in fremder Regie - deshalb steht die Herkunft im
+           Linktext und nicht nur im Hinweis darunter: wer hier klickt,
+           verlaesst das Projekt, und das soll er vorher wissen. -->
+      <p class="help-guide">
+        <a href="https://kyrodan.github.io/yuvomi-docs/" target="_blank" rel="noopener noreferrer">
+          ${esc(t('help.guideLink'))}
+        </a>
+        <span class="help-guide__hint">${esc(t('help.guideHint'))}</span>
+      </p>
     </div>
   `);
 
@@ -2528,15 +2538,26 @@ function showHelpModal() {
 // Punkt nach einem Reload sofort wieder steht, statt bis zur nächsten Prüfung
 // zu verschwinden und dann grundlos zurückzukommen.
 const UPDATE_LATEST_KEY = 'yuvomi.update.latest';
-// Version, für die der Nutzer den Änderungsverlauf zuletzt geöffnet hat.
-const UPDATE_SEEN_KEY = 'yuvomi.update.seen';
-// Die INSTALLIERTE Version beim letzten Öffnen - und damit eine andere Frage
-// als `UPDATE_SEEN_KEY` (#496). Der Punkt an der Navigation beantwortet "es
-// gibt draußen etwas Neueres"; diese Ansicht beantwortet "in MEINER App hat
-// sich seit meinem letzten Blick etwas geändert". Ein Haushalt auf 2.55 soll
-// nicht lesen, was 2.61 gebracht hat - bei ihm ist davon nichts passiert.
-const UPDATE_SEEN_INSTALLED_KEY = 'yuvomi.update.seenInstalled';
 const UPDATE_CHECKED_AT_KEY = 'yuvomi.update.checkedAt';
+
+/**
+ * Was DIESES KONTO zuletzt gesehen hat (#496, seit Migration 173 am Konto).
+ *
+ * Zwei Merker, zwei Fragen: `latest` ist die zuletzt bekannte VERÖFFENTLICHTE
+ * Version und steuert den Punkt an der Navigation ("gibt es draußen etwas
+ * Neueres"); `version` ist die INSTALLIERTE Version beim letzten Blick und
+ * steuert die Liste ("hat sich in MEINER App etwas geändert"). Ein Haushalt auf
+ * 2.55 soll nicht lesen, was 2.61 gebracht hat - bei ihm ist davon nichts
+ * passiert.
+ *
+ * Vorher lagen beide im localStorage. Das hieß: wer am Rechner gelesen hat,
+ * bekam auf dem Tablet denselben Punkt und dieselbe Liste noch einmal. Der
+ * zuletzt von GitHub gemeldete Stand bleibt dagegen lokal - er ist ein
+ * Zwischenspeicher für eine Auskunft des Servers, kein Zustand einer Person.
+ */
+function changelogSeen() {
+  return currentUser?.changelog_seen || { version: null, latest: null };
+}
 // Der Server hält GitHub-Releases 30 Minuten im Cache; häufigeres Fragen wäre
 // reiner Verkehr für eine Information, die sich um Wochen bewegt.
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -2546,7 +2567,7 @@ function pendingUpdateVersion() {
   const latest = localStorage.getItem(UPDATE_LATEST_KEY) || '';
   if (!latest) return '';
   if (!isNewerVersion(latest, getAppVersion())) return '';
-  const seen = localStorage.getItem(UPDATE_SEEN_KEY) || '';
+  const seen = changelogSeen().latest || '';
   if (seen && !isNewerVersion(latest, seen)) return '';
   return latest;
 }
@@ -2818,9 +2839,7 @@ function renderChangelog(panel, payload) {
   // Zweck erfüllt und verschwindet, bis eine noch neuere Version erscheint.
   if (latestVersion) {
     localStorage.setItem(UPDATE_LATEST_KEY, String(latestVersion));
-    localStorage.setItem(UPDATE_SEEN_KEY, String(latestVersion));
     localStorage.setItem(UPDATE_CHECKED_AT_KEY, String(Date.now()));
-    applyUpdateBadge();
   }
 
   const status = panel.querySelector('#changelog-status');
@@ -2837,14 +2856,36 @@ function renderChangelog(panel, payload) {
   // Erst lesen, dann fortschreiben: der Block beantwortet die Frage nach dem
   // ZUSTAND VOR diesem Aufruf, und ein Marker, der schon gesetzt ist, waere
   // die Antwort "nichts Neues" - jedes Mal.
-  const seenInstalled = localStorage.getItem(UPDATE_SEEN_INSTALLED_KEY) || '';
+  const seenInstalled = changelogSeen().version || '';
   appendWhatsNew(fragment, releases, currentVersion, seenInstalled);
   for (const release of releases) appendReleaseCard(fragment, release, currentVersion);
   list.appendChild(fragment);
-  // Auch beim ERSTEN Mal gesetzt, obwohl dann nichts angezeigt wurde: sonst
-  // gilt der naechste Aufruf wieder als erster und die Liste bliebe fuer
-  // immer leer.
-  if (currentVersion) localStorage.setItem(UPDATE_SEEN_INSTALLED_KEY, String(currentVersion));
+  markChangelogSeen(latestVersion);
+}
+
+/**
+ * Beide Merker am Konto fortschreiben, nachdem die Liste gezeigt wurde.
+ *
+ * AUCH BEIM ERSTEN MAL, obwohl dann nichts angezeigt wurde: sonst gilt der
+ * nächste Aufruf wieder als erster und die Liste bliebe für immer leer.
+ *
+ * Der lokale Stand wird sofort mitgezogen, damit der Punkt in derselben
+ * Sekunde verschwindet - auf die Antwort des Servers zu warten hieße, ihn
+ * einen Wimpernschlag lang stehen zu lassen, nachdem man gelesen hat. Ein
+ * Fehlschlag bleibt still: dann steht der Punkt beim nächsten Laden wieder da,
+ * was lästig, aber ehrlich ist.
+ */
+function markChangelogSeen(latestVersion) {
+  const seen = changelogSeen();
+  if (currentUser) {
+    currentUser.changelog_seen = {
+      version: getAppVersion() || seen.version,
+      latest: latestVersion || seen.latest,
+    };
+  }
+  applyUpdateBadge();
+  api.post('/auth/changelog-seen', latestVersion ? { latest: String(latestVersion) } : {})
+    .catch(() => { /* still: siehe oben */ });
 }
 
 function showChangelogModal() {

@@ -3367,7 +3367,9 @@
         "mobileNavigate": "Bernavigasi melalui bilah bawah dan „Lainnya\".",
         "mobileCreate": "Dengan tombol + di kanan bawah, Anda membuat sesuatu yang baru.",
         "mobileSearch": "Pencarian dibuka melalui „Lainnya\" → Cari.",
-        "mobileSettings": "Pengaturan dapat ditemukan di „Lainnya\"."
+        "mobileSettings": "Pengaturan dapat ditemukan di „Lainnya\".",
+        "guideLink": "Panduan pengguna",
+        "guideHint": "Dikelola komunitas, di repositori sendiri - bisa tertinggal dari sebuah rilis."
     },
     "changelog": {
         "title": "Catatan perubahan",

@@ -211,6 +211,10 @@ no subscription, no upsell and no paid tier.
 
 [Installation](docs/installation.md) &nbsp;·&nbsp; [Spec &amp; data model](docs/SPEC.md) &nbsp;·&nbsp; [Third-party modules](MODULES.md) &nbsp;·&nbsp; [Notification webhooks](docs/notification-webhooks.md) &nbsp;·&nbsp; [Immich screensaver](docs/immich-screensaver.md) &nbsp;·&nbsp; [Contributing](CONTRIBUTING.md) &nbsp;·&nbsp; [Security](SECURITY.md) &nbsp;·&nbsp; [Changelog](CHANGELOG.md) &nbsp;·&nbsp; [Backlog](BACKLOG.md)
 
+**User guide (community-maintained):** @Kyrodan writes a [user documentation site](https://kyrodan.github.io/yuvomi-docs/)
+in his own repository. It is not part of this project and can lag behind a release, so where it and
+the sources above disagree, the ones above are right.
+
 If you self-host Yuvomi in a GDPR context (EU/EEA, processing other people's data), read
 [privacy for self-hosters](docs/PRIVACY-FOR-SELFHOSTERS.md) before going live. It covers
 third-country assessments for every external service, data-processing-agreement notes,

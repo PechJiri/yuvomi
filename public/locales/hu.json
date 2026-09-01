@@ -3367,7 +3367,9 @@
         "mobileNavigate": "Használja az alsó sávot és a „Több” menüt a navigációhoz.",
         "mobileCreate": "Új elemek létrehozása a jobb alsó sarokban található + gombbal.",
         "mobileSearch": "Keresés megnyitása a „Több” → Keresés menüpont alatt.",
-        "mobileSettings": "A beállítások a „Több” menü alatt találhatók."
+        "mobileSettings": "A beállítások a „Több” menü alatt találhatók.",
+        "guideLink": "Felhasználói kézikönyv",
+        "guideHint": "A közösség tartja karban, saját tárolóban - lemaradhat egy kiadás mögött."
     },
     "changelog": {
         "title": "Változások",

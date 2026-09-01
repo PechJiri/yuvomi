@@ -4209,6 +4209,32 @@ p.field-hint--warn[hidden] {
   font-size: var(--text-sm);
 }
 
+/* Der Verweis aufs Nutzerhandbuch im Hilfe-Dialog (#799). Abgesetzt unter den
+ * Kuerzeln, weil er etwas anderes ist als sie: die Kuerzel gehoeren zur App,
+ * das Handbuch gehoert jemand anderem. */
+.help-guide {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--text-sm);
+}
+
+/* Der Reset nimmt jedem `a` Farbe und Unterstreichung (reset.css) - ein Link
+ * im Fliesstext ist danach von Text nicht zu unterscheiden. Hier steht beides
+ * wieder: die Akzentfarbe UND die Unterstreichung, weil Farbe allein kein
+ * Erkennungsmerkmal ist, auf das sich jeder verlassen kann. */
+.help-guide a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.help-guide__hint {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-text-tertiary);
+}
+
 /* „Neu in deiner App" (#496): der Block, mit dem die Ansicht oeffnet. Traegt
  * als einziger die Akzentfarbe - er ist die Antwort auf die Frage, mit der
  * jemand herkommt, die Versionsliste darunter ist das Archiv. */

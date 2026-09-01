@@ -3367,7 +3367,9 @@
         "mobileNavigate": "下部のバーと「その他」でナビゲートします。",
         "mobileCreate": "右下の＋ボタンで新規作成できます。",
         "mobileSearch": "検索は「その他」→「検索」で開きます。",
-        "mobileSettings": "設定は「その他」にあります。"
+        "mobileSettings": "設定は「その他」にあります。",
+        "guideLink": "ユーザーガイド",
+        "guideHint": "コミュニティが別のリポジトリで管理しています。リリースより古い場合があります。"
     },
     "changelog": {
         "title": "変更履歴",

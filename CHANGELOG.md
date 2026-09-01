@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Yuvomi links to a user guide, and says whose it is** (#799). @Kyrodan built a documentation site
+  because the answers exist but are scattered across closed discussions. It stays in his repository
+  under his own hand, and the app, the README and yuvomi.cloud now point at it. The decision was not
+  the no-bundlers rule - there is no guard that covers `docs/`, so Docusaurus here would have been a
+  choice rather than a violation. It was maintenance: at 91 releases across 21 days, documentation
+  in this repository is documentation I owe at that cadence, and drifted documentation is worse than
+  none because people trust it. Every link therefore says "community-maintained" in its own text
+  rather than in a footnote, so nobody mistakes a lag for an official statement.
+
+### Changed
+
+- **The page layout rules are now written where contributors can read them** (#929). They existed
+  and were enforced - the reading measure that hangs on the page, the scroll clearance that belongs
+  to whatever actually scrolls, one page stylesheet per route - but only in guards and in a file
+  that is not in this repository. From the outside a page composition system looked unwritten. It
+  was not; it was invisible, and a contributor proposing one was answering a real gap. CONTRIBUTING
+  now has a **Page layout** section that says what the guards check and names them as the authority.
+
 - **The changelog now opens with what changed in YOUR app since you last looked** (#496). The most
   supported open request in the project is not a feature: it says releases come fast enough that
   keeping track is work. @raninehme put it most precisely - a partner still learning the app finds
@@ -34,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   And on a first look the block stays away entirely: with no earlier mark there is nothing somebody
   can have missed, and showing everything would claim they missed everything. Long gaps are capped
   at twelve lines with the remainder counted out loud rather than silently dropped.
+
+  **What "last looked" means lives on the account, not in the browser.** Both marks moved into
+  `users` (migration 173): the installed version at your last look, which drives the list, and the
+  last known published version, which drives the dot. Before, reading the changes on the desktop
+  left the tablet showing the same dot and the same list again - the exact complaint migration 168
+  answered for the onboarding walkthrough. What stays local is the cached GitHub answer and the time
+  of the last check: a scratchpad for something the server said, not a state belonging to a person.
 
   The `/api/v1/changelog` payload keeps `items` exactly as it was and carries the split as
   `entries` beside it - a promised surface does not change shape because the UI wants a nicer one.

@@ -3367,7 +3367,9 @@
         "mobileNavigate": "하단 바와 „더보기\"로 이동하세요.",
         "mobileCreate": "오른쪽 아래 + 버튼으로 새 항목을 만드세요.",
         "mobileSearch": "검색은 „더보기\" → 검색으로 엽니다.",
-        "mobileSettings": "설정은 „더보기\"에서 찾을 수 있습니다."
+        "mobileSettings": "설정은 „더보기\"에서 찾을 수 있습니다.",
+        "guideLink": "사용자 안내서",
+        "guideHint": "커뮤니티가 별도 저장소에서 관리합니다. 릴리스보다 뒤처질 수 있습니다."
     },
     "changelog": {
         "title": "변경 내역",

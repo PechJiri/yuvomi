@@ -3367,7 +3367,9 @@
         "mobileNavigate": "Gamitin ang bar sa ibaba at ang \"Higit pa\" para mag-navigate.",
         "mobileCreate": "Gumawa ng bagong item gamit ang + button sa kanang ibaba.",
         "mobileSearch": "Buksan ang paghahanap sa \"Higit pa\" → Maghanap.",
-        "mobileSettings": "Matatagpuan ang mga setting sa ilalim ng \"Higit pa\"."
+        "mobileSettings": "Matatagpuan ang mga setting sa ilalim ng \"Higit pa\".",
+        "guideLink": "Gabay ng gumagamit",
+        "guideHint": "Pinapanatili ng komunidad, sa sariling repository - maaaring mahuli sa isang release."
     },
     "changelog": {
         "title": "Changelog",

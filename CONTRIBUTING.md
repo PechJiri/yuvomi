@@ -268,6 +268,40 @@ reviewed", not "every run reviewed it".
 - CSS uses design tokens from `public/styles/tokens.css` - never hardcode values
 - Pages export a `render()` function, no side effects on import
 
+### Page layout
+
+These rules decide how a page is shaped, and until now they were only written down where
+contributors could not see them. They are enforced by `npm run test:frontend-audit`, which is the
+authority - this section describes what those guards check, it does not replace them.
+
+- **One reading measure per page, and it hangs on the page.** A page declares its width role
+  (`page-measure--narrow` and friends), which sets `--page-measure`; carriers like `.list-group`
+  read that variable instead of carrying a width of their own. A carrier that sets its own width
+  makes the page's measure a suggestion.
+- **The clearance under fixed shell surfaces belongs to whatever actually scrolls.** The app has two
+  architectures: some pages set `overflow: hidden` on their root and bring an inner scroller, the
+  rest scrolls `.app-content`. A page that brings its own marks it `page-scrollport`, and the
+  clearance for FAB, bulk-action pill and install banner rides there rather than on the shell - put
+  it on the shell in the first architecture and it shortens the module's reference height instead of
+  sitting at the end of the content. A scrollport announces its bottom padding as `--scrollport-pad`
+  instead of setting `padding-bottom` itself, and the third value of a `padding` shorthand is
+  rejected there: that is exactly how one leftover FAB reserve survived a cleanup unnoticed.
+- **No inline width, alignment or margin on a scroller.** An inline value beats every rule in the
+  stylesheet, including the ones that keep pages consistent, so the guard rejects it outright.
+- **A settings leaf shows the leaf title once.** The shell already prints it above; a heading that
+  repeats it is a heading without a statement (`npm run test:typography`).
+- **The router loads exactly one page stylesheet per route** (`/styles/<module>.css`). The
+  consequence matters more than the rule: styles for a shared component must be linked globally, or
+  they fall back to browser defaults the moment that component appears on another page - often black
+  in dark mode. A module opened from outside its own page has to ensure its stylesheet itself and
+  wait for it.
+- **Design values come from tokens** (`public/styles/tokens.css`) - no raw hex, `rgb()`, `rem` or
+  `px` where a token exists.
+
+If a change needs an exception, say so in the pull request and give it a reason that would still
+convince somebody six months from now. Exceptions that outlive their reason are how a layout system
+stops being one.
+
 ### Backend
 
 - One route file per module in `server/routes/`

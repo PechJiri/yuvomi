@@ -3367,7 +3367,9 @@
         "mobileNavigate": "Navigera via fältet längst ned och ”Mer”.",
         "mobileCreate": "Skapa nytt med +-knappen längst ned till höger.",
         "mobileSearch": "Öppna sök via ”Mer” → Sök.",
-        "mobileSettings": "Inställningar hittar du under ”Mer”."
+        "mobileSettings": "Inställningar hittar du under ”Mer”.",
+        "guideLink": "Användarhandbok",
+        "guideHint": "Underhålls av communityn, i ett eget repository - kan ligga efter en release."
     },
     "changelog": {
         "title": "Ändringar",
