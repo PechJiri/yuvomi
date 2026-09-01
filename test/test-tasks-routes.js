@@ -918,88 +918,30 @@ test('POST: ein leerer Status ist kein Status, sondern keiner (Review zu #807)',
   }
 });
 
-test('POST: eine Monatsletzten-Serie beginnt am ersten Monatsletzten (#960)', async () => {
-  // Das Faelligkeitsdatum geht als DTSTART in den CalDAV-Push. Liegt es nicht
-  // auf seiner eigenen Regel, laesst RFC 5545 das Ergebnis fuer fremde Clients
-  // ausdruecklich offen - sie duerfen anders rechnen als wir.
-  const r = await call('POST', '/', {
-    as: { id: ALICE, role: 'admin' },
-    body: {
-      title: 'Zaehlerstand ablesen', due_date: '2026-01-15',
-      is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
-    },
-  });
-  assert.equal(r.status, 201);
-  assert.equal(r.body.data.due_date, '2026-01-31', 'der 15. wandert auf den Monatsletzten');
-
-  // Wer schon passt, bleibt - und ohne die Angabe bleibt alles, wie es war.
-  const passt = await call('POST', '/', {
-    as: { id: ALICE, role: 'admin' },
-    body: { title: 'Schon passend', due_date: '2026-01-31', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
-  });
-  assert.equal(passt.body.data.due_date, '2026-01-31');
-
-  const ohne = await call('POST', '/', {
-    as: { id: ALICE, role: 'admin' },
-    body: { title: 'Ohne die Angabe', due_date: '2026-01-15', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY' },
-  });
-  assert.equal(ohne.body.data.due_date, '2026-01-15', 'ohne BYMONTHDAY wird nichts gezogen');
-
-  // Und eine Aufgabe ohne Wiederholung erst recht nicht.
-  const einmalig = await call('POST', '/', {
-    as: { id: ALICE, role: 'admin' },
-    body: { title: 'Einmalig', due_date: '2026-01-15' },
-  });
-  assert.equal(einmalig.body.data.due_date, '2026-01-15');
-});
-
-test('PUT: auch beim Bearbeiten wandert die Faelligkeit auf die Regel (#960)', async () => {
+test('POST: das eingegebene Faelligkeitsdatum bleibt stehen (#960)', async () => {
+  // Der Server hat es einmal auf das erste Vorkommen der Regel gezogen, damit
+  // das DTSTART im CalDAV-Push eindeutig ist. Das ist zurueckgenommen:
+  // `due_date` haengt an Vorlauf, Erinnerung und Folgeinstanz, und keine dieser
+  // Stellen erfaehrt von einer Verschiebung, die erst in der Route passiert -
+  // der Client hat seine Erinnerung da laengst auf dem alten Tag gerechnet.
   const admin = { id: ALICE, role: 'admin' };
-  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Erst ohne Regel', due_date: '2026-01-15' } });
-  assert.equal(angelegt.body.data.due_date, '2026-01-15');
-
-  const bearbeitet = await call('PUT', `/${angelegt.body.data.id}`, {
+  const r = await call('POST', '/', {
     as: admin,
-    body: { title: 'Erst ohne Regel', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
-  });
-  assert.equal(bearbeitet.status, 200);
-  assert.equal(bearbeitet.body.data.due_date, '2026-01-31', 'nachtraeglich angekreuzt');
-});
-
-test('POST: wandert die Faelligkeit, wandert der Vorlauf mit (#647)', async () => {
-  // Eine Aufgabe, die am 10. beginnt und am 15. faellig ist, hat fuenf Tage
-  // Vorlauf. Bliebe der Start stehen, waeren es einundzwanzig - und
-  // shiftedStartDate traegt genau diesen Abstand in JEDE Folgeinstanz weiter.
-  const r = await call('POST', '/', {
-    as: { id: ALICE, role: 'admin' },
     body: {
-      title: 'Mit Vorlauf', start_date: '2026-01-10', due_date: '2026-01-15',
+      title: 'Zaehlerstand ablesen', start_date: '2026-01-10', due_date: '2026-01-15',
       is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
     },
   });
   assert.equal(r.status, 201);
-  assert.equal(r.body.data.due_date, '2026-01-31');
-  assert.equal(r.body.data.start_date, '2026-01-26', 'fuenf Tage Vorlauf, wie vorher');
-});
-
-test('PUT: ein Titel-Edit verschiebt keine eingelesene Serie (#756)', async () => {
-  const admin = { id: ALICE, role: 'admin' };
-  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Fremd', due_date: '2026-01-15' } });
-  const id = angelegt.body.data.id;
-  db.prepare('UPDATE tasks SET is_recurring = 1, recurrence_rule = ? WHERE id = ?')
-    .run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
-
-  const nurTitel = await call('PUT', `/${id}`, { as: admin, body: { title: 'Neuer Titel' } });
-  assert.equal(nurTitel.status, 200);
-  assert.equal(nurTitel.body.data.due_date, '2026-01-15', 'die Faelligkeit darf sich nicht bewegen');
-
-  const mitRegel = await call('PUT', `/${id}`, {
-    as: admin, body: { title: 'Neuer Titel', recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
-  });
-  assert.equal(mitRegel.body.data.due_date, '2026-01-31', 'wer die Regel anfasst, bekommt sie normalisiert');
+  assert.equal(r.body.data.due_date, '2026-01-15', 'die Faelligkeit bleibt, wie eingegeben');
+  assert.equal(r.body.data.start_date, '2026-01-10', 'und der Vorlauf mit ihr');
 });
 
 test('POST: eine Regel ohne jedes Vorkommen wird abgelehnt', async () => {
+  // FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120 ab dem 15. Januar: der erste
+  // Monatsletzte liegt hinter dem UNTIL. Uebrig bliebe eine Aufgabe, die nie
+  // faellig wird - und am 15. wird sie es auch nicht, der Tag ist kein
+  // Vorkommen der Regel.
   const r = await call('POST', '/', {
     as: { id: ALICE, role: 'admin' },
     body: {
@@ -1010,18 +952,58 @@ test('POST: eine Regel ohne jedes Vorkommen wird abgelehnt', async () => {
   assert.equal(r.status, 400, `erwartet 400, bekommen ${r.status}`);
 });
 
-test('PUT: due_date: null LOESCHT die Faelligkeit, hier anders als im Kalender', async () => {
-  // Die beiden Module meinen mit `null` Verschiedenes, und das ist der Grund,
-  // warum der Befund nicht blind auf beide passt: der Kalender schreibt sein
-  // Startdatum ueber COALESCE, dort heisst null "unveraendert lassen". Die
-  // Aufgabe weist direkt zu - null entfernt die Faelligkeit. Dann gibt es auch
-  // keinen Serienstart zu normalisieren.
+test('PUT: die Regel nachtraeglich ankreuzen verschiebt die Faelligkeit nicht (#960)', async () => {
   const admin = { id: ALICE, role: 'admin' };
-  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Mit null', due_date: '2026-01-15' } });
-  const r = await call('PUT', `/${angelegt.body.data.id}`, {
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Erst ohne Regel', due_date: '2026-01-15' } });
+  assert.equal(angelegt.body.data.due_date, '2026-01-15');
+
+  const bearbeitet = await call('PUT', `/${angelegt.body.data.id}`, {
     as: admin,
-    body: { title: 'Mit null', due_date: null, is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+    body: { title: 'Erst ohne Regel', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
   });
-  assert.equal(r.status, 200);
-  assert.equal(r.body.data.due_date, null, 'die Faelligkeit ist entfernt, nicht verschoben');
+  assert.equal(bearbeitet.status, 200);
+  assert.equal(bearbeitet.body.data.due_date, '2026-01-15', 'der Server aendert das Datum nicht');
+});
+
+test('PUT: an einer vorher schon leeren Serie laesst sich der Titel aendern', async () => {
+  // DIE PRAESENZ EINES FELDES IST KEINE AENDERUNG. Das Aufgabenformular schickt
+  // bei jedem Speichern `due_date` UND `recurrence_rule` mit, auch wenn nur der
+  // Titel angefasst wurde. Wer danach fragt, ob das Feld dabei war, bekommt
+  // immer ja - und der Guard wuerde jede Bearbeitung dieses Datensatzes mit 400
+  // abweisen. Verglichen werden deshalb die WERTE gegen den Datensatz.
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Leere Serie', due_date: '2026-01-15' } });
+  const id = angelegt.body.data.id;
+  // Am Guard vorbei in die Zeile schreiben, wie es der Sync tut.
+  db.prepare('UPDATE tasks SET is_recurring = 1, recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
+
+  const nurTitel = await call('PUT', `/${id}`, {
+    as: admin,
+    body: {
+      title: 'Neuer Titel', due_date: '2026-01-15',
+      is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+    },
+  });
+  assert.equal(nurTitel.status, 200, `ein Titel-Edit darf nicht scheitern, bekommen ${nurTitel.status}`);
+  assert.equal(nurTitel.body.data.title, 'Neuer Titel');
+
+  // Wer die Serie WIRKLICH anfasst und sie damit leer macht, bekommt weiter 400.
+  const leerGemacht = await call('PUT', `/${id}`, {
+    as: admin,
+    body: { title: 'Neuer Titel', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260118' },
+  });
+  assert.equal(leerGemacht.status, 400, `erwartet 400, bekommen ${leerGemacht.status}`);
+});
+
+test('PUT: ein Titel-Edit laesst eine eingelesene Serie in Ruhe (#756)', async () => {
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Fremd', due_date: '2026-01-15' } });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE tasks SET is_recurring = 1, recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
+
+  const nurTitel = await call('PUT', `/${id}`, { as: admin, body: { title: 'Neuer Titel' } });
+  assert.equal(nurTitel.status, 200);
+  assert.equal(nurTitel.body.data.due_date, '2026-01-15', 'die Faelligkeit darf sich nicht bewegen');
 });

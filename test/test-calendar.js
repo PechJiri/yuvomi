@@ -1214,12 +1214,16 @@ test('nextOccurrence: ein unlesbarer Anker wirft auch bei YEARLY nicht', () => {
 });
 
 // --------------------------------------------------------
-// Der Serienstart wandert auf die Regel (#960)
+// Das erste Vorkommen einer Regel finden (#960)
+//
+// LESEND. `seriesStartFor` beantwortet, welcher Tag der erste ist - es
+// korrigiert kein gespeichertes Datum. Wer den Beweis fuer die Schreibrouten
+// sucht, findet ihn in test-calendar-routes.js und test-tasks-routes.js.
 // --------------------------------------------------------
 
-test('seriesStartFor zieht den Start auf das erste Vorkommen', () => {
+test('seriesStartFor findet das erste Vorkommen', () => {
   const R = 'FREQ=MONTHLY;BYMONTHDAY=-1';
-  assert(seriesStartFor('2026-01-15', R) === '2026-01-31', 'der 15. wandert auf den Monatsletzten');
+  assert(seriesStartFor('2026-01-15', R) === '2026-01-31', 'der erste Treffer ab dem 15. ist der Monatsletzte');
   assert(seriesStartFor('2026-01-31', R) === '2026-01-31', 'wer schon passt, bleibt');
   // Die Uhrzeit bleibt Wanduhrzeit - nur der Tag wandert.
   assert(seriesStartFor('2026-01-15T09:30:00', R) === '2026-01-31T09:30:00');

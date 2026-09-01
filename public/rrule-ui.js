@@ -217,17 +217,15 @@ export function renderRRuleFields(prefix, existingRule, opts = {}) {
             <span class="toggle__track"></span>
             <span>${t('rrule.lastDayOfMonth')}</span>
           </label>
-          <!-- DER SERVER ZIEHT DEN SERIENSTART AUF DEN ERSTEN MONATSLETZTEN
-               (#960) - er muss, weil das gespeicherte Datum woertlich nach
-               draussen geht und ein Start, der nicht auf seiner Regel liegt,
-               fremde Clients anders rechnen laesst (RFC 5545 nennt das
-               Ergebnis "undefined").
-               Der Satz steht hier, damit das keine stille Korrektur ist: wer
-               den 15. eintraegt und ankreuzt, soll vorher wissen, dass die
-               Serie am 31. beginnt. Kein Vorgriff im Feld selbst - die
-               Startdatum-Felder heissen in Kalender und Aufgaben verschieden
-               und haengen beim Kalender am Ganztags-Schalter; ein geratener
-               Selektor waere still kaputt, sobald eines umbenannt wird. -->
+          <!-- DAS STARTDATUM IST NICHT DER ERSTE TERMIN (#960). Wer den 15.
+               eintraegt und ankreuzt, bekommt als erstes Vorkommen den 31. -
+               das Datum im Feld bleibt aber stehen, der Server aendert es
+               nicht. Ohne diesen Satz sieht der 15. aus wie der erste Termin,
+               und der Kalender zeigt dann etwas anderes als das Formular.
+               Kein Vorgriff im Feld selbst - die Startdatum-Felder heissen in
+               Kalender und Aufgaben verschieden und haengen beim Kalender am
+               Ganztags-Schalter; ein geratener Selektor waere still kaputt,
+               sobald eines umbenannt wird. -->
           <p class="rrule-anchor__hint" id="${prefix}-rrule-monthday-hint">${t('rrule.lastDayOfMonthHint')}</p>
         </div>
 
@@ -420,7 +418,6 @@ export function getRRuleValues(root, prefix) {
   });
 
   const lastDay = !!root.querySelector(`#${prefix}-rrule-last-day`)?.checked;
-
 
   const built = buildRRule({ freq, interval, byday, until, count, lastDay });
 

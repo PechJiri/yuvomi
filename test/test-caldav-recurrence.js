@@ -325,6 +325,14 @@ test('eine Serie mit eigener Zone verliert ihr Monatsende nicht', () => {
     const letzter = new Date(Date.UTC(y, m, 0)).getUTCDate();
     assert(d === letzter, `${tag} ist lokal nicht der Monatsletzte (${letzter}.)`);
   }
+
+  // WAS DIESER TEST NICHT ZEIGT - und was er deshalb nicht beweisen soll: der
+  // feste UTC-Tag traegt nur, solange die Sommerzeitumstellung ihn nicht ueber
+  // Mitternacht schiebt. 20:00 New Yorker Zeit hat dafuer vier Stunden Luft.
+  // Bei 23:30 hat es keine mehr: der Zeitstempel liegt dann bei 04:30Z, und
+  // nach der Umstellung auf EDT ergibt das lokal den 1. April statt des
+  // 31. Maerz. Das braucht die Rechnung in der Ereigniszone mit Rueckrechnung
+  // je Vorkommen und ist ein eigener Vorgang, kein Nachziehen hier.
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

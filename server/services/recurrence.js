@@ -205,7 +205,13 @@ function nextOccurrence(baseDateStr, rrule, {
     // Ohne sie laeuft die Serie auf ihrem festen UTC-Tag weiter, und der
     // gleichbleibende Versatz trifft den lokalen Monatsletzten von selbst.
     // Yuvomis eigene Termine sind davon nicht betroffen: sie tragen keine
-    // fremde Zone, und ihr Start wird beim Speichern auf die Regel gezogen.
+    // fremde Zone, also stimmt ihr UTC-Tag mit dem lokalen ueberein.
+    //
+    // WAS DAS NICHT LOEST: ueber eine Sommerzeitumstellung hinweg trifft der
+    // feste UTC-Tag den lokalen Monatsletzten NICHT mehr - eine New Yorker
+    // Serie am 31.01. 23:30 landet nach der Umstellung auf dem 1. April statt
+    // dem 31. Maerz. Dafuer muesste die Expansion in der Ereigniszone rechnen
+    // und je Vorkommen zurueckrechnen; das ist ein eigener Vorgang.
     const wirksam = utcDiffersFromLocal ? null : parsed.bymonthday;
     const targetDay = monthDayFor(wirksam, lastDay, anchorDay ?? base.getUTCDate());
     next.setTime(Date.UTC(year, month, targetDay));
@@ -513,35 +519,12 @@ export function rruleLine(rule) {
 }
 
 /**
- * Der Serienstart, auf das erste Vorkommen der Regel gezogen.
- *
- * WARUM DAS BEIM SPEICHERN PASSIERT UND NICHT BEIM LESEN: das gespeicherte
- * DTSTART geht woertlich nach draussen - in den ICS-Feed, zu Google, ueber
- * CalDAV. Liegt es nicht auf seiner eigenen Regel, laesst RFC 5545 das Ergebnis
- * ausdruecklich offen ("the recurrence set ... is undefined"), und jeder fremde
- * Client darf anders rechnen als wir. Intern koennen wir das abfangen, nach
- * aussen nicht.
- *
- * Es ist auch keine Korrektur gegen den Nutzer: wer "am letzten Tag des Monats"
- * ankreuzt, hat genau das gesagt. Das Datum darauf zu ziehen setzt seine Angabe
- * um, statt sie zu ignorieren - und die Oberflaeche zeigt es sofort, damit
- * niemand ein anderes Datum gespeichert findet als er gesehen hat.
- *
- * Ohne Regel oder ohne Datum bleibt alles, wie es ist.
- *
- * @param {string} dateKey YYYY-MM-DD (oder ein ISO-Zeitstempel; der Tag zaehlt)
- * @param {string} rrule
- * @returns {string} derselbe Tag, wenn er passt - sonst der naechste, der passt
- */
-/**
  * Hat diese Serie ueberhaupt ein Vorkommen?
  *
  * `FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120` ab dem 15. Januar ist eine Regel,
  * die der Validator annimmt und die trotzdem leer ist: der erste Monatsletzte
- * liegt hinter dem UNTIL. `seriesStartFor` kann daran nichts richten und laesst
- * den Start stehen - die Routen lehnen die Eingabe deshalb ab, statt eine Serie
- * zu speichern, die nie stattfindet und deren DTSTART nicht auf ihrer Regel
- * liegt.
+ * liegt hinter dem UNTIL. Die Routen lehnen die Eingabe deshalb ab, statt eine
+ * Serie zu speichern, die nie stattfindet.
  */
 function hasAnyOccurrence(dateKey, rrule) {
   if (!dateKey || !rrule) return true;
@@ -551,6 +534,28 @@ function hasAnyOccurrence(dateKey, rrule) {
   return seriesStartFor(tag, rrule) !== tag || matchesRRuleByday(tag, rrule);
 }
 
+/**
+ * Das erste Vorkommen der Regel am oder nach `dateKey`.
+ *
+ * NUR LESEND. Ein DTSTART, das die eigene Regel nicht erfuellt, wird damit
+ * NICHT korrigiert - der gespeicherte Wert bleibt, was eingegeben oder
+ * eingelesen wurde. Der Versuch, ihn beim Speichern zu ziehen, stand einmal
+ * hier und ist zurueckgenommen: `start_datetime` und `due_date` haengen an
+ * Vorlauf, Erinnerung, Folgeinstanz und optimistischem Render, und jede dieser
+ * Stellen rechnete danach auf einem Datum, das der Server hinterher geaendert
+ * hatte. Wer den ersten Tag braucht, fragt hier - und laesst den Datensatz in
+ * Ruhe.
+ *
+ * Was das offen laesst: nach draussen bleibt ein unsynchronisiertes DTSTART
+ * mehrdeutig, RFC 5545 nennt das Ergebnis dort ausdruecklich "undefined". Das
+ * gehoert in die Ausgabe-Serialisierer, nicht in die Schreibroute.
+ *
+ * Ohne Regel oder ohne Datum bleibt alles, wie es ist.
+ *
+ * @param {string} dateKey YYYY-MM-DD (oder ein ISO-Zeitstempel; der Tag zaehlt)
+ * @param {string} rrule
+ * @returns {string} derselbe Tag, wenn er passt - sonst der naechste, der passt
+ */
 function seriesStartFor(dateKey, rrule) {
   if (!dateKey || !rrule) return dateKey;
   const tag = String(dateKey).slice(0, 10);

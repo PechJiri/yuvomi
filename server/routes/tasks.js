@@ -8,7 +8,7 @@ import { createLogger } from '../logger.js';
 import express from 'express';
 import * as db from '../db.js';
 import { documentVisibleSql } from '../services/document-access.js';
-import { nextDueAfterCompletion, seriesStartFor, hasAnyOccurrence } from '../services/recurrence.js';
+import { nextDueAfterCompletion, hasAnyOccurrence } from '../services/recurrence.js';
 import { syncTaskRewards } from '../services/rewards.js';
 import { completionFeed, seriesHistory, syncTaskCompletion } from '../services/task-completions.js';
 import { normalizeCategoryFilter, taskCategoryWhere, taskScopeNeedsToday, taskScopeWhere } from '../services/task-scope.js';
@@ -968,23 +968,22 @@ router.post('/', (req, res) => {
       ? 'open'
       : req.body.status;
 
-    // Wie beim Kalender (#960): wer "am letzten Tag des Monats" waehlt, meint
-    // genau das - und das Faelligkeitsdatum geht als DTSTART in den
-    // CalDAV-Push. Ein Start, der nicht auf seiner Regel liegt, laesst fremde
-    // Clients etwas anderes rechnen als uns.
+    // Wie beim Kalender (#960): eine Serie ohne ein einziges Vorkommen wird
+    // nicht gespeichert. `FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=...` kann den ersten
+    // Monatsletzten verfehlen, und uebrig bliebe eine Aufgabe, die nie faellig
+    // wird.
+    //
+    // DAS FAELLIGKEITSDATUM SELBST BLEIBT STEHEN. Es auf das erste Vorkommen zu
+    // ziehen war der Versuch, das DTSTART im CalDAV-Push eindeutig zu machen -
+    // aber `due_date` haengt an Vorlauf, Erinnerung und Folgeinstanz, und jede
+    // dieser Stellen rechnete danach auf einem Datum, das der Server hinterher
+    // geaendert hat. Welcher Tag der erste ist, beantwortet die Expansion.
     if (is_recurring && !hasAnyOccurrence(due_date, recurrence_rule)) {
       return res.status(400).json({
         error: 'recurrence_rule: the rule has no occurrence on or after the due date.',
         code: 400,
       });
     }
-    const faellig = is_recurring ? seriesStartFor(due_date, recurrence_rule) : due_date;
-    // DER VORLAUF GEHOERT ZUM DURCHLAUF (#647). Wandert die Faelligkeit, muss
-    // das Startdatum mit: eine Aufgabe, die am 10. beginnt und am 15. faellig
-    // ist, hat fuenf Tage Vorlauf - bliebe der Start stehen, waeren es
-    // ploetzlich einundzwanzig, und `shiftedStartDate` traegt genau diesen
-    // Abstand in JEDE Folgeinstanz weiter.
-    const startMit = verschobenerStart(start_date, due_date, faellig);
 
     const userIds  = parseAssignedTo(req.body.assigned_to);
     const firstUid = userIds[0] ?? null;
@@ -1022,7 +1021,7 @@ router.post('/', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         title.trim(), description, category, priority, status,
-        startMit, faellig, due_time, firstUid, req.authUserId || req.session.userId, parent_task_id,
+        start_date, due_date, due_time, firstUid, req.authUserId || req.session.userId, parent_task_id,
         is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0, points, visibility,
         countdown ? 1 : 0, req.body.locked ? 1 : 0
       );
@@ -1111,25 +1110,19 @@ router.put('/:id', (req, res) => {
       countdown       = task.countdown,
     } = req.body;
 
-    // Auch beim Bearbeiten (#960), wie beim Kalender: der POST-Pfad zog schon,
-    // dieser nicht - wer die Wahl an einer BESTEHENDEN Aufgabe ankreuzt, haette
-    // ein Faelligkeitsdatum behalten, das nicht auf seiner Regel liegt, und es
-    // als DTSTART in den CalDAV-Push geschickt.
-    // Nur wenn jemand Regel oder Datum in DIESER Anfrage anfasst - sonst
-    // verschoebe ein Titel-Edit eine eingelesene Serie mit absichtlich
-    // unsynchronisiertem Start (#756). `null` heisst "nicht anfassen".
-    const regelGesetzt = req.body.recurrence_rule !== undefined && req.body.recurrence_rule !== null;
-    const dueGesetzt = req.body.due_date !== undefined && req.body.due_date !== null;
-    if (is_recurring && (regelGesetzt || dueGesetzt) && !hasAnyOccurrence(due_date, recurrence_rule)) {
+    // Auch beim Bearbeiten darf keine leere Serie entstehen (#960) - aber nur
+    // abweisen, wenn DIESE Anfrage sie leer macht. Das Formular schickt bei
+    // jedem Speichern alle Felder mit, also beantwortet "war das Feld dabei?"
+    // die Frage nicht; verglichen werden die WERTE gegen den Datensatz. Sonst
+    // liesse sich an einer vorher schon leeren Serie nicht einmal mehr der
+    // Titel aendern.
+    const serieBeruehrt = due_date !== task.due_date || recurrence_rule !== task.recurrence_rule;
+    if (is_recurring && serieBeruehrt && !hasAnyOccurrence(due_date, recurrence_rule)) {
       return res.status(400).json({
         error: 'recurrence_rule: the rule has no occurrence on or after the due date.',
         code: 400,
       });
     }
-    const faelligDanach = is_recurring && (regelGesetzt || dueGesetzt)
-      ? seriesStartFor(due_date, recurrence_rule)
-      : due_date;
-    const startDanach = verschobenerStart(start_date, due_date, faelligDanach);
 
     const points = req.body.points !== undefined ? clampPoints(req.body.points) : task.points;
     const visibility = req.body.visibility !== undefined
@@ -1231,7 +1224,7 @@ router.put('/:id', (req, res) => {
           points = ?, visibility = ?, countdown = ?, locked = ?
         WHERE id = ?
       `).run(title.trim(), description, category, priority,
-             status, startDanach, faelligDanach, due_time, firstUid,
+             status, start_date, due_date, due_time, firstUid,
              is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0,
              points, visibility, countdown ? 1 : 0, locked, req.params.id);
       setAssignments(db.get(), task.id, userIds);
@@ -1399,21 +1392,6 @@ function discardRecurrenceFollowup(taskId) {
  * auch ohne Fälligkeitsdatum weiter, und dann fehlt der Bezugspunkt, an dem ein
  * Vorlauf gemessen wäre.
  */
-/**
- * Das Startdatum um denselben Versatz wie die Faelligkeit verschieben.
- *
- * Ohne Start oder ohne Bewegung bleibt alles, wie es ist. Gerechnet wird in
- * ganzen Tagen ueber UTC-Mitternacht, wie ueberall in diesem Modul.
- */
-function verschobenerStart(startDate, dueVorher, dueNachher) {
-  if (!startDate || !dueVorher || dueVorher === dueNachher) return startDate;
-  const versatz = Date.parse(`${String(dueNachher).slice(0, 10)}T00:00:00Z`)
-    - Date.parse(`${String(dueVorher).slice(0, 10)}T00:00:00Z`);
-  if (!Number.isFinite(versatz) || !versatz) return startDate;
-  const neu = new Date(Date.parse(`${String(startDate).slice(0, 10)}T00:00:00Z`) + versatz);
-  return isNaN(neu.getTime()) ? startDate : neu.toISOString().slice(0, 10);
-}
-
 function shiftedStartDate(startDate, dueDate, nextDue) {
   if (!startDate || !dueDate) return null;
   const lead = Date.parse(`${dueDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`);

@@ -150,10 +150,9 @@ export function nextEventDate(event, todayKey, exceptions = null, { graceDays = 
   // DER START IST NUR DANN DER NAECHSTE TERMIN, WENN ER AUF DER REGEL LIEGT.
   // Ein Termin am 15. mit "am letzten Tag des Monats" hat am 15. kein
   // Vorkommen - der Countdown zeigte es trotzdem an, weil dieser Zweig das
-  // Startdatum ungeprueft durchreicht, sobald es in der Zukunft liegt. Ueber
-  // die API angelegte Serien tragen seit dem Ziehen des Serienstarts ohnehin
-  // ein passendes Datum; aus CalDAV eingelesene koennen weiter unsynchron sein,
-  // und fuer die gilt dasselbe.
+  // Startdatum ungeprueft durchreicht, sobald es in der Zukunft liegt. Das
+  // gespeicherte Datum bleibt dabei unangetastet - gefragt wird nur, welcher
+  // Tag der erste ist.
   const ersterTreffer = seriesStartFor(startKey, event.recurrence_rule);
   let candidate = ersterTreffer >= todayKey
     ? ersterTreffer

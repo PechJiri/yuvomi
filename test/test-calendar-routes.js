@@ -885,76 +885,35 @@ test('DELETE /:id — 404 + 204', async () => {
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM calendar_events WHERE id=?').get(id).n, 0);
 });
 
-test('POST / — eine Monatsletzten-Serie beginnt am ersten Monatsletzten (#960)', async () => {
-  // Das gespeicherte DTSTART geht woertlich nach draussen: in den ICS-Feed, zu
-  // Google, ueber CalDAV. Liegt es nicht auf seiner eigenen Regel, nennt
-  // RFC 5545 das Ergebnis "undefined" - jeder fremde Client darf dann anders
-  // rechnen als wir.
+test('POST / — der gespeicherte Start bleibt stehen, das erste Vorkommen ist der Monatsletzte (#960)', async () => {
+  // GEPRUEFT WIRD UEBER DIE EXPANSION, NICHT UEBER DIE SPALTE. Dass der Server
+  // das Datum in Ruhe laesst, ist nur die halbe Zusage - die andere ist, dass
+  // trotzdem der 31. der erste Termin ist. Beides steht deshalb in EINEM Test:
+  // wuerde die Route wieder anfangen zu ziehen, faellt die erste Zusage; ginge
+  // die Expansion verloren, die zweite.
   const r = await call('POST', '/', {
     body: {
-      title: 'Zaehlerstand', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T11:00',
+      title: 'SERIE-MONATSLETZTER', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T11:00',
       recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
     },
   });
   assert.equal(r.status, 201);
-  assert.match(r.body.data.start_datetime, /^2026-01-31/, `Start: ${r.body.data.start_datetime}`);
-  // DIE DAUER WANDERT MIT: zwei Stunden bleiben zwei Stunden, auch wenn der
-  // Termin sechzehn Tage weiter hinten anfaengt.
-  assert.match(r.body.data.end_datetime, /^2026-01-31T11:00/, `Ende: ${r.body.data.end_datetime}`);
+  assert.match(r.body.data.start_datetime, /^2026-01-15/,
+    `der Server aendert das eingegebene Datum nicht: ${r.body.data.start_datetime}`);
+  assert.match(r.body.data.end_datetime, /^2026-01-15T11:00/, 'und das Ende ebensowenig');
 
-  const ohne = await call('POST', '/', {
-    body: { title: 'Ohne', start_datetime: '2026-01-15T09:00', recurrence_rule: 'FREQ=MONTHLY' },
-  });
-  assert.match(ohne.body.data.start_datetime, /^2026-01-15/, 'ohne die Angabe bleibt der Start');
-});
-
-test('PUT / — auch beim Bearbeiten wandert der Serienstart auf die Regel (#960)', async () => {
-  // Der POST-Pfad zog schon, der PUT-Pfad nicht: wer die Wahl an einem
-  // BESTEHENDEN Termin ankreuzt, haette weiterhin ein DTSTART bekommen, das
-  // nicht auf seiner Regel liegt - und genau das geht nach draussen.
-  const angelegt = await call('POST', '/', {
-    body: { title: 'Erst ohne', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T11:00' },
-  });
-  assert.equal(angelegt.status, 201);
-  assert.match(angelegt.body.data.start_datetime, /^2026-01-15/, 'ohne Regel bleibt der Start');
-
-  const bearbeitet = await call('PUT', `/${angelegt.body.data.id}`, {
-    body: { recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
-  });
-  assert.equal(bearbeitet.status, 200);
-  assert.match(bearbeitet.body.data.start_datetime, /^2026-01-31/,
-    `nachtraeglich angekreuzt: ${bearbeitet.body.data.start_datetime}`);
-  assert.match(bearbeitet.body.data.end_datetime, /^2026-01-31T11:00/, 'die Dauer wandert mit');
-});
-
-test('PUT / — ein Titel-Edit verschiebt keine eingelesene Serie (#756)', async () => {
-  // Eine aus einem Fremdkalender eingelesene Serie darf einen absichtlich
-  // unsynchronisierten Start haben. Bei JEDEM PUT zu normalisieren haette sie
-  // beim Aendern des Titels stillschweigend verschoben - gegen genau die
-  // Wortlaut-Regel, auf die sich dieses Feature sonst beruft.
-  const angelegt = await call('POST', '/', {
-    body: { title: 'Fremd', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T10:00' },
-  });
-  const id = angelegt.body.data.id;
-  // Die Regel direkt in die Zeile schreiben, wie es der Sync tut - am
-  // Normalisieren der Route vorbei.
-  db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
-    .run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
-
-  const nurTitel = await call('PUT', `/${id}`, { body: { title: 'Neuer Titel' } });
-  assert.equal(nurTitel.status, 200);
-  assert.match(nurTitel.body.data.start_datetime, /^2026-01-15/,
-    `der Start darf sich nicht bewegen: ${nurTitel.body.data.start_datetime}`);
-
-  // Fasst jemand die Regel an, wird normalisiert.
-  const mitRegel = await call('PUT', `/${id}`, { body: { recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' } });
-  assert.match(mitRegel.body.data.start_datetime, /^2026-01-31/, 'jetzt schon');
+  const fenster = await call('GET', '/?from=2026-01-01&to=2026-04-30');
+  const tage = fenster.body.data
+    .filter((e) => e.title === 'SERIE-MONATSLETZTER')
+    .map((e) => e.start_datetime.slice(0, 10));
+  assert.deepEqual(tage, ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30'],
+    `der 15. ist kein Vorkommen der Regel: ${tage.join(', ')}`);
 });
 
 test('POST / — eine Regel ohne jedes Vorkommen wird abgelehnt', async () => {
   // FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120 ab dem 15. Januar: der erste
   // Monatsletzte liegt hinter dem UNTIL. Gespeichert waere das ein Termin, den
-  // niemand je sieht, mit einem DTSTART, das nicht auf seiner Regel liegt.
+  // niemand je zu sehen bekaeme - eine leere Serie, kein Termin am 15.
   const r = await call('POST', '/', {
     body: {
       title: 'Nie', start_datetime: '2026-01-15T09:00',
@@ -964,18 +923,70 @@ test('POST / — eine Regel ohne jedes Vorkommen wird abgelehnt', async () => {
   assert.equal(r.status, 400, `erwartet 400, bekommen ${r.status}`);
 });
 
-test('PUT / — start_datetime: null heisst "nicht anfassen", nicht "leer" (#960)', async () => {
-  // Der Validator laesst null durch, und das UPDATE behandelt es ueber COALESCE
-  // als "unveraendert". Die Normalisierung nahm es dagegen als Wert und
-  // uebersprang sich selbst: die neue Regel wurde gespeichert, der alte
-  // unpassende Start blieb stehen.
+test('PUT / — die Regel nachtraeglich ankreuzen verschiebt den Termin nicht (#960)', async () => {
+  // Der Server hat den Serienstart einmal beim Speichern auf die Regel gezogen.
+  // Das ist zurueckgenommen: `start_datetime` haengt an der Erinnerung, am
+  // optimistischen Render und am Ende des Termins, und keine dieser Stellen
+  // erfaehrt von einer Verschiebung, die erst in der Route passiert.
   const angelegt = await call('POST', '/', {
-    body: { title: 'Mit null', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T10:00' },
+    body: { title: 'SERIE-NACHTRAEGLICH', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T11:00' },
   });
-  const r = await call('PUT', `/${angelegt.body.data.id}`, {
-    body: { start_datetime: null, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  assert.equal(angelegt.status, 201);
+
+  const bearbeitet = await call('PUT', `/${angelegt.body.data.id}`, {
+    body: { recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
   });
-  assert.equal(r.status, 200);
-  assert.match(r.body.data.start_datetime, /^2026-01-31/,
-    `der gespeicherte Start wird normalisiert: ${r.body.data.start_datetime}`);
+  assert.equal(bearbeitet.status, 200);
+  assert.match(bearbeitet.body.data.start_datetime, /^2026-01-15/,
+    `der Start bleibt, wo er stand: ${bearbeitet.body.data.start_datetime}`);
+  assert.match(bearbeitet.body.data.end_datetime, /^2026-01-15T11:00/, 'das Ende ebenso');
+
+  const fenster = await call('GET', '/?from=2026-01-01&to=2026-02-28');
+  const tage = fenster.body.data
+    .filter((e) => e.title === 'SERIE-NACHTRAEGLICH')
+    .map((e) => e.start_datetime.slice(0, 10));
+  assert.deepEqual(tage, ['2026-01-31', '2026-02-28'], `bekommen: ${tage.join(', ')}`);
+});
+
+test('PUT / — an einer vorher schon leeren Serie laesst sich der Titel aendern', async () => {
+  // DIE PRAESENZ EINES FELDES IST KEINE AENDERUNG. Das Formular schickt bei
+  // jedem Speichern `start_datetime` UND `recurrence_rule` mit, auch wenn nur
+  // der Titel angefasst wurde. Wer danach fragt, ob das Feld dabei war, bekommt
+  // immer ja - und der Guard unten wuerde jede Bearbeitung dieses Datensatzes
+  // mit 400 abweisen. Verglichen werden deshalb die WERTE.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Leere Serie', start_datetime: '2026-01-15T09:00' },
+  });
+  const id = angelegt.body.data.id;
+  // Am Guard vorbei in die Zeile schreiben, wie es der Sync tut.
+  db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
+
+  const nurTitel = await call('PUT', `/${id}`, {
+    body: { title: 'Neuer Titel', start_datetime: '2026-01-15T09:00', recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120' },
+  });
+  assert.equal(nurTitel.status, 200, `ein Titel-Edit darf nicht scheitern, bekommen ${nurTitel.status}`);
+  assert.equal(nurTitel.body.data.title, 'Neuer Titel');
+
+  // Wer die Serie WIRKLICH anfasst und sie damit leer macht, bekommt weiter 400.
+  const leerGemacht = await call('PUT', `/${id}`, {
+    body: { recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260118' },
+  });
+  assert.equal(leerGemacht.status, 400, `erwartet 400, bekommen ${leerGemacht.status}`);
+});
+
+test('PUT / — ein Titel-Edit laesst eine eingelesene Serie in Ruhe (#756)', async () => {
+  // Eine aus einem Fremdkalender eingelesene Serie darf einen absichtlich
+  // unsynchronisierten Start haben. Er bleibt in jedem Fall stehen.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Fremd', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T10:00' },
+  });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
+
+  const nurTitel = await call('PUT', `/${id}`, { body: { title: 'Neuer Titel' } });
+  assert.equal(nurTitel.status, 200);
+  assert.match(nurTitel.body.data.start_datetime, /^2026-01-15/,
+    `der Start darf sich nicht bewegen: ${nurTitel.body.data.start_datetime}`);
 });

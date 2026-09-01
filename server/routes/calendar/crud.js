@@ -8,23 +8,7 @@ import express from 'express';
 import * as db from '../../db.js';
 import { str, color, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
 import { normalizeVisibility, visibilityWhere } from '../../services/visibility.js';
-import { seriesStartFor, hasAnyOccurrence } from '../../services/recurrence.js';
-
-/**
- * Denselben Zeitstempel um `versatzMs` verschieben, aber NUR im Datumsteil.
- *
- * Die Uhrzeit bleibt Wanduhrzeit: ein Termin um 09:00 faengt auch nach dem
- * Verschieben um 09:00 an, nicht um 09:00 minus Zeitzonendrift. Deshalb wird
- * der Tag gerechnet und der Rest des Strings angehaengt, statt den ganzen
- * Zeitstempel durch Date.parse zu schicken.
- */
-function verschiebeDatumsteil(stamp, versatzMs) {
-  const tag = String(stamp).slice(0, 10);
-  const rest = String(stamp).slice(10);
-  const neu = new Date(Date.parse(`${tag}T00:00:00Z`) + versatzMs);
-  if (isNaN(neu.getTime())) return stamp;
-  return `${neu.toISOString().slice(0, 10)}${rest}`;
-}
+import { hasAnyOccurrence } from '../../services/recurrence.js';
 import {
   StorageError,
   cleanupStagedUpload,
@@ -129,30 +113,24 @@ router.post('/', async (req, res) => {
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     if (!vIcon) return res.status(400).json({ error: 'icon: invalid calendar event icon.', code: 400 });
 
-    // DER SERIENSTART GEHOERT AUF DIE REGEL (#960). Wer den Termin am 15. anlegt
-    // und "am letzten Tag des Monats" waehlt, hat ein DTSTART, das nicht auf
-    // seiner eigenen Regel liegt - und genau das geht woertlich nach draussen,
-    // in den ICS-Feed, zu Google, ueber CalDAV. RFC 5545 laesst das Ergebnis
-    // dort ausdruecklich offen, jeder fremde Client darf anders rechnen als wir.
+    // EINE SERIE OHNE EIN EINZIGES VORKOMMEN WIRD NICHT GESPEICHERT (#960).
+    // `FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120` ab dem 15. Januar nimmt der
+    // Validator an, und trotzdem liegt der erste Monatsletzte hinter dem UNTIL:
+    // ein Termin, den niemand je zu sehen bekaeme, weder hier noch im Feed.
     //
-    // Das Ende wandert mit, damit die Dauer bleibt: ein zweistuendiger Termin
-    // bleibt zweistuendig, auch wenn er sechzehn Tage weiter hinten anfaengt.
-    // Eine Regel, die kein einziges Vorkommen hat, wird nicht gespeichert: sie
-    // waere ein Termin, den niemand je sieht, mit einem DTSTART, das nicht auf
-    // ihr liegt.
+    // DAS GESPEICHERTE DATUM BLEIBT DAGEGEN, WAS EINGEGEBEN WURDE. Der Server
+    // zieht es NICHT auf das erste Vorkommen - er hat es einmal getan, und jede
+    // Stelle, die `start_datetime` weiterverarbeitet, ohne davon zu wissen, hat
+    // dabei etwas verschoben: die Erinnerung rechnete auf dem alten Tag, ein
+    // Titel-Edit bewegte eine eingelesene Serie. Welcher Tag der erste ist,
+    // beantwortet die Expansion (`expandRecurringEvents`); nach aussen bleibt
+    // das DTSTART damit uneindeutig, das ist bekannt und ein eigener Vorgang.
     if (!hasAnyOccurrence(vStart.value, vRrule.value)) {
       return res.status(400).json({
         error: 'recurrence_rule: the rule has no occurrence on or after the start date.',
         code: 400,
       });
     }
-    const gezogenerStart = seriesStartFor(vStart.value, vRrule.value);
-    const versatzMs = gezogenerStart === vStart.value
-      ? 0
-      : Date.parse(`${gezogenerStart.slice(0, 10)}T00:00:00Z`) - Date.parse(`${vStart.value.slice(0, 10)}T00:00:00Z`);
-    const gezogenesEnde = versatzMs && vEnd.value
-      ? verschiebeDatumsteil(vEnd.value, versatzMs)
-      : vEnd.value;
 
     const { all_day = 0 } = req.body;
     const userIds  = parseAssignedTo(req.body.assigned_to);
@@ -189,7 +167,7 @@ router.post('/', async (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         vTitle.value, vDesc.value,
-        gezogenerStart, gezogenesEnde,
+        vStart.value, vEnd.value,
         all_day ? 1 : 0, vLoc.value,
         vColor.value, vIcon, firstUid,
         userId, vRrule.value,
@@ -334,44 +312,38 @@ router.put('/:id', async (req, res) => {
     }
 
     const {
-      title, description, start_datetime: rohStart, end_datetime: rohEnde,
+      title, description, start_datetime, end_datetime,
       all_day, location, color: colorVal, recurrence_rule,
     } = req.body;
 
-    // AUCH BEIM BEARBEITEN (#960), ABER NUR WENN JEMAND SIE ANFASST. Der
-    // POST-Pfad zog den Serienstart schon, der PUT-Pfad nicht - wer die Wahl an
-    // einem BESTEHENDEN Termin ankreuzt, haette weiterhin ein DTSTART bekommen,
-    // das nicht auf seiner Regel liegt.
+    // AUCH BEIM BEARBEITEN DARF KEINE LEERE SERIE ENTSTEHEN (#960) - aber nur
+    // dann abweisen, wenn DIESE Anfrage sie leer macht.
     //
-    // BEI JEDEM PUT ZU ZIEHEN WAERE ABER FALSCH: eine aus einem Fremdkalender
-    // eingelesene Serie darf einen absichtlich unsynchronisierten Start haben,
-    // und ein Titel-Edit haette sie stillschweigend verschoben - gegen genau die
-    // Wortlaut-Regel, auf die sich dieser PR sonst beruft (#756). Normalisiert
-    // wird deshalb nur, wenn Regel oder Start in DIESER Anfrage stehen.
+    // NICHT DIE ANWESENHEIT DER FELDER PRUEFEN, SONDERN IHRE WERTE. Beide
+    // Formulare schicken bei jedem Speichern das ganze Objekt mit
+    // (`public/pages/calendar.js`, `public/pages/tasks.js`); "hat der Aufrufer
+    // das Feld geschickt?" ist deshalb immer wahr und taugt nicht als Frage.
+    // Wer nur den Titel aendert, wuerde sonst an einer eingelesenen Serie
+    // scheitern, die schon vorher kein Vorkommen hatte - ein Datensatz, den
+    // niemand mehr bearbeiten koennte.
     //
     // `null` heisst dabei "nicht anfassen", nicht "leer": der Validator laesst
-    // es durch, und das UPDATE unten behandelt es ueber COALESCE ebenso.
-    const regelGesetzt = recurrence_rule !== undefined && recurrence_rule !== null;
-    const startGesetzt = rohStart !== undefined && rohStart !== null;
-    const regelDanach = regelGesetzt ? recurrence_rule : event.recurrence_rule;
-    const startDanach = startGesetzt ? rohStart : event.start_datetime;
-    if ((regelGesetzt || startGesetzt) && !hasAnyOccurrence(startDanach, regelDanach)) {
+    // es durch, und das UPDATE unten behandelt es ueber COALESCE ebenso. Der
+    // Tagesvergleich reicht, weil `hasAnyOccurrence` ohnehin nur den Tag liest.
+    const regelDanach = recurrence_rule !== undefined && recurrence_rule !== null
+      ? recurrence_rule
+      : event.recurrence_rule;
+    const startDanach = start_datetime !== undefined && start_datetime !== null
+      ? start_datetime
+      : event.start_datetime;
+    const serieBeruehrt = regelDanach !== event.recurrence_rule
+      || String(startDanach ?? '').slice(0, 10) !== String(event.start_datetime ?? '').slice(0, 10);
+    if (serieBeruehrt && !hasAnyOccurrence(startDanach, regelDanach)) {
       return res.status(400).json({
         error: 'recurrence_rule: the rule has no occurrence on or after the start date.',
         code: 400,
       });
     }
-    const gezogen = (regelGesetzt || startGesetzt)
-      ? seriesStartFor(startDanach, regelDanach)
-      : startDanach;
-    const versatzMs = gezogen === startDanach
-      ? 0
-      : Date.parse(`${gezogen.slice(0, 10)}T00:00:00Z`) - Date.parse(`${String(startDanach).slice(0, 10)}T00:00:00Z`);
-    // Nur setzen, wenn der Aufrufer das Feld ueberhaupt geschickt hat oder das
-    // Ziehen etwas geaendert hat - sonst bliebe COALESCE wirkungslos.
-    const start_datetime = startGesetzt || versatzMs ? gezogen : undefined;
-    const ende = rohEnde !== undefined && rohEnde !== null ? rohEnde : event.end_datetime;
-    const end_datetime = versatzMs && ende ? verschiebeDatumsteil(ende, versatzMs) : rohEnde;
 
     // `color` ueberhaupt mitgeschickt? Nur dann wird die Spalte angefasst - der
     // Wert selbst darf dann auch null sein und heisst "keine eigene Farbe" (#891).
