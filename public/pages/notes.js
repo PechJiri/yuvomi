@@ -143,8 +143,8 @@ export async function render(container, { user }) {
 
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <div class="notes-page">
-      <div class="page-toolbar notes-toolbar">
+    <div class="notes-page app-page app-page--reading page-measure--narrow" data-composition="reading">
+      <div class="page-toolbar page-toolbar--narrow notes-toolbar">
         <h1 class="page-toolbar__title">${t('notes.title')}</h1>
         ${renderPageSearch({ id: 'notes-search', label: t('notes.searchPlaceholder'), placeholder: t('notes.searchPlaceholder'), value: state.filterQuery, clearLabel: t('common.searchClear'), className: 'notes-toolbar__search' })}
         <button class="btn btn--primary toolbar-new-btn" id="notes-add-btn" aria-label="${t('notes.addNoteLabel')}">

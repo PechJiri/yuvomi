@@ -32,6 +32,12 @@ The folder name must match the manifest `id`.
     "label": "Example",
     "icon": "box",
     "order": 100
+  },
+  "page": {
+    "composition": "reading",
+    "width": "reading",
+    "navigation": "standard",
+    "responsive": "standard"
   }
 }
 ```
@@ -56,26 +62,31 @@ Optional fields:
   (see the one-voice rule in `docs/SPEC.md`), so the frame does not change color when a visitor
   opens your page. Pick a tone that reads against both a light and a dark surface: the mark is
   filled with it and carries a light or dark glyph on top.
+- `page.composition`: one of `reading` | `data` | `dashboard` | `form` | `split` | `full`
+  (see [`PAGE-COMPOSITION.md`](PAGE-COMPOSITION.md)). Declare intent; do not invent page width,
+  gutters, or breakpoints. Use `/utils/page-layout.js` and `.app-page--*` primitives.
+- `page.width`: semantic width (`reading` | `content` | `wide`); defaults from composition.
+- `page.navigation` / `page.responsive`: currently `standard` only.
 
 ## Client Entry
 
 ```js
 import { api } from '/api.js';
 import { esc } from '/utils/html.js';
+import { renderAppPage, renderPageHeader, renderPageTitle, renderPageBody } from '/utils/page-layout.js';
 
 export async function render(container, context) {
   const me = await api.get('/auth/me');
   container.replaceChildren();
-  container.insertAdjacentHTML('beforeend', `
-    <div class="page">
-      <div class="page__header">
-        <h1 class="page__title">Example Module</h1>
-      </div>
-      <section class="settings-card">
-        <p>Hello, ${esc(me.user.display_name)}</p>
-      </section>
-    </div>
-  `);
+  container.insertAdjacentHTML('beforeend', renderAppPage({
+    mode: 'reading',
+    header: renderPageHeader({
+      title: renderPageTitle('Example Module'),
+    }),
+    body: renderPageBody({
+      content: `<section class="page-section"><p>Hello, ${esc(me.user.display_name)}</p></section>`,
+    }),
+  }));
 }
 ```
 

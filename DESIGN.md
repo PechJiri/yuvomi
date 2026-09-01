@@ -307,6 +307,14 @@ components:
      Rampen sind aus dem jeweiligen canonical neu gerechnet, alle 29 Eintraege
      stimmen jetzt gegen ihren Ausgangswert. -->
 
+## Page Composition
+
+Visual language (colour, typography, components, AA) lives in this document and
+`tokens.css`. **Spatial composition** — page width, header/body alignment,
+composition modes, and extension layout rules — lives in
+[`PAGE-COMPOSITION.md`](PAGE-COMPOSITION.md) with primitives in `layout.css` and
+`public/utils/page-layout.js`.
+
 ## Direction Contract
 
 Stand bis 2026-08-08 als HTML-Kommentar am Body-Anfang von `public/index.html`

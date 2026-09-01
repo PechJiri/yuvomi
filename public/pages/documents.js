@@ -123,7 +123,7 @@ export async function render(container) {
   _container = container;
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <div class="documents-page">
+    <div class="documents-page app-page app-page--data" data-composition="data">
       <div class="page-toolbar page-toolbar--wrap documents-toolbar">
         <h1 class="page-toolbar__title">${t('documents.title')}</h1>
         ${renderPageSearch({ id: 'documents-search', label: t('documents.searchPlaceholder'), placeholder: t('documents.searchPlaceholder'), value: state.query, clearLabel: t('common.searchClear'), className: 'documents-toolbar__search page-toolbar__center' })}

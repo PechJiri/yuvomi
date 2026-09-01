@@ -67,7 +67,7 @@ export async function render(container, { user } = {}) {
   _container = container;
   state.user = user || null;
   setHtml(container, `
-    <div class="split-page">
+    <div class="split-page app-page app-page--reading page-measure--narrow" data-composition="reading">
       <header class="panel-head split-topbar">
         <div>
           <h1 class="split-title">${t('splitExpenses.title')}</h1>

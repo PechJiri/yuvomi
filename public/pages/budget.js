@@ -433,7 +433,7 @@ export async function render(container, { user }) {
   state.expensesOnly = localStorage.getItem(EXPENSES_ONLY_KEY) === '1';
 
   setHtml(container, `
-    <div class="budget-page page-measure--narrow">
+    <div class="budget-page app-page app-page--reading page-measure--narrow" data-composition="reading">
       <div class="page-toolbar page-toolbar--wrap page-toolbar--narrow budget-nav">
         <h1 class="page-toolbar__title">${t('budget.title')}</h1>
         <!-- Der Kopf-Slot bleibt auf jedem Tab besetzt: entweder Stepper oder

@@ -63,7 +63,7 @@ async function loadStats() {
 function renderShell() {
   view.root.replaceChildren();
   view.root.insertAdjacentHTML('beforeend', `
-    <div class="budget-stats">
+    <div class="budget-stats app-page app-page--dashboard" data-composition="dashboard">
       <!-- Nur noch die Auflösung: der Zeitraum selbst wird über den geteilten
            Kopf-Stepper des Moduls gewählt. Optik aus dem geteilten
            .segmented-Baustein. -->

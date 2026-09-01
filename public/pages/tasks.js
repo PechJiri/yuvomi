@@ -3382,7 +3382,7 @@ export async function render(container, { user }) {
   // Initiales Skeleton (all values are from i18n keys or hardcoded constants, no user data)
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <div class="tasks-page page-measure--narrow">
+    <div class="tasks-page app-page app-page--reading page-measure--narrow" data-composition="reading">
       <div class="page-toolbar page-toolbar--wrap tasks-toolbar">
         <h1 class="page-toolbar__title">${t('tasks.title')}</h1>
         ${renderPageSearch({

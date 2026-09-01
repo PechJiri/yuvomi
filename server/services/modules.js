@@ -145,6 +145,18 @@ export function normalizeManifest(raw, folderName) {
   const pathValue = String(menu.path || `/m/${id}`).trim();
   const routePath = pathValue === `/m/${id}` ? pathValue : `/m/${id}`;
 
+  const COMPOSITION = new Set(['reading', 'data', 'dashboard', 'form', 'split', 'full']);
+  const WIDTHS = new Set(['reading', 'content', 'wide']);
+  const pageRaw = manifest.page && typeof manifest.page === 'object' ? manifest.page : {};
+  const composition = COMPOSITION.has(String(pageRaw.composition || '').trim())
+    ? String(pageRaw.composition).trim()
+    : 'reading';
+  const width = WIDTHS.has(String(pageRaw.width || '').trim())
+    ? String(pageRaw.width).trim()
+    : (composition === 'data' ? 'content' : composition === 'dashboard' ? 'wide' : 'reading');
+  const navigation = String(pageRaw.navigation || 'standard').trim().slice(0, 40) || 'standard';
+  const responsive = String(pageRaw.responsive || 'standard').trim().slice(0, 40) || 'standard';
+
   return {
     id,
     name,
@@ -158,6 +170,12 @@ export function normalizeManifest(raw, folderName) {
     accent,
     entry,
     style: style || null,
+    page: {
+      composition,
+      width,
+      navigation,
+      responsive,
+    },
     route: {
       path: routePath,
       entry: modulePublicUrl(id, entry),

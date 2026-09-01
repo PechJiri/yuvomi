@@ -166,7 +166,7 @@ function updateHousekeepingFab() {
 function renderShell(container) {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <section class="housekeeping-page page-measure--narrow" aria-labelledby="housekeeping-title">
+    <section class="housekeeping-page app-page app-page--data" data-composition="data" aria-labelledby="housekeeping-title">
       <header class="page-toolbar page-toolbar--narrow housekeeping-toolbar">
         <h1 class="page-toolbar__title" id="housekeeping-title">${esc(t('housekeeping.title'))}</h1>
         <nav class="housekeeping-tabs page-toolbar__bar" role="tablist" aria-label="${esc(t('housekeeping.bottomNav'))}">
@@ -1229,7 +1229,7 @@ function openStaffModal(worker, content, options = {}) {
 export async function render(container) {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <section class="housekeeping-page page-measure--narrow housekeeping-page--loading" aria-busy="true">
+    <section class="housekeeping-page app-page app-page--data housekeeping-page--loading" data-composition="data" aria-busy="true">
       ${renderSkeletonList({ rows: 6, lines: 2 })}
     </section>
   `);
@@ -1257,7 +1257,7 @@ export async function render(container) {
     // sprachneutralen Statuscode und erzwingt den Wiederholen-CTA.
     container.replaceChildren();
     container.insertAdjacentHTML('beforeend',
-      '<section class="housekeeping-page page-measure--narrow"></section>');
+      '<section class="housekeeping-page app-page app-page--data" data-composition="data"></section>');
     mountLoadError(container.querySelector('.housekeeping-page'), {
       title: t('housekeeping.loadError'),
       description: t('common.loadErrorDescription'),

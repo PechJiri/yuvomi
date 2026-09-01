@@ -356,7 +356,7 @@ function renderShell() {
     ['statistics', t('schedule.statistics')],
   ];
   root.replaceChildren();
-  root.insertAdjacentHTML('beforeend', `<div class="schedule-page">
+  root.insertAdjacentHTML('beforeend', `<div class="schedule-page app-page app-page--data" data-composition="data">
     <header class="page-toolbar schedule-toolbar">
       <h1 class="page-toolbar__title">${esc(t('schedule.title'))}</h1>
       <div class="page-toolbar__actions"></div>

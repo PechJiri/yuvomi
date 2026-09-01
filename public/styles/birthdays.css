@@ -2,25 +2,17 @@
   --module-accent: var(--module-birthdays);
   /* Kohärenter Modul-Ton für Fokus-Ringe (Router setzt --active-module-accent). */
   --c-accent: var(--active-module-accent, var(--module-birthdays));
+  /* Page geometry (width, gutters, header/body axis) comes from
+   * PAGE-COMPOSITION.md / .app-page--reading — not from this file. */
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  /* Full-bleed-Root (Issue #577). Vorher --content-max-width-narrow (720px):
-   * Geburtstage war damit als einziges Personen-Modul halb so breit wie
-   * Kontakte direkt daneben in der Navigation, und die Seite schrumpfte beim
-   * Wechsel sichtbar. Jetzt dieselbe kanonische Content-Spalte wie überall. */
+  /* Full-bleed root; bottom clearance for nav + FAB. */
   padding-bottom: calc(var(--nav-bottom-height) + var(--space-6));
 }
 
-/* --------------------------------------------------------
- * Kopf: Struktur (Flex/Padding/Sticky/3px-Streifen) kommt aus .page-toolbar
- * (Canonical Page Head) in layout.css — hier nur die Suche.
- * -------------------------------------------------------- */
-/* Toolbar search uses the shared .page-search control (page-search.css);
- * .page-toolbar__center handles its placement. No module visual needed. */
-
+/* Hint copy only — measure/gutter live on .page-section.page-measure. */
 .birthdays-hint {
-  margin-inline: var(--page-inline-pad);
+  margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
 }
@@ -37,9 +29,11 @@
  * weil die Klasse fehlte, bekam die Liste das neue Lesemaß nicht und stand bei
  * 1440px auf 1156px, während die Kontaktliste daneben 720px trug. Der 436px-
  * Sprung beim Modulwechsel, den die erste Runde als behoben gemeldet hat, war
- * damit nur ein Modul weitergewandert. */
+ * damit nur ein Modul weitergewandert.
+ *
+ * Horizontal inset is owned by .app-page__body (page-inline-pad); width cap by
+ * .page-section.page-measure / --page-measure from composition mode. */
 .birthdays-list {
-  margin-inline: var(--page-inline-pad);
   /* ZWEI Container-Namen, und beide sind nötig: `list-rows` kommt aus
    * `.row-carrier` und ist der geteilte Name, unter dem die Zeilenbausteine
    * ihre Fragen stellen; `birthdays-list` ist der eigene, unter dem die

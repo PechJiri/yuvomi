@@ -202,7 +202,8 @@ export async function render(container) {
   _scrolledFilter = null;
 
   const page = document.createElement('div');
-  page.className = 'pantry-page';
+  page.className = 'pantry-page app-page app-page--reading page-measure--narrow';
+  page.dataset.composition = 'reading';
 
   // sr-only: die Küchen-Tab-Leiste benennt das Modul bereits sichtbar -
   // dieselbe Kopf-Grammatik wie Mahlzeiten/Rezepte/Einkauf.

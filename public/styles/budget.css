@@ -1166,7 +1166,7 @@
    * Kante ins Leere greifen (derselbe Fall, den `.list-scroller` in
    * list-row.css ausdrücklich vermeidet). So bleibt der Scroller so breit wie
    * die Sektion, und die Sektion trägt die eine Zahl der App. */
-  max-width: var(--content-max-width-narrow);
+  max-width: var(--page-measure, var(--layout-reading));
 }
 
 /* Der 3px-Akzentstreifen zwischen Kategoriebalken und Transaktionsliste ist mit

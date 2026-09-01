@@ -178,7 +178,7 @@ export async function render(target, { user } = {}) {
   container = target;
   state.user = user || null;
   setHtml(container, `
-    <div class="subscriptions-page" aria-busy="true">
+    <div class="subscriptions-page app-page app-page--reading page-measure--narrow" data-composition="reading" aria-busy="true">
       <div class="subscriptions-toolbar">
         <label class="subscriptions-search">
           <i data-lucide="search" aria-hidden="true"></i>

@@ -48,7 +48,7 @@ async function load() {
 function renderShell() {
   view.root.replaceChildren();
   view.root.insertAdjacentHTML('beforeend', `
-    <div class="budget-plan">
+    <div class="budget-plan app-page app-page--reading page-measure--narrow" data-composition="reading">
       <div id="budget-plan-body"></div>
     </div>
   `);
