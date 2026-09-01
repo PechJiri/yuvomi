@@ -5,7 +5,17 @@
  * Page → PageHeader + PageBody → Section markup without local width/padding hacks.
  *
  * Reference demo: public/pages/birthdays.js (mode reading, measured header rail).
+ *
+ * JEDES ATTRIBUT GEHT DURCH esc(), AUCH id UND className. Diese Helfer sind
+ * die zugesagte Oberflaeche fuer Erweiterungen (MODULES.md), und eine id aus
+ * einem Datensatz (`sec-${item.name}`) ist der erwartete Gebrauch der Option.
+ * Die erste Fassung ersetzte nur das Anfuehrungszeichen in Attribut-WERTEN;
+ * id, Klassenname und Attribut-SCHLUESSEL gingen roh in den String - ein `"`
+ * darin verliess das Attribut. Slot-Inhalte (title, body, content) bleiben
+ * bewusst roh: sie sind Markup, das der Aufrufer schon escaped hat.
  */
+
+import { esc } from './html-escape.js';
 
 export const COMPOSITION_MODES = Object.freeze([
   'reading',
@@ -53,12 +63,12 @@ export function renderAppPage({
   body = '',
   trailing = '',
 } = {}) {
-  const classes = [compositionModeClass(mode, { legacyAlias }), className].filter(Boolean).join(' ');
+  const classes = [compositionModeClass(mode, { legacyAlias }), esc(className)].filter(Boolean).join(' ');
   const attrParts = [];
-  if (id) attrParts.push(`id="${id}"`);
+  if (id) attrParts.push(`id="${esc(id)}"`);
   for (const [key, value] of Object.entries(attrs)) {
     if (value == null || value === '') continue;
-    attrParts.push(`${key}="${String(value).replace(/"/g, '&quot;')}"`);
+    attrParts.push(`${esc(key)}="${esc(String(value))}"`);
   }
   const extra = attrParts.length ? ` ${attrParts.join(' ')}` : '';
   return `<div class="${classes}" data-composition="${mode}"${extra}>
@@ -103,7 +113,7 @@ export function renderPageHeader({
     inGroup && 'page-toolbar--in-group',
     capped && 'page-toolbar--capped',
     stacked && 'page-toolbar--stacked',
-    className,
+    esc(className),
   ].filter(Boolean).join(' ');
 
   const railSlots = [title, center, actions].filter(Boolean).join('\n');
@@ -128,18 +138,18 @@ export function renderPageHeader({
  * @returns {string}
  */
 export function renderPageTitle(text, { className = '' } = {}) {
-  const cls = ['page-toolbar__title', className].filter(Boolean).join(' ');
+  const cls = ['page-toolbar__title', esc(className)].filter(Boolean).join(' ');
   return `<h1 class="${cls}">${text}</h1>`;
 }
 
 /**
- * @param {string} content — inner buttons/controls (already escaped by caller)
+ * @param {string} content - inner buttons/controls (already escaped by caller)
  * @param {object} [opts]
  * @param {string} [opts.className='']
  * @returns {string}
  */
 export function renderPageActions(content, { className = '' } = {}) {
-  const cls = ['page-toolbar__actions', className].filter(Boolean).join(' ');
+  const cls = ['page-toolbar__actions', esc(className)].filter(Boolean).join(' ');
   return `<div class="${cls}">\n${content}\n</div>`;
 }
 
@@ -151,8 +161,8 @@ export function renderPageActions(content, { className = '' } = {}) {
  * @returns {string}
  */
 export function renderPageBody({ className = '', content = '', id = '' } = {}) {
-  const cls = ['app-page__body', className].filter(Boolean).join(' ');
-  const idAttr = id ? ` id="${id}"` : '';
+  const cls = ['app-page__body', esc(className)].filter(Boolean).join(' ');
+  const idAttr = id ? ` id="${esc(id)}"` : '';
   return `<div class="${cls}"${idAttr}>\n${content}\n</div>`;
 }
 
@@ -176,9 +186,9 @@ export function renderPageSection({
     'page-section',
     bleed && 'page-section--bleed',
     measure && !bleed && 'page-measure',
-    className,
+    esc(className),
   ].filter(Boolean).join(' ');
-  const idAttr = id ? ` id="${id}"` : '';
+  const idAttr = id ? ` id="${esc(id)}"` : '';
   return `<section class="${cls}"${idAttr}>\n${content}\n</section>`;
 }
 
@@ -206,6 +216,6 @@ export function renderListSection({ className = '', content = '', id = '' } = {}
  * @returns {string}
  */
 export function renderMetricBand({ content, className = '' } = {}) {
-  const cls = ['metric-grid', 'page-measure', className].filter(Boolean).join(' ');
+  const cls = ['metric-grid', 'page-measure', esc(className)].filter(Boolean).join(' ');
   return `<div class="${cls}">\n${content}\n</div>`;
 }

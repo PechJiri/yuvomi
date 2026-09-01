@@ -154,8 +154,19 @@ export function normalizeManifest(raw, folderName) {
   const width = WIDTHS.has(String(pageRaw.width || '').trim())
     ? String(pageRaw.width).trim()
     : (composition === 'data' ? 'content' : composition === 'dashboard' ? 'wide' : 'reading');
-  const navigation = String(pageRaw.navigation || 'standard').trim().slice(0, 40) || 'standard';
-  const responsive = String(pageRaw.responsive || 'standard').trim().slice(0, 40) || 'standard';
+  // Dieselbe Regel wie fuer composition und width: ein unbekannter Wert
+  // faellt auf den unterstuetzten zurueck, statt roh weitergereicht zu werden.
+  // MODULES.md verspricht `context.page` als NORMALISIERTE Erklaerung und
+  // nennt fuer beide Felder nur `standard`; ein Tippfehler im Manifest darf
+  // im Client keinen Zustand erzeugen, den es nicht gibt.
+  const NAVIGATION = new Set(['standard']);
+  const RESPONSIVE = new Set(['standard']);
+  const navigation = NAVIGATION.has(String(pageRaw.navigation || '').trim())
+    ? String(pageRaw.navigation).trim()
+    : 'standard';
+  const responsive = RESPONSIVE.has(String(pageRaw.responsive || '').trim())
+    ? String(pageRaw.responsive).trim()
+    : 'standard';
 
   return {
     id,

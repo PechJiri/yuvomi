@@ -15169,6 +15169,15 @@ test('PAGE-007b: a narrow header keeps its slots as direct children', async () =
   // Und die Seite, die den Kopf so baut, verlangt genau diese Form.
   assert.match(read('../public/pages/birthdays.js'), /measured:\s*true,\s*\n\s*narrow:\s*true/,
     'PAGE-007b: birthdays is the measured + narrow case this guard is about');
+  // Das Beispiel in der Spec zeigt denselben Baum. Nach dem Fix oben stand
+  // dort noch `.page-toolbar__rail -> title . search . actions` - eine
+  // Anleitung, den Wrapper von Hand nachzubauen, den der Helper gerade
+  // verloren hat (Codex, dritte Runde an #995).
+  const example = read('../docs/PAGE-COMPOSITION.md').match(/### Worked example[\s\S]*?```text\n([\s\S]*?)```/);
+  assert.ok(example, 'PAGE-007b: the worked example in docs/PAGE-COMPOSITION.md is missing');
+  assert.match(example[1], /page-toolbar--narrow/, 'PAGE-007b: the worked example shows a narrow toolbar');
+  assert.doesNotMatch(example[1], /page-toolbar__rail/,
+    'PAGE-007b: the worked example must not show a rail element under a narrow toolbar');
 });
 
 test('PAGE-008: DESIGN.md points at the composition system', () => {
@@ -15210,6 +15219,13 @@ test('PAGE-009: composition mode owns responsive split/full behaviour', () => {
     assert.doesNotMatch(rule[1], /display:\s*grid|grid-template-columns/,
       'PAGE-009: .app-page--split itself must not be a grid - header and body would become its two cells');
   }
+  // Und der Koerper traegt das Polster: der Kopf polstert sich ueber
+  // .page-toolbar selbst, der Split-Koerper bekam nur Raster und gap - die
+  // Rails begannen bei x=0, links vom Titel (Codex, dritte Runde an #995).
+  // Die Regel steht AUSSERHALB der Query, damit auch der Stapel sie hat.
+  const splitBodies = [...layout.matchAll(/\.app-page--split > \.app-page__body \{([^}]*)\}/g)].map((m) => m[1]);
+  assert.ok(splitBodies.some((body) => /padding-inline:\s*var\(--page-inline-pad\)/.test(body)),
+    'PAGE-009: the split body must carry the page gutter (padding-inline: var(--page-inline-pad))');
   // Ohne Mass heisst `100%`, nicht `none`: die Kopf-Formeln rechnen mit der
   // Variable, und `none` ist in calc() kein Wert (siehe layout.css).
   assert.match(layout, /\.app-page--split,\s*\n\.app-page--full \{\s*--page-measure:\s*100%;/,
@@ -15243,6 +15259,64 @@ test('PAGE-013: a narrow header follows the measure of ITS page, and full/split 
   // `height: 100%` (Kalender, Notizen) bleiben unberuehrt.
   assert.match(layout, /\.app-page--full:has\(> \.app-page__body\),\s*\n\.app-page--split:has\(> \.app-page__body\) \{\s*height:\s*100%;/,
     'PAGE-013: full/split roots built by renderAppPage() must take the shell height');
+});
+
+test('PAGE-014: page-layout helpers escape every attribute they emit', async () => {
+  // Die Helfer sind die zugesagte Oberflaeche fuer Erweiterungen (MODULES.md);
+  // eine id aus einem Datensatz ist der erwartete Gebrauch der Option. Die
+  // erste Fassung ersetzte nur `"` in Attribut-WERTEN - id, className und
+  // Attribut-SCHLUESSEL gingen roh in den String (claude-review, dritte Runde
+  // an #995). Geprueft wird die AUSGABE, nicht die Schreibweise: ein Angriff
+  // in jedem der drei Pfade muss als Text ankommen, nicht als Attribut.
+  const h = await import('../public/utils/page-layout.js');
+  const hostile = 'x" onclick="alert(1)';
+  const cases = [
+    ['renderAppPage id', h.renderAppPage({ id: hostile })],
+    ['renderAppPage className', h.renderAppPage({ className: hostile })],
+    ['renderAppPage attrs key', h.renderAppPage({ attrs: { [hostile]: 'v' } })],
+    ['renderAppPage attrs value', h.renderAppPage({ attrs: { 'data-x': hostile } })],
+    ['renderPageHeader className', h.renderPageHeader({ className: hostile })],
+    ['renderPageTitle className', h.renderPageTitle('T', { className: hostile })],
+    ['renderPageActions className', h.renderPageActions('', { className: hostile })],
+    ['renderPageBody id', h.renderPageBody({ id: hostile })],
+    ['renderPageBody className', h.renderPageBody({ className: hostile })],
+    ['renderPageSection id', h.renderPageSection({ id: hostile })],
+    ['renderPageSection className', h.renderPageSection({ className: hostile })],
+    ['renderListSection id', h.renderListSection({ id: hostile })],
+    ['renderMetricBand className', h.renderMetricBand({ content: '', className: hostile })],
+  ];
+  for (const [name, html] of cases) {
+    assert.doesNotMatch(html, /onclick="/, `PAGE-014: ${name} lets a quote close the attribute`);
+    assert.match(html, /&quot; onclick=&quot;/, `PAGE-014: ${name} must escape the quote, not drop it`);
+  }
+  // Slot-Inhalte bleiben roh - sie sind Markup, das der Aufrufer escaped hat.
+  assert.match(h.renderPageBody({ content: '<p>x</p>' }), /<p>x<\/p>/,
+    'PAGE-014: content slots are markup and must pass through');
+  // Und die eine Escape-Funktion, nicht eine zweite von Hand.
+  const src = read('../public/utils/page-layout.js');
+  assert.match(src, /import \{ esc \} from '\.\/html-escape\.js'/,
+    'PAGE-014: the helpers use the shared esc(), not a local replace');
+  assert.doesNotMatch(src, /replace\(\/"\/g/, 'PAGE-014: no hand-rolled quote replacement next to esc()');
+});
+
+test('PAGE-015: a tab panel inside a page declares the mode of that page', () => {
+  // budget-stats und budget-plans sind keine Seiten, sondern Reiter im
+  // Budget: sie werden in `.budget-page.app-page--reading` gerendert. Ein
+  // eigener Modus dort setzt --page-measure fuer den Unterbaum um - das
+  // Kennzahlenband der Berichte lief auf --layout-wide (1200px), waehrend der
+  // gemeinsame Kopf und jeder andere Reiter bei 720px enden (Codex, dritte
+  // Runde an #995; auf main waren es 720). Bis Welle C den Kopf je Reiter
+  // umschaltet, erben die Panels den Modus der Seite.
+  const modeOf = (file) => {
+    const m = read(file).match(/class="[^"]*\bapp-page app-page--([a-z]+)/);
+    assert.ok(m, `PAGE-015: ${file} declares no composition mode`);
+    return m[1];
+  };
+  const page = modeOf('../public/pages/budget.js');
+  for (const panel of ['../public/pages/budget-stats.js', '../public/pages/budget-plans.js']) {
+    assert.equal(modeOf(panel), page,
+      `PAGE-015: ${panel} is a tab panel of budget.js and must declare its mode (${page}), not its own`);
+  }
 });
 
 test('PAGE-010: full-bleed is an explicit --bleed declaration', () => {

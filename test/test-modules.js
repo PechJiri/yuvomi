@@ -516,4 +516,10 @@ test('page.composition wird normalisiert und page.width folgt dem Modus', () => 
   assert.equal(norm({ composition: 'data', width: 'wide' }).width, 'wide', 'eine erklaerte Breite gewinnt');
   assert.equal(norm({ composition: 'tabelle' }).composition, 'reading', 'ein unbekannter Modus faellt auf reading');
   assert.equal(norm({ composition: 'data', width: 'riesig' }).width, 'content', 'eine unbekannte Breite faellt auf die des Modus');
+  // navigation/responsive folgen derselben Regel: MODULES.md nennt nur
+  // `standard`, und ein Tippfehler darf nicht als eigener Zustand ankommen
+  // (Codex, dritte Runde an #995 - die erste Fassung reichte ihn roh durch).
+  assert.equal(norm({ navigation: 'tabs' }).navigation, 'standard', 'eine unbekannte navigation faellt auf standard');
+  assert.equal(norm({ responsive: 'collapse' }).responsive, 'standard', 'ein unbekanntes responsive faellt auf standard');
+  assert.equal(norm({ navigation: 'standard', responsive: 'standard' }).navigation, 'standard', 'standard bleibt standard');
 });

@@ -2451,6 +2451,17 @@ html.fab-anim-done .page-fab {
  * ersten Kinder von .app-page__body die Rails (Master links auf Lesemass,
  * Detail rechts); der Kopf bleibt eine Zeile darueber. Unter 1024px bleibt der
  * Koerper die Flex-Spalte aus der Basisregel und stapelt. */
+/* Und der Koerper traegt das Polster wie in reading/data/dashboard: der Kopf
+ * polstert sich ueber .page-toolbar selbst, und ohne dieselbe Kante am Koerper
+ * begannen die Rails bei x=0 - gestapelt an der Shell-Kante, im Raster links
+ * vom Titel (Codex, dritte Runde an #995). `full` bleibt bewusst ohne: dort
+ * gehoert die Kante der Seite (Kalender-Raster, Notizen-Masonry). Das `gap`
+ * hier gilt dem Stapel unter 1024px; das Raster darunter setzt seines. */
+.app-page--split > .app-page__body {
+  padding-inline: var(--page-inline-pad);
+  gap: var(--space-3);
+}
+
 @media (min-width: 1024px) {
   .app-page--split > .app-page__body {
     display: grid;

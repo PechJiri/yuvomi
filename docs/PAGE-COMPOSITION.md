@@ -166,8 +166,11 @@ Mode modifiers set `--page-measure`:
 
 `split` puts the two-column grid on `.app-page__body` from 1024px: the body's
 first child is the master rail (up to `--layout-reading`), the second the detail
-rail; the header stays a full row above. Below 1024px the body stacks. `full`
-and `split` roots built with `renderAppPage()` take the shell height
+rail; the header stays a full row above. Below 1024px the body stacks. The split
+body carries the page gutter (`padding-inline: var(--page-inline-pad)`) like the
+measured modes do, so the rails start on the same edge as the title; `full` is
+the one mode whose body has no gutter, because there the page owns its edges.
+`full` and `split` roots built with `renderAppPage()` take the shell height
 (`height: 100%`), so a `flex: 1` body can host an internal scrollport without
 module CSS sizing the page.
 
@@ -250,11 +253,20 @@ Open **`/birthdays`** on a wide desktop (1440 / 1920) to see the structure:
 ```text
 .app-page--reading
 |- .page-toolbar.page-toolbar--measured.page-toolbar--narrow
-|  `- .page-toolbar__rail -> title . search . actions   <- same --page-measure
+|  |- .page-toolbar__title                <- direct children, no rail element:
+|  |- .page-search                           the collapsing header and the
+|  |- .page-toolbar__actions                 large title select `> .page-toolbar__title`
+|  `- ::after                             <- holds the row end at --page-measure
 `- .app-page__body
    |- .page-section.page-measure          <- hint
    `- .page-section--list.page-measure    <- .row-carrier list
 ```
+
+There is no `.page-toolbar__rail` in this tree, and that is deliberate: with
+`narrow` the helper emits the slots directly under the toolbar and lets the
+`::after` spacer hold the edge. Do not recreate the wrapper by hand - it hides
+the title from the selectors that build the head seal and the dock title
+(PAGE-007b). The rail exists as an element only for `measured` without `narrow`.
 
 ### Visual regression (phase 2+)
 
@@ -284,7 +296,7 @@ overflow checks. Not wired into CI yet.
 | Reference | `reading` | **birthdays** | **Done (helpers + CSS)** |
 | A | `reading` | contacts, rewards, pantry, recipes | Mode declared |
 | B | `data` | inventory, schedule, documents, housekeeping | Mode declared |
-| C | budget family | budget + stats/plans | Mode declared; metric-grid on measure |
+| C | budget family | budget + stats/plans | Mode declared (`reading`); stats and plans are tab panels inside the Budget page and inherit its measure. A per-tab mode (reports as `dashboard`) also means switching the shared header per tab - an open design decision, not done here |
 | C' | `full` / `split` | subscriptions (`full`), split-expenses (`split`) | Mode declared; content not on a measure yet (analytics grid / two-column layout own their width) |
 | D | `dashboard` / `full` | calendar, tasks, notes, health, dashboard | Mode declared |
 

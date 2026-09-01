@@ -53,7 +53,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `split`. The reach proof of the audit could not catch the failure it was written for: with a
   dead router expression the scope did not shrink to nothing but widened to every page, login
   included, and every lower bound stayed green; the expression now has to have read the
-  standalone routes before the file walk is allowed to add anything.
+  standalone routes before the file walk is allowed to add anything. A third round found the
+  helpers escaping only attribute values: `id`, `className` and attribute keys went into the
+  markup raw, and these helpers are the API an extension is told to build its page with, so a
+  per-record id was the expected way to hit it; every attribute now goes through the shared
+  `esc()`. The budget reports panel had declared itself a `dashboard` inside the `reading`
+  budget page, which set the measure of its subtree to 1200px while the shared header and
+  every other tab end at 720px; it declares the mode of the page it lives in, and a guard holds
+  the two budget panels to that. A split body now carries the page gutter like the measured
+  modes (its rails started at x=0, left of the title), the manifest fields `page.navigation`
+  and `page.responsive` fall back to `standard` like `composition` and `width` do instead of
+  passing a typo through, and the worked example in the spec no longer draws the rail element
+  that the helper had stopped emitting.
 
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from
