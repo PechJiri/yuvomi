@@ -27,6 +27,7 @@ import {
   isValidFamilyRole,
   PERMISSION_MODULES,
   PERMISSION_WIDGETS,
+  PERMISSION_CAPABILITIES,
 } from '../server/permissions.js';
 import { WIDGET_IDS } from '../public/utils/dashboard-widgets.js';
 
@@ -34,6 +35,7 @@ function freshDb() {
   const db = new DatabaseSync(':memory:');
   db.exec(MIGRATIONS_SQL[1]);   // users
   db.exec(MIGRATIONS_SQL[74]);  // access_permissions
+  db.exec(MIGRATIONS_SQL[174]); // capability resource type
   return db;
 }
 
@@ -98,7 +100,29 @@ test('Standard ohne Konfiguration: Vollzugriff (rückwärtskompatibel)', () => {
   assert.equal(r.admin, false);
   assert.equal(r.modules.budget, 'write');
   assert.equal(r.widgets.cycle, 'allow');
+  assert.equal(r.capabilities.notes_manage_household_categories, 'none');
   assert.equal(buildSessionModuleAccess(r), null); // nichts eingeschränkt
+});
+
+test('Haushaltskategorien: Admin darf immer verwalten', () => {
+  const db = freshDb();
+  const admin = addUser(db, { id: 20, role: 'admin', family_role: 'other' });
+  const r = resolvePermissions(db, admin);
+  assert.equal(r.capabilities.notes_manage_household_categories, 'allow');
+});
+
+test('Haushaltskategorien: Rolle kann erlauben, Mitglied-Override kann verbieten', () => {
+  const db = freshDb();
+  const child = addUser(db, { id: 21, family_role: 'child' });
+  replaceSubjectPermissions(db, 'role', child.family_role, {
+    capabilities: { notes_manage_household_categories: 'allow' },
+  });
+  assert.equal(resolvePermissions(db, child).capabilities.notes_manage_household_categories, 'allow');
+
+  replaceSubjectPermissions(db, 'user', child.id, {
+    capabilities: { notes_manage_household_categories: 'none' },
+  });
+  assert.equal(resolvePermissions(db, child).capabilities.notes_manage_household_categories, 'none');
 });
 
 test('Rollen-Profil greift für alle Mitglieder der Rolle', () => {
@@ -214,7 +238,7 @@ test('Leere Eingabe = „von Rolle erben" (alle Overrides entfernt)', () => {
   addUser(db, { id: 11, role: 'member', family_role: 'child' });
   replaceSubjectPermissions(db, 'user', 11, { modules: { budget: 'none' } });
   replaceSubjectPermissions(db, 'user', 11, {}); // zurücksetzen
-  assert.deepEqual(getSubjectPermissions(db, 'user', 11), { modules: {}, widgets: {} });
+  assert.deepEqual(getSubjectPermissions(db, 'user', 11), { modules: {}, widgets: {}, capabilities: {} });
 });
 
 test('normalizePermissionInput: unbekannte/ungültige Werte werfen', () => {
@@ -222,6 +246,27 @@ test('normalizePermissionInput: unbekannte/ungültige Werte werfen', () => {
   assert.throws(() => normalizePermissionInput({ modules: { budget: 'bogus' } }), /Invalid module access/);
   assert.throws(() => normalizePermissionInput({ widgets: { nope: 'allow' } }), /Unknown widget/);
   assert.throws(() => normalizePermissionInput({ widgets: { cycle: 'read' } }), /Invalid widget access/);
+});
+
+test('Capability-Defaults bleiben bei Rollen sparse, Nutzer dürfen geerbtes allow aufheben', () => {
+  const db = freshDb();
+  const child = addUser(db, { id: 15, role: 'member', family_role: 'child' });
+
+  replaceSubjectPermissions(db, 'role', 'child', {
+    capabilities: { notes_manage_household_categories: 'none' },
+  });
+  assert.deepEqual(getSubjectPermissions(db, 'role', child.family_role).capabilities, {});
+
+  replaceSubjectPermissions(db, 'role', child.family_role, {
+    capabilities: { notes_manage_household_categories: 'allow' },
+  });
+  replaceSubjectPermissions(db, 'user', child.id, {
+    capabilities: { notes_manage_household_categories: 'none' },
+  });
+  assert.deepEqual(getSubjectPermissions(db, 'user', child.id).capabilities, {
+    notes_manage_household_categories: 'none',
+  });
+  assert.equal(resolvePermissions(db, child).capabilities.notes_manage_household_categories, 'none');
 });
 
 test('isValidFamilyRole', () => {
@@ -236,6 +281,9 @@ test('permissionCatalog liefert Module, Widgets, Rollen, Levels', () => {
   assert.ok(cat.roles.includes('child'));
   assert.deepEqual(cat.moduleAccessLevels, ['none', 'read', 'write']);
   assert.deepEqual(cat.widgetAccessLevels, ['none', 'allow']);
+  assert.ok(cat.capabilities.some((item) => item.key === 'notes_manage_household_categories'));
+  assert.deepEqual(cat.capabilityAccessLevels, ['none', 'allow']);
+  assert.deepEqual(PERMISSION_CAPABILITIES.map((item) => item.key), ['notes_manage_household_categories']);
 });
 
 test('clientPermissions: kompakte Payload mit admin-Flag', () => {

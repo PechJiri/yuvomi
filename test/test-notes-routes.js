@@ -20,6 +20,7 @@ const { default: notesRouter } = await import('../server/routes/notes.js');
 const db = dbmod.get();
 
 const U = db.prepare(`INSERT INTO users (username, display_name, password_hash, role) VALUES ('u','Uli','x','member')`).run().lastInsertRowid;
+const U2 = db.prepare(`INSERT INTO users (username, display_name, password_hash, role) VALUES ('u2','Berta','x','member')`).run().lastInsertRowid;
 
 let actor = { id: U, role: 'member' };
 const app = express();
@@ -52,6 +53,140 @@ test('GET /: anfangs leer', async () => {
   const r = await call('GET', '/');
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.data, []);
+});
+
+// --------------------------------------------------------------------------
+// Kategorien
+// --------------------------------------------------------------------------
+test('Kategorien: persönlich ist frei, Haushaltskatalog standardmäßig Admin-only', async () => {
+  const personal = await call('POST', '/categories', { name: 'Privat', scope: 'personal' });
+  assert.equal(personal.status, 201);
+  assert.equal(personal.body.data.scope, 'personal');
+  assert.equal('name_key' in personal.body.data, false);
+
+  const forbidden = await call('POST', '/categories', { name: 'Familie', scope: 'household' });
+  assert.equal(forbidden.status, 403);
+
+  actor = { id: U2, role: 'member' };
+  const otherView = await call('GET', '/categories');
+  assert.equal(otherView.status, 200);
+  assert.deepEqual(otherView.body.data, []);
+  actor = { id: U, role: 'member' };
+});
+
+test('Kategorien: individuelles Recht erlaubt Haushaltsverwaltung', async () => {
+  db.prepare(`
+    INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
+    VALUES ('user', ?, 'capability', 'notes_manage_household_categories', 'allow')
+  `).run(String(U));
+  const household = await call('POST', '/categories', { name: 'Familie', scope: 'household' });
+  assert.equal(household.status, 201);
+  assert.equal(household.body.data.scope, 'household');
+  assert.equal((await call('GET', '/categories')).body.meta.can_manage_household, true);
+});
+
+test('Kategorien: ungültige Scope- und Pfadwerte liefern 400', async () => {
+  assert.equal((await call('POST', '/categories', { name: 'Null', scope: null })).status, 400);
+  assert.equal((await call('POST', '/categories', { name: 'Leer', scope: '' })).status, 400);
+  assert.equal((await call('PUT', '/categories/not-a-number', { name: 'X' })).status, 400);
+  assert.equal((await call('DELETE', '/categories/not-a-number')).status, 400);
+});
+
+test('Kategorien: Unicode-Dubletten liefern 409 und fremde persönliche Kategorien bleiben verborgen', async () => {
+  const first = await call('POST', '/categories', { name: 'Česká', scope: 'personal' });
+  assert.equal(first.status, 201);
+  assert.equal((await call('POST', '/categories', { name: 'česká', scope: 'personal' })).status, 409);
+  assert.equal((await call('POST', '/categories', { name: 'Straße', scope: 'personal' })).status, 201);
+  assert.equal((await call('POST', '/categories', { name: 'STRASSE', scope: 'personal' })).status, 409);
+
+  actor = { id: U2, role: 'member' };
+  assert.equal((await call('PUT', `/categories/${first.body.data.id}`, { name: 'Cizí' })).status, 404);
+  assert.equal((await call('DELETE', `/categories/${first.body.data.id}`)).status, 404);
+  actor = { id: U, role: 'member' };
+});
+
+test('Kategorien: Umbenennen, Sortieren und Löschen erzwingen Scope-Rechte', async () => {
+  const first = (await call('POST', '/categories', { name: 'Sort A', scope: 'personal' })).body.data;
+  const second = (await call('POST', '/categories', { name: 'Sort B', scope: 'personal' })).body.data;
+  const reordered = await call('PATCH', '/categories/reorder', { order: [second.id, first.id] });
+  assert.equal(reordered.status, 200);
+  assert.equal(reordered.body.meta.can_manage_household, true);
+  const personal = reordered.body.data.filter((category) => [first.id, second.id].includes(category.id));
+  assert.deepEqual(personal.map((category) => category.id), [second.id, first.id]);
+
+  const household = reordered.body.data.find((category) => category.scope === 'household');
+  const beforeMixedOrder = db.prepare('SELECT id, sort_order FROM note_categories WHERE id IN (?, ?) ORDER BY id').all(first.id, household.id);
+  const mixed = await call('PATCH', '/categories/reorder', { order: [first.id, household.id] });
+  assert.equal(mixed.status, 400);
+  assert.deepEqual(
+    db.prepare('SELECT id, sort_order FROM note_categories WHERE id IN (?, ?) ORDER BY id').all(first.id, household.id).map((row) => ({ ...row })),
+    beforeMixedOrder.map((row) => ({ ...row })),
+  );
+  actor = { id: U2, role: 'member' };
+  assert.equal((await call('PUT', `/categories/${first.id}`, { name: 'Cizí' })).status, 404);
+  assert.equal((await call('PATCH', '/categories/reorder', { order: [household.id] })).status, 403);
+  assert.equal((await call('DELETE', `/categories/${household.id}`)).status, 403);
+
+  actor = { id: U, role: 'member' };
+  assert.equal((await call('PUT', `/categories/${first.id}`, { name: 'Sort renamed' })).status, 200);
+  assert.equal((await call('DELETE', `/categories/${first.id}`)).status, 204);
+});
+
+test('Notiz-Zuordnung: jedes Mitglied kann bestehende Haushaltskategorien verwenden', async () => {
+  const household = (await call('GET', '/categories')).body.data.find((item) => item.scope === 'household');
+  actor = { id: U2, role: 'member' };
+  const response = await call('POST', '/', { content: 'Shared assignment', category_ids: [household.id] });
+  assert.equal(response.status, 201);
+  assert.deepEqual(response.body.data.categories.map((category) => category.id), [household.id]);
+  const removed = await call('PUT', `/${response.body.data.id}`, { category_ids: [] });
+  assert.equal(removed.status, 200);
+  assert.deepEqual(removed.body.data.categories, []);
+  assert.equal((await call('DELETE', `/${response.body.data.id}`)).status, 204);
+  actor = { id: U, role: 'member' };
+});
+
+test('Notiz-Zuordnung: souběžně zaniklá kategorie vrátí 409 a celou změnu vrátí zpět', async () => {
+  const category = (await call('POST', '/categories', { name: 'Race', scope: 'personal' })).body.data;
+  const before = db.prepare('SELECT COUNT(*) AS count FROM notes').get().count;
+  db.exec(`
+    CREATE TRIGGER test_note_category_disappears
+    BEFORE INSERT ON note_category_assignments
+    WHEN NEW.category_id = ${Number(category.id)}
+    BEGIN
+      DELETE FROM note_categories WHERE id = NEW.category_id;
+    END
+  `);
+  try {
+    const response = await call('POST', '/', { content: 'Atomic race', category_ids: [category.id] });
+    assert.equal(response.status, 409);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM notes').get().count, before);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM note_categories WHERE id = ?').get(category.id).count, 1);
+  } finally {
+    db.exec('DROP TRIGGER IF EXISTS test_note_category_disappears');
+  }
+});
+
+test('Notiz-Response zeigt nur sichtbare Kategorien und schützt fremde persönliche Zuordnung', async () => {
+  const categories = (await call('GET', '/categories')).body.data;
+  const personal = categories.find((item) => item.scope === 'personal');
+  const household = categories.find((item) => item.scope === 'household');
+  const created = await call('POST', '/', {
+    content: 'Mit Kategorien',
+    category_ids: [personal.id, household.id],
+  });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body.data.categories.map((item) => item.name), ['Familie', 'Privat']);
+
+  actor = { id: U2, role: 'member' };
+  const notes = await call('GET', '/');
+  const otherView = notes.body.data.find((item) => item.id === created.body.data.id);
+  assert.deepEqual(otherView.categories.map((item) => item.name), ['Familie']);
+  const edited = await call('PUT', `/${created.body.data.id}`, { content: 'Jiný text', category_ids: [] });
+  assert.equal(edited.status, 200);
+
+  actor = { id: U, role: 'member' };
+  const ownerView = (await call('GET', '/')).body.data.find((item) => item.id === created.body.data.id);
+  assert.deepEqual(ownerView.categories.map((item) => item.name), ['Privat']);
 });
 
 // --------------------------------------------------------------------------

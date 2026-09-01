@@ -1012,7 +1012,6 @@ const MIGRATIONS_SQL = {
     );
     CREATE INDEX IF NOT EXISTS idx_quick_links_position ON quick_links(position);
   `,
-
   // SQL-String für Migration v171 (gespiegelt aus db.js MIGRATIONS):
   // Startrechte einer Einladung (#869). Steht als EIGENER Eintrag neben 121
   // und nicht in dessen CREATE TABLE eingearbeitet: der Spiegel bildet
@@ -1057,6 +1056,52 @@ const MIGRATIONS_SQL = {
     CREATE INDEX idx_access_permissions_subject
       ON access_permissions(subject_type, subject_id);
   `,
+
+  // SQL-String für Migration v175 (gespiegelt aus db.js MIGRATIONS):
+  // Persoenliche und gemeinsame Kategorien fuer Notizen.
+  175: `
+      CREATE TABLE note_categories (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        name          TEXT    NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 80),
+        name_key      TEXT    NOT NULL,
+        scope         TEXT    NOT NULL CHECK(scope IN ('personal', 'household')),
+        owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        sort_order    INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+        updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+        CHECK(
+          (scope = 'personal' AND owner_user_id IS NOT NULL)
+          OR (scope = 'household' AND owner_user_id IS NULL)
+        )
+      );
+
+      CREATE TABLE note_category_assignments (
+        note_id     INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+        category_id INTEGER NOT NULL REFERENCES note_categories(id) ON DELETE CASCADE,
+        assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+        PRIMARY KEY (note_id, category_id)
+      );
+
+      CREATE UNIQUE INDEX idx_note_categories_household_name
+        ON note_categories(name_key)
+        WHERE scope = 'household';
+      CREATE UNIQUE INDEX idx_note_categories_personal_name
+        ON note_categories(owner_user_id, name_key)
+        WHERE scope = 'personal';
+      CREATE INDEX idx_note_categories_visible
+        ON note_categories(scope, owner_user_id, sort_order, name COLLATE NOCASE);
+      CREATE INDEX idx_note_category_assignments_category
+        ON note_category_assignments(category_id, note_id);
+      CREATE TRIGGER trg_note_categories_updated_at
+        AFTER UPDATE OF name, name_key, sort_order ON note_categories
+      BEGIN
+        UPDATE note_categories
+        SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        WHERE id = NEW.id;
+      END;
+    `,
 };
 
 export { MIGRATIONS_SQL };
