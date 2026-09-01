@@ -6,7 +6,10 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import Database from 'better-sqlite3-multiple-ciphers';
 import express from 'express';
@@ -149,6 +152,219 @@ test('DELETE /folders/:id removes the folder but keeps its documents (folder_id 
     assert.equal(doc.folder_id, null);
   } finally {
     await h.close();
+  }
+});
+
+test('DELETE /folders/:id?documents=delete removes documents from the entire folder subtree', async () => {
+  const h = createHarness();
+  try {
+    const root = await h.call('POST', '/folders', { name: `Delete-tree-${randomUUID()}` });
+    const child = await h.call('POST', '/folders', { name: 'Child', parent_id: root.body.data.id });
+
+    const insert = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
+      VALUES (?, ?, 'text/plain', 5, ?, 'other', 'family', 'active', ?, ?)
+    `);
+    const rootDoc = insert.run('Root document', 'root.txt', Buffer.from('root'), root.body.data.id, ADMIN_ID).lastInsertRowid;
+    const childDoc = insert.run('Child document', 'child.txt', Buffer.from('child'), child.body.data.id, ADMIN_ID).lastInsertRowid;
+
+    const del = await h.call('DELETE', `/folders/${root.body.data.id}?documents=delete`);
+
+    assert.equal(del.status, 200);
+    assert.equal(del.body.data.removed_folders, 2);
+    assert.equal(del.body.data.deleted_documents, 2);
+    assert.equal(get().prepare('SELECT COUNT(*) AS n FROM family_documents WHERE id IN (?, ?)').get(rootDoc, childDoc).n, 0);
+  } finally {
+    await h.close();
+  }
+});
+
+test('GET /folders/:id/delete-impact counts documents and subfolders across the entire subtree', async () => {
+  const h = createHarness();
+  try {
+    const root = await h.call('POST', '/folders', { name: `Impact-tree-${randomUUID()}` });
+    const child = await h.call('POST', '/folders', { name: 'Archived', parent_id: root.body.data.id });
+    const insert = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
+      VALUES (?, ?, 'text/plain', 1, ?, 'other', 'family', ?, ?, ?)
+    `);
+    insert.run('Active', 'active.txt', Buffer.from('a'), 'active', root.body.data.id, ADMIN_ID);
+    insert.run('Archived', 'archived.txt', Buffer.from('b'), 'archived', child.body.data.id, ADMIN_ID);
+
+    const impact = await h.call('GET', `/folders/${root.body.data.id}/delete-impact`);
+
+    assert.equal(impact.status, 200);
+    assert.deepEqual(impact.body.data, {
+      id: root.body.data.id,
+      removed_folders: 2,
+      documents: 2,
+      can_delete_documents: true,
+    });
+  } finally {
+    await h.close();
+  }
+});
+
+test('DELETE with documents rejects a member before deleting documents owned by somebody else', async () => {
+  const memberId = get().prepare(`
+    INSERT INTO users (username, display_name, password_hash, role)
+    VALUES (?, ?, 'hash', 'member')
+  `).run(`folder-member-${randomUUID()}`, 'Folder Member').lastInsertRowid;
+  const adminHarness = createHarness();
+  const memberHarness = createHarness({ userId: memberId, role: 'member' });
+  try {
+    const folder = await adminHarness.call('POST', '/folders', { name: `Protected-${randomUUID()}` });
+    const documentId = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
+      VALUES (?, 'protected.txt', 'text/plain', 9, ?, 'other', 'family', 'active', ?, ?)
+    `).run('Protected document', Buffer.from('protected'), folder.body.data.id, ADMIN_ID).lastInsertRowid;
+
+    const impact = await memberHarness.call('GET', `/folders/${folder.body.data.id}/delete-impact`);
+    assert.equal(impact.body.data.can_delete_documents, false);
+
+    const del = await memberHarness.call('DELETE', `/folders/${folder.body.data.id}?documents=delete`);
+
+    assert.equal(del.status, 403);
+    assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(documentId));
+    assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+  } finally {
+    await Promise.all([adminHarness.close(), memberHarness.close()]);
+  }
+});
+
+test('DELETE /folders/:id rejects an unknown document action without changing the folder', async () => {
+  const h = createHarness();
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Unknown-action-${randomUUID()}` });
+
+    const del = await h.call('DELETE', `/folders/${folder.body.data.id}?documents=destroy`);
+
+    assert.equal(del.status, 400);
+    assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+  } finally {
+    await h.close();
+  }
+});
+
+test('DELETE with documents rejects a changed subtree before deleting anything', async () => {
+  const h = createHarness();
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Changed-impact-${randomUUID()}` });
+    const insert = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
+      VALUES (?, ?, 'text/plain', 1, ?, 'other', 'family', 'active', ?, ?)
+    `);
+    const firstId = insert.run('First', 'first.txt', Buffer.from('a'), folder.body.data.id, ADMIN_ID).lastInsertRowid;
+    const impact = await h.call('GET', `/folders/${folder.body.data.id}/delete-impact`);
+    assert.equal(impact.body.data.documents, 1);
+
+    const secondId = insert.run('Added later', 'later.txt', Buffer.from('b'), folder.body.data.id, ADMIN_ID).lastInsertRowid;
+    const del = await h.call(
+      'DELETE',
+      `/folders/${folder.body.data.id}?documents=delete&expected_documents=1&expected_folders=1`,
+    );
+
+    assert.equal(del.status, 409);
+    assert.equal(get().prepare('SELECT COUNT(*) AS n FROM family_documents WHERE id IN (?, ?)').get(firstId, secondId).n, 2);
+    assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+  } finally {
+    await h.close();
+  }
+});
+
+test('DELETE with documents reports partial storage failures and retains the folder', async () => {
+  const storageRoot = mkdtempSync(join(tmpdir(), 'yuvomi-folder-delete-'));
+  const previousStoragePath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = storageRoot;
+  mkdirSync(join(storageRoot, 'cannot-unlink-directory'));
+  const h = createHarness();
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Partial-${randomUUID()}` });
+    const insert = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, storage_key, category, visibility, status, folder_id, created_by)
+      VALUES (?, ?, 'text/plain', 1, ?, ?, 'other', 'family', 'active', ?, ?)
+    `);
+    const deletedId = insert.run('Blob document', 'blob.txt', Buffer.from('a'), null, folder.body.data.id, ADMIN_ID).lastInsertRowid;
+    const failedId = insert.run(
+      'Directory-backed document',
+      'directory.txt',
+      Buffer.alloc(0),
+      'cannot-unlink-directory',
+      folder.body.data.id,
+      ADMIN_ID,
+    ).lastInsertRowid;
+
+    const del = await h.call('DELETE', `/folders/${folder.body.data.id}?documents=delete`);
+
+    assert.equal(del.status, 207);
+    assert.equal(del.body.data.deleted_documents, 1);
+    assert.equal(del.body.data.failed_documents.length, 1);
+    assert.equal(del.body.data.failed_documents[0].id, failedId);
+    assert.equal(del.body.data.folder_deleted, false);
+    assert.equal(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(deletedId), undefined);
+    assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(failedId));
+    assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+  } finally {
+    await h.close();
+    if (previousStoragePath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousStoragePath;
+    rmSync(storageRoot, { recursive: true, force: true });
+  }
+});
+
+test('DELETE with documents retains the folder when its contents change during storage deletion', async () => {
+  const storageRoot = mkdtempSync(join(tmpdir(), 'yuvomi-folder-delete-race-'));
+  const previousStoragePath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = storageRoot;
+  const h = createHarness();
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Concurrent-${randomUUID()}` });
+    const insert = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, storage_key, category, visibility, status, folder_id, created_by)
+      VALUES (?, ?, 'text/plain', 1, ?, ?, 'other', 'family', 'active', ?, ?)
+    `);
+    const storageKeys = Array.from({ length: 40 }, (_unused, index) => `concurrent-${index}.txt`);
+    for (const storageKey of storageKeys) {
+      writeFileSync(join(storageRoot, storageKey), storageKey);
+      insert.run(storageKey, storageKey, Buffer.alloc(0), storageKey, folder.body.data.id, ADMIN_ID);
+    }
+
+    const deletion = h.call(
+      'DELETE',
+      `/folders/${folder.body.data.id}?documents=delete&expected_documents=40&expected_folders=1`,
+    );
+    const deadline = Date.now() + 2000;
+    while (existsSync(join(storageRoot, storageKeys[0])) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    assert.equal(existsSync(join(storageRoot, storageKeys[0])), false, 'deletion must have started');
+    const addedId = insert.run(
+      'Added during deletion',
+      'added-during-delete.txt',
+      Buffer.from('new'),
+      null,
+      folder.body.data.id,
+      ADMIN_ID,
+    ).lastInsertRowid;
+
+    const del = await deletion;
+
+    assert.equal(del.status, 207);
+    assert.equal(del.body.data.folder_deleted, false);
+    assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ? AND folder_id = ?')
+      .get(addedId, folder.body.data.id));
+    assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+  } finally {
+    await h.close();
+    if (previousStoragePath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousStoragePath;
+    rmSync(storageRoot, { recursive: true, force: true });
   }
 });
 

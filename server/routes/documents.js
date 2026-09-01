@@ -546,6 +546,34 @@ router.get('/folders', (_req, res) => {
   }
 });
 
+router.get('/folders/:id/delete-impact', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid folder id.', code: 400 });
+    }
+    const existing = db.get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Folder not found.', code: 404 });
+
+    const subtree = [...subtreeIds(allFolders(), id)];
+    const folderParams = Object.fromEntries(subtree.map((value, i) => [`f${i}`, value]));
+    const folderPlaceholders = subtree.map((_v, i) => `@f${i}`).join(',');
+    const documents = db.get()
+      .prepare(`SELECT created_by FROM family_documents WHERE folder_id IN (${folderPlaceholders})`)
+      .all(folderParams);
+
+    res.json({ data: {
+      id,
+      removed_folders: subtree.length,
+      documents: documents.length,
+      can_delete_documents: isAdmin(req) || documents.every((document) => document.created_by === userId(req)),
+    } });
+  } catch (err) {
+    log.error('GET /folders/:id/delete-impact error:', err);
+    res.status(500).json({ error: 'Internal server error.', code: 500 });
+  }
+});
+
 /** Die Spalten, die eine Ordner-Antwort traegt - eine Schreibweise fuer alle Wege. */
 const FOLDER_COLUMNS = 'id, name, parent_id, module_key, created_by, created_at, updated_at';
 
@@ -617,11 +645,25 @@ router.put('/folders/:id', (req, res) => {
   }
 });
 
-router.delete('/folders/:id', (req, res) => {
+router.delete('/folders/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid folder id.', code: 400 });
+    }
+    const documentAction = req.query.documents || 'unfile';
+    if (!['unfile', 'delete'].includes(documentAction)) {
+      return res.status(400).json({ error: 'Invalid folder document action.', code: 400 });
+    }
+    const parseExpectedCount = (value) => {
+      if (value === undefined) return null;
+      const count = Number(value);
+      return Number.isInteger(count) && count >= 0 ? count : Number.NaN;
+    };
+    const expectedDocuments = parseExpectedCount(req.query.expected_documents);
+    const expectedFolders = parseExpectedCount(req.query.expected_folders);
+    if (Number.isNaN(expectedDocuments) || Number.isNaN(expectedFolders)) {
+      return res.status(400).json({ error: 'Invalid expected folder impact.', code: 400 });
     }
     const existing = db.get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Folder not found.', code: 404 });
@@ -632,16 +674,120 @@ router.delete('/folders/:id', (req, res) => {
     // Wurzel - die Antwort sagt deshalb, was verschwunden ist, damit die
     // Oberflaeche vorher fragen kann.
     //
-    // DIE DOKUMENTE BLEIBEN, unveraendert seit dieser Route: folder_id traegt
-    // ON DELETE SET NULL, sie landen unter "ohne Ordner". Kein Loeschen in
-    // diesem Modul kostet ein Dokument.
+    // Ohne explizite Dokument-Aktion bleibt der kompatible sichere Default:
+    // folder_id traegt ON DELETE SET NULL und die Dokumente landen unter
+    // "ohne Ordner". `documents=delete` ist eine eigene, vorab bestaetigte
+    // Aktion und loescht Inhalt plus Zeile nacheinander.
     const subtree = [...subtreeIds(allFolders(), id)];
-    const affected = db.get()
-      .prepare(`SELECT COUNT(*) AS n FROM family_documents WHERE folder_id IN (${subtree.map((_v, i) => `@f${i}`).join(',')})`)
-      .get(Object.fromEntries(subtree.map((value, i) => [`f${i}`, value]))).n;
+    const folderParams = Object.fromEntries(subtree.map((value, i) => [`f${i}`, value]));
+    const folderPlaceholders = subtree.map((_v, i) => `@f${i}`).join(',');
+    const documents = db.get()
+      // content_data bleibt bewusst draussen: Legacy-BLOBs koennen bis zum
+      // Uploadlimit gross sein, fuer das Loeschen braucht der Storage-Adapter
+      // aber nur Backend und Key.
+      .prepare(`
+        SELECT id, name, storage_backend, storage_key, created_by
+        FROM family_documents
+        WHERE folder_id IN (${folderPlaceholders})
+        ORDER BY id ASC
+      `)
+      .all(folderParams);
+    const deleteDocuments = documentAction === 'delete';
+
+    // Der Dialog bestaetigt konkrete Zahlen. Hat sich der Zweig seit seinem
+    // Impact-GET veraendert, darf der folgende Klick nicht still mehr loeschen
+    // als angezeigt wurde. Alte Clients ohne Erwartungswerte bleiben kompatibel.
+    if ((expectedDocuments !== null && expectedDocuments !== documents.length)
+        || (expectedFolders !== null && expectedFolders !== subtree.length)) {
+      return res.status(409).json({
+        error: 'Folder contents changed. Review the deletion impact and try again.',
+        code: 409,
+      });
+    }
+
+    // Die Besitzprüfung läuft über den GANZEN Zweig, bevor ein externer
+    // Speicher angefasst wird. Sonst könnte ein Mitglied erst eigene Dateien
+    // löschen und beim ersten fremden Dokument in einem halben Baum stranden.
+    if (deleteDocuments && !isAdmin(req)
+        && documents.some((document) => document.created_by !== userId(req))) {
+      return res.status(403).json({ error: 'Not authorized to delete every document in this folder.', code: 403 });
+    }
+
+    if (deleteDocuments) {
+      let deletedDocuments = 0;
+      const failedDocuments = [];
+      for (const document of documents) {
+        try {
+          await deleteDocumentContent(document);
+          db.get().prepare('DELETE FROM family_documents WHERE id = ?').run(document.id);
+          deletedDocuments += 1;
+        } catch (err) {
+          log.error(`DELETE /folders/:id document ${document.id} error:`, err);
+          failedDocuments.push({
+            id: document.id,
+            name: document.name,
+            storage_code: err instanceof StorageError ? err.storageCode : 'DOCUMENT_DELETE_FAILED',
+          });
+        }
+      }
+
+      // Externe Speicherlöschungen können dauern. Prüfe deshalb nach der
+      // Schleife noch einmal, ob währenddessen neue Dokumente oder Unterordner
+      // hinzugekommen sind. Der neu hinzugekommene Inhalt war nicht Teil der
+      // bestätigten Vorschau und darf weder mitgelöscht noch durch das folgende
+      // ON DELETE SET NULL überraschend entordnet werden.
+      const currentSubtree = [...subtreeIds(allFolders(), id)];
+      const currentFolderParams = Object.fromEntries(currentSubtree.map((value, i) => [`f${i}`, value]));
+      const currentFolderPlaceholders = currentSubtree.map((_v, i) => `@f${i}`).join(',');
+      const remainingDocuments = db.get()
+        .prepare(`
+          SELECT id, name
+          FROM family_documents
+          WHERE folder_id IN (${currentFolderPlaceholders})
+          ORDER BY id ASC
+        `)
+        .all(currentFolderParams);
+      const originalFolderIds = new Set(subtree);
+      const originalDocumentIds = new Set(documents.map((document) => document.id));
+      const contentsChanged = currentSubtree.length !== subtree.length
+        || currentSubtree.some((folderId) => !originalFolderIds.has(folderId))
+        || remainingDocuments.some((document) => !originalDocumentIds.has(document.id));
+      const knownFailures = new Set(failedDocuments.map((document) => document.id));
+      for (const document of remainingDocuments) {
+        if (!knownFailures.has(document.id)) {
+          failedDocuments.push({
+            id: document.id,
+            name: document.name,
+            storage_code: 'FOLDER_CONTENT_CHANGED',
+          });
+        }
+      }
+
+      // Bei einem Speicherfehler oder einer parallelen Änderung bleibt die
+      // Struktur um die verbleibenden Dokumente stehen. Erfolgreich gelöschte
+      // Dateien können nicht atomar in WebDAV/Drive zurückgerollt werden; ein
+      // ehrlicher 207-Sammelstatus macht den Teilfortschritt sichtbar.
+      if (failedDocuments.length || contentsChanged) {
+        return res.status(207).json({ data: {
+          id,
+          removed_folders: 0,
+          deleted_documents: deletedDocuments,
+          failed_documents: failedDocuments,
+          contents_changed: contentsChanged,
+          folder_deleted: false,
+        } });
+      }
+    }
 
     db.get().prepare('DELETE FROM family_document_folders WHERE id = ?').run(id);
-    res.json({ data: { id, removed_folders: subtree.length, unfiled_documents: affected } });
+    res.json({ data: {
+      id,
+      removed_folders: subtree.length,
+      unfiled_documents: deleteDocuments ? 0 : documents.length,
+      deleted_documents: deleteDocuments ? documents.length : 0,
+      failed_documents: [],
+      folder_deleted: true,
+    } });
   } catch (err) {
     log.error('DELETE /folders/:id error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });

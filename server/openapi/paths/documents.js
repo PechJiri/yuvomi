@@ -141,7 +141,60 @@ export function documentsPaths() {
     },
     '/api/v1/documents/folders/{id}': {
       put: op({ summary: 'Rename document folder', tag: 'Documents', params: [idParam()], stateChanging: true, requestBody: jsonBody(null) }),
-      delete: op({ summary: 'Delete document folder (documents keep their row, folder link is cleared)', tag: 'Documents', params: [idParam()], stateChanging: true }),
+      delete: op({
+        summary: 'Delete a document folder subtree',
+        tag: 'Documents',
+        stateChanging: true,
+        description: 'Deletes the folder and all subfolders. `documents=unfile` keeps document rows and clears their folder links; `documents=delete` sequentially deletes document content and rows. The destructive mode is rejected before any deletion when the caller does not own every affected document and is not an admin. If a storage deletion fails, the remaining folder structure is retained and a 207 response reports per-document failures.',
+        params: [
+          idParam(),
+          {
+            name: 'documents',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['unfile', 'delete'], default: 'unfile' },
+          },
+          {
+            name: 'expected_documents',
+            in: 'query',
+            required: false,
+            description: 'Document count from the latest delete-impact response. A mismatch rejects the request before deletion.',
+            schema: { type: 'integer', minimum: 0 },
+          },
+          {
+            name: 'expected_folders',
+            in: 'query',
+            required: false,
+            description: 'Folder count from the latest delete-impact response. A mismatch rejects the request before deletion.',
+            schema: { type: 'integer', minimum: 0 },
+          },
+        ],
+        responses: {
+          200: { description: 'Folder subtree deleted' },
+          207: { description: 'Some documents were deleted, but storage failures or a concurrent content change left the folder subtree in place' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'Folder not found' },
+          409: { description: 'Folder contents changed after the impact preview' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/folders/{id}/delete-impact': {
+      get: op({
+        summary: 'Preview the impact of deleting a document folder subtree',
+        tag: 'Documents',
+        description: 'Returns exact document and folder counts across the subtree and whether the caller may use destructive document deletion.',
+        params: [idParam()],
+        responses: {
+          200: { description: 'Folder deletion impact' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { description: 'Folder not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
     },
     '/api/v1/documents': {
       get: op({
