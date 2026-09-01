@@ -56,8 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   standalone routes before the file walk is allowed to add anything. A third round found the
   helpers escaping only attribute values: `id`, `className` and attribute keys went into the
   markup raw, and these helpers are the API an extension is told to build its page with, so a
-  per-record id was the expected way to hit it; every attribute now goes through the shared
-  `esc()`. The budget reports panel had declared itself a `dashboard` inside the `reading`
+  per-record id was the expected way to hit it; every attribute value now goes through the
+  shared `esc()`. A fourth round showed that `esc()` is the wrong tool for an attribute key: it
+  knows `& < > " '` and not the space or `=` that end a name outside the quotes, so a key with
+  either in it became three attributes, one of them live, while the new guard stayed green with
+  its quote-based payload. Keys are now validated against an attribute-name pattern and an
+  invalid one throws like an unknown mode does; the guard tokenizes the opening tag the way a
+  browser does instead of reading the string. The budget reports panel had declared itself a `dashboard` inside the `reading`
   budget page, which set the measure of its subtree to 1200px while the shared header and
   every other tab end at 720px; it declares the mode of the page it lives in, and a guard holds
   the two budget panels to that. A split body now carries the page gutter like the measured

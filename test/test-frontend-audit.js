@@ -15273,7 +15273,6 @@ test('PAGE-014: page-layout helpers escape every attribute they emit', async () 
   const cases = [
     ['renderAppPage id', h.renderAppPage({ id: hostile })],
     ['renderAppPage className', h.renderAppPage({ className: hostile })],
-    ['renderAppPage attrs key', h.renderAppPage({ attrs: { [hostile]: 'v' } })],
     ['renderAppPage attrs value', h.renderAppPage({ attrs: { 'data-x': hostile } })],
     ['renderPageHeader className', h.renderPageHeader({ className: hostile })],
     ['renderPageTitle className', h.renderPageTitle('T', { className: hostile })],
@@ -15289,6 +15288,46 @@ test('PAGE-014: page-layout helpers escape every attribute they emit', async () 
     assert.doesNotMatch(html, /onclick="/, `PAGE-014: ${name} lets a quote close the attribute`);
     assert.match(html, /&quot; onclick=&quot;/, `PAGE-014: ${name} must escape the quote, not drop it`);
   }
+  // Der Schluessel steht AUSSERHALB der Anfuehrungszeichen. Dort beenden
+  // Leerzeichen und `=` den Namen, und esc() kennt beide nicht: der Payload
+  // oben kam durch esc() als Schluessel unveraendert und wurde zu drei
+  // Attributen, eines davon lebendig - waehrend dieser Test mit seinem
+  // `"`-Payload gruen blieb (Codex + claude-review, vierte Runde an #995).
+  // Ein Schluessel, der kein Attributname ist, wirft; die Ausgabe wird
+  // zusaetzlich GEPARST, nicht nur als String gelesen.
+  for (const key of [hostile, 'data-x onmouseover=alert(1) z', 'x=y', 'a\tb', '', '1x', 'data-"']) {
+    assert.throws(() => h.renderAppPage({ attrs: { [key]: 'v' } }), /Invalid attribute name/,
+      `PAGE-014: attrs key ${JSON.stringify(key)} must be rejected, not serialized`);
+  }
+  // Kein DOM-Parser in den Dev-Dependencies, also der Tokenizer-Schritt des
+  // Browsers fuer den oeffnenden Tag von Hand: ein Attributname ist ein Lauf
+  // ohne Whitespace und ohne `"'>/=`, ein Wert der Inhalt der Anfuehrungs-
+  // zeichen. Das ist genau die Trennung, die den Schluessel-Payload zu drei
+  // Attributen macht - und die ein String-Vergleich nicht sieht.
+  const openingTagAttrs = (html) => {
+    const tag = html.match(/^<div\s([^>]*)>/);
+    assert.ok(tag, 'PAGE-014: the page root must open with <div ...>');
+    const attrs = new Map();
+    const re = /([^\s"'>/=]+)(?:="([^"]*)")?/g;
+    for (const m of tag[1].matchAll(re)) attrs.set(m[1], m[2] ?? '');
+    return attrs;
+  };
+  const decode = (v) => v.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const parsed = openingTagAttrs(h.renderAppPage({
+    id: hostile,
+    className: hostile,
+    attrs: { 'data-x': hostile, 'aria-label': '<b>', 'data-ok': 'v' },
+  }));
+  assert.deepEqual([...parsed.keys()].sort(), ['aria-label', 'class', 'data-composition', 'data-ok', 'data-x', 'id'],
+    'PAGE-014: the parsed root must carry exactly the six declared attributes - nothing split off, nothing live');
+  assert.equal(decode(parsed.get('id')), hostile, 'PAGE-014: the hostile id round-trips as text');
+  assert.equal(decode(parsed.get('data-x')), hostile, 'PAGE-014: the hostile value round-trips as text');
+  assert.equal(decode(parsed.get('aria-label')), '<b>', 'PAGE-014: a value with markup round-trips as text');
+  // Und die Probe auf den Tokenizer selbst: ein roher Schluessel-Payload
+  // MUSS bei ihm in drei Attribute zerfallen, sonst prueft er nichts.
+  const rawSplit = openingTagAttrs('<div class="app-page" data-x onmouseover="alert(1)" z="">');
+  assert.deepEqual([...rawSplit.keys()], ['class', 'data-x', 'onmouseover', 'z'],
+    'PAGE-014: the tokenizer must split an unquoted key the way a browser does');
   // Slot-Inhalte bleiben roh - sie sind Markup, das der Aufrufer escaped hat.
   assert.match(h.renderPageBody({ content: '<p>x</p>' }), /<p>x<\/p>/,
     'PAGE-014: content slots are markup and must pass through');
@@ -15297,6 +15336,9 @@ test('PAGE-014: page-layout helpers escape every attribute they emit', async () 
   assert.match(src, /import \{ esc \} from '\.\/html-escape\.js'/,
     'PAGE-014: the helpers use the shared esc(), not a local replace');
   assert.doesNotMatch(src, /replace\(\/"\/g/, 'PAGE-014: no hand-rolled quote replacement next to esc()');
+  assert.doesNotMatch(src, /esc\(key\)/, 'PAGE-014: an attribute key is validated, not escaped - esc() does not know space or =');
+  assert.match(src, /const ATTR_NAME = \/\^\[A-Za-z\]\[A-Za-z0-9:_\.-\]\*\$\//,
+    'PAGE-014: attribute keys are checked against a name pattern');
 });
 
 test('PAGE-015: a tab panel inside a page declares the mode of that page', () => {

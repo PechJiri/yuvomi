@@ -6,16 +6,35 @@
  *
  * Reference demo: public/pages/birthdays.js (mode reading, measured header rail).
  *
- * JEDES ATTRIBUT GEHT DURCH esc(), AUCH id UND className. Diese Helfer sind
- * die zugesagte Oberflaeche fuer Erweiterungen (MODULES.md), und eine id aus
- * einem Datensatz (`sec-${item.name}`) ist der erwartete Gebrauch der Option.
- * Die erste Fassung ersetzte nur das Anfuehrungszeichen in Attribut-WERTEN;
- * id, Klassenname und Attribut-SCHLUESSEL gingen roh in den String - ein `"`
- * darin verliess das Attribut. Slot-Inhalte (title, body, content) bleiben
+ * JEDER ATTRIBUT-WERT GEHT DURCH esc(), AUCH id UND className. Diese Helfer
+ * sind die zugesagte Oberflaeche fuer Erweiterungen (MODULES.md), und eine id
+ * aus einem Datensatz (`sec-${item.name}`) ist der erwartete Gebrauch der
+ * Option. Die erste Fassung ersetzte nur das Anfuehrungszeichen in
+ * Attribut-WERTEN; id, Klassenname und Attribut-Schluessel gingen roh in den
+ * String - ein `"` darin verliess das Attribut.
+ *
+ * EIN ATTRIBUT-SCHLUESSEL WIRD GEPRUEFT, NICHT ESCAPED. Er steht ausserhalb
+ * der Anfuehrungszeichen, und dort beenden Leerzeichen und `=` den Namen -
+ * Zeichen, die esc() gar nicht kennt. `esc('x onclick=f() y')` kommt
+ * unveraendert zurueck und wird zu drei Attributen, eines davon lebendig
+ * (Codex + claude-review, vierte Runde an #995 - die zweite Fassung hatte
+ * den Schluessel durch esc() gezogen und einen Test mit einem `"`-Payload
+ * daneben, der genau deshalb gruen blieb). Ein Schluessel, der kein
+ * Attributname ist, ist ein Programmierfehler des Aufrufers und wirft, wie
+ * ein unbekannter Modus. Slot-Inhalte (title, body, content) bleiben
  * bewusst roh: sie sind Markup, das der Aufrufer schon escaped hat.
  */
 
 import { esc } from './html-escape.js';
+
+const ATTR_NAME = /^[A-Za-z][A-Za-z0-9:_.-]*$/;
+
+function attrName(key) {
+  if (!ATTR_NAME.test(key)) {
+    throw new Error(`Invalid attribute name: ${JSON.stringify(key)}`);
+  }
+  return key;
+}
 
 export const COMPOSITION_MODES = Object.freeze([
   'reading',
@@ -68,7 +87,7 @@ export function renderAppPage({
   if (id) attrParts.push(`id="${esc(id)}"`);
   for (const [key, value] of Object.entries(attrs)) {
     if (value == null || value === '') continue;
-    attrParts.push(`${esc(key)}="${esc(String(value))}"`);
+    attrParts.push(`${attrName(key)}="${esc(String(value))}"`);
   }
   const extra = attrParts.length ? ` ${attrParts.join(' ')}` : '';
   return `<div class="${classes}" data-composition="${mode}"${extra}>
