@@ -43,6 +43,42 @@ function addUser(db, { id, role = 'member', family_role = 'other', name = 'U' })
   return db.prepare('SELECT id, role, family_role FROM users WHERE id = ?').get(id);
 }
 
+test('migration 174 preserves overrides and permits capability resources', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(MIGRATIONS_SQL[74]);
+  db.prepare(`
+    INSERT INTO access_permissions
+      (subject_type, subject_id, resource_type, resource_key, access)
+    VALUES ('role', 'child', 'module', 'notes', 'read')
+  `).run();
+
+  db.exec(MIGRATIONS_SQL[174]);
+
+  assert.deepEqual(
+    { ...db.prepare(`
+      SELECT subject_type, subject_id, resource_type, resource_key, access
+      FROM access_permissions
+    `).get() },
+    {
+      subject_type: 'role',
+      subject_id: 'child',
+      resource_type: 'module',
+      resource_key: 'notes',
+      access: 'read',
+    },
+  );
+  assert.doesNotThrow(() => db.prepare(`
+    INSERT INTO access_permissions
+      (subject_type, subject_id, resource_type, resource_key, access)
+    VALUES ('user', '42', 'capability', 'example', 'allow')
+  `).run());
+  assert.equal(
+    db.prepare("SELECT COUNT(*) AS count FROM access_permissions WHERE resource_type = 'capability'").get().count,
+    1,
+  );
+  db.close();
+});
+
 // ── Auflösung ────────────────────────────────────────────────────────────────
 
 test('Admin: Vollzugriff, admin-Flag, kein Scoping', () => {
