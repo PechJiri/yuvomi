@@ -2613,6 +2613,7 @@
         "labelEvery": "हर",
         "labelOnDays": "इन दिनों",
         "lastDayOfMonth": "महीने के अंतिम दिन",
+        "lastDayOfMonthHint": "शृंखला आरंभ तिथि से पहले महीने के अंतिम दिन शुरू होती है।",
         "labelUntil": "समाप्त होता है (वैकल्पिक)",
         "labelEnds": "समाप्त",
         "endNever": "कभी नहीं",

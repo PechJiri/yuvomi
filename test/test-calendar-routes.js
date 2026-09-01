@@ -884,3 +884,26 @@ test('DELETE /:id — 404 + 204', async () => {
   assert.equal((await call('DELETE', `/${id}`)).status, 204);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM calendar_events WHERE id=?').get(id).n, 0);
 });
+
+test('POST / — eine Monatsletzten-Serie beginnt am ersten Monatsletzten (#960)', async () => {
+  // Das gespeicherte DTSTART geht woertlich nach draussen: in den ICS-Feed, zu
+  // Google, ueber CalDAV. Liegt es nicht auf seiner eigenen Regel, nennt
+  // RFC 5545 das Ergebnis "undefined" - jeder fremde Client darf dann anders
+  // rechnen als wir.
+  const r = await call('POST', '/', {
+    body: {
+      title: 'Zaehlerstand', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T11:00',
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    },
+  });
+  assert.equal(r.status, 201);
+  assert.match(r.body.data.start_datetime, /^2026-01-31/, `Start: ${r.body.data.start_datetime}`);
+  // DIE DAUER WANDERT MIT: zwei Stunden bleiben zwei Stunden, auch wenn der
+  // Termin sechzehn Tage weiter hinten anfaengt.
+  assert.match(r.body.data.end_datetime, /^2026-01-31T11:00/, `Ende: ${r.body.data.end_datetime}`);
+
+  const ohne = await call('POST', '/', {
+    body: { title: 'Ohne', start_datetime: '2026-01-15T09:00', recurrence_rule: 'FREQ=MONTHLY' },
+  });
+  assert.match(ohne.body.data.start_datetime, /^2026-01-15/, 'ohne die Angabe bleibt der Start');
+});

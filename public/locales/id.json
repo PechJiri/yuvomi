@@ -2625,6 +2625,7 @@
         "labelEvery": "Setiap",
         "labelOnDays": "Pada hari-hari ini",
         "lastDayOfMonth": "Pada hari terakhir bulan",
+        "lastDayOfMonthHint": "Rangkaian dimulai pada akhir bulan pertama sejak tanggal mulai.",
         "labelUntil": "Berakhir pada (opsional)",
         "labelEnds": "Berakhir",
         "endNever": "Tidak pernah",

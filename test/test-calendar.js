@@ -319,7 +319,7 @@ test('Deep-Link-Instanz: expandiertes Event mit gleichem Datum wird bevorzugt', 
 // --------------------------------------------------------
 // nextOccurrence: INTERVAL-Korrektheit mit BYDAY
 // --------------------------------------------------------
-import { nextOccurrence, nextOccurrenceAfter } from '../server/services/recurrence.js';
+import { nextOccurrence, nextOccurrenceAfter, seriesStartFor } from '../server/services/recurrence.js';
 
 test('nextOccurrence: WEEKLY BYDAY=MO,TU,WE,TH,FR INTERVAL=2 — kein täglicher Übergang', () => {
   const rule = 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=2';
@@ -1211,6 +1211,29 @@ test('nextOccurrence: ein unlesbarer Anker wirft auch bei YEARLY nicht', () => {
   assert(nextOccurrence('2024-02-29', 'FREQ=YEARLY', { anchor: 'gestern' }) === ohne,
     'faellt auf das bisherige Verhalten zurueck');
   assert(nextOccurrence('2024-02-29', 'FREQ=YEARLY', { anchor: '' }) === ohne);
+});
+
+// --------------------------------------------------------
+// Der Serienstart wandert auf die Regel (#960)
+// --------------------------------------------------------
+
+test('seriesStartFor zieht den Start auf das erste Vorkommen', () => {
+  const R = 'FREQ=MONTHLY;BYMONTHDAY=-1';
+  assert(seriesStartFor('2026-01-15', R) === '2026-01-31', 'der 15. wandert auf den Monatsletzten');
+  assert(seriesStartFor('2026-01-31', R) === '2026-01-31', 'wer schon passt, bleibt');
+  // Die Uhrzeit bleibt Wanduhrzeit - nur der Tag wandert.
+  assert(seriesStartFor('2026-01-15T09:30:00', R) === '2026-01-31T09:30:00');
+});
+
+test('seriesStartFor laesst alles andere in Ruhe', () => {
+  // BYDAY ist ausdruecklich ausgenommen: Apple serialisiert "jeden Werktag" als
+  // Serie, deren Start auf ein Wochenende fallen kann, und die Expansion
+  // ueberspringt ihn (#549). Diese Entscheidung ist aelter und gilt weiter.
+  assert(seriesStartFor('2026-05-09', 'FREQ=WEEKLY;BYDAY=MO') === '2026-05-09');
+  assert(seriesStartFor('2026-01-15', 'FREQ=MONTHLY') === '2026-01-15', 'ohne die Angabe nichts');
+  assert(seriesStartFor('2026-01-15', null) === '2026-01-15', 'ohne Regel nichts');
+  assert(seriesStartFor(null, 'FREQ=MONTHLY;BYMONTHDAY=-1') === null, 'ohne Datum nichts');
+  assert(seriesStartFor('kaputt', 'FREQ=MONTHLY;BYMONTHDAY=-1') === 'kaputt', 'unlesbar bleibt unlesbar');
 });
 
 // --------------------------------------------------------

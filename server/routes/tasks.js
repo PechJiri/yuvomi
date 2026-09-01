@@ -8,7 +8,7 @@ import { createLogger } from '../logger.js';
 import express from 'express';
 import * as db from '../db.js';
 import { documentVisibleSql } from '../services/document-access.js';
-import { nextDueAfterCompletion } from '../services/recurrence.js';
+import { nextDueAfterCompletion, seriesStartFor } from '../services/recurrence.js';
 import { syncTaskRewards } from '../services/rewards.js';
 import { completionFeed, seriesHistory, syncTaskCompletion } from '../services/task-completions.js';
 import { normalizeCategoryFilter, taskCategoryWhere, taskScopeNeedsToday, taskScopeWhere } from '../services/task-scope.js';
@@ -968,6 +968,12 @@ router.post('/', (req, res) => {
       ? 'open'
       : req.body.status;
 
+    // Wie beim Kalender (#960): wer "am letzten Tag des Monats" waehlt, meint
+    // genau das - und das Faelligkeitsdatum geht als DTSTART in den
+    // CalDAV-Push. Ein Start, der nicht auf seiner Regel liegt, laesst fremde
+    // Clients etwas anderes rechnen als uns.
+    const faellig = is_recurring ? seriesStartFor(due_date, recurrence_rule) : due_date;
+
     const userIds  = parseAssignedTo(req.body.assigned_to);
     const firstUid = userIds[0] ?? null;
 
@@ -1004,7 +1010,7 @@ router.post('/', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         title.trim(), description, category, priority, status,
-        start_date, due_date, due_time, firstUid, req.authUserId || req.session.userId, parent_task_id,
+        start_date, faellig, due_time, firstUid, req.authUserId || req.session.userId, parent_task_id,
         is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0, points, visibility,
         countdown ? 1 : 0, req.body.locked ? 1 : 0
       );

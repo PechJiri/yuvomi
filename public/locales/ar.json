@@ -2613,6 +2613,7 @@
         "labelEvery": "كل",
         "labelOnDays": "في هذه الأيام",
         "lastDayOfMonth": "في اليوم الأخير من الشهر",
+        "lastDayOfMonthHint": "تبدأ السلسلة في آخر يوم من الشهر عند تاريخ البدء أو بعده.",
         "labelUntil": "ينتهي في (اختياري)",
         "labelEnds": "ينتهي",
         "endNever": "أبدًا",

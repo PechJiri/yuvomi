@@ -2625,6 +2625,7 @@
         "labelEvery": "매",
         "labelOnDays": "해당 요일에",
         "lastDayOfMonth": "매월 마지막 날",
+        "lastDayOfMonthHint": "시리즈는 시작일 이후 첫 번째 월말부터 시작됩니다.",
         "labelUntil": "종료일 (선택 사항)",
         "labelEnds": "종료",
         "endNever": "없음",

@@ -2613,6 +2613,7 @@
         "labelEvery": "Varje",
         "labelOnDays": "På dessa dagar",
         "lastDayOfMonth": "Den sista dagen i månaden",
+        "lastDayOfMonthHint": "Serien börjar vid det första månadsslutet från startdatumet.",
         "labelUntil": "Slutar på (valfritt)",
         "labelEnds": "Slutar",
         "endNever": "Aldrig",

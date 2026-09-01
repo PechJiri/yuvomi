@@ -2613,6 +2613,7 @@
         "labelEvery": "Minden",
         "labelOnDays": "Ezeken a napokon",
         "lastDayOfMonth": "A hónap utolsó napján",
+        "lastDayOfMonthHint": "A sorozat a kezdődátumtól számított első hónap utolsó napján indul.",
         "labelUntil": "Befejezés (opcionális)",
         "labelEnds": "Véget ér",
         "endNever": "Soha",

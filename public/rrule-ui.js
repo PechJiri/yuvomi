@@ -212,10 +212,23 @@ export function renderRRuleFields(prefix, existingRule, opts = {}) {
              dem buildRRule sie nur dort schreibt. -->
         <div class="rrule-monthday" id="${prefix}-rrule-monthday" ${parsed.freq === 'MONTHLY' ? '' : 'hidden'}>
           <label class="toggle" style="margin:0">
-            <input type="checkbox" id="${prefix}-rrule-last-day" ${parsed.lastDay ? 'checked' : ''}>
+            <input type="checkbox" id="${prefix}-rrule-last-day" ${parsed.lastDay ? 'checked' : ''}
+                   aria-describedby="${prefix}-rrule-monthday-hint">
             <span class="toggle__track"></span>
             <span>${t('rrule.lastDayOfMonth')}</span>
           </label>
+          <!-- DER SERVER ZIEHT DEN SERIENSTART AUF DEN ERSTEN MONATSLETZTEN
+               (#960) - er muss, weil das gespeicherte Datum woertlich nach
+               draussen geht und ein Start, der nicht auf seiner Regel liegt,
+               fremde Clients anders rechnen laesst (RFC 5545 nennt das
+               Ergebnis "undefined").
+               Der Satz steht hier, damit das keine stille Korrektur ist: wer
+               den 15. eintraegt und ankreuzt, soll vorher wissen, dass die
+               Serie am 31. beginnt. Kein Vorgriff im Feld selbst - die
+               Startdatum-Felder heissen in Kalender und Aufgaben verschieden
+               und haengen beim Kalender am Ganztags-Schalter; ein geratener
+               Selektor waere still kaputt, sobald eines umbenannt wird. -->
+          <p class="rrule-anchor__hint" id="${prefix}-rrule-monthday-hint">${t('rrule.lastDayOfMonthHint')}</p>
         </div>
 
         ${allowFromCompletion ? `
@@ -345,6 +358,9 @@ export function bindRRuleEvents(root, prefix) {
     if (details)  details.hidden  = !freq;
     if (weekdays) weekdays.hidden = freq !== 'WEEKLY';
     if (monthday) monthday.hidden = freq !== 'MONTHLY';
+    // Beim Wechsel weg von "monatlich" verliert die Wahl ihre Bedeutung. Der
+    // Haken bleibt gesetzt, damit ein versehentlicher Wechsel und zurueck ihn
+    // nicht verschluckt - buildRRule schreibt ihn ohnehin nur bei MONTHLY.
     // Der Hinweis ist die Umkehrung des Detailbereichs: er beantwortet die Frage
     // "sind das die einzigen vier Takte?", und sobald der Takt sichtbar danebensteht,
     // hat sie sich erledigt (#862). Die Beschreibung des Auswahlfelds geht mit -
@@ -404,6 +420,7 @@ export function getRRuleValues(root, prefix) {
   });
 
   const lastDay = !!root.querySelector(`#${prefix}-rrule-last-day`)?.checked;
+
 
   const built = buildRRule({ freq, interval, byday, until, count, lastDay });
 

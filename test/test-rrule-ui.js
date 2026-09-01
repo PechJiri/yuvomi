@@ -165,9 +165,17 @@ test('die Beschreibung des Auswahlfelds folgt dem Hinweis, nicht nur sein hidden
   // Referenzierten von der Verborgen-Regel aus). Bliebe die Referenz stehen,
   // hoerte ein Screenreader-Nutzer den Hinweis weiter, den Sehende nicht mehr
   // sehen - beide Modalitaeten muessen denselben Zustand zeigen.
-  assert.match(renderRRuleFields('task', null, {}), /aria-describedby="task-rrule-hint"/,
+  // GEPRUEFT WIRD DAS AUSWAHLFELD, NICHT DIE GANZE AUSGABE. Die erste Fassung
+  // suchte `aria-describedby` im gesamten Markup und wurde rot, als der
+  // Monatsletzten-Schalter seinen EIGENEN, dauerhaft gueltigen Hinweis bekam
+  // (#960) - ein anderer Knoten mit einer anderen Aussage. Die Regel gilt dem
+  // Frequenz-Feld: seine Erklaerung ist beantwortet, sobald eine Wiederholung
+  // gewaehlt ist.
+  const freqTag = (html) => html.slice(html.indexOf('id="task-rrule-freq"') - 200,
+    html.indexOf('id="task-rrule-freq"') + 200);
+  assert.match(freqTag(renderRRuleFields('task', null, {})), /aria-describedby="task-rrule-hint"/,
     'ohne Wiederholung: ohne die Zuordnung liest ein Screenreader die Auswahl ohne ihre Erklaerung vor');
-  assert.doesNotMatch(renderRRuleFields('task', 'FREQ=WEEKLY', {}), /aria-describedby/,
+  assert.doesNotMatch(freqTag(renderRRuleFields('task', 'FREQ=WEEKLY', {})), /aria-describedby/,
     'mit Wiederholung: der Hinweis ist beantwortet und darf auch nicht mehr vorgelesen werden');
 });
 

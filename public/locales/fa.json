@@ -2625,6 +2625,7 @@
         "labelEvery": "هر",
         "labelOnDays": "در این روزها",
         "lastDayOfMonth": "در آخرین روز ماه",
+        "lastDayOfMonthHint": "سری از اولین روز پایان ماه در تاریخ شروع یا پس از آن آغاز می‌شود.",
         "labelUntil": "پایان در (اختیاری)",
         "labelEnds": "پایان",
         "endNever": "هرگز",

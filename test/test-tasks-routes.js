@@ -917,3 +917,38 @@ test('POST: ein leerer Status ist kein Status, sondern keiner (Review zu #807)',
     assert.equal(r.body.data.archived_at, null);
   }
 });
+
+test('POST: eine Monatsletzten-Serie beginnt am ersten Monatsletzten (#960)', async () => {
+  // Das Faelligkeitsdatum geht als DTSTART in den CalDAV-Push. Liegt es nicht
+  // auf seiner eigenen Regel, laesst RFC 5545 das Ergebnis fuer fremde Clients
+  // ausdruecklich offen - sie duerfen anders rechnen als wir.
+  const r = await call('POST', '/', {
+    as: { id: ALICE, role: 'admin' },
+    body: {
+      title: 'Zaehlerstand ablesen', due_date: '2026-01-15',
+      is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    },
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.due_date, '2026-01-31', 'der 15. wandert auf den Monatsletzten');
+
+  // Wer schon passt, bleibt - und ohne die Angabe bleibt alles, wie es war.
+  const passt = await call('POST', '/', {
+    as: { id: ALICE, role: 'admin' },
+    body: { title: 'Schon passend', due_date: '2026-01-31', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  });
+  assert.equal(passt.body.data.due_date, '2026-01-31');
+
+  const ohne = await call('POST', '/', {
+    as: { id: ALICE, role: 'admin' },
+    body: { title: 'Ohne die Angabe', due_date: '2026-01-15', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY' },
+  });
+  assert.equal(ohne.body.data.due_date, '2026-01-15', 'ohne BYMONTHDAY wird nichts gezogen');
+
+  // Und eine Aufgabe ohne Wiederholung erst recht nicht.
+  const einmalig = await call('POST', '/', {
+    as: { id: ALICE, role: 'admin' },
+    body: { title: 'Einmalig', due_date: '2026-01-15' },
+  });
+  assert.equal(einmalig.body.data.due_date, '2026-01-15');
+});

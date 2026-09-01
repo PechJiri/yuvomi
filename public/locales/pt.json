@@ -2613,6 +2613,7 @@
         "labelEvery": "A cada",
         "labelOnDays": "Nestes dias",
         "lastDayOfMonth": "No último dia do mês",
+        "lastDayOfMonthHint": "A série começa no primeiro fim de mês a partir da data de início.",
         "labelUntil": "Termina em (opcional)",
         "labelEnds": "Termina",
         "endNever": "Nunca",

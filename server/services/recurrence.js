@@ -477,6 +477,47 @@ export function rruleLine(rule) {
   return `RRULE:${rruleValue(rule)}`;
 }
 
+/**
+ * Der Serienstart, auf das erste Vorkommen der Regel gezogen.
+ *
+ * WARUM DAS BEIM SPEICHERN PASSIERT UND NICHT BEIM LESEN: das gespeicherte
+ * DTSTART geht woertlich nach draussen - in den ICS-Feed, zu Google, ueber
+ * CalDAV. Liegt es nicht auf seiner eigenen Regel, laesst RFC 5545 das Ergebnis
+ * ausdruecklich offen ("the recurrence set ... is undefined"), und jeder fremde
+ * Client darf anders rechnen als wir. Intern koennen wir das abfangen, nach
+ * aussen nicht.
+ *
+ * Es ist auch keine Korrektur gegen den Nutzer: wer "am letzten Tag des Monats"
+ * ankreuzt, hat genau das gesagt. Das Datum darauf zu ziehen setzt seine Angabe
+ * um, statt sie zu ignorieren - und die Oberflaeche zeigt es sofort, damit
+ * niemand ein anderes Datum gespeichert findet als er gesehen hat.
+ *
+ * Ohne Regel oder ohne Datum bleibt alles, wie es ist.
+ *
+ * @param {string} dateKey YYYY-MM-DD (oder ein ISO-Zeitstempel; der Tag zaehlt)
+ * @param {string} rrule
+ * @returns {string} derselbe Tag, wenn er passt - sonst der naechste, der passt
+ */
+function seriesStartFor(dateKey, rrule) {
+  if (!dateKey || !rrule) return dateKey;
+  const tag = String(dateKey).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tag)) return dateKey;
+
+  // NUR FUER BYMONTHDAY. Ein DTSTART, das ein BYDAY-Muster nicht trifft, bleibt
+  // ausdruecklich stehen: Apple serialisiert "jeden Werktag" als Serie, deren
+  // Start auf ein Wochenende fallen kann, und die Expansion ueberspringt ihn
+  // (#549). Diese Entscheidung ist aelter und gilt weiter - hier geht es allein
+  // um die Angabe, die Yuvomi selbst erzeugt und die sonst nach draussen
+  // uneindeutig waere.
+  if (parseRRule(rrule)?.bymonthday !== -1) return dateKey;
+  if (matchesRRuleByday(tag, rrule)) return dateKey;
+  const next = nextOccurrence(tag, rrule, { anchor: tag });
+  // Kein naechstes Vorkommen (Serie schon vorbei): lieber das Datum lassen als
+  // eines zu erfinden.
+  return next ? String(dateKey).replace(tag, next) : dateKey;
+}
+
 export {
   parseRRule, nextOccurrence, nextOccurrenceAfter, nextDueAfterCompletion, matchesRRuleByday,
+  seriesStartFor,
 };

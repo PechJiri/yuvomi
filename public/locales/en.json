@@ -2613,6 +2613,7 @@
         "labelEvery": "Every",
         "labelOnDays": "On these days",
         "lastDayOfMonth": "On the last day of the month",
+        "lastDayOfMonthHint": "The series starts on the first month end on or after the start date.",
         "labelUntil": "Ends on (optional)",
         "labelEnds": "Ends",
         "endNever": "Never",

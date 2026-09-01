@@ -2625,6 +2625,7 @@
         "labelEvery": "Alle",
         "labelOnDays": "An diesen Tagen",
         "lastDayOfMonth": "Am letzten Tag des Monats",
+        "lastDayOfMonthHint": "Die Serie beginnt am ersten Monatsletzten ab dem Startdatum.",
         "labelUntil": "Endet am (optional)",
         "labelEnds": "Endet",
         "endNever": "Nie",

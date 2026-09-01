@@ -8,6 +8,23 @@ import express from 'express';
 import * as db from '../../db.js';
 import { str, color, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
 import { normalizeVisibility, visibilityWhere } from '../../services/visibility.js';
+import { seriesStartFor } from '../../services/recurrence.js';
+
+/**
+ * Denselben Zeitstempel um `versatzMs` verschieben, aber NUR im Datumsteil.
+ *
+ * Die Uhrzeit bleibt Wanduhrzeit: ein Termin um 09:00 faengt auch nach dem
+ * Verschieben um 09:00 an, nicht um 09:00 minus Zeitzonendrift. Deshalb wird
+ * der Tag gerechnet und der Rest des Strings angehaengt, statt den ganzen
+ * Zeitstempel durch Date.parse zu schicken.
+ */
+function verschiebeDatumsteil(stamp, versatzMs) {
+  const tag = String(stamp).slice(0, 10);
+  const rest = String(stamp).slice(10);
+  const neu = new Date(Date.parse(`${tag}T00:00:00Z`) + versatzMs);
+  if (isNaN(neu.getTime())) return stamp;
+  return `${neu.toISOString().slice(0, 10)}${rest}`;
+}
 import {
   StorageError,
   cleanupStagedUpload,
@@ -112,6 +129,22 @@ router.post('/', async (req, res) => {
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     if (!vIcon) return res.status(400).json({ error: 'icon: invalid calendar event icon.', code: 400 });
 
+    // DER SERIENSTART GEHOERT AUF DIE REGEL (#960). Wer den Termin am 15. anlegt
+    // und "am letzten Tag des Monats" waehlt, hat ein DTSTART, das nicht auf
+    // seiner eigenen Regel liegt - und genau das geht woertlich nach draussen,
+    // in den ICS-Feed, zu Google, ueber CalDAV. RFC 5545 laesst das Ergebnis
+    // dort ausdruecklich offen, jeder fremde Client darf anders rechnen als wir.
+    //
+    // Das Ende wandert mit, damit die Dauer bleibt: ein zweistuendiger Termin
+    // bleibt zweistuendig, auch wenn er sechzehn Tage weiter hinten anfaengt.
+    const gezogenerStart = seriesStartFor(vStart.value, vRrule.value);
+    const versatzMs = gezogenerStart === vStart.value
+      ? 0
+      : Date.parse(`${gezogenerStart.slice(0, 10)}T00:00:00Z`) - Date.parse(`${vStart.value.slice(0, 10)}T00:00:00Z`);
+    const gezogenesEnde = versatzMs && vEnd.value
+      ? verschiebeDatumsteil(vEnd.value, versatzMs)
+      : vEnd.value;
+
     const { all_day = 0 } = req.body;
     const userIds  = parseAssignedTo(req.body.assigned_to);
     const firstUid = userIds[0] ?? null;
@@ -147,7 +180,7 @@ router.post('/', async (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         vTitle.value, vDesc.value,
-        vStart.value, vEnd.value,
+        gezogenerStart, gezogenesEnde,
         all_day ? 1 : 0, vLoc.value,
         vColor.value, vIcon, firstUid,
         userId, vRrule.value,
