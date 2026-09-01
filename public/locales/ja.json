@@ -2725,6 +2725,7 @@
         "nameLabel": "名前",
         "birthDateLabel": "生年月日",
         "nameDay": "聖名祝日",
+        "celebratesNameDay": "聖名祝日を祝います",
         "nameDayLabel": "聖名祝日（任意）",
         "nameDayMonthLabel": "聖名祝日の月",
         "nameDayDayLabel": "聖名祝日の日",

@@ -2725,6 +2725,7 @@
         "nameLabel": "الاسم",
         "birthDateLabel": "تاريخ الميلاد",
         "nameDay": "يوم الاسم",
+        "celebratesNameDay": "يحتفل بيوم الاسم",
         "nameDayLabel": "يوم الاسم (اختياري)",
         "nameDayMonthLabel": "شهر يوم الاسم",
         "nameDayDayLabel": "تاريخ يوم الاسم",

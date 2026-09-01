@@ -224,9 +224,16 @@ function updateBirthdayBadge() {
   setNavBadge('/birthdays', countBirthdaysSoon(state.birthdays), undefined, 'accent');
 }
 
-function birthdayItemHtml(birthday) {
+export function birthdayItemHtml(birthday) {
   const chip = countdownChip(birthday);
   const isToday = chip.mod === 'today';
+  const hasNameDay = birthday.next_name_day && Number.isInteger(birthday.name_day_days_until);
+  const nameDayMeta = hasNameDay
+    ? `<span class="birthday-item__name-day">`
+      + `${esc(t('birthdays.inDays', { days: birthday.name_day_days_until }))} · `
+      + `${esc(formatDate(birthday.next_name_day))} · ${esc(t('birthdays.celebratesNameDay'))}`
+      + '</span>'
+    : '';
   // Wischbedienung (Redesign Runde 4, C-2): auf Touch tragen die beiden
   // Richtungen, was bis dahin zwei Icon-Knoepfe in jeder Zeile trugen - in
   // einer Grouped-Liste die lauteste Stelle des Bildschirms. Auf
@@ -247,9 +254,10 @@ function birthdayItemHtml(birthday) {
         <strong class="list-row__name birthday-item__name">
           ${esc(birthday.name)}${isToday ? CAKE_SVG : ''}
         </strong>
-        <div class="list-row__meta birthday-item__meta">
+        <div class="list-row__meta birthday-item__meta${hasNameDay ? ' birthday-item__meta--with-name-day' : ''}">
           <span class="birthday-chip birthday-chip--${chip.mod}">${esc(chip.label)}</span>
           <span class="birthday-item__when">${esc(ageMeta(birthday))}</span>
+          ${nameDayMeta}
           ${birthday.notes ? `<span class="birthday-item__notes">${esc(birthday.notes)}</span>` : ''}
         </div>
       </div>

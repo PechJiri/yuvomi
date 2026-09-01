@@ -2760,6 +2760,7 @@
         "nameLabel": "Ім'я",
         "birthDateLabel": "Дата народження",
         "nameDay": "Іменини",
+        "celebratesNameDay": "святкує іменини",
         "nameDayLabel": "Іменини (необов’язково)",
         "nameDayMonthLabel": "Місяць іменин",
         "nameDayDayLabel": "День іменин",

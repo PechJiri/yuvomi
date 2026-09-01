@@ -2725,6 +2725,7 @@
         "nameLabel": "Nome",
         "birthDateLabel": "Data de nascimento",
         "nameDay": "Dia do nome",
+        "celebratesNameDay": "celebra o dia do nome",
         "nameDayLabel": "Dia do nome (opcional)",
         "nameDayMonthLabel": "Mês do dia do nome",
         "nameDayDayLabel": "Dia do dia do nome",

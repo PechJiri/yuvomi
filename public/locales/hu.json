@@ -2706,6 +2706,7 @@
         "nameLabel": "Név",
         "birthDateLabel": "Születési dátum",
         "nameDay": "Névnap",
+        "celebratesNameDay": "névnapját ünnepli",
         "nameDayLabel": "Névnap (nem kötelező)",
         "nameDayMonthLabel": "A névnap hónapja",
         "nameDayDayLabel": "A névnap napja",

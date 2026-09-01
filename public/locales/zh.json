@@ -2725,6 +2725,7 @@
         "nameLabel": "姓名",
         "birthDateLabel": "出生日期",
         "nameDay": "命名日",
+        "celebratesNameDay": "庆祝命名日",
         "nameDayLabel": "命名日（可选）",
         "nameDayMonthLabel": "命名日月份",
         "nameDayDayLabel": "命名日日期",

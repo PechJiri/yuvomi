@@ -2725,6 +2725,7 @@
         "nameLabel": "नाम",
         "birthDateLabel": "जन्म तिथि",
         "nameDay": "नाम दिवस",
+        "celebratesNameDay": "नाम दिवस मनाते हैं",
         "nameDayLabel": "नाम दिवस (वैकल्पिक)",
         "nameDayMonthLabel": "नाम दिवस का महीना",
         "nameDayDayLabel": "नाम दिवस की तारीख",

@@ -2725,6 +2725,7 @@
         "nameLabel": "Имя",
         "birthDateLabel": "Дата рождения",
         "nameDay": "Именины",
+        "celebratesNameDay": "празднует именины",
         "nameDayLabel": "Именины (необязательно)",
         "nameDayMonthLabel": "Месяц именин",
         "nameDayDayLabel": "День именин",

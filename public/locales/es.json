@@ -2725,6 +2725,7 @@
         "nameLabel": "Nombre",
         "birthDateLabel": "Fecha de nacimiento",
         "nameDay": "Onomástica",
+        "celebratesNameDay": "celebra su onomástica",
         "nameDayLabel": "Onomástica (opcional)",
         "nameDayMonthLabel": "Mes de la onomástica",
         "nameDayDayLabel": "Día de la onomástica",

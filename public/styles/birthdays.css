@@ -161,6 +161,11 @@
   flex-shrink: 0;
 }
 
+.birthday-item__name-day {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* DIE NOTIZ IST EINE FRAGE DER BREITE, NICHT DES GERÄTS - deshalb der Container
  * am Träger und nicht der Viewport: massgeblich ist, was die ZEILE hat.
  *
@@ -192,6 +197,31 @@
 @container birthdays-list (min-width: 560px) {
   .birthday-item__notes {
     display: block;
+  }
+}
+
+/* S narozeninami i svátkem může metadatový řádek na úzké kartě přesáhnout
+ * dostupnou šířku. Na širší ploše zůstávají oba termíny za sebou; pod 840 px
+ * dostane svátek vlastní řádek a smí se zalomit. Poznámka je stejně jako v
+ * původním mobilním pravidle nejméně důležitá informace, proto zde ustoupí. */
+@container birthdays-list (max-width: 840px) {
+  .birthday-item__meta--with-name-day {
+    flex-wrap: wrap;
+  }
+
+  .birthday-item__meta--with-name-day > .birthday-item__name-day {
+    flex-basis: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .birthday-item__meta--with-name-day > .birthday-item__name-day::before {
+    content: none;
+    margin-inline-end: 0;
+  }
+
+  .birthday-item__meta--with-name-day > .birthday-item__notes {
+    display: none;
   }
 }
 

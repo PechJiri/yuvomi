@@ -2718,6 +2718,7 @@
         "nameLabel": "نام",
         "birthDateLabel": "تاریخ تولد",
         "nameDay": "روز نام",
+        "celebratesNameDay": "روز نام را جشن می‌گیرد",
         "nameDayLabel": "روز نام (اختیاری)",
         "nameDayMonthLabel": "ماه روز نام",
         "nameDayDayLabel": "روزِ روز نام",

@@ -2706,6 +2706,7 @@
         "nameLabel": "Naam",
         "birthDateLabel": "Geboortedatum",
         "nameDay": "Naamdag",
+        "celebratesNameDay": "viert naamdag",
         "nameDayLabel": "Naamdag (optioneel)",
         "nameDayMonthLabel": "Maand van de naamdag",
         "nameDayDayLabel": "Dag van de naamdag",

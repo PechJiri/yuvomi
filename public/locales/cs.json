@@ -3226,6 +3226,7 @@
         "nameLabel": "Jméno",
         "birthDateLabel": "Datum narození",
         "nameDay": "Svátek",
+        "celebratesNameDay": "oslaví svátek",
         "nameDayLabel": "Svátek (volitelné)",
         "nameDayMonthLabel": "Měsíc svátku",
         "nameDayDayLabel": "Den svátku",

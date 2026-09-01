@@ -2706,6 +2706,7 @@
         "nameLabel": "Name",
         "birthDateLabel": "Birth date",
         "nameDay": "Name day",
+        "celebratesNameDay": "celebrates their name day",
         "nameDayLabel": "Name day (optional)",
         "nameDayMonthLabel": "Name day month",
         "nameDayDayLabel": "Name day day",

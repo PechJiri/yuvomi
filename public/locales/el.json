@@ -2725,6 +2725,7 @@
         "nameLabel": "Όνομα",
         "birthDateLabel": "Ημερομηνία γέννησης",
         "nameDay": "Ονομαστική εορτή",
+        "celebratesNameDay": "γιορτάζει την ονομαστική εορτή",
         "nameDayLabel": "Ονομαστική εορτή (προαιρετικό)",
         "nameDayMonthLabel": "Μήνας ονομαστικής εορτής",
         "nameDayDayLabel": "Ημέρα ονομαστικής εορτής",

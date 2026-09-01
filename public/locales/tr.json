@@ -2725,6 +2725,7 @@
         "nameLabel": "Ad",
         "birthDateLabel": "Doğum tarihi",
         "nameDay": "İsim günü",
+        "celebratesNameDay": "isim gününü kutlar",
         "nameDayLabel": "İsim günü (isteğe bağlı)",
         "nameDayMonthLabel": "İsim günü ayı",
         "nameDayDayLabel": "İsim günü tarihi",

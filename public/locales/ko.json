@@ -2718,6 +2718,7 @@
         "nameLabel": "이름",
         "birthDateLabel": "생년월일",
         "nameDay": "명명 축일",
+        "celebratesNameDay": "명명 축일을 기념합니다",
         "nameDayLabel": "명명 축일(선택 사항)",
         "nameDayMonthLabel": "명명 축일 월",
         "nameDayDayLabel": "명명 축일 일",
