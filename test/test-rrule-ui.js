@@ -374,3 +374,24 @@ test('der Server nimmt nur BYMONTHDAY=-1 an, nichts Weiteres (#960)', async () =
   assert.ok(RRULE_RE.test('FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=-1'),
     'unter MONTHLY bleibt sie erlaubt, auch neben BYDAY');
 });
+
+test('der Hinweis nennt in jeder Sprache dieselbe Richtung (#960)', async () => {
+  // Die hindi-Fassung sagte "vor dem Startdatum" und beschrieb damit das
+  // Gegenteil dessen, was passiert - unmittelbar bevor jemand ein Datum
+  // aendernd speichert. Eine Uebersetzung, die in die falsche Richtung zeigt,
+  // ist schlechter als gar keine.
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = new URL('../public/locales/', import.meta.url);
+  const sprachen = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  assert.ok(sprachen.length >= 20, `Reichweite: ${sprachen.length} Sprachen gelesen`);
+
+  // Geprueft wird die Sache, nicht der Wortlaut: die deutsche Referenz und die
+  // englische Fassung nennen beide "ab"/"on or after". Ein Marker fuer die
+  // Gegenrichtung darf in keiner Fassung stehen.
+  const gegenrichtung = /\bbefore\b|\bvor dem\b|से पहले|antes de|avant la/i;
+  for (const datei of sprachen) {
+    const wert = JSON.parse(readFileSync(new URL(datei, dir), 'utf8')).rrule?.lastDayOfMonthHint;
+    assert.ok(wert, `${datei}: der Hinweis fehlt`);
+    assert.ok(!gegenrichtung.test(wert), `${datei} zeigt in die falsche Richtung: ${wert}`);
+  }
+});

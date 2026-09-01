@@ -926,3 +926,56 @@ test('PUT / — auch beim Bearbeiten wandert der Serienstart auf die Regel (#960
     `nachtraeglich angekreuzt: ${bearbeitet.body.data.start_datetime}`);
   assert.match(bearbeitet.body.data.end_datetime, /^2026-01-31T11:00/, 'die Dauer wandert mit');
 });
+
+test('PUT / — ein Titel-Edit verschiebt keine eingelesene Serie (#756)', async () => {
+  // Eine aus einem Fremdkalender eingelesene Serie darf einen absichtlich
+  // unsynchronisierten Start haben. Bei JEDEM PUT zu normalisieren haette sie
+  // beim Aendern des Titels stillschweigend verschoben - gegen genau die
+  // Wortlaut-Regel, auf die sich dieses Feature sonst beruft.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Fremd', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T10:00' },
+  });
+  const id = angelegt.body.data.id;
+  // Die Regel direkt in die Zeile schreiben, wie es der Sync tut - am
+  // Normalisieren der Route vorbei.
+  db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
+
+  const nurTitel = await call('PUT', `/${id}`, { body: { title: 'Neuer Titel' } });
+  assert.equal(nurTitel.status, 200);
+  assert.match(nurTitel.body.data.start_datetime, /^2026-01-15/,
+    `der Start darf sich nicht bewegen: ${nurTitel.body.data.start_datetime}`);
+
+  // Fasst jemand die Regel an, wird normalisiert.
+  const mitRegel = await call('PUT', `/${id}`, { body: { recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' } });
+  assert.match(mitRegel.body.data.start_datetime, /^2026-01-31/, 'jetzt schon');
+});
+
+test('POST / — eine Regel ohne jedes Vorkommen wird abgelehnt', async () => {
+  // FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120 ab dem 15. Januar: der erste
+  // Monatsletzte liegt hinter dem UNTIL. Gespeichert waere das ein Termin, den
+  // niemand je sieht, mit einem DTSTART, das nicht auf seiner Regel liegt.
+  const r = await call('POST', '/', {
+    body: {
+      title: 'Nie', start_datetime: '2026-01-15T09:00',
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+    },
+  });
+  assert.equal(r.status, 400, `erwartet 400, bekommen ${r.status}`);
+});
+
+test('PUT / — start_datetime: null heisst "nicht anfassen", nicht "leer" (#960)', async () => {
+  // Der Validator laesst null durch, und das UPDATE behandelt es ueber COALESCE
+  // als "unveraendert". Die Normalisierung nahm es dagegen als Wert und
+  // uebersprang sich selbst: die neue Regel wurde gespeichert, der alte
+  // unpassende Start blieb stehen.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Mit null', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T10:00' },
+  });
+  const r = await call('PUT', `/${angelegt.body.data.id}`, {
+    body: { start_datetime: null, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  });
+  assert.equal(r.status, 200);
+  assert.match(r.body.data.start_datetime, /^2026-01-31/,
+    `der gespeicherte Start wird normalisiert: ${r.body.data.start_datetime}`);
+});

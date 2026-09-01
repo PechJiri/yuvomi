@@ -981,3 +981,47 @@ test('POST: wandert die Faelligkeit, wandert der Vorlauf mit (#647)', async () =
   assert.equal(r.body.data.due_date, '2026-01-31');
   assert.equal(r.body.data.start_date, '2026-01-26', 'fuenf Tage Vorlauf, wie vorher');
 });
+
+test('PUT: ein Titel-Edit verschiebt keine eingelesene Serie (#756)', async () => {
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Fremd', due_date: '2026-01-15' } });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE tasks SET is_recurring = 1, recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
+
+  const nurTitel = await call('PUT', `/${id}`, { as: admin, body: { title: 'Neuer Titel' } });
+  assert.equal(nurTitel.status, 200);
+  assert.equal(nurTitel.body.data.due_date, '2026-01-15', 'die Faelligkeit darf sich nicht bewegen');
+
+  const mitRegel = await call('PUT', `/${id}`, {
+    as: admin, body: { title: 'Neuer Titel', recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  });
+  assert.equal(mitRegel.body.data.due_date, '2026-01-31', 'wer die Regel anfasst, bekommt sie normalisiert');
+});
+
+test('POST: eine Regel ohne jedes Vorkommen wird abgelehnt', async () => {
+  const r = await call('POST', '/', {
+    as: { id: ALICE, role: 'admin' },
+    body: {
+      title: 'Nie faellig', due_date: '2026-01-15',
+      is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+    },
+  });
+  assert.equal(r.status, 400, `erwartet 400, bekommen ${r.status}`);
+});
+
+test('PUT: due_date: null LOESCHT die Faelligkeit, hier anders als im Kalender', async () => {
+  // Die beiden Module meinen mit `null` Verschiedenes, und das ist der Grund,
+  // warum der Befund nicht blind auf beide passt: der Kalender schreibt sein
+  // Startdatum ueber COALESCE, dort heisst null "unveraendert lassen". Die
+  // Aufgabe weist direkt zu - null entfernt die Faelligkeit. Dann gibt es auch
+  // keinen Serienstart zu normalisieren.
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Mit null', due_date: '2026-01-15' } });
+  const r = await call('PUT', `/${angelegt.body.data.id}`, {
+    as: admin,
+    body: { title: 'Mit null', due_date: null, is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.due_date, null, 'die Faelligkeit ist entfernt, nicht verschoben');
+});

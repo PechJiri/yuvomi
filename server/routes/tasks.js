@@ -8,7 +8,7 @@ import { createLogger } from '../logger.js';
 import express from 'express';
 import * as db from '../db.js';
 import { documentVisibleSql } from '../services/document-access.js';
-import { nextDueAfterCompletion, seriesStartFor } from '../services/recurrence.js';
+import { nextDueAfterCompletion, seriesStartFor, hasAnyOccurrence } from '../services/recurrence.js';
 import { syncTaskRewards } from '../services/rewards.js';
 import { completionFeed, seriesHistory, syncTaskCompletion } from '../services/task-completions.js';
 import { normalizeCategoryFilter, taskCategoryWhere, taskScopeNeedsToday, taskScopeWhere } from '../services/task-scope.js';
@@ -972,6 +972,12 @@ router.post('/', (req, res) => {
     // genau das - und das Faelligkeitsdatum geht als DTSTART in den
     // CalDAV-Push. Ein Start, der nicht auf seiner Regel liegt, laesst fremde
     // Clients etwas anderes rechnen als uns.
+    if (is_recurring && !hasAnyOccurrence(due_date, recurrence_rule)) {
+      return res.status(400).json({
+        error: 'recurrence_rule: the rule has no occurrence on or after the due date.',
+        code: 400,
+      });
+    }
     const faellig = is_recurring ? seriesStartFor(due_date, recurrence_rule) : due_date;
     // DER VORLAUF GEHOERT ZUM DURCHLAUF (#647). Wandert die Faelligkeit, muss
     // das Startdatum mit: eine Aufgabe, die am 10. beginnt und am 15. faellig
@@ -1109,7 +1115,20 @@ router.put('/:id', (req, res) => {
     // dieser nicht - wer die Wahl an einer BESTEHENDEN Aufgabe ankreuzt, haette
     // ein Faelligkeitsdatum behalten, das nicht auf seiner Regel liegt, und es
     // als DTSTART in den CalDAV-Push geschickt.
-    const faelligDanach = is_recurring ? seriesStartFor(due_date, recurrence_rule) : due_date;
+    // Nur wenn jemand Regel oder Datum in DIESER Anfrage anfasst - sonst
+    // verschoebe ein Titel-Edit eine eingelesene Serie mit absichtlich
+    // unsynchronisiertem Start (#756). `null` heisst "nicht anfassen".
+    const regelGesetzt = req.body.recurrence_rule !== undefined && req.body.recurrence_rule !== null;
+    const dueGesetzt = req.body.due_date !== undefined && req.body.due_date !== null;
+    if (is_recurring && (regelGesetzt || dueGesetzt) && !hasAnyOccurrence(due_date, recurrence_rule)) {
+      return res.status(400).json({
+        error: 'recurrence_rule: the rule has no occurrence on or after the due date.',
+        code: 400,
+      });
+    }
+    const faelligDanach = is_recurring && (regelGesetzt || dueGesetzt)
+      ? seriesStartFor(due_date, recurrence_rule)
+      : due_date;
     const startDanach = verschobenerStart(start_date, due_date, faelligDanach);
 
     const points = req.body.points !== undefined ? clampPoints(req.body.points) : task.points;

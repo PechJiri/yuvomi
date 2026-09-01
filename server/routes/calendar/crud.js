@@ -8,7 +8,7 @@ import express from 'express';
 import * as db from '../../db.js';
 import { str, color, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
 import { normalizeVisibility, visibilityWhere } from '../../services/visibility.js';
-import { seriesStartFor } from '../../services/recurrence.js';
+import { seriesStartFor, hasAnyOccurrence } from '../../services/recurrence.js';
 
 /**
  * Denselben Zeitstempel um `versatzMs` verschieben, aber NUR im Datumsteil.
@@ -137,6 +137,15 @@ router.post('/', async (req, res) => {
     //
     // Das Ende wandert mit, damit die Dauer bleibt: ein zweistuendiger Termin
     // bleibt zweistuendig, auch wenn er sechzehn Tage weiter hinten anfaengt.
+    // Eine Regel, die kein einziges Vorkommen hat, wird nicht gespeichert: sie
+    // waere ein Termin, den niemand je sieht, mit einem DTSTART, das nicht auf
+    // ihr liegt.
+    if (!hasAnyOccurrence(vStart.value, vRrule.value)) {
+      return res.status(400).json({
+        error: 'recurrence_rule: the rule has no occurrence on or after the start date.',
+        code: 400,
+      });
+    }
     const gezogenerStart = seriesStartFor(vStart.value, vRrule.value);
     const versatzMs = gezogenerStart === vStart.value
       ? 0
@@ -329,21 +338,39 @@ router.put('/:id', async (req, res) => {
       all_day, location, color: colorVal, recurrence_rule,
     } = req.body;
 
-    // AUCH BEIM BEARBEITEN (#960). Der POST-Pfad zog den Serienstart schon, der
-    // PUT-Pfad nicht - wer die Wahl an einem BESTEHENDEN Termin ankreuzt, haette
-    // damit weiterhin ein DTSTART bekommen, das nicht auf seiner Regel liegt.
-    // Gerechnet wird gegen die Regel, die NACH diesem Aufruf gilt, und gegen den
-    // Start, der nach ihm gilt: beides kann in derselben Anfrage neu kommen.
-    const regelDanach = recurrence_rule !== undefined ? recurrence_rule : event.recurrence_rule;
-    const startDanach = rohStart !== undefined ? rohStart : event.start_datetime;
-    const gezogen = seriesStartFor(startDanach, regelDanach);
+    // AUCH BEIM BEARBEITEN (#960), ABER NUR WENN JEMAND SIE ANFASST. Der
+    // POST-Pfad zog den Serienstart schon, der PUT-Pfad nicht - wer die Wahl an
+    // einem BESTEHENDEN Termin ankreuzt, haette weiterhin ein DTSTART bekommen,
+    // das nicht auf seiner Regel liegt.
+    //
+    // BEI JEDEM PUT ZU ZIEHEN WAERE ABER FALSCH: eine aus einem Fremdkalender
+    // eingelesene Serie darf einen absichtlich unsynchronisierten Start haben,
+    // und ein Titel-Edit haette sie stillschweigend verschoben - gegen genau die
+    // Wortlaut-Regel, auf die sich dieser PR sonst beruft (#756). Normalisiert
+    // wird deshalb nur, wenn Regel oder Start in DIESER Anfrage stehen.
+    //
+    // `null` heisst dabei "nicht anfassen", nicht "leer": der Validator laesst
+    // es durch, und das UPDATE unten behandelt es ueber COALESCE ebenso.
+    const regelGesetzt = recurrence_rule !== undefined && recurrence_rule !== null;
+    const startGesetzt = rohStart !== undefined && rohStart !== null;
+    const regelDanach = regelGesetzt ? recurrence_rule : event.recurrence_rule;
+    const startDanach = startGesetzt ? rohStart : event.start_datetime;
+    if ((regelGesetzt || startGesetzt) && !hasAnyOccurrence(startDanach, regelDanach)) {
+      return res.status(400).json({
+        error: 'recurrence_rule: the rule has no occurrence on or after the start date.',
+        code: 400,
+      });
+    }
+    const gezogen = (regelGesetzt || startGesetzt)
+      ? seriesStartFor(startDanach, regelDanach)
+      : startDanach;
     const versatzMs = gezogen === startDanach
       ? 0
       : Date.parse(`${gezogen.slice(0, 10)}T00:00:00Z`) - Date.parse(`${String(startDanach).slice(0, 10)}T00:00:00Z`);
     // Nur setzen, wenn der Aufrufer das Feld ueberhaupt geschickt hat oder das
     // Ziehen etwas geaendert hat - sonst bliebe COALESCE wirkungslos.
-    const start_datetime = rohStart !== undefined || versatzMs ? gezogen : undefined;
-    const ende = rohEnde !== undefined ? rohEnde : event.end_datetime;
+    const start_datetime = startGesetzt || versatzMs ? gezogen : undefined;
+    const ende = rohEnde !== undefined && rohEnde !== null ? rohEnde : event.end_datetime;
     const end_datetime = versatzMs && ende ? verschiebeDatumsteil(ende, versatzMs) : rohEnde;
 
     // `color` ueberhaupt mitgeschickt? Nur dann wird die Spalte angefasst - der

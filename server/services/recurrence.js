@@ -522,6 +522,24 @@ export function rruleLine(rule) {
  * @param {string} rrule
  * @returns {string} derselbe Tag, wenn er passt - sonst der naechste, der passt
  */
+/**
+ * Hat diese Serie ueberhaupt ein Vorkommen?
+ *
+ * `FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120` ab dem 15. Januar ist eine Regel,
+ * die der Validator annimmt und die trotzdem leer ist: der erste Monatsletzte
+ * liegt hinter dem UNTIL. `seriesStartFor` kann daran nichts richten und laesst
+ * den Start stehen - die Routen lehnen die Eingabe deshalb ab, statt eine Serie
+ * zu speichern, die nie stattfindet und deren DTSTART nicht auf ihrer Regel
+ * liegt.
+ */
+function hasAnyOccurrence(dateKey, rrule) {
+  if (!dateKey || !rrule) return true;
+  const tag = String(dateKey).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tag)) return true;
+  if (parseRRule(rrule)?.bymonthday !== -1) return true;
+  return seriesStartFor(tag, rrule) !== tag || matchesRRuleByday(tag, rrule);
+}
+
 function seriesStartFor(dateKey, rrule) {
   if (!dateKey || !rrule) return dateKey;
   const tag = String(dateKey).slice(0, 10);
@@ -559,5 +577,5 @@ function seriesStartFor(dateKey, rrule) {
 
 export {
   parseRRule, nextOccurrence, nextOccurrenceAfter, nextDueAfterCompletion, matchesRRuleByday,
-  seriesStartFor,
+  seriesStartFor, hasAnyOccurrence,
 };
