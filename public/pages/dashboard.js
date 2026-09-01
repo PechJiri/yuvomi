@@ -5,7 +5,7 @@
  */
 
 import { api, auth } from '/api.js';
-import { canSeeWidget } from '/permissions.js';
+import { canSeeWidget, moduleAccess } from '/permissions.js';
 import { t, formatDate, formatTime, timeSuffix, getLocale, getNumberFormat } from '/i18n.js';
 import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
 import { resolveEventColor } from '/utils/event-color.js';
@@ -22,11 +22,19 @@ import { openModal, closeModal, confirmModal } from '/components/modal.js';
 import { renderAvatarStack } from '/components/user-multi-select.js';
 import { isSoloHousehold } from '/utils/household.js';
 import {
-  WIDGET_IDS, WIDGET_SIZE_PRESETS, WIDGET_SIZE_OPTIONS, DEFAULT_WIDGET_CONFIG,
+  WIDGET_SIZE_PRESETS, WIDGET_SIZE_OPTIONS,
   COCKPIT_COVERED_WIDGETS,
-  nearestPreset, normalizeDashboardConfig, isUserOrderedConfig, sameWidgetConfig,
+  nearestPreset, isUserOrderedConfig, sameWidgetConfig,
   dashboardQuery,
 } from '/utils/dashboard-widgets.js';
+import {
+  allWidgetIds,
+  buildDefaultWidgetConfig,
+  normalizeDashboardConfigWithExtensions,
+  isExtensionWidget,
+  getExtensionWidgetMeta,
+} from '/utils/extension-widgets.js';
+import { widgetDisplayLabel, optionFieldLabel } from '/utils/extension-i18n.js';
 import { whoMark } from '/utils/seal-pair.js';
 import { MODULE_ICON, moduleIconHTML } from '/nav-icons.js';
 import { enterWallMode, exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
@@ -271,6 +279,50 @@ function maybeHintCustomize(container) {
 // Wieder-Einblenden-Leiste dieselbe Sichtbarkeitsregel teilen.
 const MODULE_FOR_WIDGET = { tasks: 'tasks', calendar: 'calendar', shopping: 'shopping', meals: 'meals', notes: 'notes', birthdays: 'birthdays', budget: 'budget', rewards: 'rewards', health: 'health', cycle: 'health', housekeeping: 'housekeeping' };
 
+const WIDGETS_WITH_OPTIONS = new Set(['calendar', 'tasks']);
+
+const _extensionWidgetModules = new Map();
+
+function widgetHasOptions(id) {
+  if (WIDGETS_WITH_OPTIONS.has(id)) return true;
+  const meta = getExtensionWidgetMeta(id);
+  return Boolean(meta?.optionsSchema && Object.keys(meta.optionsSchema).length);
+}
+
+async function mountExtensionWidgets(shell, cfg, user) {
+  const mounts = shell.querySelectorAll('[data-extension-widget-mount]');
+  await Promise.all([...mounts].map(async (mount) => {
+    const wrapper = mount.closest('[data-widget-id]');
+    const id = wrapper?.dataset?.widgetId;
+    if (!id) return;
+    const w = cfg.find((item) => item.id === id);
+    const meta = getExtensionWidgetMeta(id);
+    if (!meta?.entry) return;
+    try {
+      let mod = _extensionWidgetModules.get(meta.entry);
+      if (!mod) {
+        mod = await import(/* webpackIgnore: true */ meta.entry);
+        _extensionWidgetModules.set(meta.entry, mod);
+      }
+      mount.replaceChildren();
+      if (typeof mod.renderWidget !== 'function') {
+        throw new Error('renderWidget export missing');
+      }
+      await mod.renderWidget(mount, {
+        size: w?.size,
+        options: w?.options ?? {},
+        user,
+      });
+      if (window.lucide) window.lucide.createIcons({ el: mount });
+    } catch (err) {
+      console.error(`[dashboard] Extension widget "${id}" konnte nicht gerendert werden`, err);
+      mount.replaceChildren();
+      mount.insertAdjacentHTML('afterbegin', renderWidgetError(id));
+      if (window.lucide) window.lucide.createIcons({ el: mount });
+    }
+  }));
+}
+
 /* DER COUNTDOWN IST EIN WIDGET, DAS ES ERST GIBT, WENN JEMAND ETWAS MARKIERT
  * HAT (#647). Er hat keine eigene Seite und keinen eigenen Bestand: seine
  * Kachel zeigt Termine und Aufgaben, die jemand ausdrücklich dafür markiert
@@ -315,6 +367,13 @@ function visibleCountdowns(items) {
 }
 
 function isWidgetModuleEnabled(id) {
+  if (isExtensionWidget(id)) {
+    const meta = getExtensionWidgetMeta(id);
+    if (!meta) return false;
+    if (meta.permissionModuleKey && moduleAccess(meta.permissionModuleKey) === 'none') return false;
+    if (!canSeeWidget(id)) return false;
+    return true;
+  }
   const mod = MODULE_FOR_WIDGET[id];
   if (mod && window.yuvomi?.isModuleDisabled(mod)) return false;
   // Rollen-/Mitglied-Rechte (#467): serverseitig gesperrtes Widget (bzw. Widget
@@ -338,6 +397,8 @@ function setHtml(element, html) {
 }
 
 function widgetLabel(id) {
+  const ext = getExtensionWidgetMeta(id);
+  if (ext) return widgetDisplayLabel(ext);
   const map = {
     tasks:    () => t('nav.tasks'),
     calendar: () => t('nav.calendar'),
@@ -367,6 +428,8 @@ function widgetLabel(id) {
  * der vier Dashboard-eigenen Karten (Wetter, Uhr, Kennzahlen, Countdown), die
  * keine Module sind, aber dieselbe Absender-Rolle im Kopf tragen. */
 function widgetIcon(id) {
+  const ext = getExtensionWidgetMeta(id);
+  if (ext?.icon) return ext.icon;
   return MODULE_ICON[id] ?? MODULE_ICON.dashboard;
 }
 
@@ -2366,7 +2429,6 @@ function renderSizeMiniGridCells(size) {
  * Lehre aus dem alten Groessen-Select, Critique P1). Der Knopf oeffnet, was
  * Platz braucht.
  */
-const WIDGETS_WITH_OPTIONS = new Set(['calendar', 'tasks']);
 
 /* Das Etikett einer Kategorie - dieselbe Regel wie im Aufgabenmodul
  * (`catLabel` in pages/tasks.js): die mitgelieferten Kategorien tragen einen
@@ -2390,8 +2452,83 @@ async function loadTaskCategories() {
   return taskCategoriesCache;
 }
 
+/** Generic options dialog for extension widgets (optionsSchema from module.json). */
+async function openExtensionWidgetOptions(id, meta, current = {}) {
+  const schema = meta.optionsSchema || {};
+  const moduleId = meta.moduleId || String(id).split(':')[0];
+  const fields = Object.entries(schema).map(([key, field]) => {
+    const val = current[key] ?? field.default ?? '';
+    const title = esc(optionFieldLabel(moduleId, field, key));
+    if (field.type === 'boolean') {
+      return `<label class="widget-options__choice">
+        <input type="checkbox" name="opt-${esc(key)}" ${val ? 'checked' : ''}>
+        <span>${title}</span>
+      </label>`;
+    }
+    if (field.type === 'number') {
+      return `<label class="form-group"><span class="form-label">${title}</span>
+        <input class="form-input" type="number" name="opt-${esc(key)}" value="${esc(String(val))}"></label>`;
+    }
+    if (Array.isArray(field.enum) && field.enum.length) {
+      return `<label class="form-group"><span class="form-label">${title}</span>
+        <select class="form-input" name="opt-${esc(key)}">
+          ${field.enum.map((opt) => `<option value="${esc(opt)}" ${String(val) === opt ? 'selected' : ''}>${esc(opt)}</option>`).join('')}
+        </select></label>`;
+    }
+    return `<label class="form-group"><span class="form-label">${title}</span>
+      <input class="form-input" type="text" name="opt-${esc(key)}" value="${esc(String(val ?? ''))}"></label>`;
+  }).join('');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    openModal({
+      title: t('dashboard.optionsFor', { widget: widgetLabel(id) }),
+      size: 'sm',
+      content: `
+        <form id="widget-options-form" class="widget-options">
+          ${fields || `<p class="widget-options__hint">${t('dashboard.optionExtensionEmpty')}</p>`}
+          <div class="modal-actions">
+            <button type="button" class="btn btn--secondary" data-action="cancel">${t('common.cancel')}</button>
+            <button type="submit" class="btn btn--primary">${t('common.save')}</button>
+          </div>
+        </form>`,
+      onClose: () => finish(null),
+      onSave(panel) {
+        panel.querySelector('[data-action="cancel"]')?.addEventListener('click', () => closeModal({ force: true }));
+        panel.querySelector('#widget-options-form')?.addEventListener('submit', (event) => {
+          event.preventDefault();
+          const next = {};
+          for (const [key, field] of Object.entries(schema)) {
+            const el = panel.querySelector(`[name="opt-${CSS.escape(key)}"]`);
+            if (!el) continue;
+            if (field.type === 'boolean') {
+              if (el.checked) next[key] = true;
+            } else if (field.type === 'number') {
+              const num = Number(el.value);
+              if (Number.isFinite(num)) next[key] = num;
+            } else {
+              const text = el.value.trim();
+              if (text) next[key] = text;
+            }
+          }
+          finish(Object.keys(next).length ? next : {});
+          closeModal({ force: true });
+        });
+      },
+    });
+  });
+}
+
 /** Der Optionen-Dialog eines Widgets. Aufloesen mit den neuen Optionen oder null. */
 async function openWidgetOptions(id, current = {}) {
+  const extMeta = getExtensionWidgetMeta(id);
+  if (extMeta?.optionsSchema) return openExtensionWidgetOptions(id, extMeta, current);
+
   const options = { ...current };
   const categories = id === 'tasks' ? await loadTaskCategories() : [];
 
@@ -2512,7 +2649,7 @@ function renderWidgetCustomizeControls(w, index = 0, total = 1) {
       <div class="widget-edit-controls__size" role="group" aria-label="${t('dashboard.customizeSizeFor', { widget: widgetLabel(w.id) })}">
         ${sizeButtons}
       </div>
-      ${WIDGETS_WITH_OPTIONS.has(w.id) ? `
+      ${widgetHasOptions(w.id) ? `
       <button type="button" class="widget-edit-controls__options" data-widget-options="${esc(w.id)}"
               aria-label="${esc(t('dashboard.optionsFor', { widget: widgetLabel(w.id) }))}"
               title="${esc(t('dashboard.optionsFor', { widget: widgetLabel(w.id) }))}">
@@ -2530,7 +2667,7 @@ function renderWidgetCustomizeControls(w, index = 0, total = 1) {
 // Klick zurückholen — so ist der Inline-Editor allein vollständig (Zeigen +
 // Verstecken + Größe + Reihenfolge) und das frühere zweite Editor-Modal entfällt.
 function renderHiddenWidgetsTray(cfg, glanceHidden = false) {
-  const hidden = cfg.filter((w) => !w.visible && WIDGET_IDS.includes(w.id) && isWidgetModuleEnabled(w.id));
+  const hidden = cfg.filter((w) => !w.visible && allWidgetIds().includes(w.id) && isWidgetModuleEnabled(w.id));
   if (!hidden.length && !glanceHidden) return '';
   // Das Kopfband steht mit in dieser Leiste, obwohl es keine Rasterkachel ist:
   // ausgeblendet waere es sonst nur ueber „Zuruecksetzen" zurueckzuholen.
@@ -2556,7 +2693,7 @@ function renderHiddenWidgetsTray(cfg, glanceHidden = false) {
         <span class="widget-restore-chip__label">${widgetLabel(w.id)}</span>
         <i data-lucide="plus" class="widget-restore-chip__add" aria-hidden="true"></i>
       </button>
-      ${WIDGETS_WITH_OPTIONS.has(w.id) ? `
+      ${widgetHasOptions(w.id) ? `
       <button type="button" class="widget-restore-chip__options" data-widget-options="${esc(w.id)}"
               aria-label="${esc(t('dashboard.optionsFor', { widget: widgetLabel(w.id) }))}"
               title="${esc(t('dashboard.optionsFor', { widget: widgetLabel(w.id) }))}">
@@ -2600,19 +2737,17 @@ function renderDashboardLayout(cfg, data, weather, currency, { editing = false, 
   };
 
   const tiles = cfg
-    .filter((w) => w.visible && widgetById[w.id] && isWidgetModuleEnabled(w.id))
+    .filter((w) => w.visible && isWidgetModuleEnabled(w.id) && (widgetById[w.id] || isExtensionWidget(w.id)))
     .map((w, index, arr) => {
-      // Widget-weise Fehler-Isolation: wirft ein einzelner Renderer (kaputtes oder
-      // fehlendes Daten-Slice), fällt nur dieses Widget auf eine ruhige Inline-
-      // Fehlerkachel zurück — die übrigen Widgets und das Cockpit bleiben nutzbar,
-      // statt dass ein Payload-Defekt das ganze Grid killt (Critique P2).
       let html;
       try {
-        // Die Groessenklasse geht an den Renderer: eine Listenkachel entscheidet
-        // damit ihre Zeilenzahl (listRowCap). Renderer, die sie nicht brauchen,
-        // ignorieren das Argument - eine zweite Dispatch-Tabelle fuer „die mit
-        // Groesse" waere beim naechsten Widget wieder unvollstaendig.
-        html = widgetById[w.id](w.size);
+        if (isExtensionWidget(w.id)) {
+          html = `<div class="widget extension-widget-mount" data-extension-widget-mount="1">
+            <div class="widget__empty">${esc(t('common.loading'))}</div>
+          </div>`;
+        } else {
+          html = widgetById[w.id](w.size);
+        }
       } catch (err) {
         console.error(`[dashboard] Widget "${w.id}" konnte nicht gerendert werden`, err);
         html = renderWidgetError(w.id);
@@ -2655,7 +2790,7 @@ function renderDashboardLayout(cfg, data, weather, currency, { editing = false, 
  * Abmelden verworfen werden muss - die Begruendung steht dort. */
 
 function renderDashboardSkeleton() {
-  const tiles = layoutHintSizes(DEFAULT_WIDGET_CONFIG.filter((w) => w.visible).map((w) => w.size))
+  const tiles = layoutHintSizes(buildDefaultWidgetConfig().filter((w) => w.visible).map((w) => w.size))
     .map((size) => `<div class="widget-wrapper ${widgetSizeClass(size)}">${skeletonWidget(3)}</div>`)
     .join('');
   return `
@@ -3813,8 +3948,8 @@ export async function render(container, { user }) {
   setCountdownAvailability([]);
   let weather      = null;
   let weatherAutoLocate = false;
-  let widgetConfig = DEFAULT_WIDGET_CONFIG;
-  let savedWidgetConfig = DEFAULT_WIDGET_CONFIG;
+  let widgetConfig = buildDefaultWidgetConfig();
+  let savedWidgetConfig = buildDefaultWidgetConfig();
   // Das Kopfband „Heute auf einen Blick" ist kein Rasterkachel, folgt aber
   // derselben Anpassen-Grammatik wie die Widgets: ausblenden am Block, zurueck
   // ueber die Chip-Leiste, und es faehrt in denselben Speicher-, Abbruch- und
@@ -3861,7 +3996,7 @@ export async function render(container, { user }) {
     setCountdownAvailability(data?.countdowns);
     weather      = weatherRes.data ?? null;
     weatherAutoLocate = Boolean(prefsRes.data?.weather_user?.auto_locate ?? prefsRes.data?.weather_auto_locate);
-    widgetConfig = normalizeDashboardConfig(prefsRes.data?.dashboard_widgets ?? DEFAULT_WIDGET_CONFIG);
+    widgetConfig = normalizeDashboardConfigWithExtensions(prefsRes.data?.dashboard_widgets ?? buildDefaultWidgetConfig());
     savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
     /* WIDGET-OPTIONEN KOMMEN EINEN SCHRITT ZU SPAET (#814): die Uebersicht und
      * die Praeferenzen laufen absichtlich parallel los, aber welche Filter
@@ -4021,7 +4156,7 @@ export async function render(container, { user }) {
     const previousQuery = dashboardQuery(savedWidgetConfig);
     try {
       const res = await api.put('/preferences', { dashboard_widgets: null, dashboard_today_glance: null });
-      widgetConfig = normalizeDashboardConfig(res.data?.dashboard_widgets ?? DEFAULT_WIDGET_CONFIG);
+      widgetConfig = normalizeDashboardConfigWithExtensions(res.data?.dashboard_widgets ?? buildDefaultWidgetConfig());
       glanceVisible = res.data?.dashboard_today_glance !== false;
     } catch {
       window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
@@ -4314,6 +4449,7 @@ export async function render(container, { user }) {
     container.querySelector('#dashboard-customize-reset')?.addEventListener('click', resetDashboardConfig, { signal: _fabController.signal });
     container.querySelector('#dashboard-customize-publish')?.addEventListener('click', publishHouseholdDefault, { signal: _fabController.signal });
     wireDashboardEditMode();
+    void mountExtensionWidgets(shell, cfg, user);
   }
 
   rebuildDashboard(widgetConfig);

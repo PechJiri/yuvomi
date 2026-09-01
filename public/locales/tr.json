@@ -264,6 +264,7 @@
         "optionTaskCategories": "Hangi kategoriler?",
         "optionTaskCategoriesHint": "Seçim yapılmazsa genel bakış tüm kategorileri gösterir.",
         "optionTaskCategoriesEmpty": "Henüz kategori yok.",
+        "optionExtensionEmpty": "Bu widget’ın seçeneği yok.",
         "loadErrorSession": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",
         "loadErrorServer": "Sunucu şu anda yanıt vermiyor. Lütfen daha sonra tekrar deneyin.",
         "allWidgetsHidden": "Tüm widget’lar gizli - \"Özelleştir\" ile yeniden gösterin.",

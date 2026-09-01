@@ -264,6 +264,7 @@
         "optionTaskCategories": "Які категорії?",
         "optionTaskCategoriesHint": "Без вибору огляд показує всі категорії.",
         "optionTaskCategoriesEmpty": "Категорій поки немає.",
+        "optionExtensionEmpty": "У цього віджета немає параметрів.",
         "loadErrorSession": "Ваш сеанс завершився. Будь ласка, увійдіть знову.",
         "loadErrorServer": "Сервер зараз не відповідає. Спробуйте пізніше.",
         "allWidgetsHidden": "Усі віджети приховані - увімкніть їх через «Налаштувати».",

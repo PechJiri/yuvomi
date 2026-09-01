@@ -264,6 +264,7 @@
         "optionTaskCategories": "कौन-सी श्रेणियाँ?",
         "optionTaskCategoriesHint": "कुछ न चुनने पर डैशबोर्ड सभी श्रेणियाँ दिखाता है।",
         "optionTaskCategoriesEmpty": "अभी कोई श्रेणी नहीं है।",
+        "optionExtensionEmpty": "इस विजेट में कोई विकल्प नहीं है।",
         "loadErrorSession": "आपका सत्र समाप्त हो गया है. कृपया फिर से साइन इन करें.",
         "loadErrorServer": "सर्वर अभी जवाब नहीं दे रहा है. कृपया बाद में पुनः प्रयास करें.",
         "allWidgetsHidden": "सभी विजेट छिपे हैं - उन्हें \"अनुकूलित करें\" से फिर से दिखाएँ.",

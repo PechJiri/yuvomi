@@ -276,6 +276,7 @@
         "optionTaskCategories": "Kategori yang mana?",
         "optionTaskCategoriesHint": "Tanpa pilihan, ikhtisar menampilkan semua kategori.",
         "optionTaskCategoriesEmpty": "Belum ada kategori.",
+        "optionExtensionEmpty": "Widget ini tidak memiliki opsi.",
         "loadErrorSession": "Sesi Anda telah berakhir. Harap masuk kembali.",
         "loadErrorServer": "Server sedang tidak merespons. Coba lagi nanti.",
         "allWidgetsHidden": "Semua widget disembunyikan - tampilkan lagi melalui „Sesuaikan\".",

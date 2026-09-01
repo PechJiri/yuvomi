@@ -15,6 +15,7 @@ import {
 } from '/settings/module-order.js';
 import { MODULE_ICON, moduleIconHTML } from '/nav-icons.js';
 import { moduleAccentVar } from '/utils/module-accent.js';
+import { moduleDisplayLabel } from '/utils/extension-i18n.js';
 
 /**
  * Blatt: Einstellungen -> Module -> Aktive Module (adminOnly)
@@ -77,7 +78,7 @@ function buildRows(preferences, thirdPartyModules) {
       type: 'third-party',
       id: module.id,
       section: NAV_SECTION.customModules,
-      label: module.menu?.label || module.name || module.id,
+      label: moduleDisplayLabel(module),
       icon: module.menu?.icon || module.icon || 'box',
       enabled: module.enabled && module.status === 'enabled',
       status: module.menu?.show === false ? t('settings.modulesMenuDisabled') : thirdPartyStatusLabel(module),

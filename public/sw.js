@@ -122,6 +122,8 @@ const APP_SHELL = [
   '/utils/document-preview.js',
   '/utils/event-color.js',
   '/utils/empty-state.js',
+  '/utils/extension-i18n.js',
+  '/utils/extension-widgets.js',
   '/utils/fab.js',
   '/utils/folder-tree.js',
   '/utils/health-activity.js',

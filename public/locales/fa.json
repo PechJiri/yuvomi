@@ -276,6 +276,7 @@
         "optionTaskCategories": "کدام دسته‌ها؟",
         "optionTaskCategoriesHint": "بدون انتخاب، نمای کلی همه دسته‌ها را نشان می‌دهد.",
         "optionTaskCategoriesEmpty": "هنوز دسته‌ای وجود ندارد.",
+        "optionExtensionEmpty": "این ویجت گزینه‌ای ندارد.",
         "loadErrorSession": "نشست شما منقضی شده است. لطفاً دوباره وارد شوید.",
         "loadErrorServer": "سرور در حال حاضر پاسخ نمی‌دهد. لطفاً بعداً دوباره تلاش کنید.",
         "allWidgetsHidden": "همه ابزارک‌ها پنهان شدند - از طریق «سفارشی‌سازی» دوباره نمایش دهید.",

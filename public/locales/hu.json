@@ -264,6 +264,7 @@
         "optionTaskCategories": "Mely kategóriák?",
         "optionTaskCategoriesHint": "Választás nélkül az áttekintés minden kategóriát mutat.",
         "optionTaskCategoriesEmpty": "Még nincsenek kategóriák.",
+        "optionExtensionEmpty": "Ennek a widgetnek nincsenek beállításai.",
         "loadErrorSession": "A munkamenet lejárt. Jelentkezz be újra.",
         "loadErrorServer": "A szerver most nem válaszol. Próbáld újra később.",
         "allWidgetsHidden": "Minden widget rejtve - kapcsold vissza a „Testreszabás\" alatt.",

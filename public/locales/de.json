@@ -276,6 +276,7 @@
         "optionTaskCategories": "Welche Kategorien?",
         "optionTaskCategoriesHint": "Ohne Auswahl zeigt die Übersicht alle Kategorien.",
         "optionTaskCategoriesEmpty": "Es gibt noch keine Kategorien.",
+        "optionExtensionEmpty": "Dieses Widget hat keine Optionen.",
         "loadErrorSession": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.",
         "loadErrorServer": "Der Server antwortet gerade nicht. Bitte später erneut versuchen.",
         "allWidgetsHidden": "Alle Widgets ausgeblendet - über „Anpassen\" wieder einblenden.",

@@ -13651,8 +13651,10 @@ test('ein Modul fuehrt EIN Zeichen, und die Zuordnung steht an einer Stelle', ()
   //     (settings/module-order.js). Jede einzelne ist hier benannt, weil jede
   //     einzeln zurueckkommen kann.
   const dashboard = read('../public/pages/dashboard.js');
-  assert.match(dashboard, /function widgetIcon\(id\)\s*\{\s*\n\s*return MODULE_ICON\[id\]/,
-    'widgetIcon leitet aus MODULE_ICON ab, statt eine eigene Karte zu fuehren');
+  // Core-Widgets: eine Quelle (MODULE_ICON). Extension-Widgets: Icon aus dem
+  // Manifest (capabilities.widgets[].icon) - keine zweite Kern-Tabelle.
+  assert.match(dashboard, /function widgetIcon\(id\)\s*\{[\s\S]*?getExtensionWidgetMeta\(id\)[\s\S]*?MODULE_ICON\[id\]/,
+    'widgetIcon leitet Core-Widgets aus MODULE_ICON ab und Extension-Widgets aus dem Manifest');
   assert.doesNotMatch(dashboard, /const map = \{ tasks:/,
     'die zweite Modul→Zeichen-Tabelle ist wieder da');
   // Die Widget-Koepfe bekommen ihre WIDGET-ID, nicht einen Icon-Namen - sonst

@@ -9,11 +9,16 @@
  * Fail-open by design: Ohne geladene Rechte gilt Vollzugriff (leere Maps →
  * Standard 'write'/'allow'), passend zum serverseitigen Sparse-Modell. Der Server
  * bleibt das Gate, daher ist das clientseitige Default-Offen unkritisch.
+ * Extension-Keys (`ext:{id}`) nutzen dieselben Maps und denselben Default: ein
+ * noch nicht geladener Katalog sperrt nichts, das der Server nicht ohnehin
+ * durchlässt.
  */
 
 // Navigations-/Widget-Modul → Permissions-Modulschlüssel. Muss zu
 // server/permissions.js (PERMISSION_MODULES.navIds) passen. Nicht gelistete
-// Nav-Module (dashboard, settings, third-party) sind nie gesperrt.
+// Nav-Module (dashboard, settings) sind nie gesperrt. third-party-{id} ist
+// gated nur wenn das Modul permissionModuleKey deklariert hat und
+// setExtensionNavMap die Karte injiziert hat — sonst fail-open wie zuvor.
 const NAV_TO_MODULE = Object.freeze({
   calendar: 'calendar',
   schedule: 'schedule',
@@ -32,6 +37,24 @@ const NAV_TO_MODULE = Object.freeze({
   rewards: 'rewards',
   health: 'health',
 });
+
+/** third-party-{id} → ext:{id} */
+let _extensionNavMap = Object.freeze({});
+
+/** Übernimmt die Nav-Zuordnung aus enabled extension modules (runtime catalog). */
+export function setExtensionNavMap(modules) {
+  const map = {};
+  for (const mod of Array.isArray(modules) ? modules : []) {
+    if (mod?.capabilities?.permissionModuleKey) {
+      map[`third-party-${mod.id}`] = mod.capabilities.permissionModuleKey;
+    }
+  }
+  _extensionNavMap = Object.freeze(map);
+}
+
+function navPermissionKey(navModule) {
+  return NAV_TO_MODULE[navModule] || _extensionNavMap[navModule] || null;
+}
 
 let _perms = { admin: false, modules: {}, widgets: {} };
 
@@ -68,14 +91,14 @@ export function moduleAccess(moduleKey) {
 /** Darf ein Navigations-Modul (nav id) überhaupt geöffnet werden? */
 export function canAccessNavModule(navModule) {
   if (_perms.admin) return true;
-  const key = NAV_TO_MODULE[navModule];
-  if (!key) return true; // nicht gated
+  const key = navPermissionKey(navModule);
+  if (!key) return true;
   return (_perms.modules?.[key] ?? 'write') !== 'none';
 }
 
 /** Effektiver Zugriff für ein Navigations-Modul (write, wenn nicht gated). */
 export function navModuleAccess(navModule) {
-  const key = NAV_TO_MODULE[navModule];
+  const key = navPermissionKey(navModule);
   if (!key) return 'write';
   return moduleAccess(key);
 }

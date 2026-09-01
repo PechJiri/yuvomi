@@ -264,6 +264,7 @@
         "optionTaskCategories": "¿Qué categorías?",
         "optionTaskCategoriesHint": "Si no eliges ninguna, el panel muestra todas las categorías.",
         "optionTaskCategoriesEmpty": "Todavía no hay categorías.",
+        "optionExtensionEmpty": "Este widget no tiene opciones.",
         "loadErrorSession": "Tu sesión ha caducado. Inicia sesión de nuevo.",
         "loadErrorServer": "El servidor no responde en este momento. Inténtalo más tarde.",
         "allWidgetsHidden": "Todos los widgets están ocultos: vuelve a activarlos en «Personalizar».",

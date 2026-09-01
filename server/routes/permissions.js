@@ -11,6 +11,7 @@ import express from 'express';
 import * as db from '../db.js';
 import { createLogger } from '../logger.js';
 import { requireAdmin } from '../auth.js';
+import { listModules } from '../services/modules.js';
 import {
   permissionCatalog,
   getSubjectPermissions,
@@ -28,8 +29,9 @@ router.use(requireAdmin);
  * GET /api/v1/permissions/catalog
  * Liefert Module, Widgets, Rollen und die Mitgliederliste für die Rechte-Matrix.
  */
-router.get('/catalog', (req, res) => {
+router.get('/catalog', async (req, res) => {
   try {
+    await listModules({ admin: true });
     const catalog = permissionCatalog();
     const members = db.get().prepare(`
       SELECT id, display_name, username, avatar_color, avatar_data, role, family_role,

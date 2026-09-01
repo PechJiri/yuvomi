@@ -20,6 +20,7 @@ import {
 } from '/settings/module-order.js';
 import { MODULE_ICON, moduleIconHTML } from '/nav-icons.js';
 import { moduleAccentVar } from '/utils/module-accent.js';
+import { moduleDisplayLabel } from '/utils/extension-i18n.js';
 import { emptyStateHTML } from '/utils/empty-state.js';
 
 // Baut die geordnete Liste der Navigations-Rows: gesperrte, gewöhnliche, Kitchen
@@ -85,7 +86,7 @@ function buildRows(preferences, thirdPartyModules) {
       id: module.id,
       orderId: `third-party-${module.id}`,
       section: NAV_SECTION.customModules,
-      label: module.menu?.label || module.name || module.id,
+      label: moduleDisplayLabel(module),
       icon: module.menu?.icon || module.icon || 'box',
       enabled: module.enabled && module.status === 'enabled',
       status: menuHidden ? t('settings.modulesMenuDisabled') : thirdPartyStatusLabel(module),

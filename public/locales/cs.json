@@ -264,6 +264,7 @@
         "optionTaskCategories": "Které kategorie?",
         "optionTaskCategoriesHint": "Bez výběru zobrazí přehled všechny kategorie.",
         "optionTaskCategoriesEmpty": "Zatím tu nejsou žádné kategorie.",
+        "optionExtensionEmpty": "Tento widget nemá žádné možnosti.",
         "loadErrorSession": "Vaše relace vypršela. Přihlaste se prosím znovu.",
         "loadErrorServer": "Server právě neodpovídá. Zkuste to prosím později.",
         "allWidgetsHidden": "Všechny widgety jsou skryté - znovu je zapněte přes „Přizpůsobit\".",

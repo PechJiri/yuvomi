@@ -264,6 +264,7 @@
         "optionTaskCategories": "أي الفئات؟",
         "optionTaskCategoriesHint": "بدون اختيار تعرض اللوحة كل الفئات.",
         "optionTaskCategoriesEmpty": "لا توجد فئات بعد.",
+        "optionExtensionEmpty": "لا توجد خيارات لهذا العنصر.",
         "loadErrorSession": "انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.",
         "loadErrorServer": "الخادم لا يستجيب حاليًا. حاول مرة أخرى لاحقًا.",
         "allWidgetsHidden": "جميع العناصر مخفية - أعد إظهارها عبر «تخصيص».",

@@ -264,6 +264,7 @@
         "optionTaskCategories": "Những danh mục nào?",
         "optionTaskCategoriesHint": "Nếu không chọn gì, trang tổng quan hiển thị mọi danh mục.",
         "optionTaskCategoriesEmpty": "Chưa có danh mục nào.",
+        "optionExtensionEmpty": "Widget này không có tùy chọn.",
         "loadErrorSession": "Phiên của bạn đã hết hạn. Vui lòng đăng nhập lại.",
         "loadErrorServer": "Máy chủ hiện không phản hồi. Vui lòng thử lại sau.",
         "allWidgetsHidden": "Tất cả widget đã ẩn - bật lại qua \"Tùy chỉnh\".",
