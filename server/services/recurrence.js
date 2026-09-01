@@ -110,7 +110,9 @@ function parseUntilDate(str) {
  *        (und bei YEARLY den Monat), wenn die Regel selbst keinen nennt.
  * @returns {string|null}      - Nächstes Datum als YYYY-MM-DD oder null (Ende der Serie)
  */
-function nextOccurrence(baseDateStr, rrule, { anchor = null, fromArbitraryDate = false } = {}) {
+function nextOccurrence(baseDateStr, rrule, {
+  anchor = null, fromArbitraryDate = false, utcDiffersFromLocal = false,
+} = {}) {
   const parsed = parseRRule(rrule);
   if (!parsed || !baseDateStr) return null;
 
@@ -191,12 +193,21 @@ function nextOccurrence(baseDateStr, rrule, { anchor = null, fromArbitraryDate =
     // Monate, erledigt am 10. Maerz" den 31. Maerz machen statt des 30. Juni.
     const year  = base.getUTCFullYear();
     let   month = base.getUTCMonth() + interval;
-    if (parsed.bymonthday === -1 && !fromArbitraryDate) {
+    if (parsed.bymonthday === -1 && !fromArbitraryDate && !utcDiffersFromLocal) {
       const letzterImBasismonat = new Date(Date.UTC(year, base.getUTCMonth() + 1, 0)).getUTCDate();
       if (base.getUTCDate() < letzterImBasismonat) month = base.getUTCMonth();
     }
     const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    const targetDay = monthDayFor(parsed.bymonthday, lastDay, anchorDay ?? base.getUTCDate());
+    // BEI EINER SERIE MIT EIGENER ZONE WIRD DIE ANGABE GAR NICHT ANGEWANDT.
+    // Sie meint einen LOKALEN Monatsletzten, gerechnet wird hier aber auf
+    // UTC-Tagen - ein Termin am 31. Januar um 20:00 New Yorker Zeit liegt in
+    // UTC am 1. Februar, und die Rechnung machte daraus den 27. Februar lokal.
+    // Ohne sie laeuft die Serie auf ihrem festen UTC-Tag weiter, und der
+    // gleichbleibende Versatz trifft den lokalen Monatsletzten von selbst.
+    // Yuvomis eigene Termine sind davon nicht betroffen: sie tragen keine
+    // fremde Zone, und ihr Start wird beim Speichern auf die Regel gezogen.
+    const wirksam = utcDiffersFromLocal ? null : parsed.bymonthday;
+    const targetDay = monthDayFor(wirksam, lastDay, anchorDay ?? base.getUTCDate());
     next.setTime(Date.UTC(year, month, targetDay));
 
   } else if (freq === 'YEARLY') {

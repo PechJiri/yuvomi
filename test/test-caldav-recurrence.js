@@ -307,8 +307,24 @@ test('eine Serie mit eigener Zone verliert ihr Monatsende nicht', () => {
     start_datetime: '2026-02-01T01:00:00Z', end_datetime: '2026-02-01T02:00:00Z',
     all_day: 0, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
   };
-  const inst = expandRecurringEvents([ev], '2026-01-01', '2026-03-31');
+  // Fenster bis Ende April: der lokale 31. Maerz liegt als UTC-Zeitstempel
+  // bereits im April - genau die Verschiebung, um die es hier geht.
+  const inst = expandRecurringEvents([ev], '2026-01-01', '2026-04-30');
   assert(inst.length >= 3, `die Serie darf nicht leer werden, bekommen ${inst.length}`);
+
+  // UND SIE MUSS LOKAL AUF DEM MONATSLETZTEN LIEGEN, nicht nur vorhanden sein.
+  // Der erste Schutz setzte allein den FILTER aus; die Berechnung rechnete
+  // weiter auf UTC-Tagen und lieferte lokal den 27. Februar, den 30. Maerz,
+  // den 29. April - kein einziger davon ein Monatsletzter. Ein halb
+  // zurueckgedrehter Schutz sieht aus wie einer.
+  const lokal = inst.map((e) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(e.start_datetime)));
+  for (const tag of lokal) {
+    const [y, m, d] = tag.split('-').map(Number);
+    const letzter = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    assert(d === letzter, `${tag} ist lokal nicht der Monatsletzte (${letzter}.)`);
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
