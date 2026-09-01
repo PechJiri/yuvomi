@@ -18,14 +18,24 @@ const DATETIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(?:\.\d+)?)?(?:Z|[+-]
 const COLOR_RE    = /^#[0-9A-Fa-f]{6}$/;
 const MONTH_RE    = /^\d{4}-\d{2}$/;
 // UNTIL und COUNT schließen sich laut RFC 5545 gegenseitig aus (#513).
-// BYMONTHDAY steht zwischen BYDAY und der Endbedingung, weil die Oberflaeche
-// die Regel in dieser Reihenfolge baut. Erlaubt ist AUSSCHLIESSLICH `-1`
-// ("letzter Tag des Monats", #960) - die erste Fassung nahm den vollen
-// RFC-Bereich an, obwohl die Engine ihn nicht bedient: `FREQ=WEEKLY;
-// BYMONTHDAY=15` liess sich speichern und lief danach woechentlich, ohne den
-// angenommenen Monatstag je anzuwenden. Was nicht implementiert ist, wird nicht
-// angenommen.
-const RRULE_RE    = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;BYMONTHDAY=-1)?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
+// Erlaubt ist AUSSCHLIESSLICH `BYMONTHDAY=-1` ("letzter Tag des Monats", #960),
+// und AUSSCHLIESSLICH unter `FREQ=MONTHLY`. Beide Einschraenkungen mussten
+// nachgezogen werden, und die zweite ist die subtilere: als blosse optionale
+// Gruppe NEBEN der Frequenz-Alternation nahm der Ausdruck auch
+// `FREQ=WEEKLY;BYMONTHDAY=-1` an - eine Regel, die `parseRRule` danach
+// ignoriert, weil es die Angabe nur bei MONTHLY liest. Genau das
+// "angenommen, aber nie beachtet", gegen das die Verengung ueberhaupt
+// gebaut wurde, nur eine Ebene hoeher.
+//
+// Deshalb zwei Zweige statt einer gemeinsamen Gruppe: der Monatszweig darf sie
+// tragen, die anderen Frequenzen nicht. Der gemeinsame Schwanz (Endebedingung)
+// steht hinter beiden.
+const RRULE_TAIL  = '(;(UNTIL=\\d{8}(T\\d{6}Z)?|COUNT=\\d{1,4}))?';
+const RRULE_HEAD  = '(;INTERVAL=\\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?';
+const RRULE_RE    = new RegExp(
+  `^(FREQ=MONTHLY${RRULE_HEAD}(;BYMONTHDAY=-1)?${RRULE_TAIL}`
+  + `|FREQ=(DAILY|WEEKLY|YEARLY)${RRULE_HEAD}${RRULE_TAIL})?$`
+);
 
 /**
  * Bereinigt und validiert einen Pflicht-String.

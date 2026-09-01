@@ -239,5 +239,40 @@ test('BYMONTHDAY=-1 trifft ueber den ganzen Weg den letzten Tag', () => {
   }
 });
 
+// --------------------------------------------------------
+// COUNT zaehlt nur, was die Serie wirklich hat (#513, Review zu #960)
+// --------------------------------------------------------
+
+test('COUNT zaehlt keine Tage, die BYDAY herausfiltert', () => {
+  // Ein Tag ausserhalb des BYDAY-Musters ist GAR KEIN Vorkommen der Serie und
+  // darf nicht gegen COUNT zaehlen. Vorher standen BYDAY-Filter und
+  // EXDATE-Pruefung in EINER Bedingung nach dem Hochzaehlen, also verbrauchte
+  // jeder uebersprungene Wochentag ein Vorkommen: der 31.08.2026 ist ein
+  // Montag, der 30.09. ein Mittwoch - und der verbrauchte den zweiten Zaehler,
+  // ohne je zu erscheinen. Vorbestehend, aber durch BYMONTHDAY leichter zu
+  // treffen.
+  const tage = occDays(VCAL('UID:byday-count@x\r\nSUMMARY:Serie\r\n'
+    + 'DTSTART;VALUE=DATE:20260831\r\nDTEND;VALUE=DATE:20260901\r\n'
+    + 'RRULE:FREQ=MONTHLY;BYDAY=MO;COUNT=2'), '2026-01-01', '2027-12-31');
+  assert(tage.length === 2, `zwei Vorkommen erwartet, bekommen ${tage.length}: ${tage.join(', ')}`);
+  assert(tage[0] === '2026-08-31', `erstes: ${tage[0]}`);
+});
+
+test('COUNT zaehlt ein ausgenommenes Vorkommen weiterhin mit (RFC 5545, #513)', () => {
+  // Die Gegenrichtung, damit die Aufteilung nicht die andere Haelfte kippt:
+  // EXDATE nimmt ein Vorkommen aus der ANZEIGE, nicht aus der ZAEHLUNG. Der
+  // occDays-Helfer reicht keine Ausnahmen durch, deshalb hier direkt mit der
+  // Map, die der Leseweg auch benutzt.
+  const ev = {
+    id: 7, start_datetime: '2026-09-01', end_datetime: '2026-09-02',
+    all_day: 1, recurrence_rule: 'FREQ=DAILY;COUNT=3',
+  };
+  const tage = expandRecurringEvents([ev], '2026-01-01', '2027-12-31',
+    new Map([[7, new Set(['2026-09-02'])]])).map((e) => e.start_datetime.slice(0, 10));
+  assert(tage.length === 2, `drei gezaehlt, eines ausgenommen -> zwei sichtbar, bekommen ${tage.join(', ')}`);
+  assert(!tage.includes('2026-09-02'), 'das ausgenommene erscheint nicht');
+  assert(tage.includes('2026-09-03'), 'und das dritte erscheint, statt der Ausnahme zum Opfer zu fallen');
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

@@ -350,4 +350,19 @@ test('der Server nimmt nur BYMONTHDAY=-1 an, nichts Weiteres (#960)', async () =
     assert.ok(!RRULE_RE.test(`FREQ=MONTHLY;BYMONTHDAY=${wert}`),
       `BYMONTHDAY=${wert} darf nicht angenommen werden - die Engine bedient es nicht`);
   }
+
+  // UND NUR UNTER MONTHLY. Die erste Fassung dieses Tests prueste nur
+  // MONTHLY-Regeln und war damit blind fuer den eigentlichen Fehler: die
+  // optionale Gruppe stand NEBEN der Frequenz-Alternation, also nahm der
+  // Ausdruck auch `FREQ=WEEKLY;BYMONTHDAY=-1` an - eine Regel, die parseRRule
+  // danach ignoriert. Genau das "angenommen, aber nie beachtet", gegen das die
+  // Verengung gebaut ist, nur eine Ebene hoeher.
+  for (const freq of ['DAILY', 'WEEKLY', 'YEARLY']) {
+    assert.ok(!RRULE_RE.test(`FREQ=${freq};BYMONTHDAY=-1`),
+      `${freq} kennt die Angabe nicht und darf sie nicht annehmen`);
+    // Gegenprobe, dass die Frequenz selbst weiterhin gilt.
+    assert.ok(RRULE_RE.test(`FREQ=${freq}`), `${freq} bleibt gueltig`);
+  }
+  assert.ok(RRULE_RE.test('FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=-1'),
+    'unter MONTHLY bleibt sie erlaubt, auch neben BYDAY');
 });

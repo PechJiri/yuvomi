@@ -350,12 +350,27 @@ function expandRRULE(vevent, windowStart, windowEnd) {
   const tzAware = wall && wall.date === startDate;
   let current = startDate, iterations = 0;
   const MAX_ITER = 1500;
+  let occurrence = 0;
   while (current <= windowEnd && iterations < MAX_ITER) {
     iterations++;
-    if (maxCount !== null && iterations > maxCount) break;
 
-    if (current >= windowStart && !exdateSet.has(current)
-        && matchesRRuleByday(current, vevent.rrule)) {
+    // BYDAY-FILTER VOR DEM ZAEHLEN, EXDATE DANACH (RFC 5545, #513). Ein Tag
+    // ausserhalb des Musters ist gar kein Vorkommen der Serie und darf nicht
+    // gegen COUNT zaehlen; ein ausgenommenes ist eines und zaehlt mit. Hier
+    // zaehlte bis dahin die SCHLEIFE selbst (`iterations > maxCount`), also
+    // jeder Kandidat - `FREQ=MONTHLY;BYDAY=MO;COUNT=2` lieferte einen Termin
+    // statt zwei. (Dieselbe Aufteilung wie in services/calendar-events.js.)
+    if (!matchesRRuleByday(current, vevent.rrule)) {
+      const skip = nextOccurrence(current, vevent.rrule, { anchor: startDate });
+      if (!skip || skip <= current) break;
+      current = skip;
+      continue;
+    }
+
+    if (maxCount !== null && occurrence >= maxCount) break;
+    occurrence++;
+
+    if (current >= windowStart && !exdateSet.has(current)) {
       const occStart = tzAware ? localToUTC(`${current}T${wall.time}`, vevent.tzid) : current + timeSuffix;
       let occEnd = null;
       if (durationMs !== null) {
