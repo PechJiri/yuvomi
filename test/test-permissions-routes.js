@@ -57,7 +57,7 @@ const ADM = { id: ADMIN, role: 'admin' };
 const MEM = { id: MEMBER, role: 'member' };
 
 // Katalog-abgeleitete gültige Werte (robust gegen künftige Katalog-Änderungen).
-let CATALOG, ROLE, MODULE_KEY, MODULE_LEVEL, WIDGET_ID, WIDGET_LEVEL;
+let CATALOG, ROLE, MODULE_KEY, MODULE_LEVEL, WIDGET_ID, WIDGET_LEVEL, CAPABILITY_KEY;
 test('setup: Katalog liefert Module/Widgets/Rollen/Mitglieder', async () => {
   const r = await call('GET', '/catalog', { actor: ADM });
   assert.equal(r.status, 200);
@@ -74,6 +74,8 @@ test('setup: Katalog liefert Module/Widgets/Rollen/Mitglieder', async () => {
     WIDGET_ID = CATALOG.widgets[0].id;
     WIDGET_LEVEL = CATALOG.widgetAccessLevels.find((l) => l !== CATALOG.defaults.widget);
   }
+  CAPABILITY_KEY = CATALOG.capabilities[0]?.key;
+  assert.equal(CAPABILITY_KEY, 'notes_manage_household_categories');
 });
 
 // --------------------------------------------------------------------------
@@ -168,6 +170,22 @@ test('PUT /user: Widget-Override round-trip (falls Katalog Widgets führt)', asy
   assert.equal(put.status, 200);
   assert.equal(put.body.data.widgets[WIDGET_ID], WIDGET_LEVEL);
   await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: {} }); // aufräumen
+});
+
+test('PUT /user: Capability kann erlaubt und explizit gesperrt werden', async () => {
+  const allowed = await call('PUT', `/user/${MEMBER}`, {
+    actor: ADM,
+    body: { capabilities: { [CAPABILITY_KEY]: 'allow' } },
+  });
+  assert.equal(allowed.status, 200);
+  assert.equal(allowed.body.data.capabilities[CAPABILITY_KEY], 'allow');
+
+  const blocked = await call('PUT', `/user/${MEMBER}`, {
+    actor: ADM,
+    body: { capabilities: { [CAPABILITY_KEY]: 'none' } },
+  });
+  assert.equal(blocked.status, 200);
+  assert.equal(blocked.body.data.capabilities[CAPABILITY_KEY], 'none');
 });
 
 test('teardown: Server schließen', async () => {
