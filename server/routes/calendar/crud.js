@@ -288,29 +288,6 @@ router.put('/:id', async (req, res) => {
         code: 400,
       });
     }
-    const attachmentDataProvided = Object.hasOwn(req.body, 'attachment_data');
-    const replacementRequested = typeof req.body.attachment_data === 'string'
-      && req.body.attachment_data.trim() !== '';
-    const removalRequested = req.body.remove_attachment === true
-      || (attachmentDataProvided && req.body.attachment_data === null);
-    if (replacementRequested && removalRequested) {
-      return res.status(400).json({
-        error: 'attachment_data und remove_attachment widersprechen sich.',
-        code: 400,
-      });
-    }
-    const attachment = replacementRequested
-      ? parseAttachment(req.body.attachment_data)
-      : null;
-    if (attachment?.buffer) {
-      stagedUpload = await stageDocumentUpload({
-        buffer: attachment.buffer,
-        mime: attachment.mime,
-        category: 'other',
-        originalName: req.body.attachment_name || 'Attachment',
-      });
-    }
-
     const {
       title, description, start_datetime, end_datetime,
       all_day, location, color: colorVal, recurrence_rule,
@@ -348,6 +325,35 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({
         error: 'recurrence_rule: the rule has no occurrence on or after the start date.',
         code: 400,
+      });
+    }
+
+    // JEDE ABWEISUNG GEHOERT VOR DAS STAGING. Ab hier laedt
+    // `stageDocumentUpload` den Anhang in den Speicher (lokaler Ordner, WebDAV
+    // oder Cloud); aufgeraeumt wird er nur im catch-Block ganz unten. Ein
+    // fruehes `return` dazwischen laesst die hochgeladene Datei als Waise
+    // liegen - sichtbar wird das nie, weil der Aufrufer seine 400 bekommt.
+    // Der Serien-Guard oben stand genau deshalb schon einmal falsch herum.
+    const attachmentDataProvided = Object.hasOwn(req.body, 'attachment_data');
+    const replacementRequested = typeof req.body.attachment_data === 'string'
+      && req.body.attachment_data.trim() !== '';
+    const removalRequested = req.body.remove_attachment === true
+      || (attachmentDataProvided && req.body.attachment_data === null);
+    if (replacementRequested && removalRequested) {
+      return res.status(400).json({
+        error: 'attachment_data und remove_attachment widersprechen sich.',
+        code: 400,
+      });
+    }
+    const attachment = replacementRequested
+      ? parseAttachment(req.body.attachment_data)
+      : null;
+    if (attachment?.buffer) {
+      stagedUpload = await stageDocumentUpload({
+        buffer: attachment.buffer,
+        mime: attachment.mime,
+        category: 'other',
+        originalName: req.body.attachment_name || 'Attachment',
       });
     }
 

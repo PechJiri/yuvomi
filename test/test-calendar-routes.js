@@ -717,6 +717,69 @@ test('PUT /:id — Validierungs-400s', async () => {
   assert.equal((await call('PUT', `/${id}`, { body: { attachment_data: dataUrl, remove_attachment: true } })).status, 400);
 });
 
+test('PUT /:id — abgewiesene Serie laesst keinen Anhang im Speicher liegen', async () => {
+  // REIHENFOLGE-PROBE, KEINE VERHALTENSPROBE. Der Serien-Guard (#960) stand
+  // einmal NACH `stageDocumentUpload`: die Datei war dann schon geschrieben,
+  // und das fruehe `return` sprang am catch-Block vorbei, der sie aufraeumt.
+  // Sichtbar wird so eine Waise nur bei ordner-gestuetzter Ablage - der
+  // Standardpfad legt den Anhang als BLOB in die Datenbank und wuerde die
+  // Luecke verstecken. Darum hier ein echter Ordner unter os.tmpdir().
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yuvomi-cal-attach-'));
+  const vorherEnabled = process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+  const vorherPath    = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = 'true';
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = dir;
+
+  const zaehleDateien = async (ordner) => {
+    const eintraege = await fs.readdir(ordner, { withFileTypes: true, recursive: true });
+    return eintraege.filter((e) => e.isFile()).length;
+  };
+
+  try {
+    const dataUrl = `data:text/plain;base64,${Buffer.from('Anhang').toString('base64')}`;
+    const id = insertEvent({ title: 'PUT-WAISE', start_datetime: '2041-07-01T09:00' });
+
+    // GEGENPROBE ZUERST: schreibt dieser Aufbau ueberhaupt eine Datei? Ohne
+    // diesen Nachweis waere die Null unten auch dann gruen, wenn das Staging
+    // hier gar nichts ablegt - der Test pruefte dann nichts.
+    const ok = await call('PUT', `/${id}`, { body: {
+      attachment_data: dataUrl, attachment_name: 'gut.txt',
+    } });
+    assert.equal(ok.status, 200);
+    assert.equal(await zaehleDateien(dir), 1, 'Gegenprobe: gelungener Anhang liegt im Ordner');
+
+    // Jetzt die eigentliche Probe: eine Regel ohne Vorkommen wird abgewiesen.
+    // Start am 15. Januar, letzter Monatstag als Regel, UNTIL am 20.: der
+    // erste Treffer (31.1.) liegt hinter dem Ende - die Serie ist leer.
+    const abgewiesen = await call('PUT', `/${id}`, { body: {
+      start_datetime: '2026-01-15T09:00',
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+      attachment_data: dataUrl, attachment_name: 'waise.txt',
+    } });
+    assert.equal(abgewiesen.status, 400, 'leere Serie wird abgewiesen');
+    // AM GRUND FESTNAGELN. Eine syntaktisch ungueltige Regel braechte auch
+    // einen 400 - aber aus dem Validator, lange vor dem Staging. Der Test
+    // stuende dann gruen, ohne die Reihenfolge je zu beruehren.
+    assert.match(
+      String(abgewiesen.body?.error ?? ''), /no occurrence/,
+      'der 400 kommt aus dem Serien-Guard, nicht aus der Formatpruefung'
+    );
+    assert.equal(
+      await zaehleDateien(dir), 1,
+      'keine zweite Datei: der abgewiesene Anhang wurde nie geschrieben'
+    );
+  } finally {
+    if (vorherEnabled === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+    else process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = vorherEnabled;
+    if (vorherPath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = vorherPath;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('PUT /:id — partielles Update lässt andere Felder unberührt', async () => {
   const id = insertEvent({ title: 'PUT-PARTIAL', start_datetime: '2041-02-01T09:00', color: '#111111' });
   const res = await call('PUT', `/${id}`, { body: { description: 'Nur Beschreibung' } });
