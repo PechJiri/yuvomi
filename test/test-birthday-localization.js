@@ -86,6 +86,75 @@ test('GET /calendar liefert birthday_name+birthday_date für Geburtstags-Termine
   assert.equal(bday.title, 'Birthday: Lina Müller');
 });
 
+test('Namenstag erhält einen eigenen lokalisierten Kalendertermin und Reminder mit demselben Vorlauf', async () => {
+  await asAdmin(() => call('PUT', '/preferences', { language: 'de' }));
+  const created = await call('POST', '/birthdays', {
+    name: 'Jiří',
+    birth_date: '1990-04-23',
+    name_day: '04-24',
+    reminder_offset: '1440',
+  });
+  assert.equal(created.status, 201);
+
+  const links = db.prepare(`
+    SELECT calendar_event_id, name_day_calendar_event_id
+    FROM birthdays WHERE id = ?
+  `).get(created.body.data.id);
+  assert.ok(links.calendar_event_id);
+  assert.ok(links.name_day_calendar_event_id);
+  assert.notEqual(links.calendar_event_id, links.name_day_calendar_event_id);
+
+  const nameDayEvent = db.prepare(`
+    SELECT title, description, start_datetime, recurrence_rule
+    FROM calendar_events WHERE id = ?
+  `).get(links.name_day_calendar_event_id);
+  assert.equal(nameDayEvent.title, 'Namenstag: Jiří');
+  assert.equal(nameDayEvent.description, 'Jiří hat Namenstag.');
+  assert.equal(nameDayEvent.start_datetime.slice(5), '04-24');
+  assert.equal(nameDayEvent.recurrence_rule, 'FREQ=YEARLY;INTERVAL=1');
+
+  const reminders = db.prepare(`
+    SELECT entity_id, remind_at FROM reminders
+    WHERE entity_type = 'event' AND entity_id IN (?, ?)
+    ORDER BY entity_id
+  `).all(links.calendar_event_id, links.name_day_calendar_event_id);
+  assert.equal(reminders.length, 2, 'jedno společné nastavení vytvoří reminder pro oba termíny');
+
+  const calendar = await call('GET', '/calendar?from=2026-01-01&to=2026-12-31');
+  const nameDay = calendar.body.data.find((event) => event.id === links.name_day_calendar_event_id);
+  assert.equal(nameDay.birthday_name, 'Jiří', 'stejný marker drží termín ve vrstvě narozenin');
+  assert.equal(nameDay.birthday_event_kind, 'name_day');
+  assert.equal(nameDay.name_day, '04-24');
+});
+
+test('odebrání Namenstagu smaže jen jeho kalendářový termín a reminder', async () => {
+  const created = await call('POST', '/birthdays', {
+    name: 'Klára',
+    birth_date: '1991-08-12',
+    name_day: '08-13',
+  });
+  const links = db.prepare(`
+    SELECT calendar_event_id, name_day_calendar_event_id
+    FROM birthdays WHERE id = ?
+  `).get(created.body.data.id);
+
+  const updated = await call('PUT', `/birthdays/${created.body.data.id}`, { name_day: null });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.data.name_day, null);
+  assert.equal(
+    db.prepare('SELECT id FROM calendar_events WHERE id = ?').get(links.name_day_calendar_event_id),
+    undefined,
+  );
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM reminders WHERE entity_id = ?').get(links.name_day_calendar_event_id).n,
+    0,
+  );
+  assert.ok(
+    db.prepare('SELECT id FROM calendar_events WHERE id = ?').get(links.calendar_event_id),
+    'Geburtstag bleibt bestehen',
+  );
+});
+
 test('Nicht-Geburtstags-Termine tragen KEIN birthday_name-Feld', async () => {
   db.prepare(`
     INSERT INTO calendar_events (title, start_datetime, all_day, created_by, external_source)
@@ -107,6 +176,8 @@ test('de-Referenz-Locale trägt alle neuen Keys mit {{name}}-Platzhalter', () =>
   // Fallback ohne Datum: {{name}}, aber kein {{date}} (keine leere Klammer).
   assert.match(de.birthdays.calendarEventDescriptionNoDate, /\{\{name\}\}/);
   assert.doesNotMatch(de.birthdays.calendarEventDescriptionNoDate, /\{\{date\}\}/);
+  assert.match(de.birthdays.nameDayCalendarEventTitle, /\{\{name\}\}/);
+  assert.match(de.birthdays.nameDayCalendarEventDescription, /\{\{name\}\}/);
 });
 
 // ---------------------------------------------------------------------------
@@ -117,6 +188,14 @@ function storedEvent(birthdayId) {
   return db.prepare(`
     SELECT e.title, e.description
     FROM birthdays b JOIN calendar_events e ON e.id = b.calendar_event_id
+    WHERE b.id = ?
+  `).get(birthdayId);
+}
+
+function storedNameDayEvent(birthdayId) {
+  return db.prepare(`
+    SELECT e.title, e.description
+    FROM birthdays b JOIN calendar_events e ON e.id = b.name_day_calendar_event_id
     WHERE b.id = ?
   `).get(birthdayId);
 }
@@ -171,8 +250,13 @@ test('ohne Sprache und ohne Region gilt Englisch, nicht die Referenz-Locale', as
 
 test('PUT /preferences betitelt bestehende Geburtstags-Termine um', async () => {
   db.prepare(`DELETE FROM sync_config WHERE key IN ('language', 'region')`).run();
-  const created = await call('POST', '/birthdays', { name: 'Nora', birth_date: '1992-06-30' });
+  const created = await call('POST', '/birthdays', {
+    name: 'Nora',
+    birth_date: '1992-06-30',
+    name_day: '07-01',
+  });
   assert.equal(storedEvent(created.body.data.id).title, 'Birthday: Nora');
+  assert.equal(storedNameDayEvent(created.body.data.id).title, 'Name day: Nora');
 
   const saved = await asAdmin(() => call('PUT', '/preferences', { language: 'de' }));
   assert.equal(saved.status, 200);
@@ -185,6 +269,7 @@ test('PUT /preferences betitelt bestehende Geburtstags-Termine um', async () => 
   // Der Kern von #632: der Wechsel muss die bereits gespeicherten Zeilen
   // erreichen, nicht nur künftige Termine.
   assert.equal(storedEvent(created.body.data.id).title, 'Geburtstag: Nora');
+  assert.equal(storedNameDayEvent(created.body.data.id).title, 'Namenstag: Nora');
   const first = db.prepare(`SELECT id FROM birthdays ORDER BY id ASC`).get().id;
   assert.equal(storedEvent(first).title, 'Geburtstag: Lina Müller');
 });

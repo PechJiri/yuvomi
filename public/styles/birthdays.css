@@ -415,6 +415,29 @@
   min-height: var(--target-base);
 }
 
+.birthday-name-day__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 0.55fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.birthday-name-day__clear {
+  min-height: var(--target-base);
+  white-space: nowrap;
+}
+
+.birthday-name-day__clear svg {
+  width: 16px;
+  height: 16px;
+}
+
+.birthday-name-day__hint {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
 .birthday-modal__hint {
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
@@ -450,6 +473,15 @@
 
   .birthday-modal__photo-wrap {
     align-self: center;
+  }
+
+  .birthday-name-day__controls {
+    grid-template-columns: minmax(0, 1fr) minmax(88px, 0.7fr);
+  }
+
+  .birthday-name-day__clear {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 }
 

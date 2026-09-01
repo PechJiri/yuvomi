@@ -42,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The dashboard dynamically loads third-party widget entry points** (`renderWidget`) from protected module assets, with per-widget error isolation and an optional generic options dialog driven by `optionsSchema`.
 - **Third-party modules can ship UI translations** in `locales/{locale}.json` with manifest `i18n.defaultLocale`, `labelKey` / `titleKey`, and the same 24 core languages as Yuvomi.
 - **OpenAPI now documents extension module capabilities** and module i18n metadata.
+- **A person can now have an optional name day beside their birthday.** The advanced section of the
+  birthday form stores a month and day without inventing a year; leaving it empty keeps the existing
+  behaviour. A saved name day becomes its own yearly entry in the birthday calendar layer, uses the
+  birthday's existing reminder lead time and appears as a separately labelled row in the dashboard
+  widget. The navigation badge counts both kinds of upcoming occasion, while the main Birthdays list
+  remains one row per person. Name-day labels, validation and calendar text are included in all 24
+  supported interface languages.
 
 ### Changed
 

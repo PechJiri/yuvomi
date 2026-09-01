@@ -1570,15 +1570,23 @@ skipped, or exhausted, `pushed_at` is set as the legacy completion marker.
 
 ### Birthdays
 
-Birthday records with optional profile photo (same crop dialog as member avatars, see Profile picture) and automatic calendar event + reminder.
+Birthday records with optional profile photo (same crop dialog as member avatars, see Profile picture),
+an optional name day, and automatic calendar events + reminders. A name day is stored as a canonical
+`MM-DD` value rather than a date with an invented year. When present, it creates a second yearly event
+in the same calendar layer and uses the birthday's existing reminder offset; clearing it removes only
+that generated event and reminder. The dashboard expands one person into separate birthday and
+name-day occurrence rows ordered by proximity, while the Birthdays module itself remains one row per
+person. No country- or name-based lookup is performed.
 
 | Column | Type | Constraint |
 |--------|------|-----------|
 | name | TEXT | NOT NULL |
 | birth_date | TEXT | DATE (YYYY-MM-DD), NOT NULL |
+| name_day | TEXT | Month and day (`MM-DD`), nullable |
 | notes | TEXT | nullable |
 | photo_data | TEXT | Base64 data URL (≤ 5 MB), nullable |
 | calendar_event_id | INTEGER | FK → calendar_events (SET NULL on delete), nullable |
+| name_day_calendar_event_id | INTEGER | FK → calendar_events (SET NULL on delete), nullable |
 | family_user_id | INTEGER | FK → Users (CASCADE delete), UNIQUE (one linked user per birthday), nullable |
 | contact_id | INTEGER | FK → Contacts (SET NULL on delete), UNIQUE partial (one birthday per source contact); set when imported from a contact, nullable |
 | created_by | INTEGER | FK → Users (CASCADE delete), NOT NULL |

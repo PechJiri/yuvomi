@@ -88,7 +88,7 @@ Schalte an, was dein Haushalt braucht; der Rest bleibt aus dem Weg.
 | **Gesundheit** | Vitalwerte, Medikamente, Laborwerte, Aktivität und Zyklus je Mitglied, mit Verlaufsdiagrammen. |
 | **Schichtplan** | Rotierende Schichtmuster und feste Wochenpläne aus einem Zyklusmodell, mit Ausnahmen je Tag und einem ausdrücklichen freien Tag. Der Kalender zeigt sie als schreibgeschützte Ebene, beim Lesen berechnet - eine Musteränderung lässt keine veralteten Termine zurück. Standardmäßig aus. |
 | **Notizen &amp; Kontakte** | Farbige Markdown-Haftnotizen mit Checklisten, die man antippt statt zu bearbeiten, plus ein Kontaktverzeichnis mit CardDAV-Sync und vCard-Import/-Export. |
-| **Geburtstage** | Geburtstagsliste mit automatischen Kalendereinträgen, Altersanzeige und Erinnerungen. |
+| **Geburtstage** | Geburtstagsliste mit optionalen Namenstagen, automatischen Kalendereinträgen, Altersanzeige und Erinnerungen. |
 | **Familie** | Mitgliedsprofile mit Rollen, Fotos und Kontaktdaten. Neue Mitglieder kommen über einen Einladungslink und wählen ihr Passwort selbst. |
 | **Erinnerungen** | Erinnerungen an Aufgaben, Termine, Abo-Verlängerungen, Garantien, Inventar-Fristen und Mindesthaltbarkeit, per In-App-Kennzeichen, optionalem Push und Gotify-, ntfy-, Webhook- oder E-Mail-Kanälen des Haushalts. Eine Erinnerung an einem geteilten Termin erreicht alle Zugewiesenen, jeden mit einer eigenen Kopie zum Verschieben oder Verwerfen. |
 | **API-Token** | Bearer- / X-API-Key-Token mit OpenAPI-3.0-Spezifikation und eingebautem MCP-Endpunkt für KI-Agenten. Schreibende Aufrufe sind über einen optionalen `Idempotency-Key`-Header wiederholbar. |

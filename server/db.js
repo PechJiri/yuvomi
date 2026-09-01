@@ -6939,6 +6939,23 @@ const MIGRATIONS = [
       ALTER TABLE users ADD COLUMN changelog_seen_latest  TEXT;
     `,
   },
+  {
+    version: 174,
+    description: 'Birthdays: optional name day with its own generated calendar event',
+    // Der Namenstag ist ein JAHRESTAG, aber kein Geburtsdatum: ein erfundenes
+    // Jahr wuerde in API, Exporten und Datumsformatierung zu falschen Aussagen
+    // fuehren. Gespeichert wird deshalb kanonisch MM-DD. Der zweite Event-Link
+    // ist absichtlich getrennt vom Geburtstag, damit beide Termine unabhaengig
+    // verschoben, entfernt und bei externen Providern geloescht werden koennen.
+    up: `
+      ALTER TABLE birthdays ADD COLUMN name_day TEXT;
+      ALTER TABLE birthdays ADD COLUMN name_day_calendar_event_id INTEGER
+        REFERENCES calendar_events(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_birthdays_name_day ON birthdays(name_day);
+      CREATE INDEX IF NOT EXISTS idx_birthdays_name_day_calendar_ref
+        ON birthdays(name_day_calendar_event_id);
+    `,
+  },
 ];
 
 /**

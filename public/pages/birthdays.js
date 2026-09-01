@@ -2,7 +2,7 @@ import { api } from '/api.js';
 import { openModal as openSharedModal, closeModal, advancedSection } from '/components/modal.js';
 import { stagger, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
-import { t, formatDate, parseDateInput, isDateInputValid } from '/i18n.js';
+import { t, formatDate, parseDateInput, isDateInputValid, getLocale } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { todayKey } from '/utils/date.js';
@@ -72,6 +72,66 @@ function renderBirthdayReminderSection(birthday = null) {
           </select>
         </div>
       </div>
+    </div>`;
+}
+
+export function daysInNameDayMonth(month) {
+  const numeric = Number(month);
+  if (!Number.isInteger(numeric) || numeric < 1 || numeric > 12) return 0;
+  return new Date(Date.UTC(2000, numeric, 0)).getUTCDate();
+}
+
+export function normalizeNameDaySelection(month, day) {
+  const rawMonth = String(month ?? '').trim();
+  const rawDay = String(day ?? '').trim();
+  if (!rawMonth && !rawDay) return { value: null, complete: true };
+  if (!rawMonth || !rawDay) return { value: null, complete: false };
+  const monthNumber = Number(rawMonth);
+  const dayNumber = Number(rawDay);
+  if (!Number.isInteger(monthNumber) || !Number.isInteger(dayNumber)
+      || dayNumber < 1 || dayNumber > daysInNameDayMonth(monthNumber)) {
+    return { value: null, complete: false };
+  }
+  return {
+    value: `${String(monthNumber).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`,
+    complete: true,
+  };
+}
+
+function nameDayDayOptions(month, selectedDay = '') {
+  const count = daysInNameDayMonth(month);
+  const options = [`<option value="">${esc(t('birthdays.nameDayDayPlaceholder'))}</option>`];
+  for (let day = 1; day <= count; day++) {
+    const value = String(day).padStart(2, '0');
+    options.push(`<option value="${value}"${value === selectedDay ? ' selected' : ''}>${day}</option>`);
+  }
+  return options.join('');
+}
+
+export function renderNameDayField(birthday = null) {
+  const [selectedMonth = '', selectedDay = ''] = String(birthday?.name_day || '').split('-');
+  const monthFormatter = new Intl.DateTimeFormat(getLocale(), { month: 'long', timeZone: 'UTC' });
+  const months = Array.from({ length: 12 }, (_, index) => {
+    const value = String(index + 1).padStart(2, '0');
+    const label = monthFormatter.format(new Date(Date.UTC(2000, index, 1)));
+    return `<option value="${value}"${value === selectedMonth ? ' selected' : ''}>${esc(label)}</option>`;
+  }).join('');
+  return `
+    <div class="form-group birthday-name-day">
+      <span class="form-label" id="bd-name-day-label">${t('birthdays.nameDayLabel')}</span>
+      <div class="birthday-name-day__controls" role="group" aria-labelledby="bd-name-day-label">
+        <select class="form-input birthday-modal__select" id="bd-name-day-month" aria-label="${t('birthdays.nameDayMonthLabel')}">
+          <option value="">${t('birthdays.nameDayMonthPlaceholder')}</option>
+          ${months}
+        </select>
+        <select class="form-input birthday-modal__select" id="bd-name-day-day" aria-label="${t('birthdays.nameDayDayLabel')}"${selectedMonth ? '' : ' disabled'}>
+          ${nameDayDayOptions(selectedMonth, selectedDay)}
+        </select>
+        <button class="btn btn--secondary birthday-name-day__clear" type="button" id="bd-name-day-clear" aria-label="${t('birthdays.nameDayClear')}" title="${t('birthdays.nameDayClear')}">
+          <i data-lucide="x" aria-hidden="true"></i><span>${t('birthdays.nameDayClear')}</span>
+        </button>
+      </div>
+      <div class="birthday-name-day__hint">${t('birthdays.nameDayHint')}</div>
     </div>`;
 }
 
@@ -147,12 +207,16 @@ async function loadData() {
 }
 
 /**
- * Wie viele Geburtstage stehen unmittelbar an? `days_until` rechnet der Server
- * (`hydrateBirthday`), hier wird nur der Schnitt gezogen - deshalb liefert
- * dieselbe Regel auch fuer den Startwert aus `/dashboard` dieselbe Zahl.
+ * Wie viele Geburtstags- oder Namenstagsereignisse stehen unmittelbar an?
+ * Beide Abstaende rechnet der Server (`hydrateBirthday`), hier wird nur der
+ * Schnitt gezogen - deshalb liefert dieselbe Regel auch fuer den Startwert aus
+ * `/dashboard` dieselbe Zahl. Eine Person kann dabei zweimal zaehlen: Der Badge
+ * beschreibt anstehende Anlaesse, nicht Personen.
  */
 export function countBirthdaysSoon(birthdays) {
-  return birthdays.filter((b) => (b.days_until ?? 9999) <= BIRTHDAY_BADGE_DAYS).length;
+  return birthdays.reduce((count, birthday) => count
+    + ((birthday.days_until ?? 9999) <= BIRTHDAY_BADGE_DAYS ? 1 : 0)
+    + ((birthday.name_day_days_until ?? 9999) <= BIRTHDAY_BADGE_DAYS ? 1 : 0), 0);
 }
 
 function updateBirthdayBadge() {
@@ -386,12 +450,13 @@ function openBirthdayModal({ mode, birthday = null }) {
           </div>
         </div>
         ${advancedSection(`
+          ${renderNameDayField(birthday)}
           <div class="form-group">
             <label class="form-label" for="bd-notes">${t('birthdays.notesLabel')}</label>
             <textarea class="form-input" id="bd-notes" rows="3" placeholder="${t('birthdays.notesPlaceholder')}">${esc(birthday?.notes || '')}</textarea>
           </div>
           ${renderBirthdayReminderSection(birthday)}`,
-          { open: isEdit && (!!birthday?.notes || (!!birthday?.reminder_offset && birthday.reminder_offset !== '1440')) })}
+          { open: isEdit && (!!birthday?.name_day || !!birthday?.notes || (!!birthday?.reminder_offset && birthday.reminder_offset !== '1440')) })}
         <div class="birthday-modal__hint">${t('birthdays.calendarHint')}</div>
         <div class="birthday-modal__footer">
           ${isEdit ? `<button class="btn btn--danger" id="bd-delete">${t('common.delete')}</button>` : '<div></div>'}
@@ -446,6 +511,33 @@ function openBirthdayModal({ mode, birthday = null }) {
         if (reminderCustom) reminderCustom.hidden = reminderOffset.value !== 'custom';
       });
 
+      const nameDayMonth = panel.querySelector('#bd-name-day-month');
+      const nameDayDay = panel.querySelector('#bd-name-day-day');
+      const refreshNameDayDays = (preferredDay = '') => {
+        if (!nameDayDay) return;
+        const option = (value, label) => {
+          const node = document.createElement('option');
+          node.value = value;
+          node.textContent = label;
+          node.selected = value === preferredDay;
+          return node;
+        };
+        const options = [option('', t('birthdays.nameDayDayPlaceholder'))];
+        const dayCount = daysInNameDayMonth(nameDayMonth?.value);
+        for (let day = 1; day <= dayCount; day++) {
+          const value = String(day).padStart(2, '0');
+          options.push(option(value, String(day)));
+        }
+        nameDayDay.replaceChildren(...options);
+        nameDayDay.disabled = !nameDayMonth?.value;
+      };
+      nameDayMonth?.addEventListener('change', () => refreshNameDayDays(nameDayDay?.value));
+      panel.querySelector('#bd-name-day-clear')?.addEventListener('click', () => {
+        if (nameDayMonth) nameDayMonth.value = '';
+        refreshNameDayDays();
+        nameDayMonth?.focus();
+      });
+
       panel.querySelector('#bd-cancel').addEventListener('click', closeModal);
       // Löschen verwirft die Eingaben ohnehin mit dem Datensatz: der Dirty-Guard
       // hätte hier erst nach dem Verwerfen von Feldern gefragt, die gleich mit
@@ -460,9 +552,15 @@ function openBirthdayModal({ mode, birthday = null }) {
         const saveBtn = panel.querySelector('#bd-save');
         const birthDateRaw = panel.querySelector('#bd-birth-date').value;
         const birthDate = parseDateInput(birthDateRaw);
+        const nameDay = normalizeNameDaySelection(nameDayMonth?.value, nameDayDay?.value);
+        if (!nameDay.complete) {
+          window.yuvomi?.showToast(t('birthdays.nameDayIncomplete'), 'warning');
+          return;
+        }
         const body = {
           name: panel.querySelector('#bd-name').value.trim(),
           birth_date: birthDate,
+          name_day: nameDay.value,
           notes: panel.querySelector('#bd-notes').value.trim(),
           photo_data: photoData,
           reminder_offset: panel.querySelector('#bd-reminder-offset').value,

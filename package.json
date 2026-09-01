@@ -59,7 +59,7 @@
     "test:browser-loader-stubs": "node --test test/test-browser-loader-stubs.js",
     "test:birthdays-routes": "node --experimental-sqlite --test test/test-birthdays-routes.js",
     "test:birthday-import": "node --experimental-sqlite --test test/test-birthday-import.js",
-    "test:birthday-localization": "node --experimental-sqlite --test test/test-birthday-localization.js",
+    "test:birthday-localization": "node --loader ./test/test-browser-loader.mjs --experimental-sqlite --test test/test-birthday-localization.js test/test-birthday-name-day-ui.js test/test-dashboard-name-days.js",
     "test:calendar": "node --loader ./test/test-browser-loader.mjs --experimental-sqlite test/test-calendar.js",
     "test:ncb": "DB_PATH=:memory: node --experimental-sqlite test/test-notes-contacts-budget.js",
     "test:notes-reader": "node --test test/test-notes-reader.js",
