@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An `allowScripts` pin no longer points at a version that is not installed.** The field names
+  every package allowed to run install scripts, with an exact version, because the permission
+  applies to the reviewed build rather than to the name. Dependabot raises the dependency and the
+  lockfile but never touches that field - it does not know about it - so after every bump the pin
+  referred to a version that had been replaced. Nothing broke visibly, which is exactly why nobody
+  noticed: a permission pointing nowhere looks like one that holds. A guard now compares each pin
+  against the lockfile, so the next bump turns the suite red instead of leaving a dead pin behind.
+
 ### Added
 
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
