@@ -19,9 +19,13 @@ const COLOR_RE    = /^#[0-9A-Fa-f]{6}$/;
 const MONTH_RE    = /^\d{4}-\d{2}$/;
 // UNTIL und COUNT schließen sich laut RFC 5545 gegenseitig aus (#513).
 // BYMONTHDAY steht zwischen BYDAY und der Endbedingung, weil die Oberflaeche
-// die Regel in dieser Reihenfolge baut. Erlaubt ist der volle RFC-Bereich
-// (-31..-1, 1..31); erzeugt wird aus dem Formular nur `-1` (#960).
-const RRULE_RE    = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;BYMONTHDAY=-?(3[01]|[12]\d|[1-9]))?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
+// die Regel in dieser Reihenfolge baut. Erlaubt ist AUSSCHLIESSLICH `-1`
+// ("letzter Tag des Monats", #960) - die erste Fassung nahm den vollen
+// RFC-Bereich an, obwohl die Engine ihn nicht bedient: `FREQ=WEEKLY;
+// BYMONTHDAY=15` liess sich speichern und lief danach woechentlich, ohne den
+// angenommenen Monatstag je anzuwenden. Was nicht implementiert ist, wird nicht
+// angenommen.
+const RRULE_RE    = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;BYMONTHDAY=-1)?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
 
 /**
  * Bereinigt und validiert einen Pflicht-String.

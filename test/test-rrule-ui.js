@@ -337,3 +337,17 @@ test('die Zusammenfassung nennt den letzten Tag', () => {
   // Und nur dort, wo sie etwas bedeutet.
   assert.equal(describeRRule('FREQ=YEARLY;BYMONTHDAY=-1'), describeRRule('FREQ=YEARLY'));
 });
+
+test('der Server nimmt nur BYMONTHDAY=-1 an, nichts Weiteres (#960)', async () => {
+  // WAS DIE ENGINE NICHT BEDIENT, DARF DER VALIDATOR NICHT ANNEHMEN. Die erste
+  // Fassung liess den vollen RFC-Bereich durch: `FREQ=WEEKLY;BYMONTHDAY=15`
+  // liess sich speichern und lief danach woechentlich, ohne den angenommenen
+  // Monatstag je anzuwenden - eine Regel, die etwas anderes tut, als sie sagt.
+  const { RRULE_RE } = await import('../server/middleware/validate.js');
+  assert.ok(RRULE_RE.test('FREQ=MONTHLY;BYMONTHDAY=-1'), 'die eine unterstuetzte Form');
+  assert.ok(RRULE_RE.test('FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=-1;COUNT=5'));
+  for (const wert of ['15', '31', '-2', '-31', '0', '1,15']) {
+    assert.ok(!RRULE_RE.test(`FREQ=MONTHLY;BYMONTHDAY=${wert}`),
+      `BYMONTHDAY=${wert} darf nicht angenommen werden - die Engine bedient es nicht`);
+  }
+});

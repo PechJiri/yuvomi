@@ -116,36 +116,32 @@ describe('rruleToGraphRecurrence', () => {
     assert.equal(rruleToGraphRecurrence('FREQ=DAILY', ''), null);
   });
 
-  it('"am letzten Tag des Monats" wird nicht zum Starttag (#960)', () => {
-    // absoluteMonthly nimmt nur eine feste Zahl, und die waere hier der Tag des
-    // Startdatums: dieselbe Serie liefe in Yuvomi, CalDAV, Google und ICS auf
-    // dem Monatsletzten und in Outlook auf dem 15. Eine Divergenz, die niemand
-    // bemerkt, bis die Termine auseinanderlaufen.
-    const r = rruleToGraphRecurrence('FREQ=MONTHLY;BYMONTHDAY=-1', '2026-01-15');
-    assert.equal(r.pattern.type, 'relativeMonthly');
-    assert.equal(r.pattern.index, 'last');
-    assert.equal(r.pattern.daysOfWeek.length, 7,
-      'das letzte Vorkommen IRGENDEINES Wochentags ist der letzte Tag des Monats');
+  it('"am letzten Tag des Monats" wird gar nicht gepusht statt falsch (#960)', () => {
+    // Graph hat dafuer keine Entsprechung, und der naheliegende Ersatz ist
+    // keiner: relativeMonthly mit index "last" ueber alle sieben Wochentage
+    // liest sich wie "der letzte Tag", trifft ihn aber nicht - Graph nimmt bei
+    // mehreren daysOfWeek den ersten passenden Tag. Zurueck ueber ICS kaeme ein
+    // BYSETPOS-Muster, das diese Engine nicht liest. Ein Einzeltermin ist
+    // sichtbar unvollstaendig, eine Serie am falschen Tag nicht.
+    assert.equal(rruleToGraphRecurrence('FREQ=MONTHLY;BYMONTHDAY=-1', '2026-01-15'), null);
   });
 
-  it('ein positiver BYMONTHDAY schlaegt den Starttag', () => {
-    const r = rruleToGraphRecurrence('FREQ=MONTHLY;BYMONTHDAY=20', '2026-01-15');
-    assert.equal(r.pattern.type, 'absoluteMonthly');
-    assert.equal(r.pattern.dayOfMonth, 20);
-  });
-
-  it('ohne BYMONTHDAY bleibt es beim Starttag', () => {
+  it('ohne die Angabe bleibt es beim Starttag', () => {
     const r = rruleToGraphRecurrence('FREQ=MONTHLY', '2026-01-15');
     assert.equal(r.pattern.type, 'absoluteMonthly');
     assert.equal(r.pattern.dayOfMonth, 15);
   });
 
-  it('lieber gar keine Wiederholung als eine falsche', () => {
-    // "vorletzter Tag" hat in Graph keine Entsprechung. Als absoluten Tag zu
-    // pushen verschoebe jeden Termin; eine solche Regel kommt ohnehin nur aus
-    // einem Fremdkalender.
-    assert.equal(rruleToGraphRecurrence('FREQ=MONTHLY;BYMONTHDAY=-2', '2026-01-15'), null);
-    assert.equal(rruleToGraphRecurrence('FREQ=YEARLY;BYMONTHDAY=-1', '2026-01-15'), null);
+  it('eine nicht abbildbare Wiederholung wird drueben ausdruecklich geloescht', () => {
+    // PATCH laesst ein ausgelassenes Feld unveraendert: die Serie liefe in
+    // Outlook mit ihrer ALTEN Wiederholung weiter, waehrend der Inhalts-Hash
+    // gespeichert wird, als sei alles zusammengelaufen.
+    const payload = localEventToGraph({
+      title: 'Zaehlerstand', start_datetime: '2026-01-15T09:00:00', end_datetime: '2026-01-15T09:30:00',
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    });
+    assert.ok('recurrence' in payload, 'das Feld muss im Payload STEHEN');
+    assert.equal(payload.recurrence, null, 'und ausdruecklich null sein');
   });
 });
 

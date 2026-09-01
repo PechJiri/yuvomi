@@ -25,6 +25,7 @@ function parseRRule(rule) {
   }
 
   const freq     = parts.FREQ ?? null;
+  const freqRaw  = String(freq ?? '').toUpperCase();
   const interval = parseInt(parts.INTERVAL ?? '1', 10) || 1;
   const byday    = (parts.BYDAY ?? '').split(',')
     .map((d) => DAY_MAP[d.trim().toUpperCase()])
@@ -35,16 +36,20 @@ function parseRRule(rule) {
   // übernimmt die Expansion (expandRecurringEvents), die von DTSTART zählt.
   const countRaw = parts.COUNT ? parseInt(parts.COUNT, 10) : null;
   const count    = Number.isInteger(countRaw) && countRaw > 0 ? countRaw : null;
-  // BYMONTHDAY traegt den gemeinten Tag IN DER REGEL, statt ihn aus dem letzten
-  // Vorkommen abzuleiten. Die Oberflaeche erzeugt nur `-1` ("letzter Tag des
-  // Monats", #960); gelesen wird der ganze Wertebereich, weil Fremdkalender ihn
-  // liefern und weil ein positiver Wert dieselbe Rolle spielt wie ein Anker.
-  // Mehrere Werte (`BYMONTHDAY=1,15`) sind ausserhalb des Subsets: der erste
-  // gilt, der Rest wird ignoriert - eine Regel, die zwei Tage meint, wuerde von
-  // dieser Funktion sonst still zu einem einzigen.
-  const bmdRaw = parts.BYMONTHDAY ? parseInt(String(parts.BYMONTHDAY).split(',')[0], 10) : null;
-  const bymonthday = Number.isInteger(bmdRaw) && bmdRaw !== 0 && bmdRaw >= -31 && bmdRaw <= 31
-    ? bmdRaw
+  // NUR `-1`, UND NUR BEI MONTHLY. Die erste Fassung las den ganzen
+  // RFC-Wertebereich, "weil Fremdkalender ihn liefern" - und hat damit sieben
+  // Fehlerfaelle aufgemacht, die sie nicht bedienen konnte: `BYMONTHDAY=31`
+  // muesste im Februar AUSFALLEN statt zu klemmen, `1,15` meint zwei Tage im
+  // Monat, `FREQ=YEARLY;BYMONTHDAY=-1` meint zwoelf Vorkommen im Jahr und nicht
+  // eines, und bei DAILY/WEEKLY filtert es Tage, statt sie zu setzen.
+  //
+  // Was diese Funktion nicht ausdruecken kann, darf sie nicht annehmen: eine
+  // gelesene, aber falsch gerechnete Angabe verschiebt Termine still, waehrend
+  // eine ignorierte die Serie bei ihrem DTSTART-Tag laesst - dem Verhalten von
+  // vor #960. Genau `-1` bei `FREQ=MONTHLY` ist die eine Aussage, die die
+  // Oberflaeche erzeugt und die hier vollstaendig implementiert ist.
+  const bymonthday = freqRaw === 'MONTHLY' && String(parts.BYMONTHDAY ?? '').trim() === '-1'
+    ? -1
     : null;
 
   if (!['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return null;
@@ -53,26 +58,19 @@ function parseRRule(rule) {
 }
 
 /**
- * Der Tag im Zielmonat, aus der Regel oder dem Anker.
+ * Der Tag im Zielmonat: der letzte, wenn die Regel ihn nennt, sonst der
+ * gemeinte aus Anker oder Basisdatum - geklemmt wie eh und je.
  *
- * NEGATIVE WERTE ZAEHLEN VOM MONATSENDE (RFC 5545): `-1` ist der letzte Tag,
- * `-2` der vorletzte. Die erste Fassung behandelte nur `-1` und liess alles
- * andere in ein `Math.max(tag, 1)` laufen - `BYMONTHDAY=-2` wurde damit zum
- * ERSTEN des Monats. Das war schlechter als vorher: bis dahin wurde BYMONTHDAY
- * ganz ignoriert, eine eingelesene Fremdserie behielt also wenigstens ihren
- * DTSTART-Tag. Ein Wert, den Parser und Validator annehmen, darf nicht still
- * falsch gerechnet werden.
- *
- * Die Oberflaeche erzeugt weiterhin nur `-1` (#960); gerechnet wird der ganze
- * Bereich, weil Fremdkalender ihn liefern.
+ * DAS KLEMMEN GILT NUR FUER DEN FALLBACK. Ein Datum auf den letzten Tag eines
+ * kurzen Monats zu ziehen ist eine Hausregel fuer Serien, die aus ihrem
+ * Startdatum leben (ein 31. Januar wird im Februar zum 28.); auf eine
+ * ausdrueckliche Regel angewandt waere es etwas anderes - RFC 5545 laesst ein
+ * `BYMONTHDAY=31` im Februar AUSFALLEN, statt es zu verschieben. Deshalb liest
+ * `parseRRule` nur `-1`, und deshalb steht hier kein Zahlenbereich mehr.
  */
 function monthDayFor(bymonthday, lastDay, fallbackDay) {
-  const wanted = bymonthday === null || bymonthday === undefined
-    ? fallbackDay
-    : (bymonthday < 0 ? lastDay + 1 + bymonthday : bymonthday);
-  // Ein `-31` im Februar zeigt vor den Monatsanfang, ein `31` hinter sein Ende:
-  // beide landen am naechstgelegenen echten Tag, wie es die Klemmung immer tat.
-  return Math.min(Math.max(wanted, 1), lastDay);
+  if (bymonthday === -1) return lastDay;
+  return Math.min(Math.max(fallbackDay, 1), lastDay);
 }
 
 function parseUntilDate(str) {
@@ -346,16 +344,24 @@ function lastOccurrenceOf(seriesStart, parsed) {
   const { freq, interval, byday, count, bymonthday } = parsed;
   if (!count || byday.length) return null;
 
-  /* EINE REGEL MIT BYMONTHDAY LAEUFT NICHT AUF DEM RASTER IHRES STARTDATUMS.
-   * `FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3` ab dem 15. Januar bedeutet Jan 15,
-   * Feb 28, Mrz 31 - (COUNT - 1) Intervalle ab dem Start ergeben dagegen den
-   * 15. Maerz, und eine Grenze dort schneidet das letzte Vorkommen ab. Dieselbe
-   * Ueberlegung wie beim Tag > 28 gleich darunter, nur ist der Grund hier die
-   * Regel und nicht das Datum. */
-  if (bymonthday !== null && bymonthday !== undefined) return null;
-
   const start = new Date(`${String(seriesStart).slice(0, 10)}T00:00:00Z`);
   if (isNaN(start.getTime())) return null;
+
+  /* EINE -1-SERIE LAEUFT NICHT AUF DEM RASTER IHRES STARTDATUMS, ABER AUF EINEM.
+   * `FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3` ab dem 15. Januar bedeutet Jan 15
+   * (DTSTART ist Vorkommen 1), Feb 28, Mrz 31 - (COUNT - 1) Intervalle ab dem
+   * Start ergaeben dagegen den 15. Maerz, und eine Grenze dort schneidet das
+   * letzte Vorkommen ab.
+   *
+   * Die Grenze GANZ abzuschalten war die falsche Antwort darauf: dann lief eine
+   * Serie mit COUNT=1 fuer immer weiter. Sie laesst sich hier genau rechnen,
+   * weil jedes Vorkommen ausser dem ersten der letzte Tag seines Monats ist. */
+  if (bymonthday === -1) {
+    if (count === 1) return String(seriesStart).slice(0, 10);
+    const zielMonat = start.getUTCMonth() + (count - 1) * interval;
+    const letzter = new Date(Date.UTC(start.getUTCFullYear(), zielMonat + 1, 0));
+    return letzter.toISOString().slice(0, 10);
+  }
 
   /* MONATLICH UND JAEHRLICH NUR BIS ZUM 28., aus demselben Grund wie beim
    * Sprung darueber: eine Serie am 31. laeuft nicht auf einem festen

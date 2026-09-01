@@ -309,6 +309,12 @@ function toLocalRRule(raw) {
       .filter((d) => /^(MO|TU|WE|TH|FR|SA|SU)$/.test(d));
     if (days.length) rule += `;BYDAY=${days.join(',')}`;
   }
+  // Genau `-1` bei MONTHLY, in der Reihenfolge, die der Validator erwartet
+  // (#960). Der Reduzierer laesst alles weg, was die Engine nicht bedient - und
+  // seit "am letzten Tag des Monats" darstellbar ist, gehoert es dazu. Ohne
+  // diese Zeile kaeme eine importierte Monatsletzten-Serie als blosses
+  // `FREQ=MONTHLY` an und liefe danach auf dem Tag ihres Startdatums.
+  if (freq === 'MONTHLY' && String(parts.BYMONTHDAY ?? '').trim() === '-1') rule += ';BYMONTHDAY=-1';
   const count = parts.COUNT ? parseInt(parts.COUNT, 10) : null;
   if (Number.isInteger(count) && count > 0) {
     rule += `;COUNT=${count}`;

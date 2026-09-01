@@ -1154,22 +1154,42 @@ test('nextOccurrence: ein unlesbarer Anker aendert nichts', () => {
 // Was der Review zu #960 gefunden hat
 // --------------------------------------------------------
 
-test('nextOccurrence: negative BYMONTHDAY zaehlen vom Monatsende, nicht auf den 1.', () => {
-  // Parser und Validator nehmen den ganzen RFC-Bereich an; nur `-1` zu
-  // behandeln und den Rest in ein Math.max(tag, 1) laufen zu lassen machte aus
-  // "vorletzter Tag" den ERSTEN. Das war schlechter als vorher, wo BYMONTHDAY
-  // ganz ignoriert wurde und die Fremdserie ihren DTSTART-Tag behielt.
-  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-2') === '2026-02-27',
-    'Februar 2026 hat 28 Tage, der vorletzte ist der 27.');
-  assert(nextOccurrence('2026-02-15', 'FREQ=MONTHLY;BYMONTHDAY=-3') === '2026-03-29',
-    'Maerz hat 31 Tage, der drittletzte ist der 29.');
-  // Positive Werte gelten unveraendert, und beide Enden werden geklemmt statt
-  // in einen anderen Monat zu rutschen.
-  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=15') === '2026-02-15');
-  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=31') === '2026-02-28',
-    'ein 31. im Februar klemmt auf dessen letzten Tag');
-  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-31') === '2026-02-01',
-    'und ein -31 im Februar auf dessen ersten');
+test('nextOccurrence: gelesen wird NUR -1 bei MONTHLY, alles andere bleibt unbedient', () => {
+  // DIE ERSTE FASSUNG LAS DEN GANZEN RFC-BEREICH, "weil Fremdkalender ihn
+  // liefern" - und machte damit sieben Fehlerfaelle auf, die sie nicht bedienen
+  // konnte. `BYMONTHDAY=31` muesste im Februar AUSFALLEN statt zu klemmen,
+  // `1,15` meint zwei Tage im Monat, `FREQ=YEARLY;BYMONTHDAY=-1` meint zwoelf
+  // Vorkommen im Jahr, und bei DAILY/WEEKLY filtert es Tage statt sie zu
+  // setzen. Was diese Funktion nicht ausdruecken kann, nimmt sie nicht an: eine
+  // ignorierte Angabe laesst die Serie auf ihrem DTSTART-Tag, eine falsch
+  // gerechnete verschiebt jeden Termin.
+  const ohneRegel = nextOccurrence('2026-01-15', 'FREQ=MONTHLY');
+  for (const wert of ['-2', '-31', '15', '31', '1,15', '0']) {
+    assert(nextOccurrence('2026-01-15', `FREQ=MONTHLY;BYMONTHDAY=${wert}`) === ohneRegel,
+      `BYMONTHDAY=${wert} muss unbedient bleiben, nicht still gerechnet werden`);
+  }
+  // Und nur bei MONTHLY bedeutet die Angabe ueberhaupt etwas.
+  assert(nextOccurrence('2026-01-15', 'FREQ=YEARLY;BYMONTHDAY=-1')
+    === nextOccurrence('2026-01-15', 'FREQ=YEARLY'), 'jaehrlich meint etwas anderes');
+  assert(nextOccurrence('2026-01-15', 'FREQ=WEEKLY;BYMONTHDAY=-1')
+    === nextOccurrence('2026-01-15', 'FREQ=WEEKLY'), 'woechentlich erst recht');
+
+  // Reichweite: die eine unterstuetzte Form wirkt.
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-02-28');
+});
+
+test('nextOccurrenceAfter: COUNT gilt fuer eine -1-Serie, ohne sie abzuschneiden', () => {
+  // Die Grenze GANZ abzuschalten war die falsche Antwort auf den Abschneide-
+  // Fehler: dann lief eine Serie mit COUNT=1 fuer immer weiter.
+  const q = (rule, ab) => nextOccurrenceAfter('2026-01-15', rule, ab, { seriesStart: '2026-01-15' });
+  assert(q('FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3', '2026-03-01') === '2026-03-31',
+    'das letzte Vorkommen bleibt erhalten');
+  assert(q('FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3', '2026-04-01') === null,
+    'danach ist die Serie vorbei');
+  assert(q('FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=1', '2027-01-01') === null,
+    'DTSTART ist Vorkommen 1 - eine Serie mit COUNT=1 ist danach zu Ende');
+  assert(q('FREQ=MONTHLY;BYMONTHDAY=-1', '2027-01-01') === '2027-01-31',
+    'ohne COUNT laeuft sie weiter');
 });
 
 test('nextOccurrence: ein unlesbarer Anker wirft auch bei YEARLY nicht', () => {
@@ -1181,16 +1201,6 @@ test('nextOccurrence: ein unlesbarer Anker wirft auch bei YEARLY nicht', () => {
   assert(nextOccurrence('2024-02-29', 'FREQ=YEARLY', { anchor: 'gestern' }) === ohne,
     'faellt auf das bisherige Verhalten zurueck');
   assert(nextOccurrence('2024-02-29', 'FREQ=YEARLY', { anchor: '' }) === ohne);
-});
-
-test('nextOccurrenceAfter: COUNT begrenzt eine BYMONTHDAY-Serie nicht zu frueh', () => {
-  // `FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3` ab dem 15. Januar meint Jan 15,
-  // Feb 28, Mrz 31. (COUNT - 1) Intervalle ab dem Start ergaeben den 15. Maerz,
-  // und eine Grenze dort schneidet das letzte Vorkommen ab. Dieselbe
-  // Ueberlegung wie beim Starttag > 28, nur ist der Grund hier die Regel.
-  const treffer = nextOccurrenceAfter('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3',
-    '2026-03-01', { seriesStart: '2026-01-15' });
-  assert(treffer === '2026-03-31', `letztes Vorkommen erwartet, bekommen ${treffer}`);
 });
 
 // --------------------------------------------------------

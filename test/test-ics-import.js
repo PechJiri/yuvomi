@@ -106,11 +106,37 @@ test('toLocalRRule: returns null for null / unsupported FREQ', () => {
   assert.equal(toLocalRRule('FREQ=HOURLY'), null);
 });
 
-test('toLocalRRule result is compatible with the rrule() validator regex', () => {
-  const RRULE_RE = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
-  for (const r of ['RRULE:FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2', 'FREQ=WEEKLY;COUNT=5', 'FREQ=DAILY;UNTIL=20261231T235959Z']) {
+test('toLocalRRule result is compatible with the rrule() validator regex', async () => {
+  // THE REAL EXPRESSION, NOT A COPY OF IT. A hand-written duplicate lived here
+  // and would have gone stale the moment the validator changed - from then on
+  // this test would have been checking itself. The same duplicate existed in
+  // test-rrule-ui.js and was closed the same way.
+  const { RRULE_RE } = await import('../server/middleware/validate.js');
+  for (const r of [
+    'RRULE:FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2',
+    'FREQ=WEEKLY;COUNT=5',
+    'FREQ=DAILY;UNTIL=20261231T235959Z',
+    'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1',
+    'RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1;COUNT=4',
+  ]) {
     assert.ok(RRULE_RE.test(toLocalRRule(r)), `not validator-compatible: ${toLocalRRule(r)}`);
   }
+});
+
+test('toLocalRRule: keeps BYMONTHDAY=-1, drops every other value (#960)', () => {
+  // Ohne das Durchreichen kaeme eine importierte Monatsletzten-Serie als blosses
+  // FREQ=MONTHLY an und liefe danach auf dem Tag ihres Startdatums.
+  assert.equal(toLocalRRule('RRULE:FREQ=MONTHLY;BYMONTHDAY=-1'), 'FREQ=MONTHLY;BYMONTHDAY=-1');
+  assert.equal(toLocalRRule('RRULE:FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=-1;COUNT=3'),
+    'FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=-1;COUNT=3');
+
+  // Alles andere bedient die Engine nicht, also faellt es weg - eine gelesene,
+  // aber falsch gerechnete Angabe verschiebt Termine still.
+  assert.equal(toLocalRRule('RRULE:FREQ=MONTHLY;BYMONTHDAY=15'), 'FREQ=MONTHLY');
+  assert.equal(toLocalRRule('RRULE:FREQ=MONTHLY;BYMONTHDAY=-2'), 'FREQ=MONTHLY');
+  assert.equal(toLocalRRule('RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15'), 'FREQ=MONTHLY');
+  assert.equal(toLocalRRule('RRULE:FREQ=YEARLY;BYMONTHDAY=-1'), 'FREQ=YEARLY',
+    'jaehrlich meint in RFC zwoelf Vorkommen im Jahr, nicht eines');
 });
 
 // --------------------------------------------------------
