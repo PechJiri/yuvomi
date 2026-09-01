@@ -120,7 +120,7 @@
     "test:i18n": "node --test test/test-i18n.js",
     "test:i18n-plural": "node --test test/test-i18n-plural.js",
     "test:lang-init": "node --test test/test-lang-init.js",
-    "test:sw-api-cache": "node --test test/test-sw-api-cache.js",
+    "test:sw-api-cache": "node --test test/test-sw-api-cache.js test/test-service-worker-build-revision.js",
     "test:sw-precache": "node --test test/test-sw-precache.js",
     "test:modal-utils": "node --loader ./test/test-browser-loader.mjs test/test-modal-utils.js",
     "test:popover-menu": "node --loader ./test/test-browser-loader.mjs --test test/test-popover-menu.js",

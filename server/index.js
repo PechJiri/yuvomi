@@ -77,6 +77,7 @@ import scheduleRouter from './routes/schedule.js';
 import { moduleForPath, requiredAccess, tokenAllows } from './scopes.js';
 import { moduleAccessVerdict, MODULE_ACCESS_DENIED, MODULE_ACCESS_READ_ONLY } from './permissions.js';
 import { BODY_LIMIT, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from './utils/upload-limit.js';
+import { buildServiceWorkerResponse } from './utils/service-worker.js';
 
 const log     = createLogger('Server');
 const logSync = createLogger('Sync');
@@ -84,6 +85,13 @@ const logYuvomi = createLogger('Yuvomi');
 
 const { version: APP_VERSION } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
+);
+const SERVICE_WORKER_RESPONSE = buildServiceWorkerResponse(
+  readFileSync(new URL('../public/sw.js', import.meta.url), 'utf-8'),
+  {
+    appVersion: APP_VERSION,
+    buildRevision: process.env.APP_BUILD_REVISION,
+  },
 );
 const DEFAULT_APP_NAME = 'Yuvomi';
 
@@ -198,6 +206,14 @@ if (process.env.NODE_ENV === 'production' && process.env.ENABLE_API_DOCS !== 'tr
 // Bilder + Icons + Fonts: 30 Tage immutable (ändern sich praktisch nie).
 // manifest.json + sw.js: no-cache (PWA-Updates sollen sofort greifen).
 // --------------------------------------------------------
+app.get('/sw.js', (_req, res) => {
+  res.type(SERVICE_WORKER_RESPONSE.contentType);
+  res.setHeader('Cache-Control', SERVICE_WORKER_RESPONSE.cacheControl);
+  res.setHeader('CDN-Cache-Control', SERVICE_WORKER_RESPONSE.cdnCacheControl);
+  res.setHeader('Cloudflare-CDN-Cache-Control', SERVICE_WORKER_RESPONSE.cloudflareCdnCacheControl);
+  res.send(SERVICE_WORKER_RESPONSE.body);
+});
+
 app.use(express.static(path.join(import.meta.dirname, '..', 'public'), {
   etag: true,
   lastModified: true,
