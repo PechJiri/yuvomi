@@ -968,6 +968,20 @@ router.post('/', (req, res) => {
       ? 'open'
       : req.body.status;
 
+    // HIER STEHT ABSICHTLICH KEIN "LEERE SERIE"-GUARD, anders als im Kalender
+    // (#960). Die Regel beschreibt bei einer Aufgabe nur den NACHFOLGER: die
+    // Liste liest `due_date` direkt, und `spawnRecurrenceFollowup()` fragt die
+    // Regel erst beim Abhaken. Eine Aufgabe am 15. mit "am Monatsletzten, endet
+    // am 20." ist deshalb kein Fehlzustand, sondern eine gueltige endliche
+    // Aufgabe, deren einziges Vorkommen sie selbst ist - der Guard wies genau
+    // die ab. Im Kalender ist es umgekehrt: dort zeigt allein die Expansion,
+    // eine leere Serie waere unsichtbar. Dieselbe Regel, zwei Bedeutungen.
+    //
+    // DAS FAELLIGKEITSDATUM SELBST BLEIBT STEHEN. Es auf das erste Vorkommen zu
+    // ziehen war der Versuch, das DTSTART im CalDAV-Push eindeutig zu machen -
+    // aber `due_date` haengt an Vorlauf, Erinnerung und Folgeinstanz, und jede
+    // dieser Stellen rechnete danach auf einem Datum, das der Server hinterher
+    // geaendert hat. Welcher Tag der erste ist, beantwortet die Expansion.
     const userIds  = parseAssignedTo(req.body.assigned_to);
     const firstUid = userIds[0] ?? null;
 
@@ -1092,6 +1106,7 @@ router.put('/:id', (req, res) => {
       // Markierung nicht stillschweigend löschen.
       countdown       = task.countdown,
     } = req.body;
+
     const points = req.body.points !== undefined ? clampPoints(req.body.points) : task.points;
     const visibility = req.body.visibility !== undefined
       ? normalizeVisibility(req.body.visibility, task.visibility)

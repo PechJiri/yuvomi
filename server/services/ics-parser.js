@@ -348,6 +348,7 @@ function expandRRULE(vevent, windowStart, windowEnd) {
   // Tagtermine, deren lokales Datum == UTC-Datum ist (kein Mitternachts-Überlauf).
   const wall = vevent.tzid ? utcToWall(vevent.dtstart, vevent.tzid) : null;
   const tzAware = wall && wall.date === startDate;
+  const zonenUnsicher = !!vevent.tzid && !tzAware;
   let current = startDate, iterations = 0;
   const MAX_ITER = 1500;
   let occurrence = 0;
@@ -360,8 +361,8 @@ function expandRRULE(vevent, windowStart, windowEnd) {
     // zaehlte bis dahin die SCHLEIFE selbst (`iterations > maxCount`), also
     // jeder Kandidat - `FREQ=MONTHLY;BYDAY=MO;COUNT=2` lieferte einen Termin
     // statt zwei. (Dieselbe Aufteilung wie in services/calendar-events.js.)
-    if (!matchesRRuleByday(current, vevent.rrule)) {
-      const skip = nextOccurrence(current, vevent.rrule, { anchor: startDate });
+    if (!matchesRRuleByday(current, vevent.rrule, { utcDiffersFromLocal: zonenUnsicher })) {
+      const skip = nextOccurrence(current, vevent.rrule, { anchor: startDate, utcDiffersFromLocal: zonenUnsicher });
       if (!skip || skip <= current) break;
       current = skip;
       continue;
@@ -392,7 +393,7 @@ function expandRRULE(vevent, windowStart, windowEnd) {
     }
     // startDate ist DTSTART und damit der Anker: ohne ihn schreibt eine
     // Klemmung in einem kurzen Monat den Tag der Serie um (#978).
-    const next = nextOccurrence(current, vevent.rrule, { anchor: startDate });
+    const next = nextOccurrence(current, vevent.rrule, { anchor: startDate, utcDiffersFromLocal: zonenUnsicher });
     if (!next || next <= current) break;
     current = next;
   }

@@ -38,6 +38,29 @@ export function isExternalRecurringSeries(event) {
   return !!event?.recurrence_rule && !isLocalRecurringSeries(event);
 }
 
+/**
+ * Meint "dieser und alle folgenden" hier die GANZE Serie?
+ *
+ * Am Anfang einer Serie ist der Schnitt kein Schnitt: es bleibt nichts davor
+ * stehen. Loeschen heisst dann die ganze Serie loeschen, Bearbeiten heisst den
+ * Master aendern - in beiden Faellen ohne die Regel zu kuerzen.
+ *
+ * `is_recurring_instance` REICHT ALS FRAGE NICHT MEHR. Es sagt nur, ob das
+ * Vorkommen vom gespeicherten Datum abweicht, und bis #960 fielen "weicht ab"
+ * und "ist nicht der Anfang" zusammen. Seit ein Start neben dem Raster seiner
+ * Regel liegen darf (15. Januar, "am Monatsletzten"), ist das erste Vorkommen
+ * der 31.: eine Instanz, die abweicht, und trotzdem der Anfang. Der Schnitt
+ * kuerzte die Regel dort auf den 30. - eine leere Serie, die der Server
+ * ablehnt, womit sich der erste sichtbare Termin weder loeschen noch
+ * bearbeiten liess.
+ *
+ * Fehlt `is_series_start` (aeltere Antwort, nicht expandierter Termin), bleibt
+ * es beim vorherigen Verhalten.
+ */
+export function followingMeansWholeSeries(event) {
+  return !event?.is_recurring_instance || !!event?.is_series_start;
+}
+
 /** Tagesdifferenz (ganze Tage) zwischen zwei YYYY-MM-DD-Schlüsseln. */
 function dayDelta(fromKey, toKey) {
   return Math.round((parseLocalDateKey(toKey) - parseLocalDateKey(fromKey)) / 86400000);

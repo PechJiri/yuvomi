@@ -15,7 +15,7 @@ import { esc, fmtLocation } from '/utils/html.js';
 import { shiftEndDateKey, isEndBeforeStart, weekStartIndex, weekdayOrder,
          monthPeriodKeys, startOfLocalWeekKey, addLocalDays, defaultDateInPeriod,
          isWeekendKey } from '/utils/date.js';
-import { truncateRuleBefore, shiftSeriesStart, shiftEndForStart,
+import { truncateRuleBefore, shiftSeriesStart, shiftEndForStart, followingMeansWholeSeries,
          isLocalRecurringSeries, isExternalRecurringSeries } from '/utils/recurrence-scope.js';
 import { getReadableTextColor } from '/utils/color.js';
 import { resolveEventColor } from '/utils/event-color.js';
@@ -4153,7 +4153,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
 
     ${advancedSection(advancedFieldsHtml, { open: advancedFieldsOpen })}
 
-    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : null, { allowCount: true })}
+    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : null, { allowCount: true, expandsFromStart: true })}
 
     ${isEdit && isLocalRecurringSeries(event) ? renderRecurringScopeChooser('modal-edit', event.start_datetime.slice(0, 10)) : ''}
 
@@ -4332,7 +4332,10 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
         ? getRecurringScope(overlay, 'modal-edit')
         : 'series';
       const occDate = event?.start_datetime?.slice(0, 10);
-      const truncated = scope === 'following' && event.is_recurring_instance
+      // Am Anfang der Serie wird der Master aktualisiert statt geschnitten -
+      // warum das nicht an `is_recurring_instance` allein haengt, steht bei der
+      // Funktion.
+      const truncated = scope === 'following' && !followingMeansWholeSeries(event)
         ? truncateRuleBefore(event.recurrence_rule, occDate)
         : null;
 
@@ -4603,11 +4606,12 @@ function recurringDeleteChoice(event) {
 /**
  * Löscht dieses und alle folgenden Vorkommen einer lokalen Serie (#532), indem die
  * RRULE per UNTIL auf den Vortag gekürzt wird. Ist das geöffnete Vorkommen bereits
- * das erste (Master-DTSTART), verschwindet die gesamte Serie. Optimistisch + Undo.
+ * das erste der Serie, verschwindet sie ganz. Optimistisch + Undo.
  */
 async function deleteThisAndFollowing(event) {
-  // Erstes Vorkommen: „dieser und folgende" == ganze Serie.
-  if (!event.is_recurring_instance) {
+  // Am Anfang der Serie ist "dieser und folgende" die ganze Serie - warum das
+  // nicht an `is_recurring_instance` allein haengt, steht bei der Funktion.
+  if (followingMeansWholeSeries(event)) {
     await deleteEvent(event.id);
     return;
   }

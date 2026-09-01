@@ -2613,6 +2613,8 @@
         "labelEvery": "毎",
         "labelOnDays": "曜日",
         "lastDayOfMonth": "毎月の最終日",
+        "lastDayOfMonthHint": "開始日以降の最初の月末からシリーズが始まります。",
+        "lastDayOfMonthHintNext": "このタスクの期日は入力した日付のままです。月末になるのは次回の繰り返しからです。",
         "labelUntil": "終了日（任意）",
         "labelEnds": "終了",
         "endNever": "なし",

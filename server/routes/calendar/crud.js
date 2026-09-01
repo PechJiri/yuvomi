@@ -8,6 +8,8 @@ import express from 'express';
 import * as db from '../../db.js';
 import { str, color, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
 import { normalizeVisibility, visibilityWhere } from '../../services/visibility.js';
+import { hasAnyOccurrence } from '../../services/recurrence.js';
+import { utcToWall } from '../../utils/timezone.js';
 import {
   StorageError,
   cleanupStagedUpload,
@@ -111,6 +113,25 @@ router.post('/', async (req, res) => {
     const errors = collectErrors([vTitle, vDesc, vStart, vEnd, vColor, vLoc, vRrule, vCaldav, vGoogle, vOutlook]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     if (!vIcon) return res.status(400).json({ error: 'icon: invalid calendar event icon.', code: 400 });
+
+    // EINE SERIE OHNE EIN EINZIGES VORKOMMEN WIRD NICHT GESPEICHERT (#960).
+    // `FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120` ab dem 15. Januar nimmt der
+    // Validator an, und trotzdem liegt der erste Monatsletzte hinter dem UNTIL:
+    // ein Termin, den niemand je zu sehen bekaeme, weder hier noch im Feed.
+    //
+    // DAS GESPEICHERTE DATUM BLEIBT DAGEGEN, WAS EINGEGEBEN WURDE. Der Server
+    // zieht es NICHT auf das erste Vorkommen - er hat es einmal getan, und jede
+    // Stelle, die `start_datetime` weiterverarbeitet, ohne davon zu wissen, hat
+    // dabei etwas verschoben: die Erinnerung rechnete auf dem alten Tag, ein
+    // Titel-Edit bewegte eine eingelesene Serie. Welcher Tag der erste ist,
+    // beantwortet die Expansion (`expandRecurringEvents`); nach aussen bleibt
+    // das DTSTART damit uneindeutig, das ist bekannt und ein eigener Vorgang.
+    if (!hasAnyOccurrence(vStart.value, vRrule.value)) {
+      return res.status(400).json({
+        error: 'recurrence_rule: the rule has no occurrence on or after the start date.',
+        code: 400,
+      });
+    }
 
     const { all_day = 0 } = req.body;
     const userIds  = parseAssignedTo(req.body.assigned_to);
@@ -268,6 +289,64 @@ router.put('/:id', async (req, res) => {
         code: 400,
       });
     }
+    const {
+      title, description, start_datetime, end_datetime,
+      all_day, location, color: colorVal, recurrence_rule,
+    } = req.body;
+
+    // AUCH BEIM BEARBEITEN DARF KEINE LEERE SERIE ENTSTEHEN (#960) - aber nur
+    // dann abweisen, wenn DIESE Anfrage sie leer macht.
+    //
+    // NICHT DIE ANWESENHEIT DER FELDER PRUEFEN, SONDERN IHRE WERTE. Beide
+    // Formulare schicken bei jedem Speichern das ganze Objekt mit
+    // (`public/pages/calendar.js`, `public/pages/tasks.js`); "hat der Aufrufer
+    // das Feld geschickt?" ist deshalb immer wahr und taugt nicht als Frage.
+    // Wer nur den Titel aendert, wuerde sonst an einer eingelesenen Serie
+    // scheitern, die schon vorher kein Vorkommen hatte - ein Datensatz, den
+    // niemand mehr bearbeiten koennte.
+    //
+    // `null` heisst dabei "nicht anfassen", nicht "leer": der Validator laesst
+    // es durch, und das UPDATE unten behandelt es ueber COALESCE ebenso. Der
+    // Tagesvergleich reicht, weil `hasAnyOccurrence` ohnehin nur den Tag liest.
+    // DIESELBE FORMEL WIE DAS UPDATE UNTEN, sonst prueft der Guard einen
+    // Zustand, den es nie geben wird. `recurrence_rule` steht NICHT unter
+    // COALESCE: `null` loescht die Regel, statt sie stehen zu lassen. Wer die
+    // Wiederholung abschaltet und dabei das Startdatum aendert, wurde sonst
+    // gegen die ALTE Regel geprueft und mit 400 abgewiesen - fuer eine Serie,
+    // die es nach dem Speichern gar nicht mehr gibt.
+    const regelDanach = recurrence_rule !== undefined
+      ? (recurrence_rule || null)
+      : event.recurrence_rule;
+    const startDanach = start_datetime !== undefined && start_datetime !== null
+      ? start_datetime
+      : event.start_datetime;
+    const serieBeruehrt = regelDanach !== event.recurrence_rule
+      || String(startDanach ?? '').slice(0, 10) !== String(event.start_datetime ?? '').slice(0, 10);
+    // DER GUARD MUSS DENSELBEN KALENDERTAG MEINEN WIE DIE EXPANSION. Ein
+    // eingelesener Termin kann eine eigene Zone tragen: 31. Januar 20:00 in New
+    // York steht als 1. Februar 01:00 UTC in der Zeile. Fuer "am letzten Tag des
+    // Monats" zaehlt der Ortstag, also der 31. - ohne den Hinweis sah der Guard
+    // den Ersten, hielt die Serie fuer leer und wies eine gueltige Bearbeitung
+    // mit 400 ab. `expandRecurringEvents` nimmt die Pruefung im selben Fall
+    // zurueck (`zonenUnsicher`); nur `tzid` kann diesen Zustand erzeugen, die
+    // Route selbst nimmt das Feld nicht entgegen.
+    const wandUhr = event.tzid ? utcToWall(String(startDanach ?? ''), event.tzid) : null;
+    const zonenUnsicher = !!event.tzid
+      && !(wandUhr && wandUhr.date === String(startDanach ?? '').slice(0, 10));
+    if (serieBeruehrt
+      && !hasAnyOccurrence(startDanach, regelDanach, { utcDiffersFromLocal: zonenUnsicher })) {
+      return res.status(400).json({
+        error: 'recurrence_rule: the rule has no occurrence on or after the start date.',
+        code: 400,
+      });
+    }
+
+    // JEDE ABWEISUNG GEHOERT VOR DAS STAGING. Ab hier laedt
+    // `stageDocumentUpload` den Anhang in den Speicher (lokaler Ordner, WebDAV
+    // oder Cloud); aufgeraeumt wird er nur im catch-Block ganz unten. Ein
+    // fruehes `return` dazwischen laesst die hochgeladene Datei als Waise
+    // liegen - sichtbar wird das nie, weil der Aufrufer seine 400 bekommt.
+    // Der Serien-Guard oben stand genau deshalb schon einmal falsch herum.
     const attachmentDataProvided = Object.hasOwn(req.body, 'attachment_data');
     const replacementRequested = typeof req.body.attachment_data === 'string'
       && req.body.attachment_data.trim() !== '';
@@ -290,11 +369,6 @@ router.put('/:id', async (req, res) => {
         originalName: req.body.attachment_name || 'Attachment',
       });
     }
-
-    const {
-      title, description, start_datetime, end_datetime,
-      all_day, location, color: colorVal, recurrence_rule,
-    } = req.body;
 
     // `color` ueberhaupt mitgeschickt? Nur dann wird die Spalte angefasst - der
     // Wert selbst darf dann auch null sein und heisst "keine eigene Farbe" (#891).

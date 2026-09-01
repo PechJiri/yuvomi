@@ -319,7 +319,7 @@ test('Deep-Link-Instanz: expandiertes Event mit gleichem Datum wird bevorzugt', 
 // --------------------------------------------------------
 // nextOccurrence: INTERVAL-Korrektheit mit BYDAY
 // --------------------------------------------------------
-import { nextOccurrence, nextOccurrenceAfter } from '../server/services/recurrence.js';
+import { nextOccurrence, nextOccurrenceAfter, seriesStartFor, matchesRRuleByday } from '../server/services/recurrence.js';
 
 test('nextOccurrence: WEEKLY BYDAY=MO,TU,WE,TH,FR INTERVAL=2 — kein täglicher Übergang', () => {
   const rule = 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=2';
@@ -1115,10 +1115,20 @@ test('nextOccurrence: BYMONTHDAY=-1 trifft in jedem Monat dessen letzten Tag', (
   }
 });
 
-test('nextOccurrence: BYMONTHDAY=-1 gilt auch, wenn die Serie mitten im Monat beginnt', () => {
+test('nextOccurrence: das naechste Vorkommen kann im SELBEN Monat liegen', () => {
   // Die Regel ist eine Aussage, kein Nebenprodukt des Startdatums: wer sie
   // setzt, meint den letzten Tag, auch wenn er am 15. angelegt hat.
-  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-02-28');
+  //
+  // DIESER TEST HIELT DAS FALSCHE ERGEBNIS FEST. Er erwartete den 28. Februar
+  // und beschrieb damit genau den Fehler: vom 15. Januar aus ist das naechste
+  // Vorkommen der 31. Januar, nicht der Monatsletzte des Folgemonats. So fiel
+  // der 31. Januar ganz aus, sobald DTSTART nicht selbst auf der Regel lag.
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-01-31',
+    'der Monatsletzte des BASISMONATS, solange er noch bevorsteht');
+  assert(nextOccurrence('2026-01-31', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-02-28',
+    'steht er schon hinter uns, kommt der naechste Monat');
+  // Mit Intervall bleibt der Sprung erhalten, sobald der Basismonat erledigt ist.
+  assert(nextOccurrence('2026-01-31', 'FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1') === '2026-04-30');
 });
 
 test('nextOccurrence: der Anker haelt den gemeinten Tag ueber kurze Monate hinweg', () => {
@@ -1175,7 +1185,7 @@ test('nextOccurrence: gelesen wird NUR -1 bei MONTHLY, alles andere bleibt unbed
     === nextOccurrence('2026-01-15', 'FREQ=WEEKLY'), 'woechentlich erst recht');
 
   // Reichweite: die eine unterstuetzte Form wirkt.
-  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-02-28');
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-01-31');
 });
 
 test('nextOccurrenceAfter: COUNT gilt fuer eine -1-Serie, ohne sie abzuschneiden', () => {
@@ -1201,6 +1211,95 @@ test('nextOccurrence: ein unlesbarer Anker wirft auch bei YEARLY nicht', () => {
   assert(nextOccurrence('2024-02-29', 'FREQ=YEARLY', { anchor: 'gestern' }) === ohne,
     'faellt auf das bisherige Verhalten zurueck');
   assert(nextOccurrence('2024-02-29', 'FREQ=YEARLY', { anchor: '' }) === ohne);
+});
+
+// --------------------------------------------------------
+// Das erste Vorkommen einer Regel finden (#960)
+//
+// LESEND. `seriesStartFor` beantwortet, welcher Tag der erste ist - es
+// korrigiert kein gespeichertes Datum. Wer den Beweis fuer die Schreibrouten
+// sucht, findet ihn in test-calendar-routes.js und test-tasks-routes.js.
+// --------------------------------------------------------
+
+test('seriesStartFor findet das erste Vorkommen', () => {
+  const R = 'FREQ=MONTHLY;BYMONTHDAY=-1';
+  assert(seriesStartFor('2026-01-15', R) === '2026-01-31', 'der erste Treffer ab dem 15. ist der Monatsletzte');
+  assert(seriesStartFor('2026-01-31', R) === '2026-01-31', 'wer schon passt, bleibt');
+  // Die Uhrzeit bleibt Wanduhrzeit - nur der Tag wandert.
+  assert(seriesStartFor('2026-01-15T09:30:00', R) === '2026-01-31T09:30:00');
+});
+
+test('seriesStartFor laesst alles andere in Ruhe', () => {
+  // BYDAY ist ausdruecklich ausgenommen: Apple serialisiert "jeden Werktag" als
+  // Serie, deren Start auf ein Wochenende fallen kann, und die Expansion
+  // ueberspringt ihn (#549). Diese Entscheidung ist aelter und gilt weiter.
+  assert(seriesStartFor('2026-05-09', 'FREQ=WEEKLY;BYDAY=MO') === '2026-05-09');
+  assert(seriesStartFor('2026-01-15', 'FREQ=MONTHLY') === '2026-01-15', 'ohne die Angabe nichts');
+  assert(seriesStartFor('2026-01-15', null) === '2026-01-15', 'ohne Regel nichts');
+  assert(seriesStartFor(null, 'FREQ=MONTHLY;BYMONTHDAY=-1') === null, 'ohne Datum nichts');
+  assert(seriesStartFor('kaputt', 'FREQ=MONTHLY;BYMONTHDAY=-1') === 'kaputt', 'unlesbar bleibt unlesbar');
+});
+
+test('lastOccurrenceOf: COUNT=1 bezieht sich auf das erste VORKOMMEN, nicht auf DTSTART', () => {
+  // DTSTART ist nur dann Vorkommen 1, wenn es auf der Regel liegt. Bei einem
+  // unsynchronisierten Start (15. Januar) ist das erste Vorkommen der 31., und
+  // eine Grenze auf dem 15. wies genau dieses eine ab: eine Serie mit COUNT=1
+  // verschwand, sobald DTSTART vorbei war, obwohl die Expansion sie lieferte.
+  const q = (ab) => nextOccurrenceAfter('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=1', ab,
+    { seriesStart: '2026-01-15' });
+  assert(q('2026-01-20') === '2026-01-31', `das eine Vorkommen bleibt: ${q('2026-01-20')}`);
+  assert(q('2026-02-05') === null, 'danach ist die Serie vorbei');
+});
+
+test('seriesStartFor sucht weiter, bis ALLE Filter passen', () => {
+  // `BYMONTHDAY=-1` mit `BYDAY=MO` ist gueltig und meint die Schnittmenge: der
+  // erste Monatsletzte kann ein Samstag sein. Ein einzelner Schritt lieferte
+  // wieder ein Datum, das seine eigene Regel verfehlt - derselbe Fehler, gegen
+  // den diese Funktion gebaut ist, nur eine Runde spaeter.
+  const treffer = seriesStartFor('2026-01-15', 'FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=-1');
+  const d = new Date(`${treffer}T00:00:00Z`);
+  assert(d.getUTCDay() === 1, `${treffer} muss ein Montag sein`);
+  const letzter = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  assert(d.getUTCDate() === letzter, `${treffer} muss der Monatsletzte sein`);
+});
+
+test('nextOccurrenceAfter holt auf, bis ALLE Filter passen', () => {
+  // GEGENSTUECK ZUM TEST DARUEBER, UND ZWAR DAS NOETIGE: `seriesStartFor` fand
+  // den ersten Treffer bereits richtig - direkt danach verlor der Countdown den
+  // BYDAY-Filter wieder, weil `nextOccurrence` bei `BYMONTHDAY=-1` nur von
+  // Monatsletztem zu Monatsletztem springt. Die Kalender-Expansion filtert
+  // zusaetzlich, der Countdown nicht: dieselbe Serie, zwei Antworten.
+  const R = 'FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=-1';
+  const start = '2026-01-15';
+  const erster = seriesStartFor(start, R);
+  const treffer = nextOccurrenceAfter(erster, R, '2026-09-01', { seriesStart: start });
+  assert(treffer, 'die Serie laeuft weiter');
+  const d = new Date(`${treffer}T00:00:00Z`);
+  assert(d.getUTCDay() === 1, `${treffer} muss ein Montag sein`);
+  const letzter = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  assert(d.getUTCDate() === letzter, `${treffer} muss der Monatsletzte sein`);
+  // UND DIESELBE ANTWORT WIE DIE EXPANSION. Der eigentliche Schaden war nicht
+  // das falsche Datum an sich, sondern dass Kachel und Kalender auseinanderliefen.
+  let lauf = erster;
+  let expandiert = null;
+  for (let i = 0; i < 60; i++) {
+    const n = nextOccurrence(lauf, R);
+    if (!n || n <= lauf) break;
+    lauf = n;
+    if (lauf >= '2026-09-01' && matchesRRuleByday(lauf, R)) { expandiert = lauf; break; }
+  }
+  assert(treffer === expandiert,
+    `Countdown ${treffer} muss der Expansion ${expandiert} folgen`);
+});
+
+test('matchesRRuleByday filtert nicht, wo UTC- und Ortsdatum auseinanderfallen', () => {
+  // Ein Termin am 31. Januar um 20:00 New Yorker Zeit liegt in UTC schon am
+  // 1. Februar. Die Pruefung saehe dort den ersten statt des letzten Tages und
+  // wuerfe das Vorkommen still weg.
+  const R = 'FREQ=MONTHLY;BYMONTHDAY=-1';
+  assert(matchesRRuleByday('2026-02-01', R) === false, 'ohne Zonenhinweis wird gefiltert');
+  assert(matchesRRuleByday('2026-02-01', R, { utcDiffersFromLocal: true }) === true,
+    'mit Zonenhinweis nicht - lieber ein Vorkommen zu viel als eines lautlos verloren');
 });
 
 // --------------------------------------------------------

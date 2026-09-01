@@ -2625,6 +2625,8 @@
         "labelEvery": "Setiap",
         "labelOnDays": "Pada hari-hari ini",
         "lastDayOfMonth": "Pada hari terakhir bulan",
+        "lastDayOfMonthHint": "Rangkaian dimulai pada akhir bulan pertama sejak tanggal mulai.",
+        "lastDayOfMonthHintNext": "Tugas ini tetap jatuh tempo pada tanggal yang Anda masukkan; baru pengulangan berikutnya jatuh pada akhir bulan.",
         "labelUntil": "Berakhir pada (opsional)",
         "labelEnds": "Berakhir",
         "endNever": "Tidak pernah",

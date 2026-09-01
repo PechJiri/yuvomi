@@ -81,6 +81,9 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
     // ist (kein Mitternachts-Überlauf) - sonst alte Fixe-Suffix-Logik.
     const wall = (event.tzid && !isAllDay) ? utcToWall(event.start_datetime, event.tzid) : null;
     const tzAware = wall && wall.date === event.start_datetime.slice(0, 10);
+    // Einmal bestimmt, an beide Stellen gereicht: Filter UND Berechnung muessen
+    // dieselbe Antwort bekommen, sonst ist der Schutz halb.
+    const zonenUnsicher = !!event.tzid && !tzAware;
 
     // DTSTART ist zugleich Startpunkt und ANKER: ohne ihn leitet nextOccurrence
     // den gemeinten Tag aus dem vorigen Vorkommen ab, und eine Klemmung in einem
@@ -110,8 +113,12 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
       // damit verbrauchte jeder uebersprungene Wochentag ein Vorkommen:
       // `FREQ=MONTHLY;BYDAY=MO;COUNT=2` lieferte genau einen Termin, weil der
       // zweite Zaehler an einen Mittwoch ging, den niemand je zu sehen bekam.
-      if (!matchesRRuleByday(currentDate, event.recurrence_rule)) {
-        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart });
+      // Ein Termin mit eigener Zone kann in UTC an einem anderen Kalendertag
+      // liegen als vor Ort (#549 nutzt dieselbe Unterscheidung fuer die
+      // Uhrzeit). Die Monatsletzten-Pruefung wird dort ausgesetzt, statt ein
+      // Vorkommen still zu verlieren.
+      if (!matchesRRuleByday(currentDate, event.recurrence_rule, { utcDiffersFromLocal: zonenUnsicher })) {
+        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: zonenUnsicher });
         if (!next || next <= currentDate) break;
         currentDate = next;
         continue;
@@ -121,7 +128,7 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
       occurrence++;
 
       if (exceptions?.has(currentDate)) {
-        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart });
+        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: zonenUnsicher });
         if (!next || next <= currentDate) break;
         currentDate = next;
         continue;
@@ -160,10 +167,22 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
           start_datetime:       newStart,
           end_datetime:         newEnd,
           is_recurring_instance: currentDate !== event.start_datetime.slice(0, 10) ? 1 : 0,
+          // "IST DAS DER ERSTE TERMIN DER SERIE?" IST NICHT "WEICHT ER VOM
+          // GESPEICHERTEN DATUM AB?" - seit ein Start auf der Regel liegen darf,
+          // ohne ihr Raster zu treffen (#960), sind das zwei Fragen. Ein Termin
+          // am 15. mit "am Monatsletzten" hat sein erstes Vorkommen am 31.:
+          // eine Instanz, die vom Master abweicht, und trotzdem der Anfang.
+          //
+          // Das Frontend haengt "diesen und alle folgenden" daran: am Anfang
+          // der Serie meint das die ganze Serie, sonst einen Schnitt. Ohne diese
+          // Unterscheidung kuerzte es die Regel auf den Tag VOR dem ersten
+          // Vorkommen - eine leere Serie, die der Server zu Recht abwies. Der
+          // Zaehler steht hier ohnehin, weil COUNT ihn braucht.
+          is_series_start: occurrence === 1 ? 1 : 0,
         });
       }
 
-      const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart });
+      const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: zonenUnsicher });
       if (!next || next <= currentDate) break;
       currentDate = next;
     }

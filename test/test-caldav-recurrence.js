@@ -274,5 +274,66 @@ test('COUNT zaehlt ein ausgenommenes Vorkommen weiterhin mit (RFC 5545, #513)', 
   assert(tage.includes('2026-09-03'), 'und das dritte erscheint, statt der Ausnahme zum Opfer zu fallen');
 });
 
+test('ein DTSTART, das die Regel nicht erfuellt, ist kein Vorkommen', () => {
+  // Wer die Serie am 15. anlegt und "letzter Tag des Monats" ankreuzt, hat ein
+  // DTSTART, das nicht auf der Regel liegt. Der Filter prueste nur BYDAY, also
+  // ging der 15. Januar als erster Termin durch - und weil nextOccurrence von
+  // dort in den Folgemonat sprang, fiel der 31. Januar ganz aus.
+  const tage = occDays(VCAL('UID:unsync@x\r\nSUMMARY:Zaehlerstand\r\n'
+    + 'DTSTART;VALUE=DATE:20260115\r\nDTEND;VALUE=DATE:20260116\r\n'
+    + 'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1'), '2026-01-01', '2026-04-30');
+  assert(!tage.includes('2026-01-15'), `der 15. ist kein Vorkommen der Regel: ${tage.join(', ')}`);
+  assert(tage[0] === '2026-01-31', `der erste Termin ist der 31. Januar, bekommen ${tage[0]}`);
+  assert(tage.join(',') === '2026-01-31,2026-02-28,2026-03-31,2026-04-30', tage.join(', '));
+
+  // Und eine Serie, die synchron beginnt, kommt auf dasselbe Ergebnis - sonst
+  // haengt die Reihe am Startdatum statt an der Regel.
+  const synchron = occDays(VCAL('UID:sync@x\r\nSUMMARY:Zaehlerstand\r\n'
+    + 'DTSTART;VALUE=DATE:20260131\r\nDTEND;VALUE=DATE:20260201\r\n'
+    + 'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1'), '2026-01-01', '2026-04-30');
+  assert(synchron.join(',') === tage.join(','), `synchron: ${synchron.join(', ')}`);
+});
+
+test('eine Serie mit eigener Zone verliert ihr Monatsende nicht', () => {
+  // Ein Termin am 31. Januar um 20:00 New Yorker Zeit liegt in UTC schon am
+  // 1. Februar. Die Monatsletzten-Pruefung saehe dort den ersten statt des
+  // letzten Tages und wuerfe jedes Vorkommen still weg - die Serie waere leer.
+  //
+  // Geprueft wird ueber expandRecurringEvents, nicht ueber die Filterfunktion
+  // direkt: dass sie den Zonenhinweis KENNT, sagt nichts darueber, ob der
+  // Aufrufer ihn auch durchreicht. Genau das fiel beim ersten Wurf durch.
+  const ev = {
+    id: 42, tzid: 'America/New_York',
+    start_datetime: '2026-02-01T01:00:00Z', end_datetime: '2026-02-01T02:00:00Z',
+    all_day: 0, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  };
+  // Fenster bis Ende April: der lokale 31. Maerz liegt als UTC-Zeitstempel
+  // bereits im April - genau die Verschiebung, um die es hier geht.
+  const inst = expandRecurringEvents([ev], '2026-01-01', '2026-04-30');
+  assert(inst.length >= 3, `die Serie darf nicht leer werden, bekommen ${inst.length}`);
+
+  // UND SIE MUSS LOKAL AUF DEM MONATSLETZTEN LIEGEN, nicht nur vorhanden sein.
+  // Der erste Schutz setzte allein den FILTER aus; die Berechnung rechnete
+  // weiter auf UTC-Tagen und lieferte lokal den 27. Februar, den 30. Maerz,
+  // den 29. April - kein einziger davon ein Monatsletzter. Ein halb
+  // zurueckgedrehter Schutz sieht aus wie einer.
+  const lokal = inst.map((e) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(e.start_datetime)));
+  for (const tag of lokal) {
+    const [y, m, d] = tag.split('-').map(Number);
+    const letzter = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    assert(d === letzter, `${tag} ist lokal nicht der Monatsletzte (${letzter}.)`);
+  }
+
+  // WAS DIESER TEST NICHT ZEIGT - und was er deshalb nicht beweisen soll: der
+  // feste UTC-Tag traegt nur, solange die Sommerzeitumstellung ihn nicht ueber
+  // Mitternacht schiebt. 20:00 New Yorker Zeit hat dafuer vier Stunden Luft.
+  // Bei 23:30 hat es keine mehr: der Zeitstempel liegt dann bei 04:30Z, und
+  // nach der Umstellung auf EDT ergibt das lokal den 1. April statt des
+  // 31. Maerz. Das braucht die Rechnung in der Ereigniszone mit Rueckrechnung
+  // je Vorkommen und ist ein eigener Vorgang, kein Nachziehen hier.
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

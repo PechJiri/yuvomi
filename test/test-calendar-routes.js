@@ -717,6 +717,69 @@ test('PUT /:id — Validierungs-400s', async () => {
   assert.equal((await call('PUT', `/${id}`, { body: { attachment_data: dataUrl, remove_attachment: true } })).status, 400);
 });
 
+test('PUT /:id — abgewiesene Serie laesst keinen Anhang im Speicher liegen', async () => {
+  // REIHENFOLGE-PROBE, KEINE VERHALTENSPROBE. Der Serien-Guard (#960) stand
+  // einmal NACH `stageDocumentUpload`: die Datei war dann schon geschrieben,
+  // und das fruehe `return` sprang am catch-Block vorbei, der sie aufraeumt.
+  // Sichtbar wird so eine Waise nur bei ordner-gestuetzter Ablage - der
+  // Standardpfad legt den Anhang als BLOB in die Datenbank und wuerde die
+  // Luecke verstecken. Darum hier ein echter Ordner unter os.tmpdir().
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yuvomi-cal-attach-'));
+  const vorherEnabled = process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+  const vorherPath    = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = 'true';
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = dir;
+
+  const zaehleDateien = async (ordner) => {
+    const eintraege = await fs.readdir(ordner, { withFileTypes: true, recursive: true });
+    return eintraege.filter((e) => e.isFile()).length;
+  };
+
+  try {
+    const dataUrl = `data:text/plain;base64,${Buffer.from('Anhang').toString('base64')}`;
+    const id = insertEvent({ title: 'PUT-WAISE', start_datetime: '2041-07-01T09:00' });
+
+    // GEGENPROBE ZUERST: schreibt dieser Aufbau ueberhaupt eine Datei? Ohne
+    // diesen Nachweis waere die Null unten auch dann gruen, wenn das Staging
+    // hier gar nichts ablegt - der Test pruefte dann nichts.
+    const ok = await call('PUT', `/${id}`, { body: {
+      attachment_data: dataUrl, attachment_name: 'gut.txt',
+    } });
+    assert.equal(ok.status, 200);
+    assert.equal(await zaehleDateien(dir), 1, 'Gegenprobe: gelungener Anhang liegt im Ordner');
+
+    // Jetzt die eigentliche Probe: eine Regel ohne Vorkommen wird abgewiesen.
+    // Start am 15. Januar, letzter Monatstag als Regel, UNTIL am 20.: der
+    // erste Treffer (31.1.) liegt hinter dem Ende - die Serie ist leer.
+    const abgewiesen = await call('PUT', `/${id}`, { body: {
+      start_datetime: '2026-01-15T09:00',
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+      attachment_data: dataUrl, attachment_name: 'waise.txt',
+    } });
+    assert.equal(abgewiesen.status, 400, 'leere Serie wird abgewiesen');
+    // AM GRUND FESTNAGELN. Eine syntaktisch ungueltige Regel braechte auch
+    // einen 400 - aber aus dem Validator, lange vor dem Staging. Der Test
+    // stuende dann gruen, ohne die Reihenfolge je zu beruehren.
+    assert.match(
+      String(abgewiesen.body?.error ?? ''), /no occurrence/,
+      'der 400 kommt aus dem Serien-Guard, nicht aus der Formatpruefung'
+    );
+    assert.equal(
+      await zaehleDateien(dir), 1,
+      'keine zweite Datei: der abgewiesene Anhang wurde nie geschrieben'
+    );
+  } finally {
+    if (vorherEnabled === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+    else process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = vorherEnabled;
+    if (vorherPath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = vorherPath;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('PUT /:id — partielles Update lässt andere Felder unberührt', async () => {
   const id = insertEvent({ title: 'PUT-PARTIAL', start_datetime: '2041-02-01T09:00', color: '#111111' });
   const res = await call('PUT', `/${id}`, { body: { description: 'Nur Beschreibung' } });
@@ -883,4 +946,156 @@ test('DELETE /:id — 404 + 204', async () => {
   const id = insertEvent({ title: 'TO-DELETE', start_datetime: '2043-01-01T09:00' });
   assert.equal((await call('DELETE', `/${id}`)).status, 204);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM calendar_events WHERE id=?').get(id).n, 0);
+});
+
+test('POST / — der gespeicherte Start bleibt stehen, das erste Vorkommen ist der Monatsletzte (#960)', async () => {
+  // GEPRUEFT WIRD UEBER DIE EXPANSION, NICHT UEBER DIE SPALTE. Dass der Server
+  // das Datum in Ruhe laesst, ist nur die halbe Zusage - die andere ist, dass
+  // trotzdem der 31. der erste Termin ist. Beides steht deshalb in EINEM Test:
+  // wuerde die Route wieder anfangen zu ziehen, faellt die erste Zusage; ginge
+  // die Expansion verloren, die zweite.
+  const r = await call('POST', '/', {
+    body: {
+      title: 'SERIE-MONATSLETZTER', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T11:00',
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    },
+  });
+  assert.equal(r.status, 201);
+  assert.match(r.body.data.start_datetime, /^2026-01-15/,
+    `der Server aendert das eingegebene Datum nicht: ${r.body.data.start_datetime}`);
+  assert.match(r.body.data.end_datetime, /^2026-01-15T11:00/, 'und das Ende ebensowenig');
+
+  const fenster = await call('GET', '/?from=2026-01-01&to=2026-04-30');
+  const tage = fenster.body.data
+    .filter((e) => e.title === 'SERIE-MONATSLETZTER')
+    .map((e) => e.start_datetime.slice(0, 10));
+  assert.deepEqual(tage, ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30'],
+    `der 15. ist kein Vorkommen der Regel: ${tage.join(', ')}`);
+});
+
+test('POST / — eine Regel ohne jedes Vorkommen wird abgelehnt', async () => {
+  // FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120 ab dem 15. Januar: der erste
+  // Monatsletzte liegt hinter dem UNTIL. Gespeichert waere das ein Termin, den
+  // niemand je zu sehen bekaeme - eine leere Serie, kein Termin am 15.
+  const r = await call('POST', '/', {
+    body: {
+      title: 'Nie', start_datetime: '2026-01-15T09:00',
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+    },
+  });
+  assert.equal(r.status, 400, `erwartet 400, bekommen ${r.status}`);
+});
+
+test('PUT / — die Regel nachtraeglich ankreuzen verschiebt den Termin nicht (#960)', async () => {
+  // Der Server hat den Serienstart einmal beim Speichern auf die Regel gezogen.
+  // Das ist zurueckgenommen: `start_datetime` haengt an der Erinnerung, am
+  // optimistischen Render und am Ende des Termins, und keine dieser Stellen
+  // erfaehrt von einer Verschiebung, die erst in der Route passiert.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'SERIE-NACHTRAEGLICH', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T11:00' },
+  });
+  assert.equal(angelegt.status, 201);
+
+  const bearbeitet = await call('PUT', `/${angelegt.body.data.id}`, {
+    body: { recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  });
+  assert.equal(bearbeitet.status, 200);
+  assert.match(bearbeitet.body.data.start_datetime, /^2026-01-15/,
+    `der Start bleibt, wo er stand: ${bearbeitet.body.data.start_datetime}`);
+  assert.match(bearbeitet.body.data.end_datetime, /^2026-01-15T11:00/, 'das Ende ebenso');
+
+  const fenster = await call('GET', '/?from=2026-01-01&to=2026-02-28');
+  const tage = fenster.body.data
+    .filter((e) => e.title === 'SERIE-NACHTRAEGLICH')
+    .map((e) => e.start_datetime.slice(0, 10));
+  assert.deepEqual(tage, ['2026-01-31', '2026-02-28'], `bekommen: ${tage.join(', ')}`);
+});
+
+test('PUT / — an einer vorher schon leeren Serie laesst sich der Titel aendern', async () => {
+  // DIE PRAESENZ EINES FELDES IST KEINE AENDERUNG. Das Formular schickt bei
+  // jedem Speichern `start_datetime` UND `recurrence_rule` mit, auch wenn nur
+  // der Titel angefasst wurde. Wer danach fragt, ob das Feld dabei war, bekommt
+  // immer ja - und der Guard unten wuerde jede Bearbeitung dieses Datensatzes
+  // mit 400 abweisen. Verglichen werden deshalb die WERTE.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Leere Serie', start_datetime: '2026-01-15T09:00' },
+  });
+  const id = angelegt.body.data.id;
+  // Am Guard vorbei in die Zeile schreiben, wie es der Sync tut.
+  db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
+
+  const nurTitel = await call('PUT', `/${id}`, {
+    body: { title: 'Neuer Titel', start_datetime: '2026-01-15T09:00', recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120' },
+  });
+  assert.equal(nurTitel.status, 200, `ein Titel-Edit darf nicht scheitern, bekommen ${nurTitel.status}`);
+  assert.equal(nurTitel.body.data.title, 'Neuer Titel');
+
+  // Wer die Serie WIRKLICH anfasst und sie damit leer macht, bekommt weiter 400.
+  const leerGemacht = await call('PUT', `/${id}`, {
+    body: { recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260118' },
+  });
+  assert.equal(leerGemacht.status, 400, `erwartet 400, bekommen ${leerGemacht.status}`);
+});
+
+test('PUT / — ein Titel-Edit laesst eine eingelesene Serie in Ruhe (#756)', async () => {
+  // Eine aus einem Fremdkalender eingelesene Serie darf einen absichtlich
+  // unsynchronisierten Start haben. Er bleibt in jedem Fall stehen.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Fremd', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T10:00' },
+  });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
+
+  const nurTitel = await call('PUT', `/${id}`, { body: { title: 'Neuer Titel' } });
+  assert.equal(nurTitel.status, 200);
+  assert.match(nurTitel.body.data.start_datetime, /^2026-01-15/,
+    `der Start darf sich nicht bewegen: ${nurTitel.body.data.start_datetime}`);
+});
+
+test('PUT / — die Wiederholung abschalten wird nicht gegen die alte Regel geprueft', async () => {
+  // `recurrence_rule` steht als einziges der Serienfelder NICHT unter COALESCE:
+  // `null` loescht die Regel. Wurde der Guard trotzdem gegen die gespeicherte
+  // Regel gerechnet, wies er das Abschalten mit 400 ab - fuer eine Serie, die
+  // es nach dem Speichern gar nicht mehr gibt.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Abschalten', start_datetime: '2026-01-15T09:00' },
+  });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
+
+  const aus = await call('PUT', `/${id}`, {
+    body: { recurrence_rule: null, start_datetime: '2026-01-16T09:00' },
+  });
+  assert.equal(aus.status, 200, `das Abschalten darf nicht scheitern, bekommen ${aus.status}`);
+  assert.equal(aus.body.data.recurrence_rule, null, 'die Regel ist geloescht');
+  assert.match(aus.body.data.start_datetime, /^2026-01-16/, 'und das neue Datum steht');
+});
+
+test('PUT / — eine Serie mit eigener Zone wird an ihrem Ortstag geprueft', async () => {
+  // 31. Januar 20:00 in New York steht als 1. Februar 01:00 UTC in der Zeile.
+  // Fuer "am letzten Tag des Monats" zaehlt der Ortstag, also der 31.: die
+  // Serie hat ein Vorkommen und ist gueltig. Ohne Zonenhinweis sah der Guard
+  // den Ersten, hielt sie fuer leer und wies die Bearbeitung ab - fuer einen
+  // Termin, den der Kalender daneben anzeigte.
+  const id = insertEvent({ title: 'NY-Serie', start_datetime: '2026-02-01T01:00:00Z' });
+  db.prepare('UPDATE calendar_events SET tzid = ? WHERE id = ?').run('America/New_York', id);
+
+  const res = await call('PUT', `/${id}`, { body: {
+    title: 'NY-Serie', start_datetime: '2026-02-01T01:00:00Z',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260220',
+  } });
+  assert.equal(res.status, 200, `erwartet 200, bekommen ${res.status}`);
+
+  // GEGENPROBE IM TEST SELBST: ohne eigene Zone ist der 1. Februar wirklich
+  // kein Monatsletzter, und der Guard greift weiter. Sonst waere der Fix eine
+  // Abschaltung mit Umweg.
+  const ohne = insertEvent({ title: 'Ohne Zone', start_datetime: '2026-02-01T01:00:00Z' });
+  const res2 = await call('PUT', `/${ohne}`, { body: {
+    title: 'Ohne Zone', start_datetime: '2026-02-01T01:00:00Z',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260220',
+  } });
+  assert.equal(res2.status, 400, `ohne Zone erwartet 400, bekommen ${res2.status}`);
 });

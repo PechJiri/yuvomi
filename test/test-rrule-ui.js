@@ -165,9 +165,17 @@ test('die Beschreibung des Auswahlfelds folgt dem Hinweis, nicht nur sein hidden
   // Referenzierten von der Verborgen-Regel aus). Bliebe die Referenz stehen,
   // hoerte ein Screenreader-Nutzer den Hinweis weiter, den Sehende nicht mehr
   // sehen - beide Modalitaeten muessen denselben Zustand zeigen.
-  assert.match(renderRRuleFields('task', null, {}), /aria-describedby="task-rrule-hint"/,
+  // GEPRUEFT WIRD DAS AUSWAHLFELD, NICHT DIE GANZE AUSGABE. Die erste Fassung
+  // suchte `aria-describedby` im gesamten Markup und wurde rot, als der
+  // Monatsletzten-Schalter seinen EIGENEN, dauerhaft gueltigen Hinweis bekam
+  // (#960) - ein anderer Knoten mit einer anderen Aussage. Die Regel gilt dem
+  // Frequenz-Feld: seine Erklaerung ist beantwortet, sobald eine Wiederholung
+  // gewaehlt ist.
+  const freqTag = (html) => html.slice(html.indexOf('id="task-rrule-freq"') - 200,
+    html.indexOf('id="task-rrule-freq"') + 200);
+  assert.match(freqTag(renderRRuleFields('task', null, {})), /aria-describedby="task-rrule-hint"/,
     'ohne Wiederholung: ohne die Zuordnung liest ein Screenreader die Auswahl ohne ihre Erklaerung vor');
-  assert.doesNotMatch(renderRRuleFields('task', 'FREQ=WEEKLY', {}), /aria-describedby/,
+  assert.doesNotMatch(freqTag(renderRRuleFields('task', 'FREQ=WEEKLY', {})), /aria-describedby/,
     'mit Wiederholung: der Hinweis ist beantwortet und darf auch nicht mehr vorgelesen werden');
 });
 
@@ -365,4 +373,99 @@ test('der Server nimmt nur BYMONTHDAY=-1 an, nichts Weiteres (#960)', async () =
   }
   assert.ok(RRULE_RE.test('FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=-1'),
     'unter MONTHLY bleibt sie erlaubt, auch neben BYDAY');
+});
+
+test('der Hinweis nennt in jeder Sprache dieselbe Richtung (#960)', async () => {
+  // Die hindi-Fassung sagte "vor dem Startdatum" und beschrieb damit das
+  // Gegenteil dessen, was passiert - unmittelbar bevor jemand ein Datum
+  // aendernd speichert. Eine Uebersetzung, die in die falsche Richtung zeigt,
+  // ist schlechter als gar keine.
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = new URL('../public/locales/', import.meta.url);
+  const sprachen = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  assert.ok(sprachen.length >= 20, `Reichweite: ${sprachen.length} Sprachen gelesen`);
+
+  // Geprueft wird die Sache, nicht der Wortlaut: die deutsche Referenz und die
+  // englische Fassung nennen beide "ab"/"on or after". Ein Marker fuer die
+  // Gegenrichtung darf in keiner Fassung stehen.
+  //
+  // BEIDE HINWEISE, nicht nur der erste: sie stehen an derselben Stelle im
+  // Formular und unterscheiden sich nur nach Modul. Ein Guard, der einen von
+  // ihnen nicht kennt, deckt die Haelfte der Nutzer nicht ab.
+  const gegenrichtung = /\bbefore\b|\bvor dem\b|से पहले|antes de|avant la/i;
+  for (const datei of sprachen) {
+    const rrule = JSON.parse(readFileSync(new URL(datei, dir), 'utf8')).rrule;
+    for (const key of ['lastDayOfMonthHint', 'lastDayOfMonthHintNext']) {
+      const wert = rrule?.[key];
+      assert.ok(wert, `${datei}: ${key} fehlt`);
+      assert.ok(!gegenrichtung.test(wert), `${datei}/${key} zeigt in die falsche Richtung: ${wert}`);
+    }
+  }
+});
+
+test('der Monatsletzten-Hinweis sagt in jedem Modul, was dort passiert (#960)', () => {
+  // Die beiden Module verarbeiten die Regel VERSCHIEDEN: der Kalender rechnet
+  // sie vom Startdatum aus aus, die Aufgabe schreibt ein einzelnes Datum fort.
+  // Ein gemeinsamer Hinweis verspricht deshalb der einen Haelfte der Nutzer das
+  // Gegenteil dessen, was sie danach sehen - die Aufgabe bleibt am eingetragenen
+  // Tag faellig, Liste und Countdown lesen `due_date` direkt.
+  //
+  // GEPRUEFT UEBER DIE AUFRUFER-SIGNATUR, nicht ueber den Prefix: dass die
+  // Funktion zwei Texte KENNT, sagt nichts darueber, ob der Kalender die Option
+  // auch setzt.
+  const kalender = renderRRuleFields('event', 'FREQ=MONTHLY', { allowCount: true, expandsFromStart: true });
+  const aufgabe  = renderRRuleFields('task', 'FREQ=MONTHLY', { allowFromCompletion: true });
+
+  // MIT DEN SPITZEN KLAMMERN, sonst prueft der Test sich selbst weg: unter dem
+  // Loader liefert `t()` den Schluessel, und `rrule.lastDayOfMonthHint` ist ein
+  // Praefix von `rrule.lastDayOfMonthHintNext` - ein blosses includes() waere
+  // fuer beide wahr und der Test immer gruen.
+  const KAL  = '>rrule.lastDayOfMonthHint<';
+  const AUFG = '>rrule.lastDayOfMonthHintNext<';
+
+  assert.ok(kalender.includes(KAL), 'der Kalender rechnet vom Startdatum aus und sagt das auch');
+  assert.ok(!kalender.includes(AUFG), 'und nicht beides');
+  assert.ok(aufgabe.includes(AUFG), 'die Aufgabe verspricht keinen Termin, den sie nicht liefert');
+  assert.ok(!aufgabe.includes(KAL), 'und nicht beides');
+});
+
+test('jeder Aufrufer des Wiederholungsformulars beantwortet die Expansionsfrage (#960)', async () => {
+  // DER TEST OBEN BEWEIST NICHTS UEBER DIE AUFRUFER. Er uebergibt die Option
+  // selbst, also bleibt er gruen, auch wenn calendar.js sie gar nicht setzt -
+  // gemessen, nicht vermutet: das Entfernen im Aufrufer liess ihn durchgehen.
+  //
+  // Geprueft wird deshalb eine REGEL, keine Liste: wer das Formular einbindet,
+  // muss `expandsFromStart` NENNEN. Rechnet das Modul die Regel vom Startdatum
+  // aus (Kalender), steht dort true; schreibt es ein einzelnes Datum fort
+  // (Aufgaben), false. Ein neues Modul kann die Frage damit nicht stillschweigend
+  // ueberspringen und den falschen Hinweis erben - es muss sie beantworten.
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = new URL('../public/pages/', import.meta.url);
+
+  const aufrufe = [];
+  for (const datei of readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+    const quelle = readFileSync(new URL(datei, dir), 'utf8');
+    for (const m of quelle.matchAll(/renderRRuleFields\s*\(/g)) {
+      // Von der Klammer an so weit lesen, wie der Aufruf reicht - die Optionen
+      // stehen im letzten Argument und koennen ueber Zeilen laufen.
+      let tiefe = 0, i = m.index + m[0].length - 1;
+      for (; i < quelle.length; i++) {
+        if (quelle[i] === '(') tiefe++;
+        else if (quelle[i] === ')' && --tiefe === 0) break;
+      }
+      aufrufe.push({ datei, text: quelle.slice(m.index, i + 1) });
+    }
+  }
+
+  assert.ok(aufrufe.length >= 2, `Reichweite: ${aufrufe.length} Aufrufe gefunden`);
+  for (const { datei, text } of aufrufe) {
+    assert.match(text, /expandsFromStart\s*:\s*(true|false)/,
+      `${datei} bindet das Wiederholungsformular ein, ohne zu sagen, ob es die Regel vom Startdatum aus ausrechnet - der Monatsletzten-Hinweis waere dort geraten`);
+  }
+
+  // Und die eine Antwort, die aus der Sache folgt: der Kalender expandiert.
+  const kal = aufrufe.find((a) => a.datei === 'calendar.js');
+  assert.ok(kal, 'calendar.js bindet das Formular ein');
+  assert.match(kal.text, /expandsFromStart\s*:\s*true/,
+    'der Kalender expandiert die Serie ueber expandRecurringEvents und zeigt den ersten Monatsletzten');
 });

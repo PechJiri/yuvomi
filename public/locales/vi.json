@@ -2613,6 +2613,8 @@
         "labelEvery": "Mỗi",
         "labelOnDays": "Vào những ngày này",
         "lastDayOfMonth": "Vào ngày cuối cùng của tháng",
+        "lastDayOfMonthHint": "Chuỗi bắt đầu vào cuối tháng đầu tiên kể từ ngày bắt đầu.",
+        "lastDayOfMonthHintNext": "Nhiệm vụ này vẫn đến hạn vào ngày bạn đã nhập; chỉ lần lặp tiếp theo mới rơi vào cuối tháng.",
         "labelUntil": "Kết thúc vào (tùy chọn)",
         "labelEnds": "Kết thúc",
         "endNever": "Không bao giờ",

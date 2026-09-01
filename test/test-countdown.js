@@ -391,6 +391,27 @@ test('ein Termin mit Uhrzeit zählt auf SEINEN Kalendertag, nicht auf den UTC-Ta
   );
 });
 
+test('eine Serie mit eigener Zone wird nicht verschwiegen', () => {
+  // 31. Januar 20:00 in New York liegt in UTC schon am 1. Februar. Fuer "am
+  // letzten Tag des Monats" zaehlt der Ortstag, also der 31. - die Serie ist
+  // gueltig, und der Kalender zeigt sie. Die Kachel fragte dagegen ohne
+  // Zonenhinweis, sah den Ersten, fand kein Vorkommen und gab null zurueck:
+  // ein Termin, den eine Stelle anzeigt und die andere verschweigt.
+  const ev = {
+    id: 1, title: 'NY', all_day: 0, tzid: 'America/New_York',
+    start_datetime: '2026-02-01T01:00:00Z',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260220',
+  };
+  assert.equal(nextEventDate(ev, '2026-01-15'), '2026-02-01');
+
+  // GEGENPROBE IN DIE ANDERE RICHTUNG: ohne eigene Zone bleibt die Pruefung
+  // scharf. Sonst waere der Fix eine Abschaltung mit Umweg - dieselbe Regel
+  // haette dann gar keine Wirkung mehr.
+  const ohneZone = { ...ev, tzid: null };
+  assert.equal(nextEventDate(ohneZone, '2026-01-15'), null,
+    'ohne Zonenhinweis ist der 1. Februar kein Monatsletzter');
+});
+
 test('nextEventDate gibt für einen vergangenen Einzeltermin nichts zurück', () => {
   assert.equal(nextEventDate({ start_datetime: '2026-08-16' }, '2026-08-17'), null);
   assert.equal(nextEventDate({ start_datetime: '2026-08-17' }, '2026-08-17'), '2026-08-17');
@@ -711,4 +732,32 @@ test('ein geloeschtes primaeres Mitglied laesst die Kachel nicht farblos zurueck
     .items.find((c) => c.title === 'Verwaist');
   assert.equal(zeile.color, '#D8B349',
     'die Kachel faellt auf den verbliebenen Zugewiesenen zurueck, nicht auf den Modulton');
+});
+
+test('der Countdown zeigt kein Datum, an dem die Serie kein Vorkommen hat (#960)', () => {
+  // Ein Termin am 15. mit "am letzten Tag des Monats" hat am 15. kein
+  // Vorkommen. Dieser Zweig reichte das Startdatum ungeprueft durch, sobald es
+  // in der Zukunft lag - der Countdown kuendigte einen Termin an, den die
+  // Kalenderansicht nicht zeigte. Das gespeicherte Datum bleibt dabei stehen;
+  // gefragt wird nur, welcher Tag der erste ist.
+  const ev = { start_datetime: '2026-01-15', recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' };
+  assert.equal(nextEventDate(ev, '2026-01-01', null, GRACE), '2026-01-31');
+
+  // Ohne die Angabe bleibt der Start der naechste Termin.
+  assert.equal(nextEventDate({ ...ev, recurrence_rule: 'FREQ=MONTHLY' }, '2026-01-01', null, GRACE),
+    '2026-01-15');
+});
+
+test('eine Serie ohne jedes Vorkommen liefert kein Countdown-Datum (#960)', () => {
+  // `seriesStartFor` gibt ohne Treffer das Datum zurueck, das es bekommen hat -
+  // "nicht bewegt" und "nichts gefunden" sehen am Rueckgabewert gleich aus. Bei
+  // BYMONTHDAY=-1 mit einem UNTIL vor dem ersten Monatsletzten waere der
+  // unveraenderte Start als naechster Termin durchgegangen, obwohl die
+  // Kalenderansicht nichts zeigt.
+  const leer = { start_datetime: '2026-01-15', recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120' };
+  assert.equal(nextEventDate(leer, '2026-01-01', null, GRACE), null);
+
+  // Dieselbe Regel mit Luft nach hinten hat ein Vorkommen und liefert es.
+  const voll = { ...leer, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260215' };
+  assert.equal(nextEventDate(voll, '2026-01-01', null, GRACE), '2026-01-31');
 });

@@ -1018,6 +1018,12 @@ ${syncTargetFieldHtml(task)}
       ${renderRRuleFields('task', task?.recurrence_rule, {
         allowFromCompletion: true,
         fromCompletion: !!task?.recurrence_from_completion,
+        // AUSDRUECKLICH FALSE, nicht weggelassen (#960). Eine Aufgabe ist eine
+        // Zeile mit einem Faelligkeitsdatum, das Liste, Ueberfaelligkeit und
+        // Countdown direkt lesen - sie wird nicht wie eine Kalenderserie vom
+        // Startdatum aus expandiert. Der Monatsletzten-Hinweis muss das sagen,
+        // sonst verspricht er einen Termin, den es hier nicht gibt.
+        expandsFromStart: false,
       })}
 
       ${renderReminderSection(task, reminder)}

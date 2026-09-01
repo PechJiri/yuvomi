@@ -2613,6 +2613,8 @@
         "labelEvery": "Cada",
         "labelOnDays": "En estos días",
         "lastDayOfMonth": "El último día del mes",
+        "lastDayOfMonthHint": "La serie comienza en el primer fin de mes a partir de la fecha de inicio.",
+        "lastDayOfMonthHintNext": "Esta tarea sigue venciendo en la fecha que introdujiste; solo la siguiente repetición cae en el fin de mes.",
         "labelUntil": "Termina el (opcional)",
         "labelEnds": "Termina",
         "endNever": "Nunca",

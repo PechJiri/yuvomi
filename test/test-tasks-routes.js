@@ -917,3 +917,127 @@ test('POST: ein leerer Status ist kein Status, sondern keiner (Review zu #807)',
     assert.equal(r.body.data.archived_at, null);
   }
 });
+
+test('POST: das eingegebene Faelligkeitsdatum bleibt stehen (#960)', async () => {
+  // Der Server hat es einmal auf das erste Vorkommen der Regel gezogen, damit
+  // das DTSTART im CalDAV-Push eindeutig ist. Das ist zurueckgenommen:
+  // `due_date` haengt an Vorlauf, Erinnerung und Folgeinstanz, und keine dieser
+  // Stellen erfaehrt von einer Verschiebung, die erst in der Route passiert -
+  // der Client hat seine Erinnerung da laengst auf dem alten Tag gerechnet.
+  const admin = { id: ALICE, role: 'admin' };
+  const r = await call('POST', '/', {
+    as: admin,
+    body: {
+      title: 'Zaehlerstand ablesen', start_date: '2026-01-10', due_date: '2026-01-15',
+      is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    },
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.due_date, '2026-01-15', 'die Faelligkeit bleibt, wie eingegeben');
+  assert.equal(r.body.data.start_date, '2026-01-10', 'und der Vorlauf mit ihr');
+});
+
+test('POST: eine Aufgabe, deren einziges Vorkommen sie selbst ist, wird angenommen', async () => {
+  // GEGENSTUECK ZUM KALENDER, NICHT SEINE KOPIE. Dort weist der Server eine
+  // Serie ohne Vorkommen ab, weil allein die Expansion sie zeigt. Bei Aufgaben
+  // liest die Liste `due_date` direkt, und die Regel betrifft erst den
+  // Nachfolger: eine Aufgabe am 15. mit "am Monatsletzten, endet am 20." ist
+  // am 15. faellig und danach fertig - gueltig, nicht leer. Ein aus dem
+  // Kalender uebernommener Guard wies genau die ab.
+  const admin = { id: ALICE, role: 'admin' };
+  const r = await call('POST', '/', {
+    as: admin,
+    body: {
+      title: 'Einmal und fertig', due_date: '2026-01-15',
+      is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+    },
+  });
+  assert.equal(r.status, 201, `erwartet 201, bekommen ${r.status}`);
+  assert.equal(r.body.data.due_date, '2026-01-15', 'faellig am eingetragenen Tag');
+  // UND SIE IST AUCH ZU SEHEN. Das ist der Punkt: waere sie unsichtbar wie ein
+  // leerer Kalendertermin, haette der Guard recht gehabt.
+  const liste = await call('GET', '/', { as: admin });
+  assert.ok(
+    liste.body.data.some((t) => t.id === r.body.data.id),
+    'die Aufgabe steht in der Liste'
+  );
+});
+
+test('PUT: die Regel nachtraeglich ankreuzen verschiebt die Faelligkeit nicht (#960)', async () => {
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Erst ohne Regel', due_date: '2026-01-15' } });
+  assert.equal(angelegt.body.data.due_date, '2026-01-15');
+
+  const bearbeitet = await call('PUT', `/${angelegt.body.data.id}`, {
+    as: admin,
+    body: { title: 'Erst ohne Regel', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  });
+  assert.equal(bearbeitet.status, 200);
+  assert.equal(bearbeitet.body.data.due_date, '2026-01-15', 'der Server aendert das Datum nicht');
+});
+
+test('PUT: eine Serie ohne Nachfolger bleibt bearbeitbar', async () => {
+  // Eine Serie, die keinen Nachfolger mehr hervorbringt, ist kein kaputter
+  // Datensatz: die Aufgabe selbst bleibt faellig und muss sich weiter
+  // bearbeiten lassen. Ein aus dem Kalender uebernommener Guard sperrte diese
+  // Zeile - und weil das Formular bei jedem Speichern alle Felder mitschickt,
+  // traf es auch reine Titel-Edits.
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Leere Serie', due_date: '2026-01-15' } });
+  const id = angelegt.body.data.id;
+  // Am Guard vorbei in die Zeile schreiben, wie es der Sync tut.
+  db.prepare('UPDATE tasks SET is_recurring = 1, recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
+
+  const nurTitel = await call('PUT', `/${id}`, {
+    as: admin,
+    body: {
+      title: 'Neuer Titel', due_date: '2026-01-15',
+      is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+    },
+  });
+  assert.equal(nurTitel.status, 200, `ein Titel-Edit darf nicht scheitern, bekommen ${nurTitel.status}`);
+  assert.equal(nurTitel.body.data.title, 'Neuer Titel');
+
+  // Und auch das Verkuerzen der Regel geht durch: die Aufgabe bleibt am 15.
+  // faellig, nur ein Nachfolger entsteht nicht mehr.
+  const verkuerzt = await call('PUT', `/${id}`, {
+    as: admin,
+    body: { title: 'Neuer Titel', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260118' },
+  });
+  assert.equal(verkuerzt.status, 200, `erwartet 200, bekommen ${verkuerzt.status}`);
+  assert.equal(verkuerzt.body.data.due_date, '2026-01-15', 'die Faelligkeit bleibt stehen');
+});
+
+test('PUT: ein Titel-Edit laesst eine eingelesene Serie in Ruhe (#756)', async () => {
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Fremd', due_date: '2026-01-15' } });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE tasks SET is_recurring = 1, recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
+
+  const nurTitel = await call('PUT', `/${id}`, { as: admin, body: { title: 'Neuer Titel' } });
+  assert.equal(nurTitel.status, 200);
+  assert.equal(nurTitel.body.data.due_date, '2026-01-15', 'die Faelligkeit darf sich nicht bewegen');
+});
+
+test('PUT: die Wiederholung laesst sich einschalten, auch ohne Nachfolger', async () => {
+  // Eine Aufgabe kann eine Regel tragen, ohne dass `is_recurring` gesetzt ist.
+  // Wird sie eingeschaltet und bringt die Regel keinen Nachfolger hervor, ist
+  // das kein Fehler: die Aufgabe bleibt an ihrem Tag faellig und laeuft danach
+  // aus. Genau diesen Fall wies der frühere Guard ab.
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Ruhende Regel', due_date: '2026-01-15' } });
+  const id = angelegt.body.data.id;
+  db.prepare('UPDATE tasks SET recurrence_rule = ? WHERE id = ?')
+    .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
+
+  const ein = await call('PUT', `/${id}`, { as: admin, body: { is_recurring: 1 } });
+  assert.equal(ein.status, 200, `das Einschalten ist erlaubt, bekommen ${ein.status}`);
+
+  // Eine Regel MIT Vorkommen laesst sich dagegen einschalten.
+  db.prepare('UPDATE tasks SET recurrence_rule = ? WHERE id = ?').run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
+  const ok = await call('PUT', `/${id}`, { as: admin, body: { is_recurring: 1 } });
+  assert.equal(ok.status, 200, `erwartet 200, bekommen ${ok.status}`);
+  assert.equal(ok.body.data.due_date, '2026-01-15', 'und das Datum bleibt stehen');
+});

@@ -36,7 +36,7 @@
  * die dieses Widget je hat.
  */
 
-import { nextOccurrenceAfter } from './recurrence.js';
+import { hasAnyOccurrence, nextOccurrenceAfter, seriesStartFor } from './recurrence.js';
 import { loadEventExceptions } from './calendar-events.js';
 import { visibilityWhere } from './visibility.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
@@ -147,9 +147,37 @@ export function nextEventDate(event, todayKey, exceptions = null, { graceDays = 
    *
    * Die Kalender-Oberflaeche bietet "endet nach N Malen" ausdruecklich an
    * (`allowCount` in pages/calendar.js), das ist also keine Sonderform. */
-  let candidate = startKey >= todayKey
-    ? startKey
-    : nextOccurrenceAfter(startKey, event.recurrence_rule, todayKey, { seriesStart: startKey });
+  // DER START IST NUR DANN DER NAECHSTE TERMIN, WENN ER AUF DER REGEL LIEGT.
+  // Ein Termin am 15. mit "am letzten Tag des Monats" hat am 15. kein
+  // Vorkommen - der Countdown zeigte es trotzdem an, weil dieser Zweig das
+  // Startdatum ungeprueft durchreicht, sobald es in der Zukunft liegt. Das
+  // gespeicherte Datum bleibt dabei unangetastet - gefragt wird nur, welcher
+  // Tag der erste ist.
+  //
+  // OHNE TREFFER GIBT `seriesStartFor` DAS DATUM ZURUECK, DAS ES BEKOMMEN HAT.
+  // Das ist der richtige Umgang fuer eine Funktion, die nichts erfinden soll -
+  // hier waere es aber genau der Fehler von oben: bei
+  // `BYMONTHDAY=-1;UNTIL=20260120` ab dem 15. Januar gibt es kein Vorkommen,
+  // und der unveraenderte 15. saehe aus wie einer. "Nicht bewegt" und "nichts
+  // gefunden" sind vom Rueckgabewert her nicht zu unterscheiden, deshalb wird
+  // vorher gefragt.
+  // DIESELBE ZONENFRAGE WIE IN DER EXPANSION, SONST WIDERSPRECHEN SIE SICH.
+  // Ein Termin mit eigener Zone kann in UTC an einem anderen Kalendertag liegen
+  // als vor Ort: 31. Januar 20:00 in New York ist gespeichert als 1. Februar
+  // 01:00 UTC. Die Monatsletzten-Pruefung sah dort den Ersten, fand kein
+  // Vorkommen und gab `null` zurueck - der Kalender zeigte den Termin, die
+  // Kachel verschwieg ihn. `expandRecurringEvents` setzt die Pruefung in genau
+  // diesem Fall aus (`zonenUnsicher`); hier gilt dieselbe Ruecknahme, sonst
+  // beantworten zwei Stellen dieselbe Frage verschieden.
+  const wandUhr = event.tzid ? utcToWall(String(event.start_datetime ?? ''), event.tzid) : null;
+  const zonenUnsicher = !!event.tzid
+    && !(wandUhr && wandUhr.date === String(event.start_datetime ?? '').slice(0, 10));
+
+  if (!hasAnyOccurrence(startKey, event.recurrence_rule, { utcDiffersFromLocal: zonenUnsicher })) return null;
+  const ersterTreffer = seriesStartFor(startKey, event.recurrence_rule, { utcDiffersFromLocal: zonenUnsicher });
+  let candidate = ersterTreffer >= todayKey
+    ? ersterTreffer
+    : nextOccurrenceAfter(ersterTreffer, event.recurrence_rule, todayKey, { seriesStart: startKey });
 
   let skips = 0;
   while (candidate && exceptions?.has(candidate) && skips++ < MAX_EXCEPTION_SKIPS) {
@@ -258,6 +286,11 @@ function eventCountdowns(d, userId, todayKey) {
   const tz = householdTimeZone(d);
   const rows = d.prepare(`
     SELECT e.id, e.title, e.start_datetime, e.recurrence_rule, e.icon, e.color, e.all_day,
+           -- tzid gehoert zur Frage "welcher Kalendertag ist das?": ohne die
+           -- Spalte kann nextEventDate die Zonenruecknahme nicht treffen und
+           -- verschweigt Termine, die der Kalender zeigt. (Keine Backticks in
+           -- diesem Kommentar - er steht in einem Template-Literal.)
+           e.tzid,
            e.assigned_to,
            -- Die geliehene Farbe braucht dieselben drei Quellen wie im Kalender
            -- (#891). Hier reicht EINE Person statt des ganzen Avatar-Stacks: die

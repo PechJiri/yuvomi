@@ -2613,6 +2613,8 @@
         "labelEvery": "Her",
         "labelOnDays": "Bu günlerde",
         "lastDayOfMonth": "Ayın son gününde",
+        "lastDayOfMonthHint": "Seri, başlangıç tarihinden itibaren ilk ay sonunda başlar.",
+        "lastDayOfMonthHintNext": "Bu görevin son tarihi girdiğiniz tarih olarak kalır; ay sonuna denk gelen yalnızca sonraki tekrardır.",
         "labelUntil": "Bitiş tarihi (isteğe bağlı)",
         "labelEnds": "Biter",
         "endNever": "Asla",
