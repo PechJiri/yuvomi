@@ -4153,7 +4153,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
 
     ${advancedSection(advancedFieldsHtml, { open: advancedFieldsOpen })}
 
-    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : null, { allowCount: true })}
+    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : null, { allowCount: true, expandsFromStart: true })}
 
     ${isEdit && isLocalRecurringSeries(event) ? renderRecurringScopeChooser('modal-edit', event.start_datetime.slice(0, 10)) : ''}
 

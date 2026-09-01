@@ -3255,6 +3255,7 @@
         "labelOnDays": "V tyto dny",
         "lastDayOfMonth": "Poslední den v měsíci",
         "lastDayOfMonthHint": "Série začne prvním posledním dnem měsíce od data zahájení.",
+        "lastDayOfMonthHintNext": "Tento úkol zůstane splatný k zadanému datu; teprve další opakování připadne na poslední den měsíce.",
         "labelUntil": "Končí dne (volitelné)",
         "labelEnds": "Končí",
         "endNever": "Nikdy",

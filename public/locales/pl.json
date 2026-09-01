@@ -2626,6 +2626,7 @@
         "labelOnDays": "W te dni",
         "lastDayOfMonth": "W ostatnim dniu miesiąca",
         "lastDayOfMonthHint": "Seria zaczyna się w pierwszym końcu miesiąca od daty początkowej.",
+        "lastDayOfMonthHintNext": "To zadanie pozostaje z wprowadzonym terminem; dopiero następne powtórzenie wypada na koniec miesiąca.",
         "labelUntil": "Kończy się (opcjonalnie)",
         "labelEnds": "Kończy się",
         "endNever": "Nigdy",

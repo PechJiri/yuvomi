@@ -100,17 +100,27 @@ export function buildRRule({ freq, interval, byday, until, count = null, lastDay
  * Rendert das HTML für die Wiederholungs-Felder.
  * @param {string} prefix - ID-Prefix (z.B. "task" oder "event")
  * @param {string|null} existingRule - bestehende RRULE oder null
- * @param {{ allowCount?: boolean, allowFromCompletion?: boolean, fromCompletion?: boolean }} [opts]
+ * @param {{ allowCount?: boolean, allowFromCompletion?: boolean, fromCompletion?: boolean, expandsFromStart?: boolean }} [opts]
  *        allowCount aktiviert die "Nach N Terminen"-Endebedingung (COUNT). Nur
  *        für Kontexte mit startverankerter Expansion (Kalender). Aufgaben sind
  *        abschluss-getrieben und kennen keine COUNT-Semantik (#513).
  *        allowFromCompletion aktiviert den Ankerschalter "ab Erledigung" (#658) -
  *        umgekehrt nur dort, wo es ein Erledigen gibt: ein Termin wird nicht
  *        abgehakt, für ihn gäbe es keinen zweiten Anker.
+ *        expandsFromStart sagt, ob das Modul die Regel vom Startdatum aus
+ *        ausrechnet (Kalender) oder ein einzelnes Datum fortschreibt (Aufgaben).
+ *        Nur davon haengt ab, welcher Monatsletzten-Hinweis stimmt.
  * @returns {string} HTML-String
  */
 export function renderRRuleFields(prefix, existingRule, opts = {}) {
   const allowCount = !!opts.allowCount;
+  // NICHT AN `allowCount` GEHAENGT, obwohl beide heute denselben Wert haben.
+  // Sie beantworten verschiedene Fragen: `allowCount` fragt, ob "endet nach N
+  // Malen" angeboten wird, diese hier, ob das Modul die Regel ueberhaupt vom
+  // Startdatum aus ausrechnet. Der Kalender tut es, die Aufgabe nicht - sie ist
+  // eine Zeile mit einem Faelligkeitsdatum, das die Liste direkt liest. Wer die
+  // beiden koppelt, bekommt beim naechsten Modul den falschen Hinweis.
+  const expandsFromStart = !!opts.expandsFromStart;
   const allowFromCompletion = !!opts.allowFromCompletion;
   const fromCompletion = !!opts.fromCompletion;
   const parsed = parseRRule(existingRule);
@@ -217,16 +227,22 @@ export function renderRRuleFields(prefix, existingRule, opts = {}) {
             <span class="toggle__track"></span>
             <span>${t('rrule.lastDayOfMonth')}</span>
           </label>
-          <!-- DAS STARTDATUM IST NICHT DER ERSTE TERMIN (#960). Wer den 15.
-               eintraegt und ankreuzt, bekommt als erstes Vorkommen den 31. -
-               das Datum im Feld bleibt aber stehen, der Server aendert es
-               nicht. Ohne diesen Satz sieht der 15. aus wie der erste Termin,
-               und der Kalender zeigt dann etwas anderes als das Formular.
+          <!-- DAS EINGETRAGENE DATUM BLEIBT STEHEN (#960) - was daraus folgt,
+               ist aber in den beiden Modulen VERSCHIEDEN, und ein Hinweis, der
+               das Gegenteil verspricht, ist schlimmer als keiner.
+               Der Kalender rechnet die Regel vom Startdatum aus aus: wer den
+               15. eintraegt und ankreuzt, sieht als ersten Termin den 31.
+               Die Aufgabe tut das nicht. Sie ist eine Zeile mit einem
+               Faelligkeitsdatum, das Liste, Ueberfaelligkeit und Countdown
+               direkt lesen - sie bleibt am 15. faellig, und erst der Durchlauf
+               NACH dem Abhaken faellt auf den Monatsletzten.
                Kein Vorgriff im Feld selbst - die Startdatum-Felder heissen in
                Kalender und Aufgaben verschieden und haengen beim Kalender am
                Ganztags-Schalter; ein geratener Selektor waere still kaputt,
                sobald eines umbenannt wird. -->
-          <p class="rrule-anchor__hint" id="${prefix}-rrule-monthday-hint">${t('rrule.lastDayOfMonthHint')}</p>
+          <p class="rrule-anchor__hint" id="${prefix}-rrule-monthday-hint">${
+            expandsFromStart ? t('rrule.lastDayOfMonthHint') : t('rrule.lastDayOfMonthHintNext')
+          }</p>
         </div>
 
         ${allowFromCompletion ? `

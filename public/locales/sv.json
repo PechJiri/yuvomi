@@ -2614,6 +2614,7 @@
         "labelOnDays": "På dessa dagar",
         "lastDayOfMonth": "Den sista dagen i månaden",
         "lastDayOfMonthHint": "Serien börjar vid det första månadsslutet från startdatumet.",
+        "lastDayOfMonthHintNext": "Den här uppgiften förfaller fortfarande det datum du angav; först nästa upprepning hamnar på månadsslutet.",
         "labelUntil": "Slutar på (valfritt)",
         "labelEnds": "Slutar",
         "endNever": "Aldrig",

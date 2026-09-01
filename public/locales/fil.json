@@ -2626,6 +2626,7 @@
         "labelOnDays": "Sa mga araw na ito",
         "lastDayOfMonth": "Sa huling araw ng buwan",
         "lastDayOfMonthHint": "Magsisimula ang serye sa unang katapusan ng buwan mula sa petsa ng simula.",
+        "lastDayOfMonthHintNext": "Mananatiling nakatakda ang gawaing ito sa petsang inilagay mo; ang susunod na pag-ulit lang ang mapupunta sa katapusan ng buwan.",
         "labelUntil": "Nagtatapos sa (opsyonal)",
         "labelEnds": "Nagtatapos",
         "endNever": "Hindi kailanman",

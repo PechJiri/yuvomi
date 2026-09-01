@@ -2626,6 +2626,7 @@
         "labelOnDays": "An diesen Tagen",
         "lastDayOfMonth": "Am letzten Tag des Monats",
         "lastDayOfMonthHint": "Die Serie beginnt am ersten Monatsletzten ab dem Startdatum.",
+        "lastDayOfMonthHintNext": "Diese Aufgabe bleibt am eingetragenen Datum fällig; erst der nächste Durchlauf fällt auf den Monatsletzten.",
         "labelUntil": "Endet am (optional)",
         "labelEnds": "Endet",
         "endNever": "Nie",

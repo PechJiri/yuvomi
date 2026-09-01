@@ -2614,6 +2614,7 @@
         "labelOnDays": "Ces jours-ci",
         "lastDayOfMonth": "Le dernier jour du mois",
         "lastDayOfMonthHint": "La série commence à la première fin de mois à partir de la date de début.",
+        "lastDayOfMonthHintNext": "Cette tâche reste due à la date saisie ; seule la répétition suivante tombe à la fin du mois.",
         "labelUntil": "Se termine le (optionnel)",
         "labelEnds": "Se termine",
         "endNever": "Jamais",

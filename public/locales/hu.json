@@ -2614,6 +2614,7 @@
         "labelOnDays": "Ezeken a napokon",
         "lastDayOfMonth": "A hónap utolsó napján",
         "lastDayOfMonthHint": "A sorozat a kezdődátumtól számított első hónap utolsó napján indul.",
+        "lastDayOfMonthHintNext": "Ez a feladat a megadott dátumon marad esedékes; csak a következő ismétlés esik a hónap utolsó napjára.",
         "labelUntil": "Befejezés (opcionális)",
         "labelEnds": "Véget ér",
         "endNever": "Soha",

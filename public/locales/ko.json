@@ -2626,6 +2626,7 @@
         "labelOnDays": "해당 요일에",
         "lastDayOfMonth": "매월 마지막 날",
         "lastDayOfMonthHint": "시리즈는 시작일 이후 첫 번째 월말부터 시작됩니다.",
+        "lastDayOfMonthHintNext": "이 할 일의 기한은 입력한 날짜 그대로입니다. 월말이 되는 것은 다음 반복부터입니다.",
         "labelUntil": "종료일 (선택 사항)",
         "labelEnds": "종료",
         "endNever": "없음",
