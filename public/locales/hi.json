@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub तक नहीं पहुँचा जा सका। इस संस्करण के साथ आया इतिहास दिखाया जा रहा है।",
         "unknownVersion": "अज्ञात",
         "changes": "बदलाव",
-        "noReleaseNotes": "इस संस्करण के लिए कोई रिलीज नोट नहीं है।"
+        "noReleaseNotes": "इस संस्करण के लिए कोई रिलीज नोट नहीं है।",
+        "whatsNewTitle": "आपके ऐप में नया",
+        "whatsNewSince": "संस्करण {{version}} के बाद से, जो आपने पिछली बार देखा था।",
+        "whatsNewMore": "नीचे दी गई सूची में {{count}} और बदलाव हैं।",
+        "whatsNewMore_one": "नीचे दी गई सूची में एक और बदलाव है।"
     },
     "forgotPassword": {
         "title": "पासवर्ड रीसेट करें",

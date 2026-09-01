@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub kunde inte nås. Historiken som medföljer den här versionen visas.",
         "unknownVersion": "Okänd",
         "changes": "Ändringar",
-        "noReleaseNotes": "Inga versionsnoteringar för den här versionen."
+        "noReleaseNotes": "Inga versionsnoteringar för den här versionen.",
+        "whatsNewTitle": "Nytt i din app",
+        "whatsNewSince": "Sedan version {{version}}, den du såg senast.",
+        "whatsNewMore": "Ytterligare {{count}} ändringar finns i listan nedan.",
+        "whatsNewMore_one": "Ytterligare en ändring finns i listan nedan."
     },
     "forgotPassword": {
         "title": "Återställ lösenord",

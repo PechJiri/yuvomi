@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub was niet bereikbaar. De geschiedenis die met deze versie is meegeleverd wordt getoond.",
         "unknownVersion": "Onbekend",
         "changes": "Wijzigingen",
-        "noReleaseNotes": "Geen release-opmerkingen voor deze versie."
+        "noReleaseNotes": "Geen release-opmerkingen voor deze versie.",
+        "whatsNewTitle": "Nieuw in je app",
+        "whatsNewSince": "Sinds versie {{version}}, de laatste die je zag.",
+        "whatsNewMore": "Er staan nog {{count}} wijzigingen in de lijst hieronder.",
+        "whatsNewMore_one": "Er staat nog één wijziging in de lijst hieronder."
     },
     "forgotPassword": {
         "title": "Wachtwoord opnieuw instellen",

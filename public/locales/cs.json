@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub nebyl dostupný. Zobrazuje se historie dodaná s touto verzí.",
         "unknownVersion": "Neznámá",
         "changes": "Změny",
-        "noReleaseNotes": "Pro tuto verzi nejsou žádné poznámky k vydání."
+        "noReleaseNotes": "Pro tuto verzi nejsou žádné poznámky k vydání.",
+        "whatsNewTitle": "Novinky ve tvé aplikaci",
+        "whatsNewSince": "Od verze {{version}}, kterou jsi viděl naposledy.",
+        "whatsNewMore": "V seznamu níže je dalších {{count}} změn.",
+        "whatsNewMore_one": "V seznamu níže je ještě jedna změna."
     },
     "forgotPassword": {
         "title": "Obnovit heslo",

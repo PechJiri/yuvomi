@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The changelog now opens with what changed in YOUR app since you last looked** (#496). The most
+  supported open request in the project is not a feature: it says releases come fast enough that
+  keeping track is work. @raninehme put it most precisely - a partner still learning the app finds
+  things moving while she is practising. The answer given at the time was honest and was not an
+  answer.
+
+  Batching releases onto a fixed cadence would solve it by removing the property this project gets
+  thanked for most often, so the cost moved elsewhere: keeping up should not require a trip to a
+  changelog. Two pieces were already in place and had never been connected. Since v1.84.0 the app
+  knows when a newer release exists and remembers which version you last opened (#490). Since
+  v2.41.0 every changelog entry opens with a bolded sentence naming the change, enforced by a test
+  (#850, @mariojg-dev). What was missing is that the view threw the second one away: the route
+  stripped the emphasis and merged the follow-up lines back into prose.
+
+  Entries now arrive as a lead sentence plus its reasoning, and the view shows a **"New in your
+  app"** block at the top - the lead sentences as a scannable list, each one expandable for the
+  story underneath. Nobody has to read 91 releases; they read the handful of lines that changed
+  something since they last looked.
+
+  **Two boundaries make it honest.** It counts only releases this instance actually runs: a
+  household on 2.55 does not read what 2.61 brought, because for them none of it happened - that is
+  a different question from the update dot, which asks whether something newer exists out there.
+  And on a first look the block stays away entirely: with no earlier mark there is nothing somebody
+  can have missed, and showing everything would claim they missed everything. Long gaps are capped
+  at twelve lines with the remainder counted out loud rather than silently dropped.
+
+  The `/api/v1/changelog` payload keeps `items` exactly as it was and carries the split as
+  `entries` beside it - a promised surface does not change shape because the UI wants a nicer one.
+
 - **Each person chooses what their new health entries start as, per measurement** (#958). @cmjmmrp-byte
   asked for blood pressure to default to family-visible, so that in an emergency somebody knows the
   usual values. The shipped default stays `private`, and the choice moves to the household instead.

@@ -3384,7 +3384,11 @@
         "offlineNotice": "A GitHub nem volt elérhető. A verzióval szállított előzmények láthatók.",
         "unknownVersion": "Ismeretlen",
         "changes": "Változások",
-        "noReleaseNotes": "Ehhez a verzióhoz nincsenek kiadási megjegyzések."
+        "noReleaseNotes": "Ehhez a verzióhoz nincsenek kiadási megjegyzések.",
+        "whatsNewTitle": "Újdonságok az alkalmazásodban",
+        "whatsNewSince": "A(z) {{version}} verzió óta, amelyet legutóbb láttál.",
+        "whatsNewMore": "Az alábbi listában további {{count}} változás szerepel.",
+        "whatsNewMore_one": "Az alábbi listában még egy változás szerepel."
     },
     "forgotPassword": {
         "title": "Jelszó visszaállítása",

@@ -3384,7 +3384,11 @@
         "offlineNotice": "Hindi maabot ang GitHub. Ipinapakita ang kasaysayang kasama ng bersyong ito.",
         "unknownVersion": "Hindi alam",
         "changes": "Mga pagbabago",
-        "noReleaseNotes": "Walang release notes para sa bersyong ito."
+        "noReleaseNotes": "Walang release notes para sa bersyong ito.",
+        "whatsNewTitle": "Bago sa app mo",
+        "whatsNewSince": "Mula sa bersyong {{version}}, ang huli mong nakita.",
+        "whatsNewMore": "May {{count}} pang pagbabago sa listahan sa ibaba.",
+        "whatsNewMore_one": "May isa pang pagbabago sa listahan sa ibaba."
     },
     "forgotPassword": {
         "title": "I-reset ang password",

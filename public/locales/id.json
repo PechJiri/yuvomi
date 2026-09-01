@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub tidak dapat dihubungi. Menampilkan riwayat yang disertakan dengan versi ini.",
         "unknownVersion": "Tidak diketahui",
         "changes": "Perubahan",
-        "noReleaseNotes": "Tidak ada catatan rilis untuk versi ini."
+        "noReleaseNotes": "Tidak ada catatan rilis untuk versi ini.",
+        "whatsNewTitle": "Baru di aplikasimu",
+        "whatsNewSince": "Sejak versi {{version}}, yang terakhir kamu lihat.",
+        "whatsNewMore": "Ada {{count}} perubahan lagi di daftar di bawah.",
+        "whatsNewMore_one": "Ada satu perubahan lagi di daftar di bawah."
     },
     "forgotPassword": {
         "title": "Atur ulang kata sandi",

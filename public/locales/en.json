@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub could not be reached. Showing the history bundled with this version.",
         "unknownVersion": "Unknown",
         "changes": "Changes",
-        "noReleaseNotes": "No release notes for this version."
+        "noReleaseNotes": "No release notes for this version.",
+        "whatsNewTitle": "New in your app",
+        "whatsNewSince": "Since version {{version}}, the one you last saw.",
+        "whatsNewMore": "{{count}} more changes are in the list below.",
+        "whatsNewMore_one": "One more change is in the list below."
     },
     "forgotPassword": {
         "title": "Reset password",

@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub недоступний. Показано історію, що постачається з цією версією.",
         "unknownVersion": "Невідома",
         "changes": "Зміни",
-        "noReleaseNotes": "Для цієї версії немає приміток до випуску."
+        "noReleaseNotes": "Для цієї версії немає приміток до випуску.",
+        "whatsNewTitle": "Нове у вашому застосунку",
+        "whatsNewSince": "Від версії {{version}}, яку ви бачили востаннє.",
+        "whatsNewMore": "У списку нижче ще {{count}} змін.",
+        "whatsNewMore_one": "У списку нижче ще одна зміна."
     },
     "forgotPassword": {
         "title": "Скидання пароля",

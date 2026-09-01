@@ -3384,7 +3384,11 @@
         "offlineNotice": "Não foi possível contactar o GitHub. É apresentado o histórico incluído nesta versão.",
         "unknownVersion": "Desconhecida",
         "changes": "Alterações",
-        "noReleaseNotes": "Não há notas de lançamento para esta versão."
+        "noReleaseNotes": "Não há notas de lançamento para esta versão.",
+        "whatsNewTitle": "Novidades na tua app",
+        "whatsNewSince": "Desde a versão {{version}}, a última que viste.",
+        "whatsNewMore": "Há mais {{count}} alterações na lista abaixo.",
+        "whatsNewMore_one": "Há mais uma alteração na lista abaixo."
     },
     "forgotPassword": {
         "title": "Repor palavra-passe",

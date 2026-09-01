@@ -55,3 +55,31 @@ export function isNewerVersion(candidate, current) {
   const result = compareVersions(candidate, current);
   return result !== null && result > 0;
 }
+
+/**
+ * Die Releases, die auf DIESER Instanz seit dem letzten Blick dazugekommen sind
+ * (#496).
+ *
+ * ZWEI Grenzen, und beide sind noetig. Neuer als der letzte Blick - sonst ist
+ * es nichts Neues. Und NICHT neuer als das, was hier laeuft - sonst stuende in
+ * der Liste, was auf GitHub veroeffentlicht wurde, bei diesem Haushalt aber
+ * noch gar nicht angekommen ist. Genau diese zweite Grenze unterscheidet die
+ * Frage "was hat sich fuer mich geaendert" von der Frage "gibt es ein Update",
+ * die der Punkt an der Navigation beantwortet.
+ *
+ * Ohne `seenInstalled` ist die Antwort leer: wer zum ersten Mal hinsieht, hat
+ * nichts verpasst, das wir wuessten, und ihm alles zu zeigen waere die
+ * Behauptung, er haette alles verpasst.
+ *
+ * @param {{version?: string}[]} releases
+ * @param {string} currentVersion   die hier laufende Version
+ * @param {string} seenInstalled    die laufende Version beim letzten Blick
+ */
+export function releasesNewForMe(releases, currentVersion, seenInstalled) {
+  if (!seenInstalled || !currentVersion) return [];
+  return (Array.isArray(releases) ? releases : []).filter((r) => {
+    const v = r?.version;
+    if (!v) return false;
+    return isNewerVersion(v, seenInstalled) && !isNewerVersion(v, currentVersion);
+  });
+}

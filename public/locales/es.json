@@ -3384,7 +3384,11 @@
         "offlineNotice": "No se pudo conectar con GitHub. Se muestra el historial incluido en esta versión.",
         "unknownVersion": "Desconocida",
         "changes": "Cambios",
-        "noReleaseNotes": "No hay notas de versión para esta versión."
+        "noReleaseNotes": "No hay notas de versión para esta versión.",
+        "whatsNewTitle": "Novedades en tu app",
+        "whatsNewSince": "Desde la versión {{version}}, la última que viste.",
+        "whatsNewMore": "Hay {{count}} cambios más en la lista de abajo.",
+        "whatsNewMore_one": "Hay un cambio más en la lista de abajo."
     },
     "forgotPassword": {
         "title": "Restablecer contraseña",

@@ -3384,7 +3384,11 @@
         "offlineNotice": "Không thể kết nối tới GitHub. Đang hiển thị lịch sử đi kèm phiên bản này.",
         "unknownVersion": "Không rõ",
         "changes": "Thay đổi",
-        "noReleaseNotes": "Không có ghi chú phát hành cho phiên bản này."
+        "noReleaseNotes": "Không có ghi chú phát hành cho phiên bản này.",
+        "whatsNewTitle": "Mới trong ứng dụng của bạn",
+        "whatsNewSince": "Kể từ phiên bản {{version}}, phiên bản bạn xem lần trước.",
+        "whatsNewMore": "Còn {{count}} thay đổi nữa trong danh sách bên dưới.",
+        "whatsNewMore_one": "Còn một thay đổi nữa trong danh sách bên dưới."
     },
     "forgotPassword": {
         "title": "Đặt lại mật khẩu",

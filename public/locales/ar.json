@@ -3384,7 +3384,11 @@
         "offlineNotice": "تعذر الوصول إلى GitHub. يُعرض السجل المرفق مع هذا الإصدار.",
         "unknownVersion": "غير معروف",
         "changes": "التغييرات",
-        "noReleaseNotes": "لا توجد ملاحظات إصدار لهذه النسخة."
+        "noReleaseNotes": "لا توجد ملاحظات إصدار لهذه النسخة.",
+        "whatsNewTitle": "الجديد في تطبيقك",
+        "whatsNewSince": "منذ الإصدار {{version}}، آخر ما شاهدته.",
+        "whatsNewMore": "هناك {{count}} تغييرات أخرى في القائمة أدناه.",
+        "whatsNewMore_one": "هناك تغيير آخر في القائمة أدناه."
     },
     "forgotPassword": {
         "title": "إعادة تعيين كلمة المرور",

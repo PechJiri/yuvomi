@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub に接続できませんでした。このバージョンに同梱された履歴を表示しています。",
         "unknownVersion": "不明",
         "changes": "変更",
-        "noReleaseNotes": "このバージョンのリリースノートはありません。"
+        "noReleaseNotes": "このバージョンのリリースノートはありません。",
+        "whatsNewTitle": "あなたのアプリの新着",
+        "whatsNewSince": "前回見た バージョン {{version}} 以降の変更です。",
+        "whatsNewMore": "他に {{count}} 件の変更が下の一覧にあります。",
+        "whatsNewMore_one": "他に 1 件の変更が下の一覧にあります。"
     },
     "forgotPassword": {
         "title": "パスワードの再設定",

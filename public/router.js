@@ -32,7 +32,7 @@ import {
   applyNavBadges, setNavBadge, resetNavBadges, navBadgeRoutes,
   moduleCountsFrom, navBadgeCountsFrom,
 } from '/utils/nav-badges.js';
-import { isNewerVersion, displayVersion } from '/utils/version.js';
+import { isNewerVersion, displayVersion, releasesNewForMe } from '/utils/version.js';
 import { setMaxUploadBytes } from '/utils/upload-limit.js';
 import { syncWallMode } from '/utils/wall-mode.js';
 import {
@@ -2530,6 +2530,12 @@ function showHelpModal() {
 const UPDATE_LATEST_KEY = 'yuvomi.update.latest';
 // Version, für die der Nutzer den Änderungsverlauf zuletzt geöffnet hat.
 const UPDATE_SEEN_KEY = 'yuvomi.update.seen';
+// Die INSTALLIERTE Version beim letzten Öffnen - und damit eine andere Frage
+// als `UPDATE_SEEN_KEY` (#496). Der Punkt an der Navigation beantwortet "es
+// gibt draußen etwas Neueres"; diese Ansicht beantwortet "in MEINER App hat
+// sich seit meinem letzten Blick etwas geändert". Ein Haushalt auf 2.55 soll
+// nicht lesen, was 2.61 gebracht hat - bei ihm ist davon nichts passiert.
+const UPDATE_SEEN_INSTALLED_KEY = 'yuvomi.update.seenInstalled';
 const UPDATE_CHECKED_AT_KEY = 'yuvomi.update.checkedAt';
 // Der Server hält GitHub-Releases 30 Minuten im Cache; häufigeres Fragen wäre
 // reiner Verkehr für eine Information, die sich um Wochen bewegt.
@@ -2630,6 +2636,54 @@ function renderChangelogStatus(panel, message, tone = 'muted') {
   status.textContent = message;
 }
 
+/**
+ * Ein Eintrag als Vorspann plus aufklappbare Begruendung.
+ *
+ * DAS IST DER KERN VON #496. Der Changelog erzaehlt seit v2.41.0 zweistufig -
+ * ein fett gesetzter Satz, der die Aenderung benennt, darunter warum. Die
+ * Ansicht hat diese Stufe bisher eingeebnet und daraus wieder Prosa gemacht.
+ * Wer scannen will, liest jetzt nur die Vorspaenne; wer die Geschichte will,
+ * klappt sie auf.
+ *
+ * Ohne Begruendung (Eintraege vor 2.41.0) gibt es nichts aufzuklappen - dann
+ * steht der Vorspann allein, ohne Zusammenklapp-Dreieck, das nichts verbirgt.
+ */
+function entryNode(entry) {
+  const li = document.createElement('li');
+  const lead = String(entry?.lead || '');
+  const detail = String(entry?.detail || '');
+  if (!detail) {
+    li.className = 'changelog-entry changelog-entry--plain';
+    li.textContent = lead;
+    return li;
+  }
+  li.className = 'changelog-entry';
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.className = 'changelog-entry__lead';
+  summary.textContent = lead;
+  const body = document.createElement('p');
+  body.className = 'changelog-entry__detail';
+  body.textContent = detail;
+  details.appendChild(summary);
+  details.appendChild(body);
+  li.appendChild(details);
+  return li;
+}
+
+/**
+ * Die Eintraege einer Section - aus `entries`, sonst aus `items`.
+ *
+ * Der Rueckfall ist kein Schmuck: `items` ist die Form, die diese Route seit
+ * jeher liefert, und ein Client, der gegen einen aelteren Server laeuft (oder
+ * gegen einen Cache davon), bekommt sonst eine leere Liste statt der Texte.
+ */
+function sectionEntries(section) {
+  if (Array.isArray(section?.entries) && section.entries.length) return section.entries;
+  return (Array.isArray(section?.items) ? section.items : [])
+    .map((item) => ({ lead: String(item || ''), detail: '' }));
+}
+
 function appendReleaseSection(parent, section) {
   const block = document.createElement('section');
   block.className = 'changelog-section';
@@ -2641,11 +2695,7 @@ function appendReleaseSection(parent, section) {
 
   const list = document.createElement('ul');
   list.className = 'changelog-section__list';
-  for (const item of Array.isArray(section.items) ? section.items : []) {
-    const li = document.createElement('li');
-    li.textContent = String(item || '');
-    list.appendChild(li);
-  }
+  for (const entry of sectionEntries(section)) list.appendChild(entryNode(entry));
   block.appendChild(list);
   parent.appendChild(block);
 }
@@ -2681,6 +2731,56 @@ function appendReleaseCard(parent, release, currentVersion) {
     card.appendChild(empty);
   }
   parent.appendChild(card);
+}
+
+// Wie viele Vorspaenne die "Neu bei dir"-Liste hoechstens zeigt. Wer nach
+// zwanzig Versionen aktualisiert, soll eine LISTE bekommen und keine zweite
+// Textwand - der Rest steht darunter, und die Zahl wird genannt statt still
+// abgeschnitten.
+const WHATS_NEW_MAX = 12;
+
+/**
+ * Der Block, mit dem die Ansicht oeffnet: was sich seit dem letzten Blick
+ * geaendert hat, als Liste der Vorspaenne (#496).
+ *
+ * BEIM ERSTEN OEFFNEN bleibt er weg. Ohne frueheren Stand gibt es keine
+ * Aussage darueber, was jemand verpasst hat - alles zu zeigen waere die
+ * Behauptung, er haette alles verpasst.
+ */
+function appendWhatsNew(parent, releases, currentVersion, seenInstalled) {
+  const fresh = releasesNewForMe(releases, currentVersion, seenInstalled);
+  if (!fresh.length) return;
+
+  const entries = fresh.flatMap((release) =>
+    (Array.isArray(release.sections) ? release.sections : []).flatMap(sectionEntries));
+  if (!entries.length) return;
+
+  const box = document.createElement('section');
+  box.className = 'changelog-whats-new';
+
+  const title = document.createElement('h3');
+  title.className = 'changelog-whats-new__title';
+  title.textContent = t('changelog.whatsNewTitle');
+  box.appendChild(title);
+
+  const since = document.createElement('p');
+  since.className = 'changelog-whats-new__since';
+  since.textContent = t('changelog.whatsNewSince', { version: displayVersion(seenInstalled) });
+  box.appendChild(since);
+
+  const list = document.createElement('ul');
+  list.className = 'changelog-section__list';
+  for (const entry of entries.slice(0, WHATS_NEW_MAX)) list.appendChild(entryNode(entry));
+  box.appendChild(list);
+
+  const hidden = entries.length - WHATS_NEW_MAX;
+  if (hidden > 0) {
+    const more = document.createElement('p');
+    more.className = 'changelog-whats-new__more';
+    more.textContent = t('changelog.whatsNewMore', { count: hidden });
+    box.appendChild(more);
+  }
+  parent.appendChild(box);
 }
 
 function renderChangelog(panel, payload) {
@@ -2734,8 +2834,17 @@ function renderChangelog(panel, payload) {
   }
 
   const fragment = document.createDocumentFragment();
+  // Erst lesen, dann fortschreiben: der Block beantwortet die Frage nach dem
+  // ZUSTAND VOR diesem Aufruf, und ein Marker, der schon gesetzt ist, waere
+  // die Antwort "nichts Neues" - jedes Mal.
+  const seenInstalled = localStorage.getItem(UPDATE_SEEN_INSTALLED_KEY) || '';
+  appendWhatsNew(fragment, releases, currentVersion, seenInstalled);
   for (const release of releases) appendReleaseCard(fragment, release, currentVersion);
   list.appendChild(fragment);
+  // Auch beim ERSTEN Mal gesetzt, obwohl dann nichts angezeigt wurde: sonst
+  // gilt der naechste Aufruf wieder als erster und die Liste bliebe fuer
+  // immer leer.
+  if (currentVersion) localStorage.setItem(UPDATE_SEEN_INSTALLED_KEY, String(currentVersion));
 }
 
 function showChangelogModal() {

@@ -3384,7 +3384,11 @@
         "offlineNotice": "无法连接 GitHub。正在显示此版本随附的更新历史。",
         "unknownVersion": "未知",
         "changes": "更改",
-        "noReleaseNotes": "此版本没有发布说明。"
+        "noReleaseNotes": "此版本没有发布说明。",
+        "whatsNewTitle": "你的应用有什么新变化",
+        "whatsNewSince": "自你上次查看的版本 {{version}} 以来。",
+        "whatsNewMore": "下方列表中还有 {{count}} 项变更。",
+        "whatsNewMore_one": "下方列表中还有 1 项变更。"
     },
     "forgotPassword": {
         "title": "重置密码",

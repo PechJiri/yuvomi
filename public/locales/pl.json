@@ -3384,7 +3384,11 @@
         "offlineNotice": "Nie udało się połączyć z GitHubem. Wyświetlana jest historia dołączona do tej wersji.",
         "unknownVersion": "Nieznana",
         "changes": "Zmiany",
-        "noReleaseNotes": "Brak informacji o wydaniu dla tej wersji."
+        "noReleaseNotes": "Brak informacji o wydaniu dla tej wersji.",
+        "whatsNewTitle": "Nowości w twojej aplikacji",
+        "whatsNewSince": "Od wersji {{version}}, którą widziałeś ostatnio.",
+        "whatsNewMore": "Na liście poniżej jest jeszcze {{count}} zmian.",
+        "whatsNewMore_one": "Na liście poniżej jest jeszcze jedna zmiana."
     },
     "forgotPassword": {
         "title": "Zresetuj hasło",

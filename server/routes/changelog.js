@@ -63,10 +63,31 @@ function ensureSection(sections, title) {
   let current = sections[sections.length - 1];
   if (!title && current) return current;
   if (!current || current.title !== requestedTitle) {
-    current = { title: requestedTitle, items: [] };
+    current = { title: requestedTitle, entries: [] };
     sections.push(current);
   }
   return current;
+}
+
+// Der fett gesetzte Vorspann am Anfang eines Eintrags. Seit v2.41.0 oeffnet
+// JEDER Changelog-Eintrag so, und `test/test-changelog.js` setzt das durch
+// (#850) - hier wird diese Kante wieder gelesen, statt sie einzuebnen.
+const LEAD_PATTERN = /^\*\*(.+?)\*\*\s*/;
+
+/**
+ * Zerlegt eine Eintragszeile in Vorspann und Begruendung.
+ *
+ * OHNE Vorspann (alles vor v2.41.0) ist die ganze Zeile der Vorspann und die
+ * Begruendung leer. Das ist die ehrliche Lesart: ein Eintrag ohne Kurzfassung
+ * bekommt keine erfundene, und die Ansicht zeigt ihn dann eben ganz.
+ */
+function splitEntry(rawText) {
+  const lead = rawText.match(LEAD_PATTERN);
+  if (!lead) return { lead: cleanMarkdownText(rawText), detail: '' };
+  return {
+    lead: cleanMarkdownText(lead[1]),
+    detail: cleanMarkdownText(rawText.slice(lead[0].length)),
+  };
 }
 
 function parseReleaseBody(body) {
@@ -83,22 +104,38 @@ function parseReleaseBody(body) {
     }
 
     const bullet = line.match(/^(?:[-*+]|\d+\.)\s+(.+)$/);
-    const text = cleanMarkdownText(bullet ? bullet[1] : line);
-    if (!text || isNoiseLine(text)) continue;
+    const raw = bullet ? bullet[1] : line;
+    // Die Rauschpruefung laeuft auf dem GEREINIGTEN Text - sie kennt Woerter,
+    // keine Auszeichnung.
+    const cleaned = cleanMarkdownText(raw);
+    if (!cleaned || isNoiseLine(cleaned)) continue;
 
     const current = ensureSection(sections);
-    if (bullet || current.items.length === 0) {
-      current.items.push(text);
+    if (bullet || current.entries.length === 0) {
+      current.entries.push(splitEntry(raw));
     } else {
-      current.items[current.items.length - 1] = `${current.items[current.items.length - 1]} ${text}`.trim();
+      // Fortsetzungszeile: sie gehoert zur BEGRUENDUNG, nie zum Vorspann - der
+      // ist genau ein Satz, und ihn waehrend des Lesens wachsen zu lassen
+      // wuerde die Kurzfassung wieder zur Textwand machen.
+      const last = current.entries[current.entries.length - 1];
+      last.detail = `${last.detail} ${cleaned}`.trim();
     }
   }
 
   return sections
-    .map((section) => ({
-      title: section.title,
-      items: section.items.filter(Boolean),
-    }))
+    .map((section) => {
+      const entries = section.entries.filter((e) => e.lead || e.detail);
+      return {
+        title: section.title,
+        entries,
+        // `items` bleibt Wort fuer Wort, was es vorher war: ein Eintrag als
+        // EIN String. /api/v1 ist eine zugesagte Oberflaeche, und `entries`
+        // daneben zu legen kostet ein paar Bytes doppelt, aber niemandem
+        // seinen Integrator. Beides stammt aus derselben Zerlegung - es sind
+        // zwei Sichten auf einen Text, keine zwei Wahrheiten.
+        items: entries.map((e) => `${e.lead} ${e.detail}`.trim()).filter(Boolean),
+      };
+    })
     .filter((section) => section.items.length);
 }
 

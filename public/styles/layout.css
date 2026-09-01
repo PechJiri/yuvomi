@@ -4209,6 +4209,57 @@ p.field-hint--warn[hidden] {
   font-size: var(--text-sm);
 }
 
+/* „Neu in deiner App" (#496): der Block, mit dem die Ansicht oeffnet. Traegt
+ * als einziger die Akzentfarbe - er ist die Antwort auf die Frage, mit der
+ * jemand herkommt, die Versionsliste darunter ist das Archiv. */
+.changelog-whats-new {
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-accent) var(--tint-hint), var(--color-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) var(--tint-state), var(--color-surface));
+}
+
+.changelog-whats-new__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+
+.changelog-whats-new__since {
+  margin: var(--space-1) 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.changelog-whats-new__more {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* Der Vorspann ist die Zeile, die man scannt - er traegt das Gewicht, die
+ * Begruendung darunter nicht. Das Dreieck steht nur, wo es etwas aufklappt;
+ * Eintraege ohne Begruendung sind schlichte Listenpunkte. */
+.changelog-entry__lead {
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.changelog-entry__lead::marker {
+  color: var(--color-text-tertiary);
+}
+
+.changelog-entry__detail {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.changelog-entry + .changelog-entry {
+  margin-top: var(--space-2);
+}
+
 .form-stack {
   display: flex;
   flex-direction: column;

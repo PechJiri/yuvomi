@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub est injoignable. L'historique fourni avec cette version est affiché.",
         "unknownVersion": "Inconnue",
         "changes": "Changements",
-        "noReleaseNotes": "Aucune note de version pour cette version."
+        "noReleaseNotes": "Aucune note de version pour cette version.",
+        "whatsNewTitle": "Nouveautés dans ton app",
+        "whatsNewSince": "Depuis la version {{version}}, la dernière que tu as vue.",
+        "whatsNewMore": "{{count}} autres changements figurent dans la liste ci-dessous.",
+        "whatsNewMore_one": "Un autre changement figure dans la liste ci-dessous."
     },
     "forgotPassword": {
         "title": "Réinitialiser le mot de passe",

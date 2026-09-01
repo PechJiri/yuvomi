@@ -3384,7 +3384,11 @@
         "offlineNotice": "GitHub non è raggiungibile. Viene mostrata la cronologia inclusa in questa versione.",
         "unknownVersion": "Sconosciuta",
         "changes": "Modifiche",
-        "noReleaseNotes": "Nessuna nota di rilascio per questa versione."
+        "noReleaseNotes": "Nessuna nota di rilascio per questa versione.",
+        "whatsNewTitle": "Novità nella tua app",
+        "whatsNewSince": "Dalla versione {{version}}, l’ultima che hai visto.",
+        "whatsNewMore": "Ci sono altri {{count}} cambiamenti nell’elenco qui sotto.",
+        "whatsNewMore_one": "C'è un altro cambiamento nell’elenco qui sotto."
     },
     "forgotPassword": {
         "title": "Reimposta password",

@@ -10,7 +10,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import changelogRouter, { buildRouter, __test } from '../server/routes/changelog.js';
-import { compareVersions, isNewerVersion, displayVersion } from '../public/utils/version.js';
+import { compareVersions, isNewerVersion, displayVersion, releasesNewForMe } from '../public/utils/version.js';
 
 test('parseReleaseBody keeps release sections and removes GitHub noise', () => {
   const sections = __test.parseReleaseBody(`
@@ -25,7 +25,9 @@ Full Changelog: https://github.com/ulsklyc/yuvomi/compare/v1.0.0...v1.1.0
 Assets
 `);
 
-  assert.deepEqual(sections, [
+  // `items` ist unveraendert die eine-Zeile-je-Eintrag-Form: /api/v1 ist eine
+  // zugesagte Oberflaeche, `entries` liegt additiv daneben (#496).
+  assert.deepEqual(sections.map((s) => ({ title: s.title, items: s.items })), [
     {
       title: 'Added',
       items: [
@@ -38,6 +40,36 @@ Assets
       items: ['Better widget sizing'],
     },
   ]);
+  // Ohne fettgedruckten Vorspann (alles vor 2.41.0) ist die ganze Zeile der
+  // Vorspann - erfunden wird keiner.
+  assert.deepEqual(sections[0].entries[0], {
+    lead: 'New dashboard changelog modal (#455)', detail: '',
+  });
+});
+
+test('parseReleaseBody trennt den fettgedruckten Vorspann von der Begruendung', () => {
+  // DAS IST DIE LUECKE, UM DIE ES GEHT (#496): seit 2.41.0 oeffnet jeder
+  // Eintrag mit einem Vorspann, und ein Guard setzt das durch (#850) - die
+  // Ansicht bekam ihn bis hierher aber als Fliesstext, weil die Auszeichnung
+  // vorher eingeebnet wurde. Wer scannen will, konnte nicht scannen.
+  const sections = __test.parseReleaseBody(`
+## Fixed
+- **The weather forecast was off by a day** (#851). The server already keeps the
+  running day out of \`forecast\` so it is not shown twice.
+- **A second change** with its own reason.
+`);
+
+  assert.equal(sections.length, 1);
+  const [first, second] = sections[0].entries;
+  assert.equal(first.lead, 'The weather forecast was off by a day');
+  assert.match(first.detail, /^\(#851\)\. The server already keeps/);
+  // Die Fortsetzungszeile gehoert zur Begruendung, nicht zum Vorspann.
+  assert.match(first.detail, /shown twice\.$/);
+  assert.equal(second.lead, 'A second change');
+  assert.equal(second.detail, 'with its own reason.');
+
+  // Und `items` bleibt daneben die zusammengesetzte Zeile von frueher.
+  assert.match(sections[0].items[0], /^The weather forecast was off by a day \(#851\)\./);
 });
 
 test('buildChangelogPayload marks current version when it appears in releases', () => {
@@ -92,6 +124,48 @@ test('changelog router fetches and sanitizes GitHub release JSON', async () => {
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+// --------------------------------------------------------
+// „Neu in deiner App" - die Auswahl der Releases (#496)
+// --------------------------------------------------------
+
+const RELEASES = [
+  { version: 'v2.61.0' }, { version: 'v2.60.0' }, { version: 'v2.59.0' },
+  { version: 'v2.58.0' }, { version: 'v2.57.0' },
+];
+
+test('neu fuer mich sind die Releases zwischen letztem Blick und laufender Version', () => {
+  const fresh = releasesNewForMe(RELEASES, '2.60.0', '2.58.0');
+  assert.deepEqual(fresh.map((r) => r.version), ['v2.60.0', 'v2.59.0']);
+});
+
+test('was hier noch nicht laeuft, steht nicht in der Liste', () => {
+  // DAS ist die Grenze, die diese Ansicht von der Update-Meldung trennt: 2.61
+  // ist veroeffentlicht, aber dieser Haushalt laeuft auf 2.60 - bei ihm hat
+  // sich davon nichts geaendert.
+  const fresh = releasesNewForMe(RELEASES, '2.60.0', '2.58.0');
+  assert.equal(fresh.some((r) => r.version === 'v2.61.0'), false);
+});
+
+test('ohne frueheren Blick bleibt die Liste leer', () => {
+  // Wer zum ersten Mal hinsieht, hat nichts verpasst, das wir wuessten.
+  assert.deepEqual(releasesNewForMe(RELEASES, '2.60.0', ''), []);
+  assert.deepEqual(releasesNewForMe(RELEASES, '', '2.58.0'), []);
+});
+
+test('ist der letzte Blick der laufende Stand, gibt es nichts zu zeigen', () => {
+  assert.deepEqual(releasesNewForMe(RELEASES, '2.60.0', '2.60.0'), []);
+});
+
+test('das v-Praefix der GitHub-Tags stoert die Auswahl nicht', () => {
+  const fresh = releasesNewForMe(RELEASES, 'v2.59.0', 'v2.57.0');
+  assert.deepEqual(fresh.map((r) => r.version), ['v2.59.0', 'v2.58.0']);
+});
+
+test('Releases ohne Version fallen heraus, statt die Liste zu vergiften', () => {
+  const fresh = releasesNewForMe([{ version: '' }, { version: 'v2.59.0' }, {}], '2.60.0', '2.58.0');
+  assert.deepEqual(fresh.map((r) => r.version), ['v2.59.0']);
 });
 
 test('default changelog router is an express router', () => {
