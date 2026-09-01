@@ -159,7 +159,11 @@ git fetch upstream
 git rebase upstream/main
 ```
 
-Rebase before opening a PR and keep the branch conflict-free.
+Rebase before opening a PR. After that, do not keep rebasing to stay current.
+`main` moves several times a day, and a branch that chases it spends your time
+on conflicts that get resolved again at merge anyway. Rebase once more when the
+review is done and the PR is about to land. What happens to a stale PR in the
+meantime is spelled out under [Review and merge](#6-review-and-merge).
 
 ### 4. Commit
 
@@ -200,6 +204,18 @@ chore: update helmet to 8.3
 - Description: explain what the PR does, why, and link the related issue (`Closes #123`)
 - Keep PRs focused - one feature or fix per PR
 
+**On size.** "One feature" is not a line count, but a branch carrying several
+independent decisions is hard to land as one thing: a single objection holds up
+all of it. If your branch contains something that would still make sense on its
+own - a fix to an unrelated module, a refactor you needed along the way, a new
+dependency - open that separately and first. It lands in days instead of waiting
+on the review of everything around it.
+
+**On migrations.** Take the next free number in the `MIGRATIONS` array and expect
+it to change. Two open PRs regularly claim the same one. The maintainer renumbers
+yours as it lands, which does not break the append-only rule: that rule protects
+migrations that have shipped, not one that is still in review.
+
 **Before opening:**
 
 ```bash
@@ -214,6 +230,32 @@ mentioning `@claude` in an issue or PR comment triggers an AI assistant. Their f
 informational; the maintainer's review decides. PRs from forks are excluded from the
 automation. Once approved, PRs are merged by the maintainer, usually squashed into a
 single commit.
+
+**If your PR goes stale, that is the maintainer's problem before it is yours.**
+`main` moves faster than a review cycle, so who cleans up follows from what caused
+the mess, not from who has time:
+
+- **Mechanical, and the maintainer resolves it:** rebases onto a moved `main`,
+  `CHANGELOG.md` collisions, the version line, `sw.js`, migration numbering, test
+  script entries in `package.json`. These exist because this project releases
+  often. You did not create them, and you are not expected to keep chasing them.
+- **Substantive, and it stays with you:** anything that is a decision inside your
+  feature. Which tables it adds, what it names things, whether a dependency earns
+  its weight, how it behaves at the edges. Nobody can answer these for you without
+  guessing.
+
+Two things follow from that, and both are promises rather than requests:
+
+**Rebase once, after the review, not before.** Rebasing while a review is open
+means doing it twice. Wait for the findings, fix them, rebase then. If a PR has
+gone so far out of date that the review itself is blocked, the maintainer says so
+and does that rebase.
+
+**An open architecture question never blocks your PR.** If a design decision comes
+up that is really about the project's direction, the maintainer decides it, or the
+PR lands without it. This is written down because it went the other way once:
+[#621](https://github.com/ulsklyc/yuvomi/pull/621) was parked on a question its
+author could not answer alone, and the contribution died waiting.
 
 **A red `claude-review` check is not a review finding.** Open the job and read which step
 failed first - the job goes red for ordinary reasons too (checkout, the action itself, a
