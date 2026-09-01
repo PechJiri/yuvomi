@@ -14862,58 +14862,112 @@ test('der Lucide-Ausschnitt läuft nach dem Bundle und vor jedem Modul, das ihn 
 });
 
 /* ============================================================
- * PAGE COMPOSITION SYSTEM — PAGE-001 … PAGE-010
- * (PAGE-COMPOSITION.md)
+ * PAGE COMPOSITION SYSTEM - PAGE-001 ... PAGE-011
+ * (docs/PAGE-COMPOSITION.md)
  * ============================================================ */
 
 const COMPOSITION_MODES = ['reading', 'data', 'dashboard', 'form', 'split', 'full'];
-const COMPOSITION_MODE_RE = new RegExp(
-  `app-page--(?:${COMPOSITION_MODES.join('|')})|data-composition="(?:${COMPOSITION_MODES.join('|')})"|page-measure--narrow`,
-);
 
-/** Pages migrated onto the composition contract (strict). Others stay allowlisted. */
-const COMPOSITION_MIGRATED = new Set([
-  'birthdays.js',
-  'contacts.js',
-  'notes.js',
-  'rewards.js',
-  'pantry.js',
-  'recipes.js',
-  'inventory.js',
-  'schedule.js',
-  'documents.js',
-  'housekeeping.js',
-  'budget.js',
-  'budget-stats.js',
-  'budget-plans.js',
-  'subscriptions.js',
-  'split-expenses.js',
-  'calendar.js',
-  'tasks.js',
-  'health.js',
-  'dashboard.js',
-]);
+/**
+ * WER GEPRUEFT WIRD, STEHT IN KEINER LISTE.
+ *
+ * Die erste Fassung dieses Blocks fuehrte eine Allowlist migrierter Seiten: nur
+ * wer darin stand, wurde geprueft. Eine neue Seite waere still durchgefallen -
+ * sie stand in keiner der beiden Listen, und jede Schleife begann mit
+ * `if (!MIGRATED.has(name)) continue;`. Genau dieselbe Bauart hat die Codebasis
+ * schon zweimal bezahlt (Kuechen-Zusammenfuehrung, Budget-Guards): eine
+ * Allowlist deckt die Dateien ab, an die jemand gedacht hat, eine Regel deckt
+ * das Problem ab.
+ *
+ * Der Geltungsbereich kommt deshalb aus `router.js`. Eine Route mit
+ * `requiresAuth: false` zeichnet ohne App-Shell (Login, Setup, Einladung,
+ * Passwort-Reset) und kann den Vertrag nicht erfuellen; alles andere steht
+ * dahinter und muss ihn erfuellen. Eine morgen angelegte Seite ist an dem Tag
+ * erfasst, an dem sie eine Route bekommt.
+ */
+function pagesBehindAppShell() {
+  const router = read('../public/router.js');
+  const rows = [...router.matchAll(
+    /page:\s*'\/pages\/([\w-]+)\.js'[^}]*?requiresAuth:\s*(true|false)/g)];
+  const shell = new Set(rows.filter((r) => r[2] === 'true').map((r) => `${r[1]}.js`));
+  const standalone = new Set(rows.filter((r) => r[2] === 'false').map((r) => `${r[1]}.js`));
+  // Unterseiten ohne eigene Route (budget-stats, split-expenses ...) werden von
+  // einer App-Route nachgeladen und gehoeren damit ebenfalls hinter die Shell.
+  for (const file of walkJsFiles('../public/pages/')) {
+    const name = file.split('/').pop();
+    if (!standalone.has(name)) shell.add(name);
+  }
+  return [...shell].sort();
+}
 
-const COMPOSITION_OUT_OF_SCOPE = new Set([
+/**
+ * NOCH NICHT MIGRIERT - DIESE LISTE DARF NUR SCHRUMPFEN.
+ *
+ * Jeder Eintrag ist eine Seite, die es vor den Vertrag geschafft hat. Migrieren
+ * heisst: Zeile loeschen. PAGE-011 wird rot, wenn die Liste waechst, und ebenso,
+ * wenn ein Eintrag auf eine Seite zeigt, die es nicht mehr gibt - sonst haelt
+ * eine tote Zeile eine Ausnahme offen, die niemand mehr braucht.
+ */
+const COMPOSITION_PENDING = new Set([
   'shopping.js',
   'meals.js',
   'settings.js',
-  'login.js',
-  'setup.js',
-  'join.js',
-  'forgot-password.js',
-  'reset-password.js',
 ]);
+
+/** Stand bei Einfuehrung der Regel. Nach unten anpassen, nie nach oben. */
+const COMPOSITION_PENDING_MAX = 3;
+
+function compositionScope() {
+  return pagesBehindAppShell().filter((name) => !COMPOSITION_PENDING.has(name));
+}
+
+/** Seiten-CSS im Geltungsbereich; Unterseiten ohne eigene Datei fallen raus. */
+function compositionScopeCss() {
+  return compositionScope()
+    .map((name) => name.replace(/\.js$/, '.css'))
+    .filter((css) => existsSync(new URL(`../public/styles/${css}`, import.meta.url)));
+}
 
 const COMPOSITION_BLACKLIST_WIDTH = /max-width\s*:\s*(?!none|100%|var\(--(?:page-measure|layout-|content-max-width))[0-9.]+(?:px|rem|em|vw)/i;
 const COMPOSITION_NEGATIVE_MARGIN = /margin(?:-inline|-left|-right|-inline-start|-inline-end)?\s*:\s*-[0-9]/i;
-const COMPOSITION_LOCAL_BP = /@media\s*\(\s*max-width\s*:\s*(?!768px|1024px|640px|900px)[0-9]+px\s*\)/;
 
-test('PAGE-001: migrated page declares exactly one composition mode', () => {
-  for (const page of walkJsFiles('../public/pages/')) {
-    const name = page.split('/').pop();
-    if (!COMPOSITION_MIGRATED.has(name)) continue;
-    const src = withoutHtmlComments(read(page));
+test('PAGE-000: der Geltungsbereich ist nicht leer und deckt fast alle Seiten', () => {
+  // REICHWEITEN-NACHWEIS. Ohne ihn koennte jede Regel darunter gruen sein, weil
+  // sie ueber null Dateien laeuft - ein Tippfehler im Router-Regex genuegt.
+  const shell = pagesBehindAppShell();
+  const scope = compositionScope();
+  const all = walkJsFiles('../public/pages/').length;
+  assert.ok(shell.length >= 20,
+    `Nur ${shell.length} Seiten hinter der App-Shell erkannt - liest der Router-Ausdruck noch?`);
+  assert.ok(scope.length >= 15,
+    `Nur ${scope.length} Seiten im Geltungsbereich - die Regeln pruefen fast nichts`);
+  assert.ok(scope.length >= all - 8,
+    `${all - scope.length} von ${all} Seiten sind ausgenommen - das ist wieder eine Allowlist`);
+  assert.ok(compositionScopeCss().length >= 12,
+    'Zu wenige Seiten-CSS im Geltungsbereich - die CSS-Regeln laufen ins Leere');
+});
+
+test('PAGE-011: die Ausnahmeliste waechst nicht und enthaelt nur echte Seiten', () => {
+  assert.ok(COMPOSITION_PENDING.size <= COMPOSITION_PENDING_MAX,
+    `Die Ausnahmeliste ist auf ${COMPOSITION_PENDING.size} gewachsen (erlaubt: `
+    + `${COMPOSITION_PENDING_MAX}). Eine neue Seite gehoert nicht auf diese Liste, `
+    + 'sie erfuellt den Vertrag von Anfang an.');
+  assert.equal(COMPOSITION_PENDING.size, COMPOSITION_PENDING_MAX,
+    `Es sind nur noch ${COMPOSITION_PENDING.size} Ausnahmen - setze `
+    + `COMPOSITION_PENDING_MAX auf ${COMPOSITION_PENDING.size} herunter, sonst haelt `
+    + 'der Guard Platz frei, den niemand mehr braucht.');
+  const shell = new Set(pagesBehindAppShell());
+  for (const name of COMPOSITION_PENDING) {
+    assert.ok(existsSync(new URL(`../public/pages/${name}`, import.meta.url)),
+      `PAGE-011: ${name} steht auf der Ausnahmeliste, die Datei gibt es nicht mehr`);
+    assert.ok(shell.has(name),
+      `PAGE-011: ${name} liegt nicht hinter der App-Shell und braucht keine Ausnahme`);
+  }
+});
+
+test('PAGE-001: every page behind the app shell declares exactly one composition mode', () => {
+  for (const name of compositionScope()) {
+    const src = withoutHtmlComments(read(`../public/pages/${name}`));
     const found = COMPOSITION_MODES.filter((mode) =>
       new RegExp(`app-page--${mode}|data-composition="${mode}"|mode:\\s*'${mode}'`).test(src));
     // Compat: page-measure--narrow alone counts as reading until aliases retire.
@@ -14936,18 +14990,15 @@ test('PAGE-002: PageHeader and PageBody share composition context', () => {
 });
 
 test('PAGE-003: primary content must not define arbitrary width', () => {
-  for (const page of walkJsFiles('../public/pages/')) {
-    const name = page.split('/').pop();
-    if (COMPOSITION_OUT_OF_SCOPE.has(name)) continue;
-    if (!COMPOSITION_MIGRATED.has(name)) continue;
-    const src = withoutBlockComments(read(page));
+  for (const name of compositionScope()) {
+    const src = withoutBlockComments(read(`../public/pages/${name}`));
     const hits = [...src.matchAll(/style\s*=\s*["'][^"']*max-width\s*:\s*[^;"']+/gi)];
     for (const hit of hits) {
       assert.ok(/var\(--(?:page-measure|layout-|content-max-width)/.test(hit[0]) || /100%|none/.test(hit[0]),
-        `PAGE-003 ${name}: arbitrary inline max-width — ${hit[0]}`);
+        `PAGE-003 ${name}: arbitrary inline max-width - ${hit[0]}`);
     }
   }
-  for (const file of ['birthdays.css', 'contacts.css', 'notes.css', 'rewards.css', 'budget.css']) {
+  for (const file of compositionScopeCss()) {
     const css = withoutBlockComments(read(`../public/styles/${file}`));
     for (const rule of eachRule(css)) {
       if (!COMPOSITION_BLACKLIST_WIDTH.test(rule.body)) continue;
@@ -14976,8 +15027,8 @@ test('PAGE-004: layout width tokens exist and are wired', () => {
     'PAGE-004: page-layout.js must exist');
 });
 
-test('PAGE-005: migrated pages avoid local page-geometry breakpoints', () => {
-  for (const file of ['birthdays.css', 'contacts.css', 'notes.css', 'rewards.css']) {
+test('PAGE-005: pages in scope avoid local page-geometry breakpoints', () => {
+  for (const file of compositionScopeCss()) {
     const css = withoutBlockComments(read(`../public/styles/${file}`));
     // Soft: only flag bizarre one-off widths not on the shared scale.
     const odd = [...css.matchAll(/@media\s*\(\s*max-width\s*:\s*([0-9]+)px\s*\)/g)]
@@ -14988,8 +15039,8 @@ test('PAGE-005: migrated pages avoid local page-geometry breakpoints', () => {
   }
 });
 
-test('PAGE-006: page-level negative margins are prohibited on migrated CSS', () => {
-  for (const file of ['birthdays.css', 'contacts.css', 'notes.css', 'rewards.css', 'pantry.css']) {
+test('PAGE-006: page-level negative margins are prohibited in scope', () => {
+  for (const file of compositionScopeCss()) {
     const css = withoutBlockComments(read(`../public/styles/${file}`));
     for (const rule of eachRule(css)) {
       if (!COMPOSITION_NEGATIVE_MARGIN.test(rule.body)) continue;
@@ -15024,10 +15075,12 @@ test('PAGE-007: page-layout helpers export the contract surface', () => {
 
 test('PAGE-008: DESIGN.md points at the composition system', () => {
   const design = read('../DESIGN.md');
-  assert.match(design, /PAGE-COMPOSITION\.md/,
-    'PAGE-008: DESIGN.md must link PAGE-COMPOSITION.md');
-  assert.ok(existsSync(new URL('../PAGE-COMPOSITION.md', import.meta.url)),
-    'PAGE-008: PAGE-COMPOSITION.md must exist');
+  assert.match(design, /docs\/PAGE-COMPOSITION\.md/,
+    'PAGE-008: DESIGN.md must link docs/PAGE-COMPOSITION.md');
+  assert.ok(existsSync(new URL('../docs/PAGE-COMPOSITION.md', import.meta.url)),
+    'PAGE-008: docs/PAGE-COMPOSITION.md must exist');
+  assert.ok(!existsSync(new URL('../PAGE-COMPOSITION.md', import.meta.url)),
+    'PAGE-008: the spec lives under docs/, not in the repository root');
 });
 
 test('PAGE-009: composition mode owns responsive split/full behaviour', () => {
@@ -15047,11 +15100,29 @@ test('PAGE-010: full-bleed is an explicit --bleed declaration', () => {
     'PAGE-010: helpers must emit bleed class');
 });
 
-test('PAGE composition: reference page birthdays uses page-layout helpers', () => {
+/**
+ * KEINE SEITE IST DIE REFERENZ.
+ *
+ * Die erste Fassung markierte `/birthdays` im Produktionsmarkup als
+ * `data-composition-reference="true"` und pruefte genau diese eine Seite streng.
+ * Das war ein Testhaken, der im ausgelieferten HTML stand: er kostete jeden
+ * Besucher ein Attribut und sagte ueber die anderen dreissig Seiten nichts. Die
+ * Strenge steckt jetzt in PAGE-001 bis PAGE-006 ueber den ganzen
+ * Geltungsbereich; dieser Test haelt nur den Weg zurueck zu.
+ */
+test('PAGE composition: no page marks itself as the reference implementation', () => {
+  const offenders = walkJsFiles('../public/')
+    .filter((file) => /data-composition-reference/.test(read(file)));
+  assert.deepEqual(offenders, [],
+    'Ein Kompositions-Marker ist zurueck im Produktionsmarkup. Die Zusicherung '
+    + 'gehoert in den Guard, nicht ins ausgelieferte HTML.');
+});
+
+test('PAGE composition: birthdays stays free of page geometry in module CSS', () => {
   const src = read('../public/pages/birthdays.js');
   const css = withoutBlockComments(read('../public/styles/birthdays.css'));
   assert.match(src, /from ['"]\/utils\/page-layout\.js['"]/,
-    'birthdays.js must import page-layout helpers (reference page)');
+    'birthdays.js must import page-layout helpers');
   for (const name of [
     'renderAppPage',
     'renderPageHeader',
@@ -15061,23 +15132,21 @@ test('PAGE composition: reference page birthdays uses page-layout helpers', () =
     'renderPageSection',
     'renderListSection',
   ]) {
-    assert.match(src, new RegExp(name), `reference must call ${name}`);
+    assert.match(src, new RegExp(name), `birthdays.js must call ${name}`);
   }
-  assert.match(src, /mode:\s*'reading'/, 'reference must declare reading mode');
+  assert.match(src, /mode:\s*'reading'/, 'birthdays.js must declare reading mode');
   assert.match(src, /legacyAlias:\s*false/,
-    'reference must omit .page-measure--narrow compat alias');
-  assert.match(src, /data-composition-reference/,
-    'reference must mark data-composition-reference');
-  assert.match(src, /measured:\s*true/, 'reference header must use measured rail');
+    'birthdays.js must omit the .page-measure--narrow compat alias');
+  assert.match(src, /measured:\s*true/, 'birthdays.js header must use the measured rail');
   assert.doesNotMatch(src, /page-measure--narrow/,
-    'reference source must not reintroduce page-measure--narrow');
-  // Module CSS owns accent/list chrome only — no page geometry.
+    'birthdays.js must not reintroduce page-measure--narrow');
+  // Module CSS owns accent/list chrome only - no page geometry.
   for (const rule of eachRule(css)) {
     if (!/\.birthdays-page\b/.test(rule.selector)) continue;
     assert.doesNotMatch(rule.body, /max-width\s*:/,
-      `reference CSS must not set page max-width on ${rule.selector}`);
+      `birthdays.css must not set page max-width on ${rule.selector}`);
     assert.doesNotMatch(rule.body, /margin-inline\s*:\s*var\(--page-inline-pad\)/,
-      `reference CSS must not own page gutters on ${rule.selector}`);
+      `birthdays.css must not own page gutters on ${rule.selector}`);
   }
   assert.doesNotMatch(css, /\.birthdays-hint\s*\{[^}]*margin-inline\s*:\s*var\(--page-inline-pad\)/,
     'hint gutter must come from .app-page__body, not birthdays.css');
