@@ -63,9 +63,13 @@ Optional fields:
   opens your page. Pick a tone that reads against both a light and a dark surface: the mark is
   filled with it and carries a light or dark glyph on top.
 - `page.composition`: one of `reading` | `data` | `dashboard` | `form` | `split` | `full`
-  (see [`docs/PAGE-COMPOSITION.md`](docs/PAGE-COMPOSITION.md)). Declare intent; do not invent page width,
-  gutters, or breakpoints. Use `/utils/page-layout.js` and `.app-page--*` primitives.
-- `page.width`: semantic width (`reading` | `content` | `wide`); defaults from composition.
+  (see [`docs/PAGE-COMPOSITION.md`](docs/PAGE-COMPOSITION.md)). The app applies it: the
+  `container` your `render()` receives is the `.app-page--<composition>` root, with the page
+  measure set. Declare intent; do not invent page width, gutters, or breakpoints. Build the
+  header and body with `/utils/page-layout.js`.
+- `page.width`: semantic width (`reading` | `content` | `wide`); defaults from composition and
+  refines the measure inside `reading`, `form`, `data` and `dashboard`. `split` and `full` own
+  their width and ignore it.
 - `page.navigation` / `page.responsive`: currently `standard` only.
 
 ## Client Entry
@@ -73,22 +77,26 @@ Optional fields:
 ```js
 import { api } from '/api.js';
 import { esc } from '/utils/html.js';
-import { renderAppPage, renderPageHeader, renderPageTitle, renderPageBody } from '/utils/page-layout.js';
+import { renderPageHeader, renderPageTitle, renderPageBody, renderPageSection } from '/utils/page-layout.js';
 
 export async function render(container, context) {
+  // `container` already is your page root: the app has wrapped it in the
+  // composition you declared in module.json (`.app-page.app-page--reading`,
+  // `--page-measure` set). Render the header and the body into it; do not
+  // call renderAppPage() yourself, that would nest a second page root.
   const me = await api.get('/auth/me');
   container.replaceChildren();
-  container.insertAdjacentHTML('beforeend', renderAppPage({
-    mode: 'reading',
-    header: renderPageHeader({
-      title: renderPageTitle('Example Module'),
-    }),
-    body: renderPageBody({
-      content: `<section class="page-section"><p>Hello, ${esc(me.user.display_name)}</p></section>`,
-    }),
-  }));
+  container.insertAdjacentHTML('beforeend',
+    renderPageHeader({ title: renderPageTitle('Example Module') })
+    + renderPageBody({
+      content: renderPageSection({
+        content: `<p>Hello, ${esc(me.user.display_name)}</p>`,
+      }),
+    }));
 }
 ```
+
+`context` carries `user` and `page`. `page` is the normalized declaration from your manifest (`composition`, `width`, `navigation`, `responsive`), so a module can branch on it without reading `module.json` a second time.
 
 Modules may import public Yuvomi browser libraries such as `/api.js`, `/i18n.js`, and utilities under `/utils/`. For calls to Yuvomi's built-in REST API, prefer `import { api } from '/api.js'`: it prefixes requests with `/api/v1`, sends the current session credentials, handles CSRF tokens, and uses non-cached fetches for user data.
 

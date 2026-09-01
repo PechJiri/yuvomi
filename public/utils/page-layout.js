@@ -74,8 +74,8 @@ ${header}${body}${trailing}
  * @param {string} [opts.actions='']
  * @param {string} [opts.bar='']
  * @param {boolean} [opts.wrap=false]
- * @param {boolean} [opts.narrow=false] — legacy ::after spacer; prefer measured
- * @param {boolean} [opts.measured=true] — wrap primary slots in .page-toolbar__rail
+ * @param {boolean} [opts.narrow=true] - ::after spacer pulls the row end to --page-measure
+ * @param {boolean} [opts.measured=false] - without narrow: wrap primary slots in .page-toolbar__rail
  * @param {boolean} [opts.inGroup=false]
  * @param {boolean} [opts.capped=false]
  * @param {boolean} [opts.stacked=false]
@@ -106,7 +106,14 @@ export function renderPageHeader({
   ].filter(Boolean).join(' ');
 
   const railSlots = [title, center, actions].filter(Boolean).join('\n');
-  const rail = measured && railSlots
+  // Der Rail ist nur dann ein Element, wenn er auch eine Box ist. Mit
+  // `narrow` haelt der ::after-Slot die Kante, und ein Wrapper um die Slots
+  // waere reine DOM-Tiefe - eine, die alles blind macht, was den Titel als
+  // DIREKTES Kind der Leiste sucht: das Absender-Siegel und der Dock-Titel
+  // (`:scope > .page-toolbar__title` in ux.js) und die Large-Title-Regeln
+  // (`.page-toolbar > .page-toolbar__title` in typography.css). `display:
+  // contents` hilft dort nicht, Selektoren sehen den DOM, nicht den Boxbaum.
+  const rail = measured && !narrow && railSlots
     ? `<div class="page-toolbar__rail">\n${railSlots}\n</div>`
     : railSlots;
   const inner = [rail, bar].filter(Boolean).join('\n');

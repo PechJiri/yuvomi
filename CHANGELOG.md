@@ -29,7 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   migrating a page is a deletion rather than a table somebody has to keep honest. The first draft
   marked one reference page in the production markup instead; that attribute shipped to every
   visitor and said nothing about the other thirty pages, so the guarantee moved into the guard.
-  The spec lives at `docs/PAGE-COMPOSITION.md`.
+  The spec lives at `docs/PAGE-COMPOSITION.md`. Two reviews on the way in found what the first
+  cut had left undone: an extension module's `page.composition` and `page.width` were checked
+  on the server and shown in the admin list but never applied to the page, so `data` looked
+  exactly like `reading`; now the router mounts the module in the declared root (the
+  `container` a module's `render()` receives is that root, and `context.page` says which). The
+  reference page had lost the gap between its header and its body, and its measured header
+  wrapped the title in a rail that hid the module seal and the docked title; notes was declared a
+  reading page while its masonry ran the full width beside a 720px header, and is now `full`.
+  Three of the new guards were green without seeing anything: the breakpoint check let the
+  spec's own forbidden example through, the negative-margin check did not know `calc(-1 * ...)`,
+  and the inline-width check read the whole `style` attribute instead of the value. Each of
+  them now has a counter-proof.
 
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from

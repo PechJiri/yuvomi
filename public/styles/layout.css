@@ -2315,6 +2315,16 @@ html.fab-anim-done .page-fab {
   flex: 1;
 }
 
+/* Kopf-Koerper-Rhythmus gehoert der Seite, nicht dem Modul (docs/PAGE-COMPOSITION.md):
+ * Leiste und .app-page__body sind Geschwister auf .app-page, und der Abstand
+ * zwischen ihnen wohnt HIER. Als birthdays.css sein `gap` abgab, ersetzte es
+ * nichts - `.app-page--* > .app-page__body { gap }` spaciert nur das Innere
+ * des Koerpers. Begrenzt auf Wurzeln aus renderAppPage, damit eine Seite, die
+ * ihren Abstand noch selbst traegt, ihn nicht doppelt bekommt. */
+.app-page:has(> .app-page__body) {
+  gap: var(--space-3);
+}
+
 .app-page--reading,
 .app-page--form,
 .page-measure--narrow {
@@ -2334,6 +2344,22 @@ html.fab-anim-done .page-fab {
   --page-measure: none;
 }
 
+/* `page.width` from an extension manifest refines the measure INSIDE a
+ * measured mode (router.js sets data-page-width on the module's page root).
+ * split/full have no measure and are not listed here, so a width declared on
+ * them stays without effect instead of capping a page that owns its width. */
+.app-page:is(.app-page--reading, .app-page--form, .app-page--data, .app-page--dashboard)[data-page-width="reading"] {
+  --page-measure: var(--layout-reading);
+}
+
+.app-page:is(.app-page--reading, .app-page--form, .app-page--data, .app-page--dashboard)[data-page-width="content"] {
+  --page-measure: var(--layout-content);
+}
+
+.app-page:is(.app-page--reading, .app-page--form, .app-page--data, .app-page--dashboard)[data-page-width="wide"] {
+  --page-measure: var(--layout-wide);
+}
+
 /* Calendar agenda (and similar): temporarily adopt reading measure without
  * switching composition mode declaration (PAGE-001). */
 .app-page.is-reading-measure {
@@ -2348,11 +2374,13 @@ html.fab-anim-done .page-fab {
    * .row-carrier / historical page-measure--narrow behaviour. */
 }
 
-/* Measured toolbar rail (PAGE-COMPOSITION.md).
+/* Measured toolbar rail (docs/PAGE-COMPOSITION.md).
  *
- * With .page-toolbar--narrow: rail is display:contents so title/center/actions
- * stay direct flex participants for Large-Title / wrap rules; ::after still
- * owns the primary edge.
+ * With .page-toolbar--narrow there is NO rail element: ::after owns the
+ * primary edge, and title/center/actions stay direct children, which the
+ * Large-Title rules (typography.css) and the head seal / dock title
+ * (`:scope > .page-toolbar__title` in ux.js) depend on. A `display: contents`
+ * wrapper would keep the flex participation but not the selectors.
  *
  * Without --narrow (new pages once selectors are migrated): rail is a real
  * flex box capped to --page-measure. */
@@ -2361,10 +2389,6 @@ html.fab-anim-done .page-fab {
   display: none;
   flex: 0 0 0;
   margin: 0;
-}
-
-.page-toolbar--measured > .page-toolbar__rail {
-  display: contents;
 }
 
 .page-toolbar--measured:not(.page-toolbar--narrow) > .page-toolbar__rail {

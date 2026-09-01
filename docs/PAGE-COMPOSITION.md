@@ -2,8 +2,8 @@
 
 Spatial composition standard for Yuvomi application pages and third-party extension modules.
 
-**Visual language** lives in [`DESIGN.md`](DESIGN.md) and [`public/styles/tokens.css`](public/styles/tokens.css).  
-**Spatial composition** lives here, in layout primitives, and in [`public/utils/page-layout.js`](public/utils/page-layout.js).
+**Visual language** lives in [`DESIGN.md`](../DESIGN.md) and [`public/styles/tokens.css`](../public/styles/tokens.css).  
+**Spatial composition** lives here, in layout primitives, and in [`public/utils/page-layout.js`](../public/utils/page-layout.js).
 
 ```text
 DESIGN SYSTEM
@@ -47,12 +47,12 @@ Application
 
 | Mode | Purpose | Width token |
 |------|---------|-------------|
-| `reading` | notes, contacts, recipes, tasks list, forms | `--layout-reading` (~720px) |
+| `reading` | contacts, recipes, tasks list, forms | `--layout-reading` (~720px) |
 | `data` | tables, inventory, documents list, large datasets | `--layout-content` (~960px) |
 | `dashboard` | KPI grids, health, analytics | `--layout-wide` (~1200px) |
 | `form` | complex forms inside reading column | `--layout-reading` |
 | `split` | master/detail; stacks on mobile | split rails |
-| `full` | calendar month, kanban, immersive | usable width |
+| `full` | calendar month, kanban, notes masonry, immersive | usable width |
 
 Arbitrary values such as `max-width: 843px` are prohibited.
 
@@ -91,6 +91,12 @@ Third-party modules declare intent; they do not implement geometry:
 }
 ```
 
+The router applies the declaration (`mountExtensionPage` in `public/router.js`): the
+`container` handed to the module's `render()` is the `.app-page--<composition>` root,
+`data-page-width` refines `--page-measure` inside the measured modes, and `context.page`
+carries the normalized values. A module renders header and body into that root; it does not
+create a second one.
+
 ### Blacklist
 
 ```text
@@ -121,7 +127,7 @@ Documented exceptions - not forced through composition modes in v1:
 
 ### Layout width tokens
 
-Defined in [`public/styles/tokens.css`](public/styles/tokens.css):
+Defined in [`public/styles/tokens.css`](../public/styles/tokens.css):
 
 | Token | Default | Role |
 |-------|---------|------|
@@ -136,7 +142,7 @@ Legacy aliases remain for one release cycle:
 
 ### CSS primitives
 
-Defined in [`public/styles/layout.css`](public/styles/layout.css):
+Defined in [`public/styles/layout.css`](../public/styles/layout.css):
 
 | Class | Role |
 |-------|------|
@@ -157,7 +163,7 @@ Mode modifiers set `--page-measure`:
 
 ### JavaScript helpers
 
-[`public/utils/page-layout.js`](public/utils/page-layout.js):
+[`public/utils/page-layout.js`](../public/utils/page-layout.js):
 
 | Export | Role |
 |--------|------|
@@ -184,7 +190,7 @@ New code must not introduce legacy aliases. Reference page already omits `.page-
 
 ### Audit invariants
 
-Enforced in [`test/test-frontend-audit.js`](test/test-frontend-audit.js):
+Enforced in [`test/test-frontend-audit.js`](../test/test-frontend-audit.js):
 
 | ID | Invariant |
 |----|-----------|
@@ -266,9 +272,9 @@ overflow checks. Not wired into CI yet.
 | Wave | Mode | Modules | Status in this PR |
 |------|------|---------|-------------------|
 | Reference | `reading` | **birthdays** | **Done (helpers + CSS)** |
-| A | `reading` | contacts, notes, rewards, pantry, recipes | Mode declared |
+| A | `reading` | contacts, rewards, pantry, recipes | Mode declared |
 | B | `data` | inventory, schedule, documents, housekeeping | Mode declared |
 | C | budget family | budget + stats/plans/subscriptions/split | Mode declared; metric-grid on measure |
-| D | `dashboard` / `full` | calendar, tasks, health, dashboard | Mode declared |
+| D | `dashboard` / `full` | calendar, tasks, notes, health, dashboard | Mode declared |
 
 After v1, every layout question becomes: *which composition mode, and which contract clause is violated?*

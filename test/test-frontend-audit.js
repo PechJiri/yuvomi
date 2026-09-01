@@ -14929,7 +14929,11 @@ function compositionScopeCss() {
 }
 
 const COMPOSITION_BLACKLIST_WIDTH = /max-width\s*:\s*(?!none|100%|var\(--(?:page-measure|layout-|content-max-width))[0-9.]+(?:px|rem|em|vw)/i;
-const COMPOSITION_NEGATIVE_MARGIN = /margin(?:-inline|-left|-right|-inline-start|-inline-end)?\s*:\s*-[0-9]/i;
+// Auch `calc(-1 * var(--x))` und `-.5rem` sind negative Margen - die erste
+// Fassung verlangte `-` plus Ziffer direkt nach dem Doppelpunkt und sah damit
+// genau das Idiom nicht, das dieses Repo benutzt (auch .page-section--bleed
+// selbst). Ein Guard, der sein eigenes Beispiel nicht faengt, prueft nichts.
+const COMPOSITION_NEGATIVE_MARGIN = /margin(?:-inline|-left|-right|-inline-start|-inline-end)?\s*:\s*(?:-[0-9.]|calc\(\s*-)/i;
 
 test('PAGE-000: der Geltungsbereich ist nicht leer und deckt fast alle Seiten', () => {
   // REICHWEITEN-NACHWEIS. Ohne ihn koennte jede Regel darunter gruen sein, weil
@@ -14987,15 +14991,22 @@ test('PAGE-002: PageHeader and PageBody share composition context', () => {
   // Budget KPI band must read the page measure (Header/Body axis).
   assert.match(layout, /\.page-measure--narrow :is\([\s\S]*?\.metric-grid/,
     'PAGE-002: .metric-grid must share the reading measure with header/list');
+  // Und der Abstand ZWISCHEN Kopf und Koerper ist Teil desselben Kontexts:
+  // birthdays.css gab sein `gap` an die Seite ab, die Seite hatte keines.
+  assert.match(layout, /\.app-page:has\(> \.app-page__body\)\s*\{[^}]*gap:\s*var\(--space-3\)/,
+    'PAGE-002: .app-page must space toolbar and .app-page__body - the module CSS no longer does');
 });
 
 test('PAGE-003: primary content must not define arbitrary width', () => {
   for (const name of compositionScope()) {
     const src = withoutBlockComments(read(`../public/pages/${name}`));
-    const hits = [...src.matchAll(/style\s*=\s*["'][^"']*max-width\s*:\s*[^;"']+/gi)];
+    // Geprueft wird der WERT von max-width, nicht das ganze style-Attribut:
+    // mit `style="width:100%;max-width:843px"` liess der Treffer auf `100%`
+    // weiter vorn die 843px durch.
+    const hits = [...src.matchAll(/style\s*=\s*["'][^"']*?max-width\s*:\s*([^;"']+)/gi)];
     for (const hit of hits) {
-      assert.ok(/var\(--(?:page-measure|layout-|content-max-width)/.test(hit[0]) || /100%|none/.test(hit[0]),
-        `PAGE-003 ${name}: arbitrary inline max-width - ${hit[0]}`);
+      assert.ok(/var\(--(?:page-measure|layout-|content-max-width)/.test(hit[1]) || /^\s*(?:100%|none)\s*$/.test(hit[1]),
+        `PAGE-003 ${name}: arbitrary inline max-width - ${hit[1]}`);
     }
   }
   for (const file of compositionScopeCss()) {
@@ -15027,29 +15038,48 @@ test('PAGE-004: layout width tokens exist and are wired', () => {
     'PAGE-004: page-layout.js must exist');
 });
 
+// Die geteilte Breakpoint-Skala, wie sie im Repo tatsaechlich steht: jede
+// Stufe als max-width (639) und als min-width (640) - gemessen ueber alle
+// public/styles/*.css, 121 Media-Queries, keine einzige daneben. Die erste
+// Fassung dieses Guards fuehrte 640/768/900/1024/1440 als Skala und liess
+// zusaetzlich alles unter 600 durch; damit war `@media (max-width: 637px)`,
+// das eigene Beispiel der Spec, gerade NICHT gefangen.
+const COMPOSITION_BREAKPOINT_SCALE = new Set([639, 640, 767, 768, 1023, 1024, 1439, 1440]);
+
 test('PAGE-005: pages in scope avoid local page-geometry breakpoints', () => {
+  let seen = 0;
   for (const file of compositionScopeCss()) {
     const css = withoutBlockComments(read(`../public/styles/${file}`));
-    // Soft: only flag bizarre one-off widths not on the shared scale.
-    const odd = [...css.matchAll(/@media\s*\(\s*max-width\s*:\s*([0-9]+)px\s*\)/g)]
-      .map((m) => Number(m[1]))
-      .filter((n) => ![640, 768, 900, 1024, 1440].includes(n) && n < 600);
-    assert.equal(odd.length, 0,
-      `PAGE-005 ${file}: odd local breakpoints ${odd.join(',')}`);
+    const widths = [...css.matchAll(/@media[^{]*?\(\s*(?:min|max)-width\s*:\s*([0-9.]+)(px|rem|em)\s*\)/g)];
+    seen += widths.length;
+    const odd = widths
+      .filter(([, value, unit]) => unit !== 'px' || !COMPOSITION_BREAKPOINT_SCALE.has(Number(value)))
+      .map(([, value, unit]) => `${value}${unit}`);
+    assert.deepEqual(odd, [],
+      `PAGE-005 ${file}: breakpoints off the shared scale: ${odd.join(', ')} - a page does not own its own breakpoints`);
   }
+  assert.ok(seen >= 40, `PAGE-005: only ${seen} media queries seen in scope - the scan is blind`);
 });
 
 test('PAGE-006: page-level negative margins are prohibited in scope', () => {
+  // Negative Margen an Bauteilen INNERHALB einer Seite sind erlaubt (ein Chip,
+  // der seinen Rand ausgleicht); an der Seitenwurzel oder einem `*-page`-Traeger
+  // kompensieren sie Geometrie, die dem Kern gehoert. Gezaehlt wird, was die
+  // Regex ueberhaupt sieht: sieht sie nichts, prueft die Schleife nichts.
+  let seen = 0;
   for (const file of compositionScopeCss()) {
     const css = withoutBlockComments(read(`../public/styles/${file}`));
     for (const rule of eachRule(css)) {
       if (!COMPOSITION_NEGATIVE_MARGIN.test(rule.body)) continue;
+      seen++;
       if (/\.page-section--bleed/.test(rule.selector)) continue;
       if (/\.(?:app-page|[\w-]+-page)\b/.test(rule.selector)) {
         assert.fail(`PAGE-006 ${file}: page-level negative margin in ${rule.selector}`);
       }
     }
   }
+  assert.ok(seen >= 3,
+    `PAGE-006: the regex matched only ${seen} negative margins in scope - it no longer sees the calc(-1 * ...) idiom`);
 });
 
 test('PAGE-007: page-layout helpers export the contract surface', () => {
@@ -15073,6 +15103,50 @@ test('PAGE-007: page-layout helpers export the contract surface', () => {
     'PAGE-007: modes must include reading');
 });
 
+test('PAGE-006b: a page without a measure does not narrow its header', () => {
+  // `.page-toolbar--narrow` zieht das Zeilenende des Kopfes auf --page-measure.
+  // In `full` und `split` gibt es dieses Mass nicht (`--page-measure: none`),
+  // der Koerper laeuft ueber die Nutzbreite. Ein statisch gesetzter Modifier
+  // faellt dort auf den Rueckfall (720px) zurueck und der Kopf endet neben
+  // seinem Koerper - so kam #929 bei den Notizen an: Kopf bei 720px, das
+  // Masonry-Raster daneben bis fuenf Spalten breit. Wer je Ansicht toggelt
+  // (Kalender), wird oben unter der Kopplungsregel geprueft, nicht hier.
+  let checked = 0;
+  for (const file of compositionScope()) {
+    const src = read(`../public/pages/${file}`);
+    if (!/app-page--(?:full|split)\b|data-composition="(?:full|split)"|mode:\s*'(?:full|split)'/.test(src)) continue;
+    checked++;
+    const heads = [...src.matchAll(/class="([^"]*\bpage-toolbar\b[^"]*)"/g)].map((m) => m[1]);
+    for (const classList of heads) {
+      assert.ok(!/\bpage-toolbar--narrow\b/.test(classList),
+        `PAGE-006b ${file}: "${classList}" narrows the header on a page whose body has no measure`);
+    }
+  }
+  assert.ok(checked >= 2, `PAGE-006b: only ${checked} full/split pages found - calendar and notes should be two`);
+});
+
+test('PAGE-007b: a narrow header keeps its slots as direct children', async () => {
+  // Das Absender-Siegel und der Dock-Titel suchen `:scope > .page-toolbar__title`
+  // (ux.js), die Large-Title-Regeln `.page-toolbar > .page-toolbar__title`
+  // (typography.css). Ein Rail-Wrapper um die Slots macht beides blind - auf
+  // /birthdays fehlten Siegel und Dock-Titel, weil `measured` den Titel eine
+  // Ebene tiefer legte. Mit `narrow` haelt ::after die Kante; der Rail ist dort
+  // kein Element. Ohne `narrow` ist er eine echte Box und darf stehen.
+  const { renderPageHeader } = await import('../public/utils/page-layout.js');
+  const slots = { title: '<h1 class="page-toolbar__title">T</h1>', actions: '<div class="page-toolbar__actions"></div>' };
+  const narrow = renderPageHeader({ ...slots, measured: true, narrow: true });
+  assert.doesNotMatch(narrow, /page-toolbar__rail/,
+    'PAGE-007b: measured + narrow must not wrap the slots in a rail');
+  assert.match(narrow, /<div class="page-toolbar[^"]*">\n<h1 class="page-toolbar__title">/,
+    'PAGE-007b: the title must be the first direct child of the toolbar');
+  const railed = renderPageHeader({ ...slots, measured: true, narrow: false });
+  assert.match(railed, /<div class="page-toolbar__rail">\n<h1 class="page-toolbar__title">/,
+    'PAGE-007b: without narrow the rail is a real flex box and wraps the slots');
+  // Und die Seite, die den Kopf so baut, verlangt genau diese Form.
+  assert.match(read('../public/pages/birthdays.js'), /measured:\s*true,\s*\n\s*narrow:\s*true/,
+    'PAGE-007b: birthdays is the measured + narrow case this guard is about');
+});
+
 test('PAGE-008: DESIGN.md points at the composition system', () => {
   const design = read('../DESIGN.md');
   assert.match(design, /docs\/PAGE-COMPOSITION\.md/,
@@ -15081,6 +15155,19 @@ test('PAGE-008: DESIGN.md points at the composition system', () => {
     'PAGE-008: docs/PAGE-COMPOSITION.md must exist');
   assert.ok(!existsSync(new URL('../PAGE-COMPOSITION.md', import.meta.url)),
     'PAGE-008: the spec lives under docs/, not in the repository root');
+
+  // Die Datei ist aus der Wurzel nach docs/ gezogen; jeder Link auf eine
+  // Repo-Datei braucht seitdem ein `../`. Beim Umzug blieben sechs davon
+  // stehen und zeigten auf docs/DESIGN.md, docs/public/... - Ziele, die es
+  // nicht gibt. Aufgeloest wird von docs/ aus, so wie GitHub es tut.
+  const spec = read('../docs/PAGE-COMPOSITION.md');
+  const links = [...spec.matchAll(/\]\(([^)#]+?)(?:#[^)]*)?\)/g)]
+    .map((m) => m[1])
+    .filter((target) => !/^[a-z]+:/.test(target));
+  assert.ok(links.length >= 6, `PAGE-008: only ${links.length} relative links found - the scan is blind`);
+  const dead = links.filter((target) => !existsSync(new URL(`../docs/${target}`, import.meta.url)));
+  assert.deepEqual(dead, [],
+    `PAGE-008: links in docs/PAGE-COMPOSITION.md that do not resolve from docs/: ${dead.join(', ')}`);
 });
 
 test('PAGE-009: composition mode owns responsive split/full behaviour', () => {
@@ -15110,6 +15197,43 @@ test('PAGE-010: full-bleed is an explicit --bleed declaration', () => {
  * Strenge steckt jetzt in PAGE-001 bis PAGE-006 ueber den ganzen
  * Geltungsbereich; dieser Test haelt nur den Weg zurueck zu.
  */
+test('PAGE-012: the router applies what an extension manifest declares', () => {
+  // `page.composition` und `page.width` werden serverseitig geprueft
+  // (test-modules.js) und in MODULES.md als Vertrag versprochen. Ein Vertrag,
+  // den der Router nicht anwendet, ist ein Feld ohne Wirkung: `data` saehe aus
+  // wie `reading`, `wide` wie gar nichts. Codex fand genau das an #995 - die
+  // Erklaerung kam bis zur Admin-Liste und nicht bis zur Seite.
+  const router = withoutBlockComments(read('../public/router.js'));
+  const mount = router.slice(router.indexOf('function mountExtensionPage('));
+  assert.ok(mount.length > 0, 'PAGE-012: router.js must mount an extension page root');
+  const body = mount.slice(0, mount.indexOf('\n}\n'));
+  assert.match(body, /page\.composition/, 'PAGE-012: the mount reads page.composition');
+  assert.match(body, /COMPOSITION_MODES\.includes\(/, 'PAGE-012: an unknown mode falls back instead of leaking into a class');
+  assert.match(body, /app-page app-page--\$\{mode\}/, 'PAGE-012: the root carries the mode class');
+  assert.match(body, /dataset\.composition = mode/, 'PAGE-012: the root carries data-composition');
+  assert.match(body, /dataset\.pageWidth/, 'PAGE-012: page.width lands on the root');
+  // ... und der Renderpfad benutzt die Wurzel, nicht den nackten Wrapper.
+  assert.match(router, /mountExtensionPage\(pageWrapper, route\.thirdPartyModule\)/,
+    'PAGE-012: the extension render path must mount through the composition root');
+  assert.match(router, /page: \{ \.\.\.route\.thirdPartyModule\.page \}/,
+    'PAGE-012: the module learns its declared page via context.page');
+
+  // `page.width` hat ein Gegenstueck im CSS, sonst ist die Breite die naechste
+  // Erklaerung ohne Wirkung; und sie greift NUR in gemessenen Modi.
+  const layout = read('../public/styles/layout.css');
+  for (const [width, token] of [['reading', 'reading'], ['content', 'content'], ['wide', 'wide']]) {
+    const rule = new RegExp(`\\[data-page-width="${width}"\\]\\s*\\{[^}]*--page-measure:\\s*var\\(--layout-${token}\\)`);
+    assert.match(layout, rule, `PAGE-012: layout.css maps page.width=${width} to --layout-${token}`);
+  }
+  const widthRules = [...layout.matchAll(/^[^{]*\[data-page-width=[^{]*\{/gm)].map((m) => m[0]);
+  assert.ok(widthRules.length >= 3, 'PAGE-012: three width rules expected');
+  for (const sel of widthRules) {
+    assert.doesNotMatch(sel, /app-page--(?:full|split)/,
+      `PAGE-012: a width must not cap a page that owns its width: ${sel.trim()}`);
+    assert.match(sel, /app-page--reading/, `PAGE-012: width rules are scoped to measured modes: ${sel.trim()}`);
+  }
+});
+
 test('PAGE composition: no page marks itself as the reference implementation', () => {
   const offenders = walkJsFiles('../public/')
     .filter((file) => /data-composition-reference/.test(read(file)));
