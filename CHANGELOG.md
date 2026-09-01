@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
+  and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from
+  #919 - widgets, `ext:<module-id>` permissions, an API prefix, a locale chain - is a promise made
+  to code nobody here can see: `modules/` is gitignored, modules arrive at runtime. Without a format
+  number, renaming a field later would have been a silent break, where the module still loads, the
+  field is gone, and the household notices a widget that stopped doing anything.
+
+  Omitting the field means 1, so manifests written before it keep working. A manifest declaring a
+  higher version is rejected outright, and the error names both numbers, because loading it halfway
+  would silently ignore fields it considers essential.
+
+  **New optional fields never require a bump**; the number moves only when one is removed or
+  renamed, and then the older format stays readable. A guard drives a manifest carrying every
+  promised field through the real normaliser, so dropping one turns the suite red rather than
+  turning somebody's widget blank.
+
+
+### Added
+
 - **Third-party modules can declare capabilities in `module.json`** for dashboard widgets, household permissions (`ext:<module-id>`), and API token scopes - the same surfaces core modules use, without changing core application code.
 - **The dashboard dynamically loads third-party widget entry points** (`renderWidget`) from protected module assets, with per-widget error isolation and an optional generic options dialog driven by `optionsSchema`.
 - **Third-party modules can ship UI translations** in `locales/{locale}.json` with manifest `i18n.defaultLocale`, `labelKey` / `titleKey`, and the same 24 core languages as Yuvomi.

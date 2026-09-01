@@ -138,6 +138,8 @@ import express from 'express';
 
 const dbmod = await import('../server/db.js');
 const svc = await import('../server/services/modules.js');
+const { SUPPORTED_MANIFEST_VERSION } = svc;
+const { normalizeCapabilities } = await import('../server/services/module-capabilities.js');
 const { default: modulesRouter } = await import('../server/routes/modules.js');
 const db = dbmod.get();
 
@@ -216,6 +218,85 @@ test('listModules(admin): valide Manifeste werden vollständig normalisiert', as
   assert.equal(beta.menu.show, false, 'menu.show wird übernommen');
   assert.equal(beta.menu.label, 'beta-mod', 'menu.label fällt auf name zurück');
   assert.equal(beta.enabled, true, 'menu.show=false lässt das Modul dennoch enabled');
+});
+
+// ── Formatvertrag des Manifests (#919 Folgearbeit) ──────────────────────────────
+// `capabilities` ist seit #919 eine ZUGESAGTE Oberflaeche, und `modules/` ist
+// gitignored: die Module kommen zur Laufzeit, niemand hier sieht, wer sie mit
+// welchen Annahmen benutzt. Ohne eine Formatversion waere jede Umbenennung
+// eines Feldes ein stiller Bruch - das Modul laedt, das Feld fehlt, und der
+// Haushalt merkt es an einem Widget, das nichts mehr tut.
+//
+// Geprueft wird DIREKT an den beiden Funktionen, die den Vertrag tragen, nicht
+// ueber angelegte Ordner: ein Test, der dafuer Module auf die Platte schreibt,
+// veraendert die Liste, die sieben andere Tests hier zaehlen. (Beim ersten
+// Versuch genau so passiert.)
+
+test('ein Manifest ohne manifestVersion gilt als Version 1', () => {
+  // Der einzige Wert, der die Manifeste nicht bricht, die es seit #919 schon
+  // geben kann: sie beschreiben genau dieses Format.
+  const m = svc.normalizeManifest({ id: 'x-mod', entry: 'index.js' }, 'x-mod');
+  assert.equal(m.manifestVersion, SUPPORTED_MANIFEST_VERSION);
+});
+
+test('ein Manifest fuer ein neueres Format wird abgewiesen, nicht halb gelesen', () => {
+  const zuNeu = SUPPORTED_MANIFEST_VERSION + 1;
+  assert.throws(
+    () => svc.normalizeManifest({ id: 'x-mod', entry: 'index.js', manifestVersion: zuNeu }, 'x-mod'),
+    (err) => {
+      // Die Meldung nennt BEIDE Zahlen - wer sie liest, weiss sofort, wer wen
+      // ueberholt hat, und muss nicht im Quelltext nachsehen.
+      assert.match(err.message, new RegExp(String(zuNeu)));
+      assert.match(err.message, new RegExp(`${SUPPORTED_MANIFEST_VERSION}\\b`));
+      return true;
+    },
+  );
+});
+
+test('eine unsinnige manifestVersion wird abgewiesen', () => {
+  for (const bad of ['zwei', 0, -1, 1.5]) {
+    assert.throws(
+      () => svc.normalizeManifest({ id: 'x-mod', entry: 'index.js', manifestVersion: bad }, 'x-mod'),
+      /manifestVersion/,
+      `manifestVersion ${JSON.stringify(bad)} haette abgewiesen werden muessen`,
+    );
+  }
+});
+
+test('jedes zugesagte capabilities-Feld kommt beim Modul auch an', async () => {
+  // DER EIGENTLICHE VERTRAG, und er prueft VERHALTEN statt Schreibweise: ein
+  // Manifest mit allen dokumentierten Feldern geht durch den echten
+  // Normalisierer, und jedes Feld muss im Ergebnis ankommen. Wer eines
+  // entfernt oder umbenennt, macht diesen Test rot - und die Reparatur ist
+  // nicht, ihn anzupassen, sondern SUPPORTED_MANIFEST_VERSION anzuheben und
+  // die alte Fassung weiter zu lesen. Ein Guard ueber den Quelltext haette
+  // denselben Namen an anderer Stelle akzeptiert.
+  const caps = await normalizeCapabilities(
+    {
+      capabilities: {
+        permissions: { module: { labelKey: 'contract.title', icon: 'box' } },
+        widgets: [{
+          id: 'panel', entry: 'widget.js', titleKey: 'contract.panel',
+          optionsSchema: { properties: { rows: { type: 'number' } } },
+        }],
+        api: { prefix: '/api/extensions/contract-mod' },
+      },
+    },
+    'contract-mod',
+    '/nowhere',
+    (id, rel) => `/api/v1/modules/assets/${id}/${rel}`,
+    async () => true,        // jede Datei existiert
+    () => true,              // jeder Pfad ist sicher
+  );
+
+  assert.ok(caps, 'capabilities duerfen nicht ganz wegfallen');
+  assert.equal(caps.permissionModuleKey, 'ext:contract-mod', 'ext:<id> ist der zugesagte Namensraum');
+  assert.ok(caps.permissionModule, 'permissions.module');
+  assert.equal(caps.apiPrefix, '/api/extensions/contract-mod', 'api.prefix');
+  assert.equal(caps.widgets.length, 1, 'widgets');
+  assert.equal(caps.widgets[0].shortId, 'panel');
+  assert.equal(caps.widgets[0].id, 'contract-mod:panel', '<module-id>:<widget-id> ist zugesagt');
+  assert.ok(caps.widgets[0].optionsSchema, 'widgets[].optionsSchema');
 });
 
 // ── Service: error-Fallback bei ungültigem Manifest ──────────────────────────────

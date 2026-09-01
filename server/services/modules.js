@@ -17,6 +17,12 @@ const log = createLogger('Modules');
 
 const MODULES_DIR = path.resolve(process.env.MODULES_DIR || path.join(import.meta.dirname, '..', '..', 'modules'));
 const DISABLED_KEY = 'third_party_disabled_modules';
+// Die hoechste Manifest-Formatversion, die diese Fassung lesen kann. Wer ein
+// Feld aus `capabilities` entfernt oder umbenennt, hebt SIE an - der Guard in
+// test/test-modules.js besteht darauf. Neue OPTIONALE Felder brauchen keine
+// Anhebung: ein aelteres Modul laesst sie weg und verhaelt sich wie zuvor.
+export const SUPPORTED_MANIFEST_VERSION = 1;
+
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
 const SAFE_RELATIVE_RE = /^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/;
 const MENU_LABEL_KEY_RE = /^[a-z][a-z0-9._-]{0,79}$/;
@@ -69,11 +75,48 @@ function modulePublicUrl(id, relPath) {
   return `/api/v1/modules/assets/${encodeURIComponent(id)}/${relPath.split('/').map(encodeURIComponent).join('/')}`;
 }
 
-function normalizeManifest(raw, folderName) {
+// Exportiert fuer test/test-modules.js: der Formatvertrag wird an DIESER
+// Funktion geprueft, nicht ueber den Umweg des Dateisystems - ein Test, der
+// dafuer Ordner anlegt, veraendert die Liste, die andere Tests zaehlen.
+export function normalizeManifest(raw, folderName) {
   const manifest = raw && typeof raw === 'object' ? raw : {};
   const id = String(manifest.id || folderName || '').trim();
   if (!ID_RE.test(id)) throw new Error('module.json must define a lowercase id using letters, numbers and hyphens.');
   if (id !== folderName) throw new Error('module id must match the folder name.');
+
+  // FORMATVERSION DES MANIFESTS, nicht Version des Moduls (das ist `version`).
+  //
+  // WARUM DAS HIER STEHT UND NICHT SPAETER: seit #919 ist `capabilities` eine
+  // zugesagte Oberflaeche - Widgets, `ext:<id>`-Rechte, ein API-Praefix, eine
+  // Locale-Kette. `modules/` ist gitignored, die Module kommen zur Laufzeit,
+  // und niemand hier sieht, wer die Oberflaeche mit welchen Annahmen benutzt.
+  // Ohne diese Zahl waere jede kuenftige Umbenennung eines Feldes ein stiller
+  // Bruch: das Modul laedt, das Feld fehlt, und der Haushalt merkt es an einem
+  // Widget, das nichts mehr tut.
+  //
+  // FEHLT DIE ANGABE, gilt 1. Das ist keine Nachlaessigkeit, sondern der
+  // einzige Wert, der die Manifeste nicht bricht, die es seit #919 schon geben
+  // kann - sie beschreiben genau dieses Format.
+  //
+  // EINE ZU HOHE ZAHL WIRD ABGEWIESEN, statt teilweise gelesen zu werden. Ein
+  // Manifest fuer ein Format, das diese Yuvomi-Fassung nicht kennt, halb zu
+  // laden hiesse, Felder stillschweigend zu ignorieren, die es fuer wesentlich
+  // haelt - und der Betreiber saehe ein Modul, das laeuft und etwas anderes
+  // tut als beschrieben. Die Fehlermeldung nennt beide Zahlen, damit klar ist,
+  // wer wen ueberholt hat.
+  const rawManifestVersion = manifest.manifestVersion;
+  const manifestVersion = rawManifestVersion === undefined || rawManifestVersion === null
+    ? SUPPORTED_MANIFEST_VERSION
+    : Number(rawManifestVersion);
+  if (!Number.isInteger(manifestVersion) || manifestVersion < 1) {
+    throw new Error('module.json manifestVersion must be a positive integer.');
+  }
+  if (manifestVersion > SUPPORTED_MANIFEST_VERSION) {
+    throw new Error(
+      `module.json declares manifestVersion ${manifestVersion}, but this Yuvomi supports up to `
+      + `${SUPPORTED_MANIFEST_VERSION}. Update Yuvomi, or use a build of the module for this version.`,
+    );
+  }
 
   const entry = String(manifest.entry || '').trim();
   if (!isSafeRelativeFile(entry) || !entry.endsWith('.js')) {
@@ -106,6 +149,10 @@ function normalizeManifest(raw, folderName) {
     id,
     name,
     version,
+    // Nach aussen sichtbar, damit ein Betreiber in der Admin-Liste sieht, nach
+    // welchem Format ein Modul gebaut ist - und nicht raten muss, warum eines
+    // sich anders verhaelt als das daneben.
+    manifestVersion,
     description,
     icon,
     accent,

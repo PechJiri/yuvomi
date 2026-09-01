@@ -18,6 +18,7 @@ The folder name must match the manifest `id`.
 
 ```json
 {
+  "manifestVersion": 1,
   "id": "example-module",
   "name": "Example Module",
   "version": "1.0.0",
@@ -194,6 +195,8 @@ Core shell surfaces (navigation, dashboard widget chrome, permissions admin, API
 
 Rules:
 
+- `manifestVersion` declares the **format** your manifest is written in, not the version of your module (that is `version`). It is an integer; this Yuvomi reads up to **1**. Omit it and 1 is assumed, so manifests written before this field keep working. A manifest declaring a *higher* version is rejected outright rather than read in part: loading it halfway would mean silently ignoring fields it considers essential, and the operator would see a module that runs and does something other than what it says. The error names both numbers.
+- **What a version bump means for you:** new optional fields never require one - an older manifest simply omits them and behaves as before. The number only moves when a field is removed or renamed, and when it does, this Yuvomi keeps reading the older format as well. A guard in `test/test-modules.js` enforces that: it drives a manifest carrying every promised field through the real normaliser, so dropping one turns the suite red rather than turning somebody's widget blank.
 - Permission module key: `ext:<module-id>` (appears in Settings -> Admin -> Roles & permissions).
 - Widget id in the dashboard: `<module-id>:<widget-id>` (namespace avoids collisions with core widgets).
 - `capabilities.permissions.module` is required when you declare widgets and/or `api.prefix`.
