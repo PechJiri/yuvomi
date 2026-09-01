@@ -276,6 +276,7 @@
         "optionTaskCategories": "Które kategorie?",
         "optionTaskCategoriesHint": "Bez wyboru przegląd pokazuje wszystkie kategorie.",
         "optionTaskCategoriesEmpty": "Nie ma jeszcze kategorii.",
+        "optionExtensionEmpty": "Ten widżet nie ma opcji.",
         "loadErrorSession": "Twoja sesja wygasła. Zaloguj się ponownie.",
         "loadErrorServer": "Serwer teraz nie odpowiada. Spróbuj ponownie później.",
         "allWidgetsHidden": "Wszystkie widżety są ukryte - włącz je ponownie w „Dostosuj\".",

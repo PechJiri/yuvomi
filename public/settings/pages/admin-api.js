@@ -3,9 +3,11 @@ import { formatDate, formatTime, t } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { confirmModal } from '/components/modal.js';
 import { createRetryState, toggleRowHtml } from '/settings/components.js';
+import { getExtensionModules } from '/utils/extension-widgets.js';
+import { moduleDisplayLabel } from '/utils/extension-i18n.js';
 
-// Muss mit MODULE_KEYS in server/scopes.js übereinstimmen (gleiche Reihenfolge).
-const SCOPE_MODULE_KEYS = [
+// Core scope keys — extension modules are appended from /permissions/catalog at render time.
+const CORE_SCOPE_MODULE_KEYS = [
   'tasks', 'shopping', 'meals', 'pantry', 'inventory', 'calendar', 'schedule', 'notes', 'contacts', 'budget',
   'documents', 'health', 'rewards', 'housekeeping', 'weather', 'family',
   'dashboard', 'search',
@@ -90,7 +92,28 @@ function renderApiTokenList(container, tokens) {
   window.lucide?.createIcons({ el: list });
 }
 
-function renderPage(container) {
+function scopeModuleLabel(key) {
+  if (String(key).startsWith('ext:')) {
+    const moduleId = key.slice(4);
+    const mod = getExtensionModules().find((m) => m.id === moduleId);
+    if (mod) return moduleDisplayLabel(mod);
+  }
+  const i18nKey = `settings.apiTokenScopeModules.${key}`;
+  const label = t(i18nKey);
+  return label === i18nKey ? key : label;
+}
+
+function renderScopeRows(scopeKeys) {
+  return scopeKeys.map((key) => `
+    <div class="api-token-scopes__row">
+      <span class="api-token-scopes__name">${esc(scopeModuleLabel(key))}</span>
+      <label class="api-token-scopes__cell"><input type="checkbox" data-scope="${key}:read" aria-label="${esc(scopeModuleLabel(key))} ${t('settings.apiTokenScopeRead')}" /></label>
+      <label class="api-token-scopes__cell"><input type="checkbox" data-scope="${key}:write" aria-label="${esc(scopeModuleLabel(key))} ${t('settings.apiTokenScopeWrite')}" /></label>
+    </div>
+  `).join('');
+}
+
+function renderPage(container, scopeKeys = CORE_SCOPE_MODULE_KEYS) {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
     <section class="settings-section">
@@ -127,13 +150,7 @@ function renderPage(container) {
                 <span>${t('settings.apiTokenScopeRead')}</span>
                 <span>${t('settings.apiTokenScopeWrite')}</span>
               </div>
-              ${SCOPE_MODULE_KEYS.map((key) => `
-                <div class="api-token-scopes__row">
-                  <span class="api-token-scopes__name">${t(`settings.apiTokenScopeModules.${key}`)}</span>
-                  <label class="api-token-scopes__cell"><input type="checkbox" data-scope="${key}:read" aria-label="${t(`settings.apiTokenScopeModules.${key}`)} ${t('settings.apiTokenScopeRead')}" /></label>
-                  <label class="api-token-scopes__cell"><input type="checkbox" data-scope="${key}:write" aria-label="${t(`settings.apiTokenScopeModules.${key}`)} ${t('settings.apiTokenScopeWrite')}" /></label>
-                </div>
-              `).join('')}
+              ${renderScopeRows(scopeKeys)}
             </div>
           </div>
           <div id="api-token-created" class="settings-token-output" hidden>
@@ -303,7 +320,12 @@ async function loadTokens(container, currentUserId) {
 }
 
 export async function render(container, { user } = {}) {
-  renderPage(container);
+  let scopeKeys = [...CORE_SCOPE_MODULE_KEYS];
+  try {
+    const catalog = await api.get('/permissions/catalog');
+    if (Array.isArray(catalog.data?.scopeModuleKeys)) scopeKeys = catalog.data.scopeModuleKeys;
+  } catch { /* core keys only */ }
+  renderPage(container, scopeKeys);
   await loadTokens(container, user?.id);
   window.lucide?.createIcons({ el: container });
 }

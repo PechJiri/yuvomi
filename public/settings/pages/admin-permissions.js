@@ -16,6 +16,7 @@ import { esc } from '/utils/html.js';
 import { prefersInkText } from '/utils/contrast.js';
 import { confirmModal } from '/components/modal.js';
 import { createRetryState } from '/settings/components.js';
+import { resolveExtensionLabel } from '/utils/extension-i18n.js';
 
 // ── Statik ───────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,15 @@ const WIDGET_LABEL_KEYS = {
 const MODULE_OPT_ICONS = { none: 'eye-off', read: 'eye', write: 'pencil', inherit: 'corner-down-right' };
 const WIDGET_OPT_ICONS = { none: 'eye-off', allow: 'eye', inherit: 'corner-down-right' };
 
-const widgetLabel = (id) => t(WIDGET_LABEL_KEYS[id] || id);
+const widgetLabel = (id) => {
+  const w = state.catalog?.widgets.find((x) => x.id === id);
+  if (w?.labelKey && id.includes(':')) {
+    const moduleId = id.split(':')[0];
+    return resolveExtensionLabel(moduleId, { labelKey: w.labelKey, label: w.label, fallback: id });
+  }
+  if (w?.label) return w.label;
+  return t(WIDGET_LABEL_KEYS[id] || id);
+};
 
 const familyRoleLabel = (role) =>
   t(`settings.familyRole${String(role || 'other').replace(/(^|_)([a-z])/g, (_, __, c) => c.toUpperCase())}`);
@@ -82,7 +91,10 @@ const state = {
 
 const moduleLabel = (key) => {
   const m = state.catalog?.modules.find((x) => x.key === key);
-  return m ? t(m.labelKey) : key;
+  if (!m) return key;
+  if (m.labelKey) return t(m.labelKey);
+  if (m.label) return m.label;
+  return key;
 };
 
 const widgetsForModule = (moduleKey) => state.catalog.widgets.filter((w) => w.module === moduleKey);

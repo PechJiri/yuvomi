@@ -276,6 +276,7 @@
         "optionTaskCategories": "어떤 분류를 볼까요?",
         "optionTaskCategoriesHint": "선택하지 않으면 개요에 모든 분류가 표시됩니다.",
         "optionTaskCategoriesEmpty": "아직 분류가 없습니다.",
+        "optionExtensionEmpty": "이 위젯에는 옵션이 없습니다.",
         "loadErrorSession": "세션이 만료되었습니다. 다시 로그인해 주세요.",
         "loadErrorServer": "서버가 지금 응답하지 않습니다. 나중에 다시 시도해 주세요.",
         "allWidgetsHidden": "모든 위젯이 숨겨졌습니다 - „맞춤 설정\"에서 다시 표시하세요.",

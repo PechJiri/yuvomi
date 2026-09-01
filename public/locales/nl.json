@@ -264,6 +264,7 @@
         "optionTaskCategories": "Welke categorieën?",
         "optionTaskCategoriesHint": "Zonder selectie toont het overzicht alle categorieën.",
         "optionTaskCategoriesEmpty": "Er zijn nog geen categorieën.",
+        "optionExtensionEmpty": "Dit widget heeft geen opties.",
         "loadErrorSession": "Je sessie is verlopen. Meld je opnieuw aan.",
         "loadErrorServer": "De server reageert momenteel niet. Probeer het later opnieuw.",
         "allWidgetsHidden": "Alle widgets zijn verborgen - schakel ze weer in via \"Aanpassen\".",

@@ -264,6 +264,7 @@
         "optionTaskCategories": "どのカテゴリを表示しますか？",
         "optionTaskCategoriesHint": "選択しない場合、ダッシュボードはすべてのカテゴリを表示します。",
         "optionTaskCategoriesEmpty": "カテゴリはまだありません。",
+        "optionExtensionEmpty": "このウィジェットにはオプションがありません。",
         "loadErrorSession": "セッションの有効期限が切れました。再度サインインしてください。",
         "loadErrorServer": "サーバーが応答していません。後でもう一度お試しください。",
         "allWidgetsHidden": "すべてのウィジェットが非表示です。「カスタマイズ」から再表示できます。",

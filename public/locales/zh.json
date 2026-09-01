@@ -264,6 +264,7 @@
         "optionTaskCategories": "显示哪些分类？",
         "optionTaskCategoriesHint": "未选择时，概览显示所有分类。",
         "optionTaskCategoriesEmpty": "还没有分类。",
+        "optionExtensionEmpty": "此小组件没有选项。",
         "loadErrorSession": "您的会话已过期。请重新登录。",
         "loadErrorServer": "服务器暂时无响应。请稍后再试。",
         "allWidgetsHidden": "所有小组件已隐藏——通过\"自定义\"重新启用。",

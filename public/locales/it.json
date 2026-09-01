@@ -264,6 +264,7 @@
         "optionTaskCategories": "Quali categorie?",
         "optionTaskCategoriesHint": "Senza selezione la panoramica mostra tutte le categorie.",
         "optionTaskCategoriesEmpty": "Non ci sono ancora categorie.",
+        "optionExtensionEmpty": "Questo widget non ha opzioni.",
         "loadErrorSession": "La sessione è scaduta. Accedi di nuovo.",
         "loadErrorServer": "Il server non risponde al momento. Riprova più tardi.",
         "allWidgetsHidden": "Tutti i widget sono nascosti: riattivali da «Personalizza».",

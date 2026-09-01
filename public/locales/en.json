@@ -264,6 +264,7 @@
         "optionTaskCategories": "Which categories?",
         "optionTaskCategoriesHint": "With nothing selected the overview shows every category.",
         "optionTaskCategoriesEmpty": "There are no categories yet.",
+        "optionExtensionEmpty": "This widget has no options.",
         "loadErrorSession": "Your session has expired. Please sign in again.",
         "loadErrorServer": "The server is not responding right now. Please try again later.",
         "allWidgetsHidden": "All widgets are hidden - re-enable them via \"Customize\".",

@@ -264,6 +264,7 @@
         "optionTaskCategories": "Какие категории?",
         "optionTaskCategoriesHint": "Без выбора обзор показывает все категории.",
         "optionTaskCategoriesEmpty": "Категорий пока нет.",
+        "optionExtensionEmpty": "У этого виджета нет параметров.",
         "loadErrorSession": "Сессия истекла. Пожалуйста, войдите снова.",
         "loadErrorServer": "Сервер сейчас не отвечает. Попробуйте позже.",
         "allWidgetsHidden": "Все виджеты скрыты - включите их через «Настроить».",

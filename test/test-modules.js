@@ -42,7 +42,9 @@ function writeModule(folder, manifest, files = {}) {
     fs.writeFileSync(path.join(dir, 'module.json'), body);
   }
   for (const [name, content] of Object.entries(files)) {
-    fs.writeFileSync(path.join(dir, name), content);
+    const filePath = path.join(dir, name);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content);
   }
 }
 
@@ -79,9 +81,56 @@ writeModule('no-style-file-mod', { id: 'no-style-file-mod', entry: 'index.js', s
 // Loser Nicht-Ordner-Eintrag im MODULES_DIR → muss weggefiltert werden.
 fs.writeFileSync(path.join(MODULES_DIR, 'loose.txt'), 'not a module');
 
-const VALID_IDS = ['alpha-mod', 'beta-mod', 'omega-mod'];
+writeModule('cap-mod', {
+  id: 'cap-mod',
+  name: 'Capabilities Module',
+  entry: 'index.js',
+  capabilities: {
+    permissions: {
+      module: { label: 'Cap Module', icon: 'star' },
+      widgets: [{ id: 'tile', label: 'Tile' }],
+    },
+    widgets: [{
+      id: 'tile',
+      entry: 'widgets/tile.js',
+      label: 'Tile',
+      defaultSize: '2x1',
+      optionsSchema: {
+        show_title: { type: 'boolean', title: 'Show title', default: true },
+      },
+    }],
+    api: { prefix: '/api/extensions/cap-mod' },
+  },
+}, {
+  'index.js': 'export async function render() {}\n',
+  'widgets/tile.js': 'export async function renderWidget(c) { c.textContent = "ok"; }\n',
+});
+
+writeModule('bad-cap-mod', {
+  id: 'bad-cap-mod',
+  entry: 'index.js',
+  capabilities: {
+    permissions: { module: { label: 'Bad', icon: 'box' } },
+    widgets: [{ id: 'tile', entry: 'widgets/missing.js', label: 'Tile' }],
+  },
+}, { 'index.js': 'export async function render() {}\n' });
+
+writeModule('i18n-mod', {
+  id: 'i18n-mod',
+  name: 'I18n Module',
+  entry: 'index.js',
+  i18n: { defaultLocale: 'en' },
+  menu: { label: 'I18n', labelKey: 'menu', show: false },
+}, {
+  'index.js': 'export async function render() {}\n',
+  'locales/en.json': JSON.stringify({ menu: 'Menu EN' }),
+  'locales/de.json': JSON.stringify({ menu: 'Menu DE' }),
+  'locales/xx.json': JSON.stringify({ menu: 'Invalid' }),
+});
+
+const VALID_IDS = ['alpha-mod', 'beta-mod', 'omega-mod', 'cap-mod', 'i18n-mod'];
 const ERROR_IDS = ['broken-json-mod', 'mismatch-mod', 'no-entry-mod', 'bad-entry-mod',
-  'bad-style-mod', 'no-style-file-mod'];
+  'bad-style-mod', 'no-style-file-mod', 'bad-cap-mod'];
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -127,7 +176,12 @@ async function call(method, route, { actor: a, body } = {}) {
 
 function disabledConfig() {
   const row = db.prepare("SELECT value FROM sync_config WHERE key = 'third_party_disabled_modules'").get();
-  return row ? JSON.parse(row.value) : null;
+  if (!row) return null;
+  try {
+    return JSON.parse(row.value);
+  } catch {
+    return null;
+  }
 }
 
 test.after(() => {
@@ -185,8 +239,8 @@ test('listModules(admin): jedes kaputte Modul wird zum error-Eintrag (kein Wurf)
 // ── Service: non-admin filtert + Sortierung ──────────────────────────────────────
 test('listModules(): non-admin zeigt nur enabled+ok, sortiert nach order dann name', async () => {
   const mods = await svc.listModules({ admin: false });
-  assert.deepEqual(mods.map((m) => m.id), ['beta-mod', 'alpha-mod', 'omega-mod'],
-    'order 5 < 10 < 1000');
+  assert.deepEqual(mods.map((m) => m.id), ['beta-mod', 'alpha-mod', 'cap-mod', 'i18n-mod', 'omega-mod'],
+    'order 5 < 10 < 1000, dann name');
   assert.ok(mods.every((m) => m.status === 'enabled'), 'keine error-Module für Nutzer');
 });
 
@@ -194,7 +248,7 @@ test('listModules(): korrupter disabled-Eintrag in sync_config → als leer beha
   // parseDisabledModules fängt ungültiges JSON ab und liefert [] (kein Wurf).
   db.prepare("INSERT INTO sync_config (key, value) VALUES ('third_party_disabled_modules', '{kaputt')").run();
   const mods = await svc.listModules({ admin: false });
-  assert.deepEqual(mods.map((m) => m.id), ['beta-mod', 'alpha-mod', 'omega-mod'],
+  assert.deepEqual(mods.map((m) => m.id), ['beta-mod', 'alpha-mod', 'cap-mod', 'i18n-mod', 'omega-mod'],
     'nichts gilt als deaktiviert, wenn der Eintrag unlesbar ist');
   // Wieder entfernen: die folgenden PATCH-Tests erwarten einen jungfräulichen Zustand.
   db.prepare("DELETE FROM sync_config WHERE key = 'third_party_disabled_modules'").run();
@@ -204,7 +258,7 @@ test('listModules(): korrupter disabled-Eintrag in sync_config → als leer beha
 test('GET /: member erhält nur enabled Module', async () => {
   const r = await call('GET', '/', { actor: MEM });
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body.data.map((m) => m.id), ['beta-mod', 'alpha-mod', 'omega-mod']);
+  assert.deepEqual(r.body.data.map((m) => m.id), ['beta-mod', 'alpha-mod', 'cap-mod', 'i18n-mod', 'omega-mod']);
 });
 
 test('GET /?admin=1: member wird NICHT als admin behandelt (kein Bypass)', async () => {
@@ -338,4 +392,30 @@ test('PATCH /:id: reaktivieren ist idempotent und stellt das Modul wieder her', 
 
   const list = await call('GET', '/', { actor: MEM });
   assert.ok(list.body.data.some((m) => m.id === 'alpha-mod'), 'wieder sichtbar');
+});
+
+test('listModules: capabilities werden normalisiert und exponiert', async () => {
+  const mods = await svc.listModules({ admin: true });
+  const cap = mods.find((m) => m.id === 'cap-mod');
+  assert.ok(cap, 'cap-mod vorhanden');
+  assert.equal(cap.capabilities.permissionModuleKey, 'ext:cap-mod');
+  assert.equal(cap.capabilities.widgets[0].id, 'cap-mod:tile');
+  assert.equal(cap.capabilities.apiPrefix, '/api/extensions/cap-mod');
+  assert.equal(cap.capabilities.widgets[0].optionsSchema.show_title.type, 'boolean');
+});
+
+test('listModules: i18n metadata scans locales/ and filters unsupported codes', async () => {
+  const mods = await svc.listModules({ admin: true });
+  const i18nMod = mods.find((m) => m.id === 'i18n-mod');
+  assert.ok(i18nMod, 'i18n-mod vorhanden');
+  assert.equal(i18nMod.i18n.defaultLocale, 'en');
+  assert.deepEqual(i18nMod.i18n.availableLocales, ['de', 'en']);
+  assert.ok(Array.isArray(i18nMod.i18n.coreLocales) && i18nMod.i18n.coreLocales.includes('de'));
+});
+
+test('listModules: fehlende widget entry datei → error status', async () => {
+  const mods = await svc.listModules({ admin: true });
+  const bad = mods.find((m) => m.id === 'bad-cap-mod');
+  assert.equal(bad.status, 'error');
+  assert.match(bad.error, /does not exist/i);
 });

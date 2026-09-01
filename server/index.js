@@ -64,6 +64,7 @@ import familyRouter from './routes/family.js';
 import backupRouter from './routes/backup.js';
 import housekeepingRouter from './routes/housekeeping.js';
 import modulesRouter from './routes/modules.js';
+import { listModules } from './services/modules.js';
 import pushRouter from './routes/push.js';
 import emailRouter from './routes/email.js';
 import notificationsRouter from './routes/notifications.js';
@@ -586,6 +587,16 @@ async function runSync() {
 // --------------------------------------------------------
 // Server starten
 // --------------------------------------------------------
+// Scan the extension catalog before the socket accepts requests. resolvePermissions
+// drops unknown ext:* rows, and moduleAccessVerdict is a deny-list — a missing
+// key means allow. Starting the scan inside the listen callback left that window
+// open until the first GET /api/v1/modules (or /permissions/catalog).
+try {
+  await listModules({ admin: true });
+} catch (err) {
+  log.warn('Initial module registry scan failed:', err.message);
+}
+
 app.listen(PORT, () => {
   logYuvomi.info(`Server running on port ${PORT} | Version ${APP_VERSION}`);
   logYuvomi.info(`Environment: ${process.env.NODE_ENV || 'development'}`);

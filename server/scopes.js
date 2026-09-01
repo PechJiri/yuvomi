@@ -46,19 +46,40 @@ const SCOPE_MODULES = [
 ];
 
 const MODULE_KEYS = SCOPE_MODULES.map((m) => m.key);
-const MODULE_KEY_SET = new Set(MODULE_KEYS);
 
-// Pfadsegment → Modul-Schlüssel (aus SCOPE_MODULES abgeleitet, keine Doppelpflege).
-const PREFIX_TO_MODULE = new Map();
-for (const mod of SCOPE_MODULES) {
-  for (const prefix of mod.prefixes) PREFIX_TO_MODULE.set(prefix, mod.key);
+/** Extension scope modules registered at runtime from third-party manifests. */
+let _extensionScopeModules = [];
+
+export function setExtensionScopeModules(modules) {
+  _extensionScopeModules = Array.isArray(modules)
+    ? modules.filter((m) => m && typeof m.key === 'string' && Array.isArray(m.prefixes))
+    : [];
+  rebuildScopeMaps();
 }
 
-const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+function allScopeModules() {
+  return [...SCOPE_MODULES, ..._extensionScopeModules];
+}
 
-/** Alle gültigen Einzel-Scope-Strings (`modul:read` + `modul:write`). */
-const ALL_SCOPES = MODULE_KEYS.flatMap((key) => [`${key}:read`, `${key}:write`]);
-const ALL_SCOPE_SET = new Set(ALL_SCOPES);
+let MODULE_KEY_SET = new Set(MODULE_KEYS);
+let PREFIX_TO_MODULE = new Map();
+let ALL_SCOPES = MODULE_KEYS.flatMap((key) => [`${key}:read`, `${key}:write`]);
+let ALL_SCOPE_SET = new Set(ALL_SCOPES);
+
+function rebuildScopeMaps() {
+  const keys = allScopeModules().map((m) => m.key);
+  MODULE_KEY_SET = new Set(keys);
+  PREFIX_TO_MODULE = new Map();
+  for (const mod of allScopeModules()) {
+    for (const prefix of mod.prefixes) PREFIX_TO_MODULE.set(prefix, mod.key);
+  }
+  ALL_SCOPES = keys.flatMap((key) => [`${key}:read`, `${key}:write`]);
+  ALL_SCOPE_SET = new Set(ALL_SCOPES);
+}
+
+rebuildScopeMaps();
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
  * Parst den DB-Wert der `scopes`-Spalte in ein Array oder `null`.
@@ -116,8 +137,28 @@ function requiredAccess(method) {
  * @returns {string|null} Modul-Schlüssel oder null (unbekannt/nicht scopebar).
  */
 function moduleForPath(path) {
-  const segment = String(path || '').replace(/^\/+/, '').split('/')[0];
-  return PREFIX_TO_MODULE.get(segment) || null;
+  const cleaned = String(path || '').replace(/^\/+/, '');
+  const parts = cleaned.split('/').filter(Boolean);
+  if (parts[0] === 'extensions' && parts[1]) {
+    const extKey = PREFIX_TO_MODULE.get(`extensions/${parts[1]}`);
+    if (extKey) return extKey;
+  }
+  if (parts.length >= 2) {
+    const compound = `${parts[0]}/${parts[1]}`;
+    const compoundKey = PREFIX_TO_MODULE.get(compound);
+    if (compoundKey) return compoundKey;
+  }
+  return PREFIX_TO_MODULE.get(parts[0]) || null;
+}
+
+/** All scope module keys including runtime extension modules. */
+function getModuleKeys() {
+  return allScopeModules().map((m) => m.key);
+}
+
+/** All valid scope strings including extension modules. */
+function getAllScopes() {
+  return ALL_SCOPES;
 }
 
 /**
@@ -147,4 +188,6 @@ export {
   requiredAccess,
   moduleForPath,
   tokenAllows,
+  getModuleKeys,
+  getAllScopes,
 };

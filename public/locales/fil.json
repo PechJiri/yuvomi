@@ -276,6 +276,7 @@
         "optionTaskCategories": "Aling mga kategorya?",
         "optionTaskCategoriesHint": "Kapag walang napili, ipinapakita ng overview ang lahat ng kategorya.",
         "optionTaskCategoriesEmpty": "Wala pang kategorya.",
+        "optionExtensionEmpty": "Walang mga opsyon ang widget na ito.",
         "loadErrorSession": "Nag-expire na ang iyong session. Pakisign in muli.",
         "loadErrorServer": "Hindi tumutugon ang server sa ngayon. Pakisubukang muli mamaya.",
         "allWidgetsHidden": "Nakatago ang lahat ng widget - i-enable muli ang mga ito sa pamamagitan ng \"I-customize\".",

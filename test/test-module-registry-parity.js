@@ -44,8 +44,8 @@ function objectKeys(source, name) {
 // --------------------------------------------------------------------------
 // Scopes: die API-Token-Oberfläche muss jeden scopebaren Modulschlüssel kennen
 // --------------------------------------------------------------------------
-test('admin-api.js SCOPE_MODULE_KEYS deckt jeden Scope-Modulschlüssel ab', () => {
-  const client = arrayLiteral(read('../public/settings/pages/admin-api.js'), 'SCOPE_MODULE_KEYS');
+test('admin-api.js CORE_SCOPE_MODULE_KEYS deckt jeden Scope-Modulschlüssel ab', () => {
+  const client = arrayLiteral(read('../public/settings/pages/admin-api.js'), 'CORE_SCOPE_MODULE_KEYS');
   const missing = MODULE_KEYS.filter((key) => !client.includes(key));
   const extra = client.filter((key) => !MODULE_KEYS.includes(key));
 

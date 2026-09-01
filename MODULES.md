@@ -94,7 +94,7 @@ Modules must follow the same frontend security rules as core Yuvomi:
 
 A module page is browser code with no server of its own. When a module needs stored state, scheduled work, or a third-party credential, run that as a separate service beside Yuvomi rather than as a patch to core, and leave Yuvomi on its official image. What follows is what such a module needs in order to survive a Yuvomi upgrade.
 
-Serve the service from the same origin under an `/api/` path; `/api/extensions/<module-id>/` is a reasonable convention. Browser requests then carry the Yuvomi session cookie, and the service worker leaves them alone. The stale-cache trap described above applies to any dynamic path outside `/api/`.
+Serve the service from the same origin under `/api/extensions/<module-id>/`. That path is required, not a convention: `capabilities.api.prefix` is rejected unless it is exactly `/api/extensions/<module-id>`, so an extension cannot take over a core API prefix. Browser requests then carry the Yuvomi session cookie, and the service worker leaves them alone. The stale-cache trap described above applies to any dynamic path outside `/api/`.
 
 Do not open `yuvomi.db`. It is core's private storage: the schema changes between releases without notice, and a second writer breaks Yuvomi's own migrations. Read and write through `/api/v1` instead. If the data a module needs is not reachable through the API, that is a missing endpoint worth an issue, not a reason to reach for the file.
 
@@ -109,7 +109,101 @@ Yuvomi's CSRF token protects Yuvomi's endpoints, not a module's. State-changing 
 - the service's own double-submit CSRF cookie and header pair;
 - an endpoint-specific role or ownership check.
 
-Scheduled jobs have no session. Issue an API token under Settings -> Admin -> API Access (admin-only, so a module that needs one has to ask the household's admin for it) with only the scopes the module needs - `budget:read` and `budget:write`, for example - and keep it in the service's secrets, never in the module folder, a Compose file, or browser storage. Keep the service's own state in the service's own database, and treat stored secrets as write-only: expose `has_api_token: true`, never a fragment of the token itself.
+Scheduled jobs have no session. Issue an API token under Settings -> Admin -> API Access (admin-only, so a module that needs one has to ask the household's admin for it) with only the scopes the module needs - for core modules `budget:read` and `budget:write`, for extension modules `ext:<module-id>:read` / `:write` - and keep it in the service's secrets, never in the module folder, a Compose file, or browser storage. Keep the service's own state in the service's own database, and treat stored secrets as write-only: expose `has_api_token: true`, never a fragment of the token itself.
+
+When your module declares `capabilities.api.prefix`, enforce household permissions on the sidecar: after resolving the session through `GET /api/v1/auth/me`, deny requests when `permissions.modules['ext:<module-id>'] === 'none'`, and treat `'read'` as read-only for mutating routes.
+
+## Capabilities (permissions, widgets, API)
+
+Optional `capabilities` block in `module.json` registers your module with the same permission and dashboard surfaces core modules use.
+
+```json
+{
+  "menu": {
+    "label": "My Module",
+    "labelKey": "menu"
+  },
+  "capabilities": {
+    "permissions": {
+      "module": { "label": "My Module", "labelKey": "module", "icon": "box" },
+      "widgets": [{ "id": "summary", "label": "Summary tile" }]
+    },
+    "widgets": [{
+      "id": "summary",
+      "entry": "widgets/summary.js",
+      "label": "Summary tile",
+      "labelKey": "widgets.summary",
+      "icon": "box",
+      "defaultSize": "1x2",
+      "defaultVisible": false,
+      "optionsSchema": {
+        "compact": { "type": "boolean", "title": "Compact mode", "titleKey": "options.compact", "default": false }
+      }
+    }],
+    "api": { "prefix": "/api/extensions/my-module" }
+  }
+}
+```
+
+### Localization
+
+Third-party modules integrate with the same `t('key')` helper as core UI (`import { t } from '/i18n.js'`).
+
+**Supported languages:** the same 24 locales as Yuvomi core (`getSupportedLocales()` / files under `public/locales/`). You may ship all of them, a subset, or only your default - the runtime never shows raw i18n keys in shell UI.
+
+**Ship translation files** under `locales/{locale}.json` in your module folder (for example `locales/de.json`, `locales/en.json`, `locales/ru.json`). Yuvomi scans that folder at module load and exposes metadata on `GET /api/v1/modules`:
+
+```json
+"i18n": {
+  "defaultLocale": "en",
+  "availableLocales": ["de", "en", "ru"],
+  "coreLocales": ["ar", "cs", "de", "en", "..."]
+}
+```
+
+Declare the fallback language in `module.json`:
+
+```json
+"i18n": { "defaultLocale": "en" }
+```
+
+If omitted, `en` is used. The file `locales/{defaultLocale}.json` should exist whenever you use `labelKey` - it is the last resort before static `label` / `title` strings from the manifest.
+
+**Lookup order** for `extensions.<module-id>.*` keys (and for shell labels via `labelKey`):
+
+1. User's current UI locale (if your module ships that file)
+2. Module `i18n.defaultLocale`
+3. `en`
+4. `de` (core reference locale)
+5. Static `label` / `title` from `module.json`
+
+Use flat keys in locale files:
+
+```json
+{
+  "menu": "My Module",
+  "module": "My Module",
+  "widgets.summary": "Summary tile",
+  "options.compact": "Compact mode"
+}
+```
+
+In `module.json`, reference them with short `labelKey` / `titleKey` values (`"menu"`, `"widgets.summary"`) or full paths (`extensions.my-module.menu`). Inside your module JavaScript, call `t('extensions.my-module.your.key')` for any other strings.
+
+Core shell surfaces (navigation, dashboard widget chrome, permissions admin, API token scopes) resolve extension labels automatically. Core UI chrome (`common.save`, `nav.settings`, …) still comes from Yuvomi's own locale files.
+
+Rules:
+
+- Permission module key: `ext:<module-id>` (appears in Settings -> Admin -> Roles & permissions).
+- Widget id in the dashboard: `<module-id>:<widget-id>` (namespace avoids collisions with core widgets).
+- `capabilities.permissions.module` is required when you declare widgets and/or `api.prefix`.
+- `capabilities.api.prefix`, when declared, must be exactly `/api/extensions/<module-id>` (trailing slash optional). Any other prefix — including a core path such as `/api/tasks` — is rejected and the module loads as errored.
+- Widget `entry` must export `renderWidget(container, { size, options, user })`.
+- Widgets fetch their own data (typically from your sidecar API). They are not injected into `GET /api/v1/dashboard`.
+- `optionsSchema` supports up to 8 keys (`boolean`, `number`, `string`, or `enum` via `enum` array).
+- Widget chrome (header, module seal, empty states) should follow the dashboard widget patterns in `DESIGN.md` ("Der Widget-Kopf") - core renders error/retry chrome for failed loads; your `renderWidget` owns the happy path inside the mount.
+
+Serve a sidecar from the same origin under `/api/extensions/<module-id>/` (Traefik or an equivalent reverse proxy). `capabilities.api.prefix` must match that path exactly. The Capabilities JSON example above is the canonical minimal manifest; copy it into your own folder under `modules/`.
 
 ## Loading And Failure Behavior
 

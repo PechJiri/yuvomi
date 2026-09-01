@@ -8,6 +8,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as db from '../db.js';
 import { createLogger } from '../logger.js';
+import { getSupportedLocales } from '../utils/i18n.js';
+import { normalizeCapabilities, buildExtensionCatalog } from './module-capabilities.js';
+import { setExtensionScopeModules } from '../scopes.js';
+import { setExtensionPermissionCatalog } from '../permissions.js';
 
 const log = createLogger('Modules');
 
@@ -15,6 +19,16 @@ const MODULES_DIR = path.resolve(process.env.MODULES_DIR || path.join(import.met
 const DISABLED_KEY = 'third_party_disabled_modules';
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
 const SAFE_RELATIVE_RE = /^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/;
+const MENU_LABEL_KEY_RE = /^[a-z][a-z0-9._-]{0,79}$/;
+const MODULE_LOCALE_FILE_RE = /^([a-z]{2,3})\.json$/;
+const EXTENSION_DEFAULT_LOCALE = 'en';
+
+/** Sync cache for permissions/scopes — refreshed on each listModules(). */
+let _extensionCatalog = {
+  permissionModules: [],
+  permissionWidgets: [],
+  scopeModules: [],
+};
 
 function cfgGet(key) {
   const row = db.get().prepare('SELECT value FROM sync_config WHERE key = ?').get(key);
@@ -78,6 +92,10 @@ function normalizeManifest(raw, folderName) {
   const accent = /^#[0-9a-fA-F]{6}$/.test(manifest.accent || '') ? manifest.accent : '#6366F1';
   const menu = manifest.menu && typeof manifest.menu === 'object' ? manifest.menu : {};
   const showInMenu = menu.show !== false;
+  let menuLabelKey = menu.labelKey ? String(menu.labelKey).trim().slice(0, 80) : null;
+  if (menuLabelKey && !MENU_LABEL_KEY_RE.test(menuLabelKey)) {
+    throw new Error('menu.labelKey is invalid.');
+  }
   const label = String(menu.label || name).trim().slice(0, 40);
   const menuIcon = String(menu.icon || icon).trim().slice(0, 40);
   const order = Number.isFinite(Number(menu.order)) ? Number(menu.order) : 1000;
@@ -101,9 +119,65 @@ function normalizeManifest(raw, folderName) {
     menu: {
       show: showInMenu,
       label,
+      ...(menuLabelKey ? { labelKey: menuLabelKey } : {}),
       icon: menuIcon,
       order,
     },
+  };
+}
+
+async function scanModuleLocales(basePath) {
+  const dir = path.join(basePath, 'locales');
+  const supported = new Set(getSupportedLocales());
+  try {
+    const entries = await fs.readdir(dir);
+    return entries
+      .map((file) => file.match(MODULE_LOCALE_FILE_RE)?.[1])
+      .filter((loc) => loc && supported.has(loc))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function normalizeModuleI18n(rawI18n, availableLocales) {
+  const supported = getSupportedLocales();
+  const block = rawI18n && typeof rawI18n === 'object' ? rawI18n : {};
+  let defaultLocale = String(block.defaultLocale || EXTENSION_DEFAULT_LOCALE).trim();
+  if (!supported.includes(defaultLocale)) defaultLocale = EXTENSION_DEFAULT_LOCALE;
+  if (availableLocales.length) {
+    if (!availableLocales.includes(defaultLocale)) {
+      defaultLocale = availableLocales.includes(EXTENSION_DEFAULT_LOCALE)
+        ? EXTENSION_DEFAULT_LOCALE
+        : availableLocales[0];
+    }
+  }
+  return {
+    defaultLocale,
+    availableLocales,
+    coreLocales: supported,
+  };
+}
+
+function clientCapabilities(caps) {
+  if (!caps) return null;
+  return {
+    permissionModuleKey: caps.permissionModuleKey,
+    permissionModule: caps.permissionModule,
+    apiPrefix: caps.apiPrefix,
+    scopeKey: caps.scopeKey,
+    widgets: (caps.widgets || []).map((w) => ({
+      id: w.id,
+      shortId: w.shortId,
+      entry: w.entry,
+      label: w.label,
+      labelKey: w.labelKey || null,
+      icon: w.icon,
+      defaultSize: w.defaultSize,
+      defaultVisible: w.defaultVisible,
+      optionsSchema: w.optionsSchema,
+      moduleKey: w.moduleKey,
+    })),
   };
 }
 
@@ -134,9 +208,21 @@ async function readModule(folderName, disabledSet) {
         throw new Error('style file does not exist.');
       }
     }
+    const capabilities = await normalizeCapabilities(
+      raw,
+      manifest.id,
+      basePath,
+      modulePublicUrl,
+      pathExists,
+      isSafeRelativeFile,
+    );
+    const availableLocales = await scanModuleLocales(basePath);
+    const i18n = normalizeModuleI18n(raw.i18n, availableLocales);
     const enabled = !disabledSet.has(manifest.id);
     return {
       ...manifest,
+      i18n,
+      capabilities: clientCapabilities(capabilities),
       enabled,
       status: enabled ? 'enabled' : 'disabled',
       error: null,
@@ -151,11 +237,30 @@ async function readModule(folderName, disabledSet) {
       accent: '#EF4444',
       route: null,
       menu: { show: false, label: folderName, icon: 'triangle-alert', order: 1000 },
+      capabilities: null,
       enabled: false,
       status: 'error',
       error: err?.message || 'Module could not be loaded.',
     };
   }
+}
+
+function refreshExtensionCatalog(modules) {
+  const enabled = modules.filter((m) => m.enabled && m.status === 'enabled');
+  _extensionCatalog = buildExtensionCatalog(
+    enabled.map((m) => ({
+      ...m,
+      capabilities: m.capabilities ? {
+        permissionModuleKey: m.capabilities.permissionModuleKey,
+        permissionModule: m.capabilities.permissionModule,
+        widgets: m.capabilities.widgets,
+        apiPrefix: m.capabilities.apiPrefix,
+        scopeKey: m.capabilities.scopeKey,
+      } : null,
+    })),
+  );
+  setExtensionScopeModules(_extensionCatalog.scopeModules);
+  setExtensionPermissionCatalog(_extensionCatalog);
 }
 
 async function listModules({ admin = false } = {}) {
@@ -169,6 +274,8 @@ async function listModules({ admin = false } = {}) {
   const modules = (await Promise.all(entries.map((entry) => readModule(entry, disabledSet))))
     .filter(Boolean)
     .sort((a, b) => (a.menu?.order ?? 1000) - (b.menu?.order ?? 1000) || a.name.localeCompare(b.name));
+
+  refreshExtensionCatalog(modules);
 
   return admin ? modules : modules.filter((module) => module.enabled && module.status === 'enabled');
 }
@@ -228,4 +335,16 @@ async function resolveAssetPath(id, relPath) {
   return assetPath;
 }
 
-export { MODULES_DIR, listModules, setModuleEnabled, resolveAssetPath };
+function getExtensionPermissionCatalog() {
+  return _extensionCatalog;
+}
+
+export {
+  MODULES_DIR,
+  listModules,
+  setModuleEnabled,
+  resolveAssetPath,
+  getExtensionPermissionCatalog,
+};
+
+export { extensionPermissionKey } from './module-capabilities.js';

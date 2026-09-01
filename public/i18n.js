@@ -24,6 +24,8 @@ const VALID_TIME_FORMATS = ['24h', '12h'];
 let currentLocale = DEFAULT_LOCALE;
 let translations = {};
 let fallbackTranslations = {};
+/** Third-party bundles: moduleId -> { defaultLocale, trees: { [locale]: nested } } */
+let extensionLocaleStore = Object.create(null);
 let i18nReady = false;
 let resolveI18nReady;
 const i18nReadyPromise = new Promise((resolve) => {
@@ -125,7 +127,10 @@ function pluralCategory(locale, count) {
 function resolvePluralKey(key, count) {
   const category = pluralCategory(currentLocale, count);
   for (const candidate of [`${key}_${category}`, `${key}_other`, key]) {
-    const hit = resolve(translations, candidate) ?? resolve(fallbackTranslations, candidate);
+    const extHit = resolveExtensionTranslation(candidate);
+    if (typeof extHit === 'string') return extHit;
+    const hit = resolve(translations, candidate)
+      ?? resolve(fallbackTranslations, candidate);
     if (hit != null) return hit;
   }
   return key;
@@ -152,9 +157,16 @@ function resolvePluralKey(key, count) {
  * Parameter soll im Ergebnis sichtbar sein und nicht still weggekürzt werden.
  */
 export function t(key, params = {}) {
-  const str = typeof params.count === 'number'
-    ? resolvePluralKey(key, params.count)
-    : resolve(translations, key) ?? resolve(fallbackTranslations, key) ?? key;
+  let str;
+  if (typeof params.count === 'number') {
+    str = resolvePluralKey(key, params.count);
+  } else {
+    const extHit = resolveExtensionTranslation(key);
+    str = extHit
+      ?? resolve(translations, key)
+      ?? resolve(fallbackTranslations, key)
+      ?? key;
+  }
   return str.replace(/\{\{(\w+)\}\}/g, (placeholder, name) => (
     Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : placeholder
   ));
@@ -221,6 +233,83 @@ function formatDateParts(date) {
 export function getLocale() {
   return currentLocale;
 }
+
+/** Core fallback chain for extension modules (UI locale -> module default -> en -> de). */
+export const EXTENSION_LOCALE_FALLBACKS = ['en', DEFAULT_LOCALE];
+
+export function nestFlatLocaleDict(flatDict) {
+  const DANGEROUS = new Set(['__proto__', 'constructor', 'prototype']);
+  const moduleRoot = Object.create(null);
+  for (const [key, value] of Object.entries(flatDict || {})) {
+    if (typeof value !== 'string') continue;
+    const parts = String(key).trim().split('.');
+    if (parts.some((p) => !p || DANGEROUS.has(p))) continue;
+    let node = moduleRoot;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!Object.prototype.hasOwnProperty.call(node, parts[i]) || typeof node[parts[i]] !== 'object') {
+        node[parts[i]] = Object.create(null);
+      }
+      node = node[parts[i]];
+    }
+    node[parts[parts.length - 1]] = value;
+  }
+  return moduleRoot;
+}
+
+function extensionLocaleChain(moduleDefault, locale = currentLocale) {
+  return [...new Set([locale, moduleDefault, ...EXTENSION_LOCALE_FALLBACKS].filter(Boolean))];
+}
+
+function resolveExtensionTranslation(key, locale = currentLocale) {
+  if (!key.startsWith('extensions.')) return undefined;
+  const rest = key.slice('extensions.'.length);
+  const dot = rest.indexOf('.');
+  if (dot <= 0) return undefined;
+  const moduleId = rest.slice(0, dot);
+  const subKey = rest.slice(dot + 1);
+  const store = extensionLocaleStore[moduleId];
+  if (!store) return undefined;
+  for (const loc of extensionLocaleChain(store.defaultLocale, locale)) {
+    const tree = store.trees[loc];
+    if (!tree) continue;
+    const hit = resolve(tree, subKey);
+    if (typeof hit === 'string') return hit;
+  }
+  return undefined;
+}
+
+/**
+ * Third-party module locale bundles. Pass every shipped locales/{code}.json tree;
+ * lookup walks UI locale -> module defaultLocale -> en -> de.
+ */
+export function setExtensionLocaleBundles(moduleId, { defaultLocale = 'en', trees = {} } = {}) {
+  extensionLocaleStore[moduleId] = {
+    defaultLocale,
+    trees: trees && typeof trees === 'object' ? trees : {},
+  };
+}
+
+export function clearExtensionLocaleBundles(moduleId) {
+  delete extensionLocaleStore[moduleId];
+}
+
+/** @deprecated Use setExtensionLocaleBundles — kept for tests and single-locale shortcuts. */
+export function registerExtensionTranslations(moduleId, flatDict) {
+  setExtensionLocaleBundles(moduleId, {
+    defaultLocale: 'en',
+    trees: { en: nestFlatLocaleDict(flatDict) },
+  });
+}
+
+export function unregisterExtensionTranslations(moduleId) {
+  clearExtensionLocaleBundles(moduleId);
+}
+
+export function clearExtensionTranslations() {
+  extensionLocaleStore = Object.create(null);
+}
+
+export { resolveExtensionTranslation, extensionLocaleChain };
 
 /**
  * Locale für Zahlen-/Währungsformatierung (Intl.NumberFormat).

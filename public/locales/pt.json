@@ -264,6 +264,7 @@
         "optionTaskCategories": "Que categorias?",
         "optionTaskCategoriesHint": "Sem seleção, a vista geral mostra todas as categorias.",
         "optionTaskCategoriesEmpty": "Ainda não há categorias.",
+        "optionExtensionEmpty": "Este widget não tem opções.",
         "loadErrorSession": "A sua sessão expirou. Inicie sessão novamente.",
         "loadErrorServer": "O servidor não está a responder agora. Tente novamente mais tarde.",
         "allWidgetsHidden": "Todos os widgets estão ocultos - reative-os em «Personalizar».",

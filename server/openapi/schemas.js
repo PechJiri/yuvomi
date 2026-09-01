@@ -830,4 +830,114 @@ export const schemas = {
           },
           required: ['data'],
         },
+        ExtensionModuleWidget: {
+          type: 'object',
+          description: 'Dashboard widget declared in a third-party module manifest.',
+          properties: {
+            id: { type: 'string', description: 'Namespaced widget id `<module-id>:<widget-id>`.' },
+            shortId: { type: 'string' },
+            entry: { type: 'string', description: 'Protected asset URL for the widget JavaScript entry.' },
+            label: { type: 'string' },
+            labelKey: { type: 'string', description: 'Short i18n key resolved under extensions.{moduleId}.* (from locales/{locale}.json).' },
+            icon: { type: 'string' },
+            defaultSize: { type: 'string' },
+            defaultVisible: { type: 'boolean' },
+            optionsSchema: {
+              type: ['object', 'null'],
+              additionalProperties: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['boolean', 'number', 'string', 'array'] },
+                  title: { type: 'string' },
+                  titleKey: { type: 'string', description: 'Short i18n key under extensions.{moduleId}.*' },
+                  format: { type: 'string' },
+                  enum: { type: 'array', items: { type: 'string' } },
+                  default: {},
+                },
+                required: ['type', 'title'],
+              },
+            },
+            moduleKey: { type: 'string', description: 'Permission module key, typically `ext:<module-id>`.' },
+          },
+          required: ['id', 'shortId', 'entry', 'label', 'icon', 'defaultSize', 'defaultVisible', 'moduleKey'],
+        },
+        ExtensionModuleCapabilities: {
+          type: ['object', 'null'],
+          description: 'Normalized capabilities block from module.json (null when not declared or module errored).',
+          properties: {
+            permissionModuleKey: { type: 'string' },
+            permissionModule: {
+              type: 'object',
+              properties: {
+                label: { type: 'string' },
+                icon: { type: 'string' },
+                labelKey: { type: 'string' },
+              },
+              required: ['label', 'icon'],
+            },
+            widgets: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ExtensionModuleWidget' },
+            },
+            apiPrefix: { type: 'string', description: 'Sidecar API prefix. Must be exactly `/api/extensions/<module-id>`.' },
+            scopeKey: { type: 'string', description: 'API token scope module key, typically `ext:<module-id>`.' },
+          },
+        },
+        ExtensionModule: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            version: { type: 'string' },
+            description: { type: 'string' },
+            icon: { type: 'string' },
+            accent: { type: 'string' },
+            enabled: { type: 'boolean' },
+            status: { type: 'string', enum: ['enabled', 'disabled', 'error'] },
+            error: { type: ['string', 'null'] },
+            route: {
+              type: ['object', 'null'],
+              properties: {
+                path: { type: 'string' },
+                entry: { type: 'string' },
+                style: { type: ['string', 'null'] },
+              },
+            },
+            menu: {
+              type: 'object',
+              properties: {
+                show: { type: 'boolean' },
+                label: { type: 'string' },
+                labelKey: { type: 'string' },
+                icon: { type: 'string' },
+                order: { type: 'number' },
+              },
+            },
+            i18n: {
+              type: 'object',
+              description: 'Locale metadata scanned from locales/*.json in the module folder.',
+              properties: {
+                defaultLocale: { type: 'string', description: 'Fallback locale when the UI language is not shipped (default en).' },
+                availableLocales: { type: 'array', items: { type: 'string' }, description: 'Locale files present in the module.' },
+                coreLocales: { type: 'array', items: { type: 'string' }, description: 'All locales supported by Yuvomi core.' },
+              },
+            },
+            capabilities: { $ref: '#/components/schemas/ExtensionModuleCapabilities' },
+          },
+          required: ['id', 'name', 'enabled', 'status'],
+        },
+        ModulesListResponse: {
+          type: 'object',
+          properties: {
+            data: { type: 'array', items: { $ref: '#/components/schemas/ExtensionModule' } },
+          },
+          required: ['data'],
+        },
+        ModuleEnableRequest: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+          },
+          required: ['enabled'],
+        },
 };

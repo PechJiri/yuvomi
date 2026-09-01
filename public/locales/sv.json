@@ -264,6 +264,7 @@
         "optionTaskCategories": "Vilka kategorier?",
         "optionTaskCategoriesHint": "Utan val visar översikten alla kategorier.",
         "optionTaskCategoriesEmpty": "Det finns inga kategorier än.",
+        "optionExtensionEmpty": "Den här widgeten har inga alternativ.",
         "loadErrorSession": "Din session har gått ut. Logga in igen.",
         "loadErrorServer": "Servern svarar inte just nu. Försök igen senare.",
         "allWidgetsHidden": "Alla widgetar är dolda - aktivera dem igen via \"Anpassa\".",
