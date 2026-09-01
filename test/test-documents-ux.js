@@ -7,7 +7,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -316,4 +316,70 @@ test('das Speichern referenziert den Submit-Button am Panel, nicht am Formular (
   assert.doesNotMatch(save, /form\.querySelector\('#document-submit'\)/);
   // Der Submit-Handler reicht das Panel an saveDocument durch.
   assert.match(page, /saveDocument\(event, doc, panel\)/);
+});
+// --------------------------------------------------------
+// Folder tree upload
+// --------------------------------------------------------
+
+test('adresářový upload je samostatná volba a nemění běžný multi-file input', () => {
+  assert.match(page, /from '\/utils\/folder-upload\.js'/);
+  assert.match(page, /id="document-file" type="file" multiple/);
+  assert.match(page, /id="document-folder-input" type="file" webkitdirectory/);
+  assert.match(page, /'webkitdirectory' in document\.createElement\('input'\)/);
+  assert.ok(page.includes("t('documents.folderUpload.unsupportedBrowser')"));
+});
+
+test('adresářový upload má viditelnou stránkovou akci a otevře rovnou výběr složky', () => {
+  assert.match(page, /id="documents-upload-folder"/);
+  assert.ok(page.includes("t('documents.folderUpload.openAction')"));
+  assert.match(page, /#documents-upload-folder[\s\S]*openDocumentModal\(null, \{ initialUpload: 'folder' \}\)/);
+  assert.match(page, /initialUpload === 'folder'[\s\S]*folderInput\.click\(\)/);
+});
+
+test('adresář se před zápisem zobrazí v jednom náhledu s konflikty a odmítnutými soubory', () => {
+  assert.match(page, /function renderFolderUploadPreview\(/);
+  assert.match(page, /id="document-folder-upload-preview"/);
+  assert.match(page, /data-folder-conflict-default/);
+  assert.match(page, /data-file-conflict-default/);
+  assert.match(page, /data-folder-conflict-key/);
+  assert.doesNotMatch(page, /data-file-conflict-key/);
+  assert.match(page, /folder-upload-tree/);
+  assert.match(page, /folder-upload-rejected/);
+  assert.match(page, /panel\._folderUpload\.ready = false/);
+  assert.match(page, /panel\._folderUpload\.ready = true/);
+});
+
+test('adresářový upload používá sekvenční executor a zachová závěrečný seznam chyb', () => {
+  assert.match(page, /executeFolderUploadPlan\(/);
+  assert.match(page, /function updateFolderUploadProgress\(/);
+  assert.match(page, /function renderFolderUploadResult\(/);
+  assert.match(page, /aria-live="polite"/);
+  assert.ok(page.includes("t('documents.folderUpload.failedTitle')"));
+  assert.match(page, /await loadUploadConflictDocuments\(\)/);
+  assert.match(page, /plan\.counts\.upload < 1 && plan\.counts\.createFolders < 1/);
+});
+
+test('náhled adresáře se na mobilu skládá bez vodorovného přetečení', () => {
+  assert.match(css, /\.document-upload-choices\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/);
+  assert.match(css, /\.folder-upload-preview\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.folder-upload-tree__item\s*\{[^}]*min-width:\s*0[^}]*padding-inline-start:\s*calc\(/);
+  assert.match(css, /@media \(max-width: 639px\)[\s\S]*\.folder-upload-conflict\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+});
+
+test('všechny podporované jazyky obsahují úplnou sadu textů pro adresářový upload', () => {
+  const localeDir = resolve(HERE, '../public/locales');
+  const files = readdirSync(localeDir).filter((file) => file.endsWith('.json'));
+  const reference = JSON.parse(read('../public/locales/en.json')).documents.folderUpload;
+  const expectedKeys = Object.keys(reference || {}).sort();
+  assert.ok(expectedKeys.length > 0, 'en.json musí definovat documents.folderUpload');
+
+  for (const file of files) {
+    const strings = JSON.parse(read(`../public/locales/${file}`)).documents?.folderUpload;
+    assert.ok(strings, `${file}: chybí documents.folderUpload`);
+    assert.deepEqual(Object.keys(strings).sort(), expectedKeys, `${file}: neodpovídá sada klíčů`);
+    for (const key of expectedKeys) {
+      assert.equal(typeof strings[key], 'string', `${file}: ${key} není řetězec`);
+      assert.notEqual(strings[key].trim(), '', `${file}: ${key} je prázdný`);
+    }
+  }
 });

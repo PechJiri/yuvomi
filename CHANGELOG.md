@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Complete directory trees can now be uploaded in one operation.** Selecting a directory keeps
+  that directory as the new root below the chosen destination, recreates supported descendants and
+  uploads their files sequentially. Before writing anything, the dialog previews the planned tree,
+  conflicts and rejected files. Existing folders may be merged or duplicated with a timestamped
+  suffix, while file conflicts can be skipped or uploaded under a timestamped name.
+
+  Validation follows the server's file-size, MIME-type, path and depth limits. Safe folder paths are
+  still created when their own files are rejected, while a failed parent blocks only its descendants
+  and does not stop sibling branches.
+
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from
   #919 - widgets, `ext:<module-id>` permissions, an API prefix, a locale chain - is a promise made

@@ -64,6 +64,27 @@
   color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary));
 }
 
+/* Adresářový upload je samostatná stránková akce, ne skrytá druhá možnost
+ * uvnitř formuláře pro dokument. Na úzkém displeji zůstává jako 44px ikona
+ * vedle přepínače zobrazení; přístupný název nese tlačítko dál přes aria-label. */
+.documents-upload-folder-btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .documents-upload-folder-btn {
+    width: var(--target-base);
+    min-width: var(--target-base);
+    height: var(--target-base);
+    min-height: var(--target-base);
+    padding-inline: 0;
+  }
+
+  .documents-upload-folder-btn__label {
+    display: none;
+  }
+}
+
 /* Eigene Filterzeile unter dem Kopf (wie Kontakte): Status- + Kategorie-Chips
  * scrollen gemeinsam horizontal, statt in die Kopfzeile gequetscht zu werden.
  * Das behebt das Überlappen/Abschneiden auf Desktop (Issue #506). */
@@ -904,6 +925,167 @@
   margin-top: var(--space-1);
   color: var(--color-text-tertiary);
   font-size: var(--text-xs);
+}
+
+/* Adresářový upload zůstává jedním formulářem: volba souborů či složky je
+ * nahoře, pod ní se ve stejné ploše rozvine kontrolovatelný plán. */
+.document-upload-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.document-upload-choice {
+  flex: 1 1 auto;
+}
+
+.document-upload-choice.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.folder-upload-preview {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-fill-well);
+  overflow-wrap: anywhere;
+}
+
+.folder-upload-preview[hidden] {
+  display: none;
+}
+
+.folder-upload-preview__summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.folder-upload-preview__summary span,
+.folder-upload-preview__limit,
+.folder-upload-progress {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.folder-upload-tree,
+.folder-upload-rejected ul,
+.folder-upload-result__failures ul {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.folder-upload-tree__item,
+.folder-upload-rejected li,
+.folder-upload-result__failures li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-block: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.folder-upload-tree__item {
+  min-width: 0;
+  padding-inline-start: calc(var(--folder-upload-depth, 0) * var(--space-3));
+}
+
+.folder-upload-tree__item svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--module-accent);
+}
+
+.folder-upload-tree__name,
+.folder-upload-tree__status,
+.folder-upload-conflict span,
+.folder-upload-rejected li span,
+.folder-upload-result__failures li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.folder-upload-tree__status {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.folder-upload-preview__section {
+  min-width: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-2);
+}
+
+.folder-upload-preview__section summary {
+  cursor: pointer;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.folder-upload-conflict__default,
+.folder-upload-conflict {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-top: var(--space-2);
+}
+
+.folder-upload-conflict select,
+.folder-upload-conflict__default select {
+  width: auto;
+  max-width: 100%;
+}
+
+.folder-upload-result {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.folder-upload-result h3,
+.folder-upload-result h4,
+.folder-upload-result p {
+  margin: 0;
+}
+
+@media (max-width: 639px) {
+  .document-upload-choices {
+    flex-direction: column;
+  }
+
+  .folder-upload-preview__summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .folder-upload-conflict {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .folder-upload-conflict__default {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .folder-upload-conflict select,
+  .folder-upload-conflict__default select {
+    width: 100%;
+  }
 }
 
 .document-member-picker {
