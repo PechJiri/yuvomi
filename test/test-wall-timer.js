@@ -235,3 +235,23 @@ test('der Timer wird verdrahtet, bevor auf die Dashboard-Daten gewartet wird', (
   assert.match(bisAwait, /wireWallTimer\(/,
     'die Wandflaeche bekommt ihren Takt, sobald sie im DOM steht - nicht erst, wenn die Daten da sind');
 });
+
+test('auch der Ausstieg wird verdrahtet, bevor auf die Daten gewartet wird', () => {
+  const dash = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  // Auf der Ladeflaeche ist der Knopf sichtbar. War er dort nicht verdrahtet,
+  // kam bei einer haengenden Anfrage niemand mehr aus dem Wandmodus heraus - in
+  // der installierten PWA ohne Browserleiste heisst das: gar nicht mehr.
+  const renderAt = dash.indexOf('export async function render(');
+  const bisAwait = dash.slice(renderAt, dash.indexOf('await ', renderAt));
+  assert.match(bisAwait, /wireWallExit\(/, 'der Ausstieg haengt nicht am Datenladen');
+
+  // Und er haengt am Container, nicht am Knopf: `setHtml` tauscht dessen Inhalt
+  // aus, der Container bleibt. Eine Verdrahtung am Knopf waere nach dem zweiten
+  // Rendern wieder tot.
+  const at = dash.indexOf('function wireWallExit');
+  const fn = dash.slice(at, dash.indexOf('\n}', at));
+  assert.match(fn, /container\.addEventListener\(\s*'click'/,
+    'delegiert am Container, damit die eine Verdrahtung beide Renders ueberlebt');
+  assert.ok(!/container\.querySelector\('#wall-exit'\)\?\.addEventListener/.test(fn),
+    'nicht am Knopf selbst');
+});

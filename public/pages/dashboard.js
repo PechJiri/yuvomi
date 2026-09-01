@@ -3442,6 +3442,22 @@ function wireWallSurface(container, rerender, signal) {
   }
   signal.addEventListener('abort', () => clearTimeout(awakeTimer));
 
+  wireWallTimer(wall, rerender, signal);
+}
+
+/**
+ * Der Ausstieg - datenunabhaengig, und deshalb getrennt vom Rest.
+ *
+ * Er stand bis zum Review in `wireWallSurface` und wurde damit erst verdrahtet,
+ * wenn die Dashboard-Daten da waren. Auf der Ladeflaeche ist der Knopf sichtbar,
+ * aber tot; haengt die Anfrage, kommt niemand mehr aus dem Wandmodus heraus -
+ * in der installierten PWA ohne Browserleiste heisst das: gar nicht mehr.
+ *
+ * Er haengt am CONTAINER, nicht am Knopf: `setHtml` tauscht dessen Inhalt aus,
+ * der Container selbst bleibt. So ueberlebt die eine Verdrahtung beide Renders,
+ * und es braucht keinen zweiten Aufruf, der Escape ein zweites Mal registrierte.
+ */
+function wireWallExit(container, rerender, signal) {
   const leave = () => {
     exitWallMode();
     // Der Toast sagt, WO der Weg zurueck liegt - wer versehentlich aussteigt,
@@ -3460,9 +3476,9 @@ function wireWallSurface(container, rerender, signal) {
     rerender();
   };
 
-  wireWallTimer(wall, rerender, signal);
-
-  container.querySelector('#wall-exit')?.addEventListener('click', leave, { signal });
+  container.addEventListener('click', (event) => {
+    if (event.target.closest('#wall-exit')) leave();
+  }, { signal });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') leave();
   }, { signal });
@@ -3783,7 +3799,13 @@ export async function render(container, { user }) {
   // Er wird deshalb verdrahtet, sobald die Flaeche im DOM steht. Der Aufruf
   // nach dem Laden bleibt und ersetzt diesen hier - `wireWallTimer` raeumt
   // seinen vorigen Takt selbst ab.
-  if (wallMode) wireWallTimer(container.querySelector('.wall'), rerender, _fabController.signal);
+  if (wallMode) {
+    wireWallTimer(container.querySelector('.wall'), rerender, _fabController.signal);
+    // Der Ausstieg gehoert zur selben Sorte: er haengt an nichts, was geladen
+    // wird. Einmal verdrahtet, ueber den Container - er ueberlebt das zweite
+    // Rendern und braucht keinen zweiten Aufruf.
+    wireWallExit(container, rerender, _fabController.signal);
+  }
 
   let data         = { upcomingEvents: [], urgentTasks: [], todayMeals: [], pinnedNotes: [], shoppingLists: [], birthdays: [], countdowns: [], users: [], budget: {}, rewards: {}, health: {}, housekeeping: {} };
   // Ein Stand von vorhin darf keine Kachel versprechen: erst nach dem Laden
