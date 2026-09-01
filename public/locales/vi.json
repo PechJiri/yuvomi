@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Thu hồi lời mời này? Liên kết sẽ ngừng hoạt động.",
             "revoked": "Lời mời đã được thu hồi.",
             "created": "Lời mời đã được tạo.",
-            "revokeConfirmDetail": "Liên kết bạn đã gửi hoặc sao chép sẽ ngừng hoạt động ngay. Người được mời không thể tạo tài khoản bằng liên kết đó nữa; bạn sẽ phải mời lại."
+            "revokeConfirmDetail": "Liên kết bạn đã gửi hoặc sao chép sẽ ngừng hoạt động ngay. Người được mời không thể tạo tài khoản bằng liên kết đó nữa; bạn sẽ phải mời lại.",
+            "presetLabel": "Quyền ban đầu",
+            "presetRestricted": "Không có khu vực cá nhân",
+            "presetRole": "Theo hồ sơ vai trò",
+            "presetHintRestricted": "{{modules}} vẫn bị khóa. Bạn có thể mở bất cứ lúc nào trong Vai trò và quyền.",
+            "presetHintRoleOpen": "Vai trò {{role}} không hạn chế gì - thành viên thấy mọi mô-đun.",
+            "presetHintRoleLimited": "Vai trò {{role}} khóa: {{modules}}.",
+            "presetHintUnavailable": "Hiện không thể hiển thị tác dụng chính xác. Mẫu vẫn được áp dụng."
         },
         "healthCaregiversLabel": "Có thể ghi dữ liệu sức khỏe",
         "healthCaregiversHint": "Những người này có thể ghi chỉ số sinh tồn, thuốc, kết quả xét nghiệm và hoạt động cho thành viên này, đồng thời thấy các mục riêng tư của họ. Nhật ký chu kỳ vẫn được loại trừ.",

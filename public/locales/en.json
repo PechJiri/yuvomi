@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Revoke this invitation? The link stops working.",
             "revoked": "The invitation was revoked.",
             "created": "The invitation was created.",
-            "revokeConfirmDetail": "A link you already sent or copied stops working immediately. The invited person can no longer create an account with it; you would have to invite them again."
+            "revokeConfirmDetail": "A link you already sent or copied stops working immediately. The invited person can no longer create an account with it; you would have to invite them again.",
+            "presetLabel": "Starting permissions",
+            "presetRestricted": "Without personal areas",
+            "presetRole": "As the role profile",
+            "presetHintRestricted": "{{modules}} stay locked. You can open them any time under Roles & permissions.",
+            "presetHintRoleOpen": "The {{role}} role restricts nothing - the member sees every module.",
+            "presetHintRoleLimited": "The {{role}} role locks: {{modules}}.",
+            "presetHintUnavailable": "The exact effect cannot be shown right now. The template still applies."
         },
         "healthCaregiversLabel": "May record health data",
         "healthCaregiversHint": "These people may record vitals, medications, lab results and activities for this member, and see their private entries while doing so. The cycle diary stays excluded.",

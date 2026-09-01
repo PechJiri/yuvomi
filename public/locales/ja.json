@@ -2465,7 +2465,14 @@
             "revokeConfirm": "この招待を取り消しますか？リンクは使えなくなります。",
             "revoked": "招待を取り消しました。",
             "created": "招待を作成しました。",
-            "revokeConfirmDetail": "すでに送った、またはコピーしたリンクはただちに使えなくなります。招待した相手はそのリンクでアカウントを作成できなくなるため、あらためて招待する必要があります。"
+            "revokeConfirmDetail": "すでに送った、またはコピーしたリンクはただちに使えなくなります。招待した相手はそのリンクでアカウントを作成できなくなるため、あらためて招待する必要があります。",
+            "presetLabel": "初期権限",
+            "presetRestricted": "個人的な領域を除く",
+            "presetRole": "役割プロファイルに従う",
+            "presetHintRestricted": "{{modules}} はロックされたままです。「役割と権限」でいつでも解除できます。",
+            "presetHintRoleOpen": "役割「{{role}}」は何も制限しません。メンバーはすべてのモジュールを見られます。",
+            "presetHintRoleLimited": "役割「{{role}}」がロックするもの: {{modules}}。",
+            "presetHintUnavailable": "正確な効果は現在表示できません。テンプレートは適用されます。"
         },
         "healthCaregiversLabel": "健康データを記録できる",
         "healthCaregiversHint": "これらの人はこのメンバーのバイタル、薬、検査結果、アクティビティを記録でき、その際に非公開の記録も見えます。周期の記録は対象外です。",

@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Bu davet geri alınsın mı? Bağlantı geçersiz olur.",
             "revoked": "Davet geri alındı.",
             "created": "Davet oluşturuldu.",
-            "revokeConfirmDetail": "Daha önce gönderdiğin ya da kopyaladığın bağlantı hemen çalışmaz olur. Davet edilen kişi onunla artık hesap oluşturamaz; yeniden davet etmen gerekir."
+            "revokeConfirmDetail": "Daha önce gönderdiğin ya da kopyaladığın bağlantı hemen çalışmaz olur. Davet edilen kişi onunla artık hesap oluşturamaz; yeniden davet etmen gerekir.",
+            "presetLabel": "Başlangıç izinleri",
+            "presetRestricted": "Kişisel alanlar olmadan",
+            "presetRole": "Rol profiline göre",
+            "presetHintRestricted": "{{modules}} kilitli kalır. İstediğin zaman Roller ve izinler bölümünden açabilirsin.",
+            "presetHintRoleOpen": "{{role}} rolü hiçbir şeyi kısıtlamıyor - üye tüm modülleri görür.",
+            "presetHintRoleLimited": "{{role}} rolü şunları kilitler: {{modules}}.",
+            "presetHintUnavailable": "Tam etkisi şu anda gösterilemiyor. Şablon yine de geçerli."
         },
         "healthCaregiversLabel": "Sağlık verisi girebilir",
         "healthCaregiversHint": "Bu kişiler bu üye için yaşamsal değerler, ilaçlar, laboratuvar sonuçları ve aktiviteler girebilir ve bunu yaparken özel kayıtlarını da görür. Döngü günlüğü hariç kalır.",

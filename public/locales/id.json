@@ -2477,7 +2477,14 @@
             "revokeConfirm": "Cabut undangan ini? Tautannya akan berhenti berfungsi.",
             "revoked": "Undangan telah dicabut.",
             "created": "Undangan telah dibuat.",
-            "revokeConfirmDetail": "Tautan yang sudah Anda kirim atau salin langsung berhenti berfungsi. Orang yang diundang tidak dapat lagi membuat akun dengannya; Anda harus mengundangnya lagi."
+            "revokeConfirmDetail": "Tautan yang sudah Anda kirim atau salin langsung berhenti berfungsi. Orang yang diundang tidak dapat lagi membuat akun dengannya; Anda harus mengundangnya lagi.",
+            "presetLabel": "Izin awal",
+            "presetRestricted": "Tanpa area pribadi",
+            "presetRole": "Sesuai profil peran",
+            "presetHintRestricted": "{{modules}} tetap terkunci. Kamu bisa membukanya kapan saja di Peran dan izin.",
+            "presetHintRoleOpen": "Peran {{role}} tidak membatasi apa pun - anggota melihat semua modul.",
+            "presetHintRoleLimited": "Peran {{role}} mengunci: {{modules}}.",
+            "presetHintUnavailable": "Efek persisnya tidak dapat ditampilkan sekarang. Templat tetap berlaku."
         },
         "healthCaregiversLabel": "Boleh mencatat data kesehatan",
         "healthCaregiversHint": "Orang-orang ini boleh mencatat tanda vital, obat, hasil lab, dan aktivitas untuk anggota ini, dan sekaligus melihat catatan pribadinya. Buku harian siklus tetap dikecualikan.",

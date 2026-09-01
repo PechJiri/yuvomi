@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Révoquer cette invitation ? Le lien cessera de fonctionner.",
             "revoked": "L'invitation a été révoquée.",
             "created": "L'invitation a été créée.",
-            "revokeConfirmDetail": "Un lien déjà envoyé ou copié cesse aussitôt de fonctionner. La personne invitée ne peut plus créer de compte avec ce lien ; il faudrait l'inviter à nouveau."
+            "revokeConfirmDetail": "Un lien déjà envoyé ou copié cesse aussitôt de fonctionner. La personne invitée ne peut plus créer de compte avec ce lien ; il faudrait l'inviter à nouveau.",
+            "presetLabel": "Autorisations de départ",
+            "presetRestricted": "Sans les espaces personnels",
+            "presetRole": "Selon le profil du rôle",
+            "presetHintRestricted": "{{modules}} restent verrouillés. Tu peux les ouvrir à tout moment dans Rôles et autorisations.",
+            "presetHintRoleOpen": "Le rôle {{role}} ne restreint rien : le membre voit tous les modules.",
+            "presetHintRoleLimited": "Le rôle {{role}} verrouille : {{modules}}.",
+            "presetHintUnavailable": "L'effet exact ne peut pas être affiché pour le moment. Le modèle s'applique quand même."
         },
         "healthCaregiversLabel": "Peut saisir des données de santé",
         "healthCaregiversHint": "Ces personnes peuvent saisir les constantes, médicaments, résultats de laboratoire et activités de ce membre, et voir ses entrées privées à cette occasion. Le journal du cycle reste exclu.",

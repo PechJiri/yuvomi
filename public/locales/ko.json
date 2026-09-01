@@ -2477,7 +2477,14 @@
             "revokeConfirm": "이 초대를 취소할까요? 링크가 더 이상 작동하지 않습니다.",
             "revoked": "초대를 취소했습니다.",
             "created": "초대를 만들었습니다.",
-            "revokeConfirmDetail": "이미 보내거나 복사한 링크는 즉시 작동하지 않습니다. 초대받은 사람은 그 링크로 계정을 만들 수 없으므로 다시 초대해야 합니다."
+            "revokeConfirmDetail": "이미 보내거나 복사한 링크는 즉시 작동하지 않습니다. 초대받은 사람은 그 링크로 계정을 만들 수 없으므로 다시 초대해야 합니다.",
+            "presetLabel": "초기 권한",
+            "presetRestricted": "개인 영역 제외",
+            "presetRole": "역할 프로필에 따름",
+            "presetHintRestricted": "{{modules}}은(는) 잠긴 상태로 유지됩니다. 역할 및 권한에서 언제든 열 수 있습니다.",
+            "presetHintRoleOpen": "{{role}} 역할은 아무것도 제한하지 않습니다 - 구성원은 모든 모듈을 봅니다.",
+            "presetHintRoleLimited": "{{role}} 역할이 잠그는 항목: {{modules}}.",
+            "presetHintUnavailable": "지금은 정확한 효과를 표시할 수 없습니다. 템플릿은 그대로 적용됩니다."
         },
         "healthCaregiversLabel": "건강 데이터를 기록할 수 있음",
         "healthCaregiversHint": "이 사람들은 이 구성원의 활력징후, 약, 검사 결과, 활동을 기록할 수 있으며 그 과정에서 비공개 기록도 볼 수 있습니다. 주기 일기는 제외됩니다.",

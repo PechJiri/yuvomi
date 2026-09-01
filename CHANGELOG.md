@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **An invitation now carries the permissions the new member starts with, and the preselection is
+  the narrow one** (#869). Until now a newly invited member could see every module at first login,
+  and an admin could only take things away afterwards. That was never decided for invitations: it
+  was inherited from migration v74, where storing permissions sparsely - no row means full access -
+  was the right call so that existing households behaved exactly as before after the update. The
+  reporter supplied the sentence that settles it for the other case: permissions can be opened
+  later, but somebody who has already seen private information cannot un-see it.
+
+  The invite form has a new **starting permissions** field with two templates. *Without personal
+  areas* is preselected and locks Health, Budget and Documents; *As the role profile* is the old
+  behaviour. Underneath, the form says what the choice means right now - which modules the template
+  locks, or, for a role, which ones that role already restricts, read from the stored profile
+  rather than described in the abstract.
+
+  **The default itself is untouched, and that is the point.** Nothing changes for existing
+  households, existing accounts or invitations already sent: what changed is the preselected value
+  of a form, not the stored default. Turning the default around would have locked out exactly the
+  households v74 set out to protect. The resolved set is stored with the invitation, so what the
+  admin saw when sending it is what applies at first login, even if the role profile changes in
+  between.
+
+  Which three modules, and why not fewer: the line is not "as little as possible" but *whose data
+  it is*. Health, Budget and Documents hold what belongs to a person; Calendar, Tasks and Shopping
+  are what somebody is invited for. Locking those would produce an empty app and a phone call, not
+  privacy. The templates stack with the role profile rather than replacing it - a role that
+  restricts more stays stricter.
+
+  There is deliberately no "full access" template. Sparse storage means a member override cannot
+  *widen* a role profile: a stored `write` does not exist, so no row can overrule a restricting
+  role. That has been true since v74; a template promising full access that quietly does nothing
+  would be a promise that does not hold. To give everyone in a role more, change the role profile.
+
 ## [2.61.0] - 2026-09-01
 
 ### Added

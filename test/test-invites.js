@@ -30,6 +30,7 @@ function makeDb() {
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(MIGRATIONS_SQL[1]);   // users
   db.exec(MIGRATIONS_SQL[121]); // invites
+  db.exec(MIGRATIONS_SQL[171]); // invites.permissions (#869)
   db.prepare(`INSERT INTO users (id, username, display_name, password_hash)
     VALUES (1, 'alice', 'Alice', 'x'), (2, 'bob', 'Bob', 'x')`).run();
   return db;
@@ -499,6 +500,100 @@ test('die öffentlichen Routen liegen vor dem globalen requireAuth der App', asy
   const guarded = src.indexOf("app.use('/api/v1', requireAuth)");
   assert.ok(mounted > -1 && guarded > -1, 'Einhängepunkte in server/index.js nicht gefunden');
   assert.ok(mounted < guarded, 'der auth-Router muss vor dem globalen requireAuth eingehängt sein');
+});
+
+// --- Startrechte (#869) ----------------------------------------------------
+// Die Frage, die diese Gruppe stellt: bekommt ein neu eingeladenes Mitglied die
+// Rechte, die der Admin beim EINLADEN gewählt hat - und zwar bevor es sich zum
+// ersten Mal anmeldet? Bis v2.61 bekam es immer alle, weil eine fehlende Zeile
+// vollen Zugriff bedeutet.
+
+test('createInvite speichert das Startrechte-Set als Text, oder null', () => {
+  const db = makeDb();
+  const svc = svcAt(db, T0);
+  const withPreset = svc.createInvite({ permissions: '{"modules":{"health":"none"}}' });
+  const without = svc.createInvite({});
+  assert.equal(
+    db.prepare('SELECT permissions FROM invites WHERE id = ?').get(withPreset.id).permissions,
+    '{"modules":{"health":"none"}}',
+  );
+  // null und nicht "{}": eine Einladung ohne Vorgabe soll sich exakt wie jede
+  // vor Migration 171 verhalten, und die hatten die Spalte gar nicht.
+  assert.equal(db.prepare('SELECT permissions FROM invites WHERE id = ?').get(without.id).permissions, null);
+});
+
+test('die enge Vorlage sperrt genau die drei persönlichen Module', async () => {
+  const { invitePresetPermissions, INVITE_RESTRICTED_MODULES } = await import('../server/permissions.js');
+  const restricted = invitePresetPermissions('restricted');
+  assert.deepEqual(Object.keys(restricted.modules).sort(), [...INVITE_RESTRICTED_MODULES].sort());
+  for (const access of Object.values(restricted.modules)) assert.equal(access, 'none');
+  // 'role' schreibt nichts: das Rollenprofil greift von selbst, eine Kopie
+  // davon als Mitglied-Zeilen wäre eine zweite Wahrheit.
+  assert.equal(invitePresetPermissions('role'), null);
+});
+
+test('POST /invites ohne permission_preset nimmt die ENGE Vorlage', async () => {
+  // Das ist die Umkehr selbst. Ein Client, der das Feld nicht kennt, darf nicht
+  // versehentlich mit vollem Zugriff einladen.
+  const { invite: created } = await invite({ username: 'sina' });
+  const stored = JSON.parse(created.permissions);
+  assert.equal(stored.modules.health, 'none');
+  assert.equal(stored.modules.budget, 'none');
+  assert.equal(stored.modules.documents, 'none');
+});
+
+test('POST /invites mit preset "role" speichert keine Vorgabe', async () => {
+  const { invite: created } = await invite({ username: 'timo', permission_preset: 'role' });
+  assert.equal(created.permissions, null);
+});
+
+test('POST /invites weist eine unbekannte Vorlage ab', async () => {
+  const res = await call('POST', '/auth/invites', {
+    actor: ADM, body: { username: 'ulla', permission_preset: 'everything' },
+  });
+  assert.equal(res.status, 400);
+});
+
+test('accept schreibt die Startrechte, bevor das Konto benutzbar ist', async () => {
+  const { token } = await invite({ username: 'vera' });
+  const res = await call('POST', '/auth/invites/accept', {
+    actor: null, body: { token, password: 'geheim12345' }, csrf: null,
+  });
+  assert.equal(res.status, 201);
+  const userId = routeDb.prepare('SELECT id FROM users WHERE username = ?').get('vera').id;
+  const rows = routeDb.prepare(
+    `SELECT resource_key, access FROM access_permissions
+     WHERE subject_type = 'user' AND subject_id = ? ORDER BY resource_key`
+  ).all(String(userId));
+  assert.deepEqual(rows, [
+    { resource_key: 'budget', access: 'none' },
+    { resource_key: 'documents', access: 'none' },
+    { resource_key: 'health', access: 'none' },
+  ]);
+  // Und die Auflösung sagt dasselbe - die Zeilen allein wären nur die halbe
+  // Zusicherung, wenn resolvePermissions() sie nicht anwendete.
+  const { resolvePermissions } = await import('../server/permissions.js');
+  const resolved = resolvePermissions(routeDb, { id: userId, role: 'member', family_role: 'other' });
+  assert.equal(resolved.modules.health, 'none');
+  assert.equal(resolved.widgets.cycle, 'none', 'ein Widget erbt die Sperre seines Moduls');
+  assert.equal(resolved.modules.tasks, 'write', 'was die Vorlage nicht nennt, bleibt offen');
+});
+
+test('accept einer Einladung OHNE Vorgabe schreibt keine Zeile', async () => {
+  // Der Bestandsfall: so verhalten sich alle Einladungen, die vor Migration 171
+  // entstanden sind, und alle mit der Vorlage "wie das Rollenprofil".
+  const { token } = await invite({ username: 'wanda', permission_preset: 'role' });
+  const res = await call('POST', '/auth/invites/accept', {
+    actor: null, body: { token, password: 'geheim12345' }, csrf: null,
+  });
+  assert.equal(res.status, 201);
+  const userId = routeDb.prepare('SELECT id FROM users WHERE username = ?').get('wanda').id;
+  assert.equal(
+    routeDb.prepare(
+      "SELECT COUNT(*) c FROM access_permissions WHERE subject_type = 'user' AND subject_id = ?"
+    ).get(String(userId)).c,
+    0,
+  );
 });
 
 test('teardown: Server schließen', async () => {

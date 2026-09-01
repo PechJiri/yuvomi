@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Revocare questo invito? Il link smetterà di funzionare.",
             "revoked": "L'invito è stato revocato.",
             "created": "L'invito è stato creato.",
-            "revokeConfirmDetail": "Un link già inviato o copiato smette subito di funzionare. La persona invitata non potrà più creare un account; dovresti invitarla di nuovo."
+            "revokeConfirmDetail": "Un link già inviato o copiato smette subito di funzionare. La persona invitata non potrà più creare un account; dovresti invitarla di nuovo.",
+            "presetLabel": "Autorizzazioni iniziali",
+            "presetRestricted": "Senza le aree personali",
+            "presetRole": "Come il profilo del ruolo",
+            "presetHintRestricted": "{{modules}} restano bloccati. Puoi sbloccarli quando vuoi in Ruoli e autorizzazioni.",
+            "presetHintRoleOpen": "Il ruolo {{role}} non limita nulla: il membro vede tutti i moduli.",
+            "presetHintRoleLimited": "Il ruolo {{role}} blocca: {{modules}}.",
+            "presetHintUnavailable": "L'effetto esatto non è visualizzabile al momento. Il modello vale comunque."
         },
         "healthCaregiversLabel": "Può registrare dati sanitari",
         "healthCaregiversHint": "Queste persone possono registrare parametri vitali, farmaci, esami di laboratorio e attività per questo membro, vedendone anche le voci private. Il diario del ciclo resta escluso.",

@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Revogar este convite? O link deixa de funcionar.",
             "revoked": "O convite foi revogado.",
             "created": "O convite foi criado.",
-            "revokeConfirmDetail": "Uma ligação já enviada ou copiada deixa de funcionar de imediato. A pessoa convidada já não consegue criar uma conta com ela; terias de a convidar novamente."
+            "revokeConfirmDetail": "Uma ligação já enviada ou copiada deixa de funcionar de imediato. A pessoa convidada já não consegue criar uma conta com ela; terias de a convidar novamente.",
+            "presetLabel": "Permissões iniciais",
+            "presetRestricted": "Sem as áreas pessoais",
+            "presetRole": "Conforme o perfil da função",
+            "presetHintRestricted": "{{modules}} ficam bloqueados. Podes liberá-los quando quiseres em Funções e permissões.",
+            "presetHintRoleOpen": "A função {{role}} não restringe nada - o membro vê todos os módulos.",
+            "presetHintRoleLimited": "A função {{role}} bloqueia: {{modules}}.",
+            "presetHintUnavailable": "O efeito exato não pode ser mostrado agora. O modelo aplica-se mesmo assim."
         },
         "healthCaregiversLabel": "Pode registar dados de saúde",
         "healthCaregiversHint": "Estas pessoas podem registar sinais vitais, medicamentos, análises e atividades para este membro e ver as suas entradas privadas ao fazê-lo. O diário do ciclo permanece excluído.",

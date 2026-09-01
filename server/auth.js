@@ -28,7 +28,11 @@ import { passwordResetService as defaultResetService } from './services/password
 import { inviteService as defaultInviteService } from './services/invites.js';
 import { parseScopes, serializeScopes, normalizeScopes } from './scopes.js';
 import { hashPassword, normalizePassword, verifyPassword } from './utils/password.js';
-import { resolvePermissions, buildSessionModuleAccess, clientPermissions } from './permissions.js';
+import {
+  resolvePermissions, buildSessionModuleAccess, clientPermissions,
+  invitePresetPermissions, isValidInvitePreset, writeSubjectPermissions,
+  INVITE_PRESET_DEFAULT,
+} from './permissions.js';
 import { requireAdmin } from './middleware/require-admin.js';
 import * as twoFactor from './services/two-factor.js';
 
@@ -1284,6 +1288,14 @@ export function buildInviteRoutes(targetRouter, {
       const familyRole = String(body.family_role || 'other').trim();
       const sendEmail = body.send_email === true || body.send_email === 'true';
       const role = body.system_admin === true || body.system_admin === 'true' ? 'admin' : 'member';
+      // Startrechte (#869). Fehlt das Feld, gilt die enge Vorlage - ein
+      // Client, der sie nicht kennt, laedt damit nicht versehentlich mit
+      // vollem Zugriff ein. Das ist die einzige Stelle, an der die Umkehr
+      // wirkt: der gespeicherte Standard in `access_permissions` bleibt, was
+      // er seit v74 ist.
+      const preset = body.permission_preset === undefined
+        ? INVITE_PRESET_DEFAULT
+        : String(body.permission_preset || '').trim();
 
       if (username && !/^[a-zA-Z0-9._-]{3,64}$/.test(username)) {
         return res.status(400).json({ error: 'Username must be 3-64 characters long and may only contain letters, numbers, dots, hyphens, and underscores.', code: 400 });
@@ -1293,6 +1305,9 @@ export function buildInviteRoutes(targetRouter, {
       }
       if (!FAMILY_ROLES.includes(familyRole)) {
         return res.status(400).json({ error: 'Invalid family role.', code: 400 });
+      }
+      if (!isValidInvitePreset(preset)) {
+        return res.status(400).json({ error: 'Invalid permission preset.', code: 400 });
       }
       // Bewusst grob: eine selbstgehostete Instanz verschickt auch an Adressen
       // ohne Punkt in der Domain (user@nas). Der Versand meldet den Rest.
@@ -1306,12 +1321,17 @@ export function buildInviteRoutes(targetRouter, {
         return res.status(409).json({ error: 'Username is already taken.', code: 409 });
       }
 
+      // Aufgeloest gespeichert, nicht als Name der Vorlage: massgeblich ist,
+      // was der Admin beim Einladen gesehen hat - auch wenn das Rollenprofil
+      // sich bis zur Annahme aendert.
+      const presetPermissions = invitePresetPermissions(preset);
       const { token } = inviteService.createInvite({
         email: email || null,
         username: username || null,
         displayName: displayName || null,
         role,
         familyRole,
+        permissions: presetPermissions ? JSON.stringify(presetPermissions) : null,
         createdBy: req.authUserId,
       });
       // Die frisch angelegte Zeile ohne token_hash - gleiche Form wie GET /invites.
@@ -1473,6 +1493,25 @@ export function buildInviteRoutes(targetRouter, {
             VALUES (?, ?, ?, ?, ?, ?)
           `).run(username, displayName, hash, avatarColor, invite.role, invite.family_role);
           const newUserId = Number(created.lastInsertRowid);
+          // Startrechte, bevor das Konto zum ersten Mal benutzbar ist (#869).
+          // In DERSELBEN Transaktion wie das Konto: entstuende es ohne seine
+          // Rechte, waere die Einladung verbraucht und das Mitglied saehe
+          // genau das, wovor die Vorlage es bewahren sollte. Deshalb hier
+          // `writeSubjectPermissions()` und nicht `replaceSubjectPermissions()`
+          // - dessen eigenes BEGIN waere in dieser Klammer ein Fehler.
+          if (invite.permissions) {
+            let parsed = null;
+            try {
+              parsed = JSON.parse(invite.permissions);
+            } catch {
+              // Eine unlesbare Vorgabe darf die Annahme nicht scheitern lassen,
+              // aber auch nicht still zu vollem Zugriff werden: gemeldet und
+              // die engste bekannte Vorlage angewandt.
+              log.error('Invite permissions unreadable; falling back to the restricted preset.');
+              parsed = invitePresetPermissions('restricted');
+            }
+            writeSubjectPermissions(getDb(), 'user', newUserId, parsed);
+          }
           syncFamilyMemberArtifacts(getDb(), newUserId, {
             displayName,
             // Die eingeladene Adresse wird zur Kontaktadresse: ohne sie fände der

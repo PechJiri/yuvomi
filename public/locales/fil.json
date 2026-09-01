@@ -2477,7 +2477,14 @@
             "revokeConfirm": "Bawiin ang imbitasyong ito? Hihinto sa paggana ang link.",
             "revoked": "Nabawi ang imbitasyon.",
             "created": "Nagawa ang imbitasyon.",
-            "revokeConfirmDetail": "Agad na hihinto sa paggana ang link na naipadala o nakopya mo na. Hindi na makakagawa ng account ang inimbitahan gamit ito; kakailanganin mo siyang imbitahang muli."
+            "revokeConfirmDetail": "Agad na hihinto sa paggana ang link na naipadala o nakopya mo na. Hindi na makakagawa ng account ang inimbitahan gamit ito; kakailanganin mo siyang imbitahang muli.",
+            "presetLabel": "Panimulang pahintulot",
+            "presetRestricted": "Walang personal na bahagi",
+            "presetRole": "Ayon sa profile ng papel",
+            "presetHintRestricted": "Mananatiling naka-lock ang {{modules}}. Puwede mo itong buksan anumang oras sa Mga papel at pahintulot.",
+            "presetHintRoleOpen": "Walang nililimitahan ang papel na {{role}} - nakikita ng miyembro ang lahat ng modyul.",
+            "presetHintRoleLimited": "Nila-lock ng papel na {{role}} ang: {{modules}}.",
+            "presetHintUnavailable": "Hindi maipakita ngayon ang eksaktong epekto. Gumagana pa rin ang template."
         },
         "healthCaregiversLabel": "Puwedeng magtala ng datos ng kalusugan",
         "healthCaregiversHint": "Puwedeng magtala ang mga taong ito ng vitals, gamot, resulta ng lab at aktibidad para sa miyembrong ito, at makikita rin nila ang mga pribadong tala nito. Hindi kasama ang talaarawan ng siklo.",

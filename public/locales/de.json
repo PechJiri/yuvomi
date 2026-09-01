@@ -2477,7 +2477,14 @@
             "revokeConfirm": "Diese Einladung widerrufen? Der Link wird damit ungültig.",
             "revoked": "Die Einladung wurde widerrufen.",
             "created": "Die Einladung wurde erstellt.",
-            "revokeConfirmDetail": "Ein bereits verschickter oder kopierter Link hört sofort auf zu funktionieren. Die eingeladene Person kann damit kein Konto mehr anlegen; dafür musst du sie erneut einladen."
+            "revokeConfirmDetail": "Ein bereits verschickter oder kopierter Link hört sofort auf zu funktionieren. Die eingeladene Person kann damit kein Konto mehr anlegen; dafür musst du sie erneut einladen.",
+            "presetLabel": "Startrechte",
+            "presetRestricted": "Ohne persönliche Bereiche",
+            "presetRole": "Wie das Rollenprofil",
+            "presetHintRestricted": "{{modules}} bleiben gesperrt. Freigeben kannst du sie jederzeit unter Rollen und Rechte.",
+            "presetHintRoleOpen": "Die Rolle {{role}} schränkt nichts ein - das Mitglied sieht alle Module.",
+            "presetHintRoleLimited": "Die Rolle {{role}} sperrt: {{modules}}.",
+            "presetHintUnavailable": "Die genaue Wirkung lässt sich gerade nicht anzeigen. Die Vorlage gilt trotzdem."
         },
         "healthCaregiversLabel": "Darf Gesundheitsdaten eintragen",
         "healthCaregiversHint": "Diese Personen dürfen für dieses Mitglied Vitalwerte, Medikamente, Laborwerte und Aktivitäten eintragen und dabei auch dessen private Einträge sehen. Das Zyklus-Tagebuch bleibt ausgenommen.",

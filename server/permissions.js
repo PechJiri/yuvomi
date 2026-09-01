@@ -108,6 +108,33 @@ export const WIDGET_ACCESS_LEVELS = Object.freeze(['none', 'allow']);
 const MODULE_DEFAULT = 'write';
 const WIDGET_DEFAULT = 'allow';
 
+// Startrechte einer Einladung (#869). Drei Vorlagen, keine Rechteverwaltung im
+// Einladungsformular: wer feiner steuern will, tut das nach der Annahme im
+// Rechte-Blatt, das es dafuer schon gibt.
+//
+//   'restricted'  Module mit persoenlichen Daten starten gesperrt
+//   'role'        was das Rollenprofil sagt (bis v2.61 das stille Verhalten)
+//
+// ES GIBT BEWUSST KEIN 'full'. Sparse heisst auch: ein Mitglied-Override kann
+// ein Rollenprofil nicht AUFWEICHEN. `normalizePermissionInput()` verwirft
+// jeden Standardwert, ein gespeichertes `write` gibt es also gar nicht, und
+// damit auch keine Zeile, die ein einschraenkendes Rollenprofil ueberstimmt.
+// Das ist keine Luecke dieser Aenderung, sondern seit v74 so; eine Vorlage
+// namens "voller Zugriff", die bei eingeschraenkter Rolle nichts tut, waere
+// eine Zusage, die nicht haelt. Wer allen einer Rolle mehr geben will, aendert
+// das Rollenprofil.
+export const INVITE_PRESETS = Object.freeze(['restricted', 'role']);
+export const INVITE_PRESET_DEFAULT = 'restricted';
+
+// Was 'restricted' sperrt. Die Trennlinie ist nicht "wenig Module", sondern
+// WELCHE: das sind die drei, deren Inhalt einer PERSON gehoert und nicht dem
+// Haushalt - Gesundheitswerte, Finanzen und Ausweise/Vertraege. Kalender,
+// Aufgaben, Einkauf und der Rest sind das, wofuer jemand eingeladen wird; sie
+// zu sperren erzeugt eine leere App und einen Anruf, keine Privatsphaere.
+// Widgets brauchen hier nichts: `resolvePermissions()` sperrt sie mit ihrem
+// Modul mit, das cycle-Widget also ueber `health`.
+export const INVITE_RESTRICTED_MODULES = Object.freeze(['health', 'budget', 'documents']);
+
 const MODULE_KEY_SET = new Set(PERMISSION_MODULES.map((m) => m.key));
 const WIDGET_ID_SET = new Set(PERMISSION_WIDGETS.map((w) => w.id));
 const MODULE_ACCESS_SET = new Set(MODULE_ACCESS_LEVELS);
@@ -270,6 +297,14 @@ export function permissionCatalog() {
     moduleAccessLevels: [...MODULE_ACCESS_LEVELS],
     widgetAccessLevels: [...WIDGET_ACCESS_LEVELS],
     defaults: { module: MODULE_DEFAULT, widget: WIDGET_DEFAULT },
+    // Startrechte-Vorlagen fuer das Einladungsformular (#869). Der Server
+    // sagt, WELCHE Module die enge Vorlage sperrt - das Formular soll sie
+    // benennen koennen, ohne die Liste ein zweites Mal zu fuehren.
+    invitePresets: {
+      values: [...INVITE_PRESETS],
+      default: INVITE_PRESET_DEFAULT,
+      restrictedModules: [...INVITE_RESTRICTED_MODULES],
+    },
   };
 }
 
@@ -322,25 +357,69 @@ export function normalizePermissionInput({ modules = {}, widgets = {} } = {}) {
  * @param {import('better-sqlite3-multiple-ciphers').Database} database
  */
 export function replaceSubjectPermissions(database, subjectType, subjectId, input) {
-  const rows = normalizePermissionInput(input);
-  const del = database.prepare('DELETE FROM access_permissions WHERE subject_type = ? AND subject_id = ?');
-  const ins = database.prepare(`
-    INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
-    VALUES (?, ?, ?, ?, ?)
-  `);
   // Portable Transaktion (BEGIN/COMMIT/ROLLBACK): funktioniert sowohl mit
   // better-sqlite3 (Produktion) als auch node:sqlite (Tests). Kein
   // database.transaction()-Helfer, den node:sqlite nicht kennt.
   database.exec('BEGIN');
   try {
-    del.run(subjectType, String(subjectId));
-    for (const r of rows) ins.run(subjectType, String(subjectId), r.resource_type, r.resource_key, r.access);
+    writeSubjectPermissions(database, subjectType, subjectId, input);
     database.exec('COMMIT');
   } catch (err) {
     database.exec('ROLLBACK');
     throw err;
   }
   return getSubjectPermissions(database, subjectType, subjectId);
+}
+
+/**
+ * Wie `replaceSubjectPermissions()`, aber OHNE eigene Transaktionsklammer -
+ * fuer Aufrufer, die schon in einer stecken.
+ *
+ * Es gibt sie, weil das Annehmen einer Einladung Nutzer, Kontakt-Artefakte und
+ * Startrechte in EINER Transaktion schreibt (#869). Ein `BEGIN` darin waere
+ * ein Fehler, kein verschachtelter Bereich, und haette den ganzen Vorgang
+ * abgebrochen: das Konto entstuende, die Rechte nicht - und die Einladung
+ * waere verbraucht.
+ */
+export function writeSubjectPermissions(database, subjectType, subjectId, input) {
+  const rows = normalizePermissionInput(input);
+  const del = database.prepare('DELETE FROM access_permissions WHERE subject_type = ? AND subject_id = ?');
+  const ins = database.prepare(`
+    INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  del.run(subjectType, String(subjectId));
+  for (const r of rows) ins.run(subjectType, String(subjectId), r.resource_type, r.resource_key, r.access);
+  return rows.length;
+}
+
+/**
+ * Loest eine Einladungs-Vorlage zu dem Rechte-Set auf, das beim ersten Login
+ * gilt.
+ *
+ * `null` heisst ausdruecklich "nichts eigenes schreiben": bei 'role' soll das
+ * Rollenprofil greifen, und das tut es von selbst, weil `resolvePermissions()`
+ * es vor dem Mitglied-Override anwendet. Eine Kopie des Profils als
+ * user-Zeilen zu schreiben waere eine zweite Wahrheit - sie wuerde bei jeder
+ * spaeteren Aenderung des Profils zurueckbleiben, ohne dass jemand sie
+ * angelegt haben wollte.
+ *
+ * 'restricted' schreibt dagegen echte Mitglied-Zeilen. Sie kommen ZUSAETZLICH
+ * zum Rollenprofil zur Wirkung: das Profil laeuft zuerst, diese drei Module
+ * gewinnen danach. Eine Rolle, die ohnehin mehr sperrt, bleibt also strenger.
+ *
+ * @param {'restricted'|'role'} preset
+ * @returns {{ modules: Record<string,string>, widgets: Record<string,string> }|null}
+ */
+export function invitePresetPermissions(preset) {
+  if (preset !== 'restricted') return null;
+  const modules = {};
+  for (const key of INVITE_RESTRICTED_MODULES) modules[key] = 'none';
+  return { modules, widgets: {} };
+}
+
+export function isValidInvitePreset(preset) {
+  return INVITE_PRESETS.includes(preset);
 }
 
 export function isValidFamilyRole(role) {

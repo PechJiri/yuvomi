@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Visszavonod ezt a meghívót? A link ezzel érvénytelenné válik.",
             "revoked": "A meghívót visszavontuk.",
             "created": "A meghívó elkészült.",
-            "revokeConfirmDetail": "A már elküldött vagy kimásolt link azonnal működésképtelen lesz. A meghívott ezzel nem tud fiókot létrehozni; újra meg kellene hívnod."
+            "revokeConfirmDetail": "A már elküldött vagy kimásolt link azonnal működésképtelen lesz. A meghívott ezzel nem tud fiókot létrehozni; újra meg kellene hívnod.",
+            "presetLabel": "Kezdő jogosultságok",
+            "presetRestricted": "A személyes területek nélkül",
+            "presetRole": "A szerepprofil szerint",
+            "presetHintRestricted": "{{modules}} zárolva marad. Bármikor feloldhatod a Szerepek és jogosultságok alatt.",
+            "presetHintRoleOpen": "A(z) {{role}} szerep semmit sem korlátoz - a tag minden modult lát.",
+            "presetHintRoleLimited": "A(z) {{role}} szerep zárolja: {{modules}}.",
+            "presetHintUnavailable": "A pontos hatás most nem jeleníthető meg. A sablon ettől még érvényes."
         },
         "healthCaregiversLabel": "Rögzíthet egészségügyi adatokat",
         "healthCaregiversHint": "Ezek a személyek rögzíthetnek életjeleket, gyógyszereket, laboreredményeket és tevékenységeket ehhez a taghoz, és eközben a privát bejegyzéseit is látják. A ciklusnapló kivétel marad.",

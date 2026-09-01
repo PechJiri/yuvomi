@@ -30,6 +30,31 @@ const randomAvatarColor = () => AVATAR_COLORS[Math.floor(Math.random() * AVATAR_
  */
 let ssoAvailable = false;
 
+/**
+ * Rechte-Katalog fuer die Startrechte einer Einladung (#869).
+ *
+ * Modulvariable aus demselben Grund wie `ssoAvailable`: eine Eigenschaft des
+ * Servers, keine eines Mitglieds. Bleibt sie leer, weil die Abfrage
+ * fehlschlaegt, verliert der Hinweis unter dem Feld seine Modulnamen - die
+ * Wahl selbst funktioniert weiter, denn aufgeloest wird sie ohnehin
+ * serverseitig.
+ */
+let permissionCatalog = null;
+
+/** Angezeigter Name eines Permissions-Moduls, sonst der Schluessel als Notnagel. */
+function moduleLabel(key) {
+  const found = permissionCatalog?.modules?.find((m) => m.key === key);
+  return found ? t(found.labelKey) : key;
+}
+
+/** Die Module, die eine Rechte-Karte ganz sperrt, als lesbare Aufzaehlung. */
+function deniedModuleNames(modules) {
+  return Object.entries(modules || {})
+    .filter(([, access]) => access === 'none')
+    .map(([key]) => moduleLabel(key))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 function initials(name) {
   if (!name) return '?';
   return name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -250,6 +275,14 @@ function renderPage(container) {
             </select>
           </div>
           <div class="form-group">
+            <label class="form-label" for="invite-permission-preset">${t('settings.invites.presetLabel')}</label>
+            <select class="form-input" id="invite-permission-preset">
+              <option value="restricted" selected>${t('settings.invites.presetRestricted')}</option>
+              <option value="role">${t('settings.invites.presetRole')}</option>
+            </select>
+            <p class="form-hint" id="invite-preset-hint"></p>
+          </div>
+          <div class="form-group">
             <label class="form-label" for="invite-email">${t('settings.memberEmailLabel')}</label>
             <input class="form-input" type="email" id="invite-email" autocomplete="email" />
           </div>
@@ -375,10 +408,58 @@ function bindInviteEvents(container, initialInvites) {
   const emailNote = container.querySelector('#invite-email-note');
   const errorEl = container.querySelector('#invite-error');
 
+  // Startrechte (#869): das Feld waehlt eine Vorlage, der Hinweis darunter sagt,
+  // was sie im MOMENT bedeutet. Ohne ihn waere "wie das Rollenprofil" eine
+  // Angabe ueber etwas, das man nur auf einem anderen Blatt nachsehen kann -
+  // und genau das Nachsehen unterbleibt beim Einladen.
+  const presetSelect = container.querySelector('#invite-permission-preset');
+  const roleSelect = container.querySelector('#invite-family-role');
+  const presetHint = container.querySelector('#invite-preset-hint');
+  // Ein Rollenprofil aendert sich waehrend eines Formularaufrufs nicht, und
+  // jeder Wechsel zwischen zwei Rollen wuerde es sonst erneut holen.
+  const roleProfiles = new Map();
+
+  async function updatePresetHint() {
+    if (!presetSelect || !presetHint) return;
+    const role = roleSelect?.value || 'other';
+    if (presetSelect.value === 'restricted') {
+      const names = (permissionCatalog?.invitePresets?.restrictedModules || []).map(moduleLabel);
+      presetHint.textContent = names.length
+        ? t('settings.invites.presetHintRestricted', { modules: names.join(', ') })
+        : t('settings.invites.presetHintUnavailable');
+      return;
+    }
+    if (!roleProfiles.has(role)) {
+      try {
+        roleProfiles.set(role, (await api.get(`/permissions/role/${encodeURIComponent(role)}`))?.data || null);
+      } catch {
+        // Kein Profil zu holen heisst nicht "kein Profil vorhanden": eine
+        // Behauptung waere hier schlimmer als keine.
+        roleProfiles.set(role, null);
+      }
+    }
+    // Zwischen Anfrage und Antwort kann eine andere Rolle gewaehlt worden sein.
+    if ((roleSelect?.value || 'other') !== role || presetSelect.value !== 'role') return;
+    const profile = roleProfiles.get(role);
+    const roleName = familyRoleLabel(role);
+    if (!profile) {
+      presetHint.textContent = t('settings.invites.presetHintUnavailable');
+      return;
+    }
+    const denied = deniedModuleNames(profile.modules);
+    presetHint.textContent = denied.length
+      ? t('settings.invites.presetHintRoleLimited', { role: roleName, modules: denied.join(', ') })
+      : t('settings.invites.presetHintRoleOpen', { role: roleName });
+  }
+
+  presetSelect?.addEventListener('change', updatePresetHint);
+  roleSelect?.addEventListener('change', updatePresetHint);
+
   addBtn.hidden = false;
   addBtn.addEventListener('click', () => {
     card.classList.remove('settings-card--hidden');
     addBtn.hidden = true;
+    updatePresetHint();
     container.querySelector('#invite-username')?.focus();
   });
 
@@ -386,6 +467,7 @@ function bindInviteEvents(container, initialInvites) {
     card.classList.add('settings-card--hidden');
     addBtn.hidden = false;
     form.reset();
+    updatePresetHint();
     errorEl.hidden = true;
     output.hidden = true;
   });
@@ -400,6 +482,7 @@ function bindInviteEvents(container, initialInvites) {
       display_name: container.querySelector('#invite-display-name').value.trim(),
       email: container.querySelector('#invite-email').value.trim(),
       family_role: container.querySelector('#invite-family-role').value,
+      permission_preset: container.querySelector('#invite-permission-preset').value,
       system_admin: container.querySelector('#invite-system-admin')?.checked === true,
       send_email: sendEmail,
     };
@@ -411,6 +494,7 @@ function bindInviteEvents(container, initialInvites) {
       invites.unshift(res.data.invite);
       renderInviteList(container, invites);
       form.reset();
+      updatePresetHint();
       // Der Klartext-Token kommt nur aus dieser einen Antwort. Die Karte bleibt
       // deshalb offen: würde sie sich wie beim Mitglied-Anlegen schließen, wäre
       // der Link im selben Moment weg, in dem er entsteht.
@@ -926,6 +1010,13 @@ export async function render(container, { user } = {}) {
     ssoAvailable = (await api.get('/auth/oidc/config'))?.enabled === true;
   } catch {
     ssoAvailable = false;
+  }
+  // Derselbe Grundsatz wie darueber: faellt der Katalog aus, bleibt der Hinweis
+  // unter den Startrechten ohne Modulnamen, aber das Formular funktioniert.
+  try {
+    permissionCatalog = (await api.get('/permissions/catalog'))?.data || null;
+  } catch {
+    permissionCatalog = null;
   }
 
   renderPage(container);

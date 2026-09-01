@@ -1012,6 +1012,16 @@ const MIGRATIONS_SQL = {
     );
     CREATE INDEX IF NOT EXISTS idx_quick_links_position ON quick_links(position);
   `,
+
+  // SQL-String für Migration v171 (gespiegelt aus db.js MIGRATIONS):
+  // Startrechte einer Einladung (#869). Steht als EIGENER Eintrag neben 121
+  // und nicht in dessen CREATE TABLE eingearbeitet: der Spiegel bildet
+  // Versionen ab, und eine Suite, die nur `121` fährt, soll die Spalte auch
+  // nicht haben - sonst prüft sie einen Zustand, den keine Installation je
+  // hatte.
+  171: `
+    ALTER TABLE invites ADD COLUMN permissions TEXT;
+  `,
 };
 
 export { MIGRATIONS_SQL };

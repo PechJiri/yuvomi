@@ -12,8 +12,12 @@ const log = createLogger('Invites');
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Spalten, die nach außen dürfen: token_hash ist hier bewusst nicht dabei.
+// `permissions` schon: die Startrechte einer offenen Einladung sind das, was
+// der Admin gewählt hat, und die Liste offener Einladungen darf sie zeigen
+// (#869). Sie enthalten keine Geheimnisse, nur Modulschlüssel.
 const PUBLIC_COLUMNS = `id, email, username, display_name, role, family_role,
-  created_by, expires_at, accepted_at, accepted_user_id, revoked_at, created_at`;
+  permissions, created_by, expires_at, accepted_at, accepted_user_id, revoked_at,
+  created_at`;
 
 export function createInviteService({ db, now = () => Date.now() } = {}) {
   const getDb = () => (db || dbModule.get());
@@ -27,17 +31,24 @@ export function createInviteService({ db, now = () => Date.now() } = {}) {
     return new Date(now()).toISOString().replace(/\.\d{3}Z$/, 'Z');
   }
 
+  /**
+   * `permissions` ist das AUFGELOESTE Startrechte-Set als JSON-Text oder null
+   * (#869). null heisst "nichts eigenes" und ist das Verhalten aller
+   * Einladungen, die vor Migration 171 entstanden sind - die Spalte ist
+   * nullable, damit dieser Fall keinen Wert braucht, den jemand deuten muss.
+   */
   function createInvite({
     email = null, username = null, displayName = null,
-    role = 'member', familyRole = 'other', createdBy = null,
+    role = 'member', familyRole = 'other', createdBy = null, permissions = null,
   } = {}) {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = now() + INVITE_TTL_MS;
     const info = getDb().prepare(`
       INSERT INTO invites (token_hash, email, username, display_name, role,
-                           family_role, created_by, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(hash(token), email, username, displayName, role, familyRole, createdBy, expiresAt);
+                           family_role, permissions, created_by, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(hash(token), email, username, displayName, role, familyRole,
+           permissions, createdBy, expiresAt);
     return { token, id: Number(info.lastInsertRowid), expiresAt };
   }
 

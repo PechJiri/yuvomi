@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Zrušit tuto pozvánku? Odkaz přestane fungovat.",
             "revoked": "Pozvánka byla zrušena.",
             "created": "Pozvánka byla vytvořena.",
-            "revokeConfirmDetail": "Už odeslaný nebo zkopírovaný odkaz okamžitě přestane fungovat. Pozvaná osoba si přes něj nevytvoří účet; musel bys ji pozvat znovu."
+            "revokeConfirmDetail": "Už odeslaný nebo zkopírovaný odkaz okamžitě přestane fungovat. Pozvaná osoba si přes něj nevytvoří účet; musel bys ji pozvat znovu.",
+            "presetLabel": "Počáteční oprávnění",
+            "presetRestricted": "Bez osobních oblastí",
+            "presetRole": "Podle profilu role",
+            "presetHintRestricted": "{{modules}} zůstanou zamčené. Kdykoli je můžeš otevřít v Role a oprávnění.",
+            "presetHintRoleOpen": "Role {{role}} nic neomezuje - člen vidí všechny moduly.",
+            "presetHintRoleLimited": "Role {{role}} zamyká: {{modules}}.",
+            "presetHintUnavailable": "Přesný účinek teď nelze zobrazit. Šablona přesto platí."
         },
         "healthCaregiversLabel": "Může zadávat zdravotní údaje",
         "healthCaregiversHint": "Tyto osoby mohou za tohoto člena zadávat vitální hodnoty, léky, laboratorní výsledky a aktivity a přitom vidí i jeho soukromé záznamy. Deník cyklu zůstává vyňat.",

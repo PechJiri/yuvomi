@@ -2465,7 +2465,14 @@
             "revokeConfirm": "Deze uitnodiging intrekken? De link werkt daarna niet meer.",
             "revoked": "De uitnodiging is ingetrokken.",
             "created": "De uitnodiging is aangemaakt.",
-            "revokeConfirmDetail": "Een link die je al hebt verstuurd of gekopieerd werkt meteen niet meer. De uitgenodigde persoon kan er geen account meer mee aanmaken; je zou opnieuw moeten uitnodigen."
+            "revokeConfirmDetail": "Een link die je al hebt verstuurd of gekopieerd werkt meteen niet meer. De uitgenodigde persoon kan er geen account meer mee aanmaken; je zou opnieuw moeten uitnodigen.",
+            "presetLabel": "Startrechten",
+            "presetRestricted": "Zonder persoonlijke onderdelen",
+            "presetRole": "Zoals het rolprofiel",
+            "presetHintRestricted": "{{modules}} blijven vergrendeld. Je kunt ze altijd vrijgeven bij Rollen en rechten.",
+            "presetHintRoleOpen": "De rol {{role}} beperkt niets - het lid ziet alle modules.",
+            "presetHintRoleLimited": "De rol {{role}} vergrendelt: {{modules}}.",
+            "presetHintUnavailable": "De exacte werking is nu niet te tonen. Het sjabloon geldt toch."
         },
         "healthCaregiversLabel": "Mag gezondheidsgegevens invoeren",
         "healthCaregiversHint": "Deze personen mogen vitale waarden, medicijnen, labuitslagen en activiteiten voor dit lid invoeren en zien daarbij ook diens privé-invoer. Het cyclusdagboek blijft uitgesloten.",

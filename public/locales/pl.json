@@ -2477,7 +2477,14 @@
             "revokeConfirm": "Unieważnić to zaproszenie? Link przestanie działać.",
             "revoked": "Zaproszenie zostało unieważnione.",
             "created": "Zaproszenie zostało utworzone.",
-            "revokeConfirmDetail": "Wysłany lub skopiowany link natychmiast przestaje działać. Zaproszona osoba nie założy już z nim konta; trzeba by zaprosić ją ponownie."
+            "revokeConfirmDetail": "Wysłany lub skopiowany link natychmiast przestaje działać. Zaproszona osoba nie założy już z nim konta; trzeba by zaprosić ją ponownie.",
+            "presetLabel": "Uprawnienia początkowe",
+            "presetRestricted": "Bez obszarów osobistych",
+            "presetRole": "Zgodnie z profilem roli",
+            "presetHintRestricted": "{{modules}} pozostaną zablokowane. Możesz je odblokować w każdej chwili w Role i uprawnienia.",
+            "presetHintRoleOpen": "Rola {{role}} niczego nie ogranicza - członek widzi wszystkie moduły.",
+            "presetHintRoleLimited": "Rola {{role}} blokuje: {{modules}}.",
+            "presetHintUnavailable": "Dokładnego działania nie da się teraz pokazać. Szablon i tak obowiązuje."
         },
         "healthCaregiversLabel": "Może wprowadzać dane zdrowotne",
         "healthCaregiversHint": "Te osoby mogą wprowadzać parametry życiowe, leki, wyniki badań i aktywności dla tego członka rodziny oraz widzieć przy tym jego prywatne wpisy. Dziennik cyklu pozostaje wyłączony.",
