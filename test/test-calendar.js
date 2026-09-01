@@ -1115,10 +1115,20 @@ test('nextOccurrence: BYMONTHDAY=-1 trifft in jedem Monat dessen letzten Tag', (
   }
 });
 
-test('nextOccurrence: BYMONTHDAY=-1 gilt auch, wenn die Serie mitten im Monat beginnt', () => {
+test('nextOccurrence: das naechste Vorkommen kann im SELBEN Monat liegen', () => {
   // Die Regel ist eine Aussage, kein Nebenprodukt des Startdatums: wer sie
   // setzt, meint den letzten Tag, auch wenn er am 15. angelegt hat.
-  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-02-28');
+  //
+  // DIESER TEST HIELT DAS FALSCHE ERGEBNIS FEST. Er erwartete den 28. Februar
+  // und beschrieb damit genau den Fehler: vom 15. Januar aus ist das naechste
+  // Vorkommen der 31. Januar, nicht der Monatsletzte des Folgemonats. So fiel
+  // der 31. Januar ganz aus, sobald DTSTART nicht selbst auf der Regel lag.
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-01-31',
+    'der Monatsletzte des BASISMONATS, solange er noch bevorsteht');
+  assert(nextOccurrence('2026-01-31', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-02-28',
+    'steht er schon hinter uns, kommt der naechste Monat');
+  // Mit Intervall bleibt der Sprung erhalten, sobald der Basismonat erledigt ist.
+  assert(nextOccurrence('2026-01-31', 'FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1') === '2026-04-30');
 });
 
 test('nextOccurrence: der Anker haelt den gemeinten Tag ueber kurze Monate hinweg', () => {
@@ -1175,7 +1185,7 @@ test('nextOccurrence: gelesen wird NUR -1 bei MONTHLY, alles andere bleibt unbed
     === nextOccurrence('2026-01-15', 'FREQ=WEEKLY'), 'woechentlich erst recht');
 
   // Reichweite: die eine unterstuetzte Form wirkt.
-  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-02-28');
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1') === '2026-01-31');
 });
 
 test('nextOccurrenceAfter: COUNT gilt fuer eine -1-Serie, ohne sie abzuschneiden', () => {

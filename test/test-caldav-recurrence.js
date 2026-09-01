@@ -274,5 +274,25 @@ test('COUNT zaehlt ein ausgenommenes Vorkommen weiterhin mit (RFC 5545, #513)', 
   assert(tage.includes('2026-09-03'), 'und das dritte erscheint, statt der Ausnahme zum Opfer zu fallen');
 });
 
+test('ein DTSTART, das die Regel nicht erfuellt, ist kein Vorkommen', () => {
+  // Wer die Serie am 15. anlegt und "letzter Tag des Monats" ankreuzt, hat ein
+  // DTSTART, das nicht auf der Regel liegt. Der Filter prueste nur BYDAY, also
+  // ging der 15. Januar als erster Termin durch - und weil nextOccurrence von
+  // dort in den Folgemonat sprang, fiel der 31. Januar ganz aus.
+  const tage = occDays(VCAL('UID:unsync@x\r\nSUMMARY:Zaehlerstand\r\n'
+    + 'DTSTART;VALUE=DATE:20260115\r\nDTEND;VALUE=DATE:20260116\r\n'
+    + 'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1'), '2026-01-01', '2026-04-30');
+  assert(!tage.includes('2026-01-15'), `der 15. ist kein Vorkommen der Regel: ${tage.join(', ')}`);
+  assert(tage[0] === '2026-01-31', `der erste Termin ist der 31. Januar, bekommen ${tage[0]}`);
+  assert(tage.join(',') === '2026-01-31,2026-02-28,2026-03-31,2026-04-30', tage.join(', '));
+
+  // Und eine Serie, die synchron beginnt, kommt auf dasselbe Ergebnis - sonst
+  // haengt die Reihe am Startdatum statt an der Regel.
+  const synchron = occDays(VCAL('UID:sync@x\r\nSUMMARY:Zaehlerstand\r\n'
+    + 'DTSTART;VALUE=DATE:20260131\r\nDTEND;VALUE=DATE:20260201\r\n'
+    + 'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1'), '2026-01-01', '2026-04-30');
+  assert(synchron.join(',') === tage.join(','), `synchron: ${synchron.join(', ')}`);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

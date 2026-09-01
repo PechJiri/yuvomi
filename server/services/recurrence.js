@@ -177,8 +177,18 @@ function nextOccurrence(baseDateStr, rrule, { anchor = null } = {}) {
     // am 31. Januar begonnene Serie ab dem Februar dauerhaft auf dem 28. Dafür
     // müsste die Regel den gemeinten Tag tragen (BYMONTHDAY, #960) oder die
     // Serie ihren Ursprung kennen; beides ist mehr als eine Rechenkorrektur.
-    const year    = base.getUTCFullYear();
-    const month   = base.getUTCMonth() + interval;
+    // DAS NAECHSTE VORKOMMEN KANN IM SELBEN MONAT LIEGEN. Bei `BYMONTHDAY=-1`
+    // und einem Basisdatum vor dem Monatsletzten ist der naechste Termin dieser
+    // Monatsletzte, nicht der des Folgemonats - sonst faellt er ganz aus. Der
+    // Fall entsteht, sobald DTSTART nicht selbst auf der Regel liegt: eine am
+    // 15. angelegte Serie lief bis hierher vom 15. Januar direkt auf den
+    // 28. Februar, und der 31. Januar wurde nie erzeugt.
+    const year  = base.getUTCFullYear();
+    let   month = base.getUTCMonth() + interval;
+    if (parsed.bymonthday === -1) {
+      const letzterImBasismonat = new Date(Date.UTC(year, base.getUTCMonth() + 1, 0)).getUTCDate();
+      if (base.getUTCDate() < letzterImBasismonat) month = base.getUTCMonth();
+    }
     const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
     const targetDay = monthDayFor(parsed.bymonthday, lastDay, anchorDay ?? base.getUTCDate());
     next.setTime(Date.UTC(year, month, targetDay));
@@ -424,9 +434,21 @@ function nextDueAfterCompletion({ anchorDate, rule, completedOn, fromCompletion 
  */
 function matchesRRuleByday(dateStr, rrule) {
   const parsed = parseRRule(rrule);
-  if (!parsed || parsed.byday.length === 0) return true;
+  if (!parsed) return true;
   const day = new Date(dateStr + 'T00:00:00Z');
   if (isNaN(day.getTime())) return true;
+
+  // BYMONTHDAY GEHOERT HIERHER, NICHT NUR BYDAY. Der Name sagt das eine, die
+  // Aufgabe ist die andere: "erfuellt dieses Datum die Regel?" Solange nur BYDAY
+  // geprueft wurde, ging ein DTSTART, das nicht auf der Regel liegt, als
+  // Vorkommen durch - eine am 15. angelegte Monatsletzten-Serie zeigte den
+  // 15. Januar als ersten Termin, obwohl er keiner ist.
+  if (parsed.bymonthday === -1) {
+    const letzter = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0)).getUTCDate();
+    if (day.getUTCDate() !== letzter) return false;
+  }
+
+  if (parsed.byday.length === 0) return true;
   return parsed.byday.includes(day.getUTCDay());
 }
 
