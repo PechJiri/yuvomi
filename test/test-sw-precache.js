@@ -163,14 +163,17 @@ test('jedes eager geladene Stylesheet aus index.html ist precacht', () => {
   // Nur `rel="stylesheet"` ohne `media`/`onload`-Umweg: das sind die, die den
   // ersten Render blockieren. Ein per Router nachgeladenes Seiten-CSS zählt
   // nicht - es kommt erst, wenn die Shell schon steht.
-  // Schreibungstoleranz durchgehend: sobald der Regex `<LINK REL=...>` findet,
-  // muessen die Ausschluesse `MEDIA=`/`ONLOAD=` genauso finden - sonst zaehlt ein
-  // grossgeschriebenes Print-Stylesheet als eager und der Guard verlangt es im
-  // Precache, obwohl es den ersten Render nie blockiert.
+  // Schreibungstoleranz durchgehend, und "durchgehend" heisst JEDER Schritt.
+  // Sobald der Regex `<LINK REL=...>` findet, muessen die Ausschluesse `MEDIA=`
+  // /`ONLOAD=` genauso finden - sonst zaehlt ein grossgeschriebenes
+  // Print-Stylesheet als eager. Und `HREF=` muss es auch: ein Treffer, dessen
+  // Adresse nicht gelesen wird, faellt hier als `undefined` durch `filter(Boolean)`
+  // und wird nie gegen APP_SHELL geprueft - der Guard verliert ihn lautlos,
+  // waehrend die Reichweiten-Schwelle darunter weiter erfuellt ist.
   const eager = [...html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi)]
     .map((m) => m[0])
     .filter((tag) => !/\bmedia=/i.test(tag) && !/\bonload=/i.test(tag))
-    .map((tag) => tag.match(/\bhref=["']([^"']+)["']/)?.[1])
+    .map((tag) => tag.match(/\bhref=["']([^"']+)["']/i)?.[1])
     .filter(Boolean);
 
   // Reichweiten-Nachweis: findet das Muster nichts, prüft die Assertion nichts.
