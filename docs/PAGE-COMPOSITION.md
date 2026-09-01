@@ -15,7 +15,7 @@ Budget core is **not** the reference implementation. It migrates as an offender 
 
 ---
 
-## Part A — Composition Principles
+## Part A - Composition Principles
 
 ### Principle Zero
 
@@ -34,9 +34,9 @@ BAD:  Module → custom .page { width; padding; margin; breakpoint; absolute }
 
 ```text
 Application
-└── ApplicationShell        # nav, chrome, viewport, overlays — NEVER module-owned
+└── ApplicationShell        # nav, chrome, viewport, overlays - NEVER module-owned
     └── Page                # composition mode, width token, gutters, header/body rhythm
-        ├── PageHeader      # title, context, actions, nav — shares composition context with body
+        ├── PageHeader      # title, context, actions, nav - shares composition context with body
         └── PageBody
             └── Section     # semantic group; no page geometry
                 └── Group
@@ -66,7 +66,7 @@ Only via the explicit pattern `.page-section--bleed`. Negative margins for layou
 
 ### Spacing rhythm
 
-Component / Group / Section / Page — semantic distance equals spatial distance. Use layout tokens, not ad-hoc pixel values.
+Component / Group / Section / Page - semantic distance equals spatial distance. Use layout tokens, not ad-hoc pixel values.
 
 ### Responsive behaviour
 
@@ -108,7 +108,7 @@ Third-party modules declare intent; they do not implement geometry:
 
 ### Out of scope (v1 exceptions)
 
-Documented exceptions — not forced through composition modes in v1:
+Documented exceptions - not forced through composition modes in v1:
 
 - Shopping kitchen tabs shell
 - Meals slot grid
@@ -117,7 +117,7 @@ Documented exceptions — not forced through composition modes in v1:
 
 ---
 
-## Part B — Implementation Contract
+## Part B - Implementation Contract
 
 ### Layout width tokens
 
@@ -172,7 +172,7 @@ Mode modifiers set `--page-measure`:
 
 Modules must not set page width, gutters, or breakpoints. They pass content into these helpers.
 
-### Deprecations (1–2 releases)
+### Deprecations (1-2 releases)
 
 | Legacy | Replacement |
 |--------|-------------|
@@ -199,47 +199,64 @@ Enforced in [`test/test-frontend-audit.js`](test/test-frontend-audit.js):
 | PAGE-009 | Responsive transformation follows composition mode |
 | PAGE-010 | Full-bleed regions are explicitly declared (`--bleed`) |
 
-**Strictness in this PR:** the **reference page** (`birthdays.js`) is audited end-to-end against helpers + no page geometry in module CSS. Other pages are **declaration-first** (mode on root); deep helper migration follows in stacked PRs.
+**Scope: every page behind the app shell.** The audit derives that set from
+`public/router.js` rather than from a list somebody has to remember: a route with
+`requiresAuth: false` renders without navigation and is outside the contract, and
+everything else is inside it. A page added tomorrow is covered on the day it gets
+a route, without anyone adding it anywhere.
 
-### Reference / demo page
+### The exception list only shrinks
 
-[`public/pages/birthdays.js`](public/pages/birthdays.js) is the **visual and structural gold standard** for this PR (`data-composition-reference="true"`).
+Three pages predate the contract and do not satisfy it yet:
 
-Open **`/birthdays`** on a wide desktop (1440 / 1920) to demo the concept:
+```js
+const COMPOSITION_PENDING = new Set(['shopping.js', 'meals.js', 'settings.js']);
+```
+
+That list lives in `test/test-frontend-audit.js`, and a second test fails if it
+grows. Migrating a page is therefore a deletion: remove the line, and the page is
+held to the same rules as the rest. Progress is visible in the guard rather than
+in a table that has to be kept honest by hand.
+
+This is deliberate. An allowlist covers the files somebody remembered to add;
+a rule covers the problem. The codebase has paid for that lesson twice already,
+in the kitchen consolidation and in the budget guards.
+
+### Worked example
+
+[`public/pages/birthdays.js`](../public/pages/birthdays.js) is the cleanest page
+to read if you want to see the composition in one piece. It carries no special
+marker: it is audited by exactly the same rules as every other page, and nothing
+in the production markup says otherwise.
+
+Open **`/birthdays`** on a wide desktop (1440 / 1920) to see the structure:
 
 ```text
 .app-page--reading
-├── .page-toolbar.page-toolbar--measured.page-toolbar--narrow
-│   └── .page-toolbar__rail → title · search · actions   ← same --page-measure
-└── .app-page__body
-    ├── .page-section.page-measure          ← hint
-    └── .page-section--list.page-measure    ← .row-carrier list
+|- .page-toolbar.page-toolbar--measured.page-toolbar--narrow
+|  `- .page-toolbar__rail -> title . search . actions   <- same --page-measure
+`- .app-page__body
+   |- .page-section.page-measure          <- hint
+   `- .page-section--list.page-measure    <- .row-carrier list
 ```
-
-**Acceptance (reference):**
-
-- [ ] Markup built only via `page-layout.js` helpers (no hand-rolled page width)
-- [ ] `data-composition="reading"` and `data-composition-reference="true"`
-- [ ] No `.page-measure--narrow` compat class on the root
-- [ ] `birthdays.css` has no page-level `max-width` / page gutters / negative margins
-- [ ] Header rail and list share one primary edge (±2px) at 1440 and 1920
 
 ### Visual regression (phase 2+)
 
-Viewports **390 / 768 / 1024 / 1440 / 1920** — screenshot + width/alignment/overflow checks. Not a merge gate for this PR beyond the reference checklist above.
+Viewports **390 / 768 / 1024 / 1440 / 1920**: screenshot plus width, alignment and
+overflow checks. Not wired into CI yet.
 
 ---
 
-## FAQ — closed requirements
+## FAQ - closed requirements
 
 | Question | Answer |
 |----------|--------|
-| Is Budget the layout reference? | **No.** Budget is an offender; birthdays is the reference. |
-| Must every page use `page-layout.js` in this PR? | **Reference must.** Others declare `data-composition` / `.app-page--*`; helper deep-migration is follow-up. |
+| Is Budget the layout reference? | **No.** There is no reference page. Budget is an offender; the rules are the contract. |
+| Must every page use `page-layout.js`? | Every page behind the app shell must declare a mode. Deep helper migration follows page by page; the three pending pages are named in the guard. |
 | Why still `page-toolbar--narrow`? | Large-Title / wrap CSS still keys off direct toolbar children. Measured rail uses `display: contents` with narrow so the edge stays correct without rewriting every selector. |
 | Why `--layout-*` and `--content-max-width-narrow`? | `--layout-*` is the contract; narrow is a one-cycle alias. |
 | Can extensions invent width? | **No.** Declare `page.composition` and use helpers / `.app-page--*`. |
-| What about shopping / meals / settings / auth? | Documented v1 exceptions — do not force composition modes yet. |
+| What about shopping / meals / settings / auth? | Documented v1 exceptions - do not force composition modes yet. |
 | How do I review this PR visually? | Open `/birthdays` at 1920px: one reading column, header actions flush with list edge. |
 
 ---

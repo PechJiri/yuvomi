@@ -63,7 +63,7 @@ Optional fields:
   opens your page. Pick a tone that reads against both a light and a dark surface: the mark is
   filled with it and carries a light or dark glyph on top.
 - `page.composition`: one of `reading` | `data` | `dashboard` | `form` | `split` | `full`
-  (see [`PAGE-COMPOSITION.md`](PAGE-COMPOSITION.md)). Declare intent; do not invent page width,
+  (see [`docs/PAGE-COMPOSITION.md`](docs/PAGE-COMPOSITION.md)). Declare intent; do not invent page width,
   gutters, or breakpoints. Use `/utils/page-layout.js` and `.app-page--*` primitives.
 - `page.width`: semantic width (`reading` | `content` | `wide`); defaults from composition.
 - `page.navigation` / `page.responsive`: currently `standard` only.
