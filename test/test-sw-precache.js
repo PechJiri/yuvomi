@@ -162,7 +162,7 @@ test('jedes eager geladene Stylesheet aus index.html ist precacht', () => {
   // Nur `rel="stylesheet"` ohne `media`/`onload`-Umweg: das sind die, die den
   // ersten Render blockieren. Ein per Router nachgeladenes Seiten-CSS zählt
   // nicht - es kommt erst, wenn die Shell schon steht.
-  const eager = [...html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/g)]
+  const eager = [...html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi)]
     .map((m) => m[0])
     .filter((tag) => !/\bmedia=/.test(tag) && !/\bonload=/.test(tag))
     .map((tag) => tag.match(/\bhref=["']([^"']+)["']/)?.[1])
@@ -188,7 +188,10 @@ test('jedes eager geladene Stylesheet aus index.html ist precacht', () => {
 // App liefe sichtbar unverändert weiter, nur langsamer.
 test('jedes von index.html geladene Skript ist precacht', () => {
   const html = readFileSync(PUBLIC_DIR + 'index.html', 'utf8');
-  const scripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/g)]
+  // `i`, weil Tagname und Attribute in HTML schreibungsegal sind: eine
+  // grossgeschriebene Fassung faende der Guard sonst nicht und meldete gruen,
+  // obwohl er nichts gesehen hat (CodeQL js/bad-tag-filter).
+  const scripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
     .map((m) => m[1])
     .filter((src) => src.startsWith('/')); // fremde Herkunft precacht der SW nicht
 

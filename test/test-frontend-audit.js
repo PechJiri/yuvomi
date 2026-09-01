@@ -14778,10 +14778,14 @@ test('der Lucide-Ausschnitt läuft nach dem Bundle und vor jedem Modul, das ihn 
   assert.match(scope, /\bel\.querySelectorAll\(/,
     'lucide-scope.js sucht nicht mehr unter `el` - dann ist der Ausschnitt keiner');
 
-  const scripts = [...read('../public/index.html').matchAll(/<script\b[^>]*>/g)]
-    .map((m) => ({ tag: m[0], src: m[0].match(/\bsrc=["']([^"']+)["']/)?.[1] }))
+  // Durchgehend `i`: Tagnamen und Attribute sind in HTML gross-/kleinschreibungs-
+  // egal, `<SCRIPT SRC=... DEFER>` ist gueltig. Ohne das Flag faende dieser Guard
+  // eine grossgeschriebene Fassung nicht und waere gruen, ohne etwas geprueft zu
+  // haben - genau der blinde Zustand, den er verhindern soll (CodeQL js/bad-tag-filter).
+  const scripts = [...read('../public/index.html').matchAll(/<script\b[^>]*>/gi)]
+    .map((m) => ({ tag: m[0], src: m[0].match(/\bsrc=["']([^"']+)["']/i)?.[1] }))
     .filter((s) => s.src);
-  const isModule = (s) => /\btype=["']module["']/.test(s.tag);
+  const isModule = (s) => /\btype=["']module["']/i.test(s.tag);
 
   const bundle = scripts.findIndex((s) => s.src === '/lucide.min.js');
   const patch = scripts.findIndex((s) => s.src === '/lucide-scope.js');
@@ -14796,7 +14800,7 @@ test('der Lucide-Ausschnitt läuft nach dem Bundle und vor jedem Modul, das ihn 
   // Beide klassisch mit `defer`: ohne defer liefe der Patch sofort beim Parsen,
   // also vor dem deferred Bundle - derselbe stille Ausstieg.
   for (const i of [bundle, patch]) {
-    assert.match(scripts[i].tag, /\bdefer\b/,
+    assert.match(scripts[i].tag, /\bdefer\b/i,
       `${scripts[i].src} trägt kein defer mehr - die Reihenfolge zwischen Bundle und Patch `
       + 'ist damit nicht mehr garantiert');
   }
@@ -14811,7 +14815,7 @@ test('der Lucide-Ausschnitt läuft nach dem Bundle und vor jedem Modul, das ihn 
   // Und die klassischen Skripte davor laufen ohne defer sofort beim Parsen,
   // lange vor dem Bundle: dort ist jeder createIcons-Aufruf ungescopt.
   const early = scripts
-    .filter((s, i) => i < patch && !isModule(s) && !/\bdefer\b/.test(s.tag))
+    .filter((s, i) => i < patch && !isModule(s) && !/\bdefer\b/i.test(s.tag))
     .filter((s) => existsSync(new URL(`../public${s.src}`, import.meta.url)))
     .filter((s) => /createIcons/.test(read(`../public${s.src}`)));
   assert.deepEqual(early.map((s) => s.src), [],
