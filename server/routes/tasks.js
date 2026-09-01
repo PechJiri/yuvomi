@@ -8,7 +8,7 @@ import { createLogger } from '../logger.js';
 import express from 'express';
 import * as db from '../db.js';
 import { documentVisibleSql } from '../services/document-access.js';
-import { nextDueAfterCompletion, hasAnyOccurrence } from '../services/recurrence.js';
+import { nextDueAfterCompletion } from '../services/recurrence.js';
 import { syncTaskRewards } from '../services/rewards.js';
 import { completionFeed, seriesHistory, syncTaskCompletion } from '../services/task-completions.js';
 import { normalizeCategoryFilter, taskCategoryWhere, taskScopeNeedsToday, taskScopeWhere } from '../services/task-scope.js';
@@ -968,23 +968,20 @@ router.post('/', (req, res) => {
       ? 'open'
       : req.body.status;
 
-    // Wie beim Kalender (#960): eine Serie ohne ein einziges Vorkommen wird
-    // nicht gespeichert. `FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=...` kann den ersten
-    // Monatsletzten verfehlen, und uebrig bliebe eine Aufgabe, die nie faellig
-    // wird.
+    // HIER STEHT ABSICHTLICH KEIN "LEERE SERIE"-GUARD, anders als im Kalender
+    // (#960). Die Regel beschreibt bei einer Aufgabe nur den NACHFOLGER: die
+    // Liste liest `due_date` direkt, und `spawnRecurrenceFollowup()` fragt die
+    // Regel erst beim Abhaken. Eine Aufgabe am 15. mit "am Monatsletzten, endet
+    // am 20." ist deshalb kein Fehlzustand, sondern eine gueltige endliche
+    // Aufgabe, deren einziges Vorkommen sie selbst ist - der Guard wies genau
+    // die ab. Im Kalender ist es umgekehrt: dort zeigt allein die Expansion,
+    // eine leere Serie waere unsichtbar. Dieselbe Regel, zwei Bedeutungen.
     //
     // DAS FAELLIGKEITSDATUM SELBST BLEIBT STEHEN. Es auf das erste Vorkommen zu
     // ziehen war der Versuch, das DTSTART im CalDAV-Push eindeutig zu machen -
     // aber `due_date` haengt an Vorlauf, Erinnerung und Folgeinstanz, und jede
     // dieser Stellen rechnete danach auf einem Datum, das der Server hinterher
     // geaendert hat. Welcher Tag der erste ist, beantwortet die Expansion.
-    if (is_recurring && !hasAnyOccurrence(due_date, recurrence_rule)) {
-      return res.status(400).json({
-        error: 'recurrence_rule: the rule has no occurrence on or after the due date.',
-        code: 400,
-      });
-    }
-
     const userIds  = parseAssignedTo(req.body.assigned_to);
     const firstUid = userIds[0] ?? null;
 
@@ -1109,27 +1106,6 @@ router.put('/:id', (req, res) => {
       // Markierung nicht stillschweigend löschen.
       countdown       = task.countdown,
     } = req.body;
-
-    // Auch beim Bearbeiten darf keine leere Serie entstehen (#960) - aber nur
-    // abweisen, wenn DIESE Anfrage sie leer macht. Das Formular schickt bei
-    // jedem Speichern alle Felder mit, also beantwortet "war das Feld dabei?"
-    // die Frage nicht; verglichen werden die WERTE gegen den Datensatz. Sonst
-    // liesse sich an einer vorher schon leeren Serie nicht einmal mehr der
-    // Titel aendern.
-    // DAS EINSCHALTEN ZAEHLT MIT. Eine Aufgabe kann eine Regel tragen, ohne
-    // dass `is_recurring` gesetzt ist - der POST-Pfad nimmt das an. Ein
-    // partielles PUT mit nur `is_recurring: 1` aendert dann weder Regel noch
-    // Datum und kaeme am Guard vorbei: uebrig bliebe eine aktive Serie, die
-    // nie faellig wird.
-    const serieBeruehrt = due_date !== task.due_date
-      || recurrence_rule !== task.recurrence_rule
-      || (is_recurring ? 1 : 0) !== (task.is_recurring ? 1 : 0);
-    if (is_recurring && serieBeruehrt && !hasAnyOccurrence(due_date, recurrence_rule)) {
-      return res.status(400).json({
-        error: 'recurrence_rule: the rule has no occurrence on or after the due date.',
-        code: 400,
-      });
-    }
 
     const points = req.body.points !== undefined ? clampPoints(req.body.points) : task.points;
     const visibility = req.body.visibility !== undefined

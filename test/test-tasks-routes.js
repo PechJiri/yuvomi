@@ -937,19 +937,30 @@ test('POST: das eingegebene Faelligkeitsdatum bleibt stehen (#960)', async () =>
   assert.equal(r.body.data.start_date, '2026-01-10', 'und der Vorlauf mit ihr');
 });
 
-test('POST: eine Regel ohne jedes Vorkommen wird abgelehnt', async () => {
-  // FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120 ab dem 15. Januar: der erste
-  // Monatsletzte liegt hinter dem UNTIL. Uebrig bliebe eine Aufgabe, die nie
-  // faellig wird - und am 15. wird sie es auch nicht, der Tag ist kein
-  // Vorkommen der Regel.
+test('POST: eine Aufgabe, deren einziges Vorkommen sie selbst ist, wird angenommen', async () => {
+  // GEGENSTUECK ZUM KALENDER, NICHT SEINE KOPIE. Dort weist der Server eine
+  // Serie ohne Vorkommen ab, weil allein die Expansion sie zeigt. Bei Aufgaben
+  // liest die Liste `due_date` direkt, und die Regel betrifft erst den
+  // Nachfolger: eine Aufgabe am 15. mit "am Monatsletzten, endet am 20." ist
+  // am 15. faellig und danach fertig - gueltig, nicht leer. Ein aus dem
+  // Kalender uebernommener Guard wies genau die ab.
+  const admin = { id: ALICE, role: 'admin' };
   const r = await call('POST', '/', {
-    as: { id: ALICE, role: 'admin' },
+    as: admin,
     body: {
-      title: 'Nie faellig', due_date: '2026-01-15',
+      title: 'Einmal und fertig', due_date: '2026-01-15',
       is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
     },
   });
-  assert.equal(r.status, 400, `erwartet 400, bekommen ${r.status}`);
+  assert.equal(r.status, 201, `erwartet 201, bekommen ${r.status}`);
+  assert.equal(r.body.data.due_date, '2026-01-15', 'faellig am eingetragenen Tag');
+  // UND SIE IST AUCH ZU SEHEN. Das ist der Punkt: waere sie unsichtbar wie ein
+  // leerer Kalendertermin, haette der Guard recht gehabt.
+  const liste = await call('GET', '/', { as: admin });
+  assert.ok(
+    liste.body.data.some((t) => t.id === r.body.data.id),
+    'die Aufgabe steht in der Liste'
+  );
 });
 
 test('PUT: die Regel nachtraeglich ankreuzen verschiebt die Faelligkeit nicht (#960)', async () => {
@@ -965,12 +976,12 @@ test('PUT: die Regel nachtraeglich ankreuzen verschiebt die Faelligkeit nicht (#
   assert.equal(bearbeitet.body.data.due_date, '2026-01-15', 'der Server aendert das Datum nicht');
 });
 
-test('PUT: an einer vorher schon leeren Serie laesst sich der Titel aendern', async () => {
-  // DIE PRAESENZ EINES FELDES IST KEINE AENDERUNG. Das Aufgabenformular schickt
-  // bei jedem Speichern `due_date` UND `recurrence_rule` mit, auch wenn nur der
-  // Titel angefasst wurde. Wer danach fragt, ob das Feld dabei war, bekommt
-  // immer ja - und der Guard wuerde jede Bearbeitung dieses Datensatzes mit 400
-  // abweisen. Verglichen werden deshalb die WERTE gegen den Datensatz.
+test('PUT: eine Serie ohne Nachfolger bleibt bearbeitbar', async () => {
+  // Eine Serie, die keinen Nachfolger mehr hervorbringt, ist kein kaputter
+  // Datensatz: die Aufgabe selbst bleibt faellig und muss sich weiter
+  // bearbeiten lassen. Ein aus dem Kalender uebernommener Guard sperrte diese
+  // Zeile - und weil das Formular bei jedem Speichern alle Felder mitschickt,
+  // traf es auch reine Titel-Edits.
   const admin = { id: ALICE, role: 'admin' };
   const angelegt = await call('POST', '/', { as: admin, body: { title: 'Leere Serie', due_date: '2026-01-15' } });
   const id = angelegt.body.data.id;
@@ -988,12 +999,14 @@ test('PUT: an einer vorher schon leeren Serie laesst sich der Titel aendern', as
   assert.equal(nurTitel.status, 200, `ein Titel-Edit darf nicht scheitern, bekommen ${nurTitel.status}`);
   assert.equal(nurTitel.body.data.title, 'Neuer Titel');
 
-  // Wer die Serie WIRKLICH anfasst und sie damit leer macht, bekommt weiter 400.
-  const leerGemacht = await call('PUT', `/${id}`, {
+  // Und auch das Verkuerzen der Regel geht durch: die Aufgabe bleibt am 15.
+  // faellig, nur ein Nachfolger entsteht nicht mehr.
+  const verkuerzt = await call('PUT', `/${id}`, {
     as: admin,
     body: { title: 'Neuer Titel', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260118' },
   });
-  assert.equal(leerGemacht.status, 400, `erwartet 400, bekommen ${leerGemacht.status}`);
+  assert.equal(verkuerzt.status, 200, `erwartet 200, bekommen ${verkuerzt.status}`);
+  assert.equal(verkuerzt.body.data.due_date, '2026-01-15', 'die Faelligkeit bleibt stehen');
 });
 
 test('PUT: ein Titel-Edit laesst eine eingelesene Serie in Ruhe (#756)', async () => {
@@ -1008,11 +1021,11 @@ test('PUT: ein Titel-Edit laesst eine eingelesene Serie in Ruhe (#756)', async (
   assert.equal(nurTitel.body.data.due_date, '2026-01-15', 'die Faelligkeit darf sich nicht bewegen');
 });
 
-test('PUT: das Einschalten der Wiederholung wird selbst geprueft', async () => {
+test('PUT: die Wiederholung laesst sich einschalten, auch ohne Nachfolger', async () => {
   // Eine Aufgabe kann eine Regel tragen, ohne dass `is_recurring` gesetzt ist.
-  // Ein partielles PUT mit nur `is_recurring: 1` aendert dann weder Regel noch
-  // Datum - und kaeme an einem Guard vorbei, der nur diese beiden vergleicht.
-  // Uebrig bliebe eine aktive Serie, die nie faellig wird.
+  // Wird sie eingeschaltet und bringt die Regel keinen Nachfolger hervor, ist
+  // das kein Fehler: die Aufgabe bleibt an ihrem Tag faellig und laeuft danach
+  // aus. Genau diesen Fall wies der frühere Guard ab.
   const admin = { id: ALICE, role: 'admin' };
   const angelegt = await call('POST', '/', { as: admin, body: { title: 'Ruhende Regel', due_date: '2026-01-15' } });
   const id = angelegt.body.data.id;
@@ -1020,7 +1033,7 @@ test('PUT: das Einschalten der Wiederholung wird selbst geprueft', async () => {
     .run('FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120', id);
 
   const ein = await call('PUT', `/${id}`, { as: admin, body: { is_recurring: 1 } });
-  assert.equal(ein.status, 400, `das Einschalten muss geprueft werden, bekommen ${ein.status}`);
+  assert.equal(ein.status, 200, `das Einschalten ist erlaubt, bekommen ${ein.status}`);
 
   // Eine Regel MIT Vorkommen laesst sich dagegen einschalten.
   db.prepare('UPDATE tasks SET recurrence_rule = ? WHERE id = ?').run('FREQ=MONTHLY;BYMONTHDAY=-1', id);
