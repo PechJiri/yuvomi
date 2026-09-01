@@ -198,6 +198,40 @@ test('das Attribut wird auch beim Verlassen der Wand zurueckgenommen', () => {
   assert.ok(at > 0, 'Reichweite: der Abbruch-Pfad wurde gefunden');
   const abort = SOURCE.slice(at, at + 260);
   assert.match(abort, /setRunningAttr\(false\)/,
-    'der Abbruch raeumt das Attribut, nicht nur das Intervall');
-  assert.match(abort, /clearInterval/, 'und den Takt weiterhin auch');
+    'der Abbruch raeumt das Attribut, nicht nur den Takt');
+  // Wie das Beenden heisst, ist gleichgueltig - dass es passiert, nicht.
+  assert.match(abort, /stopTick\(\)|clearInterval/, 'und den Takt weiterhin auch');
+});
+
+test('ein Aufruf raeumt den vorigen Takt ab - sonst laeuten zwei (Review zu #844)', () => {
+  // wireWallTimer wird auf einer Seite MEHRFACH gerufen: einmal auf der
+  // Ladeflaeche und noch einmal, wenn die Daten da sind. Ein Intervall in der
+  // Aufruf-Closure ergaebe zwei Takte, die beim Ablauf beide laeuten und beide
+  // neu zeichnen.
+  assert.match(SOURCE, /^let tick = null;$/m, 'der Takt liegt auf Modulebene');
+  const at = SOURCE.indexOf('export function wireWallTimer');
+  const kopf = SOURCE.slice(at, at + 400);
+  assert.match(kopf, /stopTick\(\)/, 'und wird zu Beginn jedes Aufrufs abgeraeumt');
+  // Vor dem `if (!wall) return`: ein Takt aus einem frueheren Aufruf schriebe
+  // sonst weiter in ein DOM, das es nicht mehr gibt.
+  assert.ok(kopf.indexOf('stopTick()') < kopf.indexOf('if (!wall) return'),
+    'auch dann, wenn diesmal gar keine Flaeche da ist');
+});
+
+test('der Timer wird verdrahtet, bevor auf die Dashboard-Daten gewartet wird', () => {
+  const dash = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  // Der Timer haengt an nichts, was geladen werden koennte. Stuende seine
+  // Verdrahtung nur hinter dem Laden, waeren Takt und Attribut weg, solange
+  // eine haengende Anfrage laeuft - die Anzeige stuende still und der
+  // Screensaver duerfte sich darueberlegen.
+  // NUR IN render() SELBST, und dort vor dem ersten await. Ein blosses
+  // indexOf ueber die ganze Datei fand den Aufruf in `wireWallSurface`, das
+  // weiter oben im Text steht - und blieb gruen, als die fruehe Verdrahtung
+  // wieder entfernt wurde. Textstelle ist nicht Ausfuehrungsreihenfolge.
+  const renderAt = dash.indexOf('export async function render(');
+  assert.ok(renderAt > 0, 'Reichweite: render() gefunden');
+  const bisAwait = dash.slice(renderAt, dash.indexOf('await ', renderAt));
+  assert.ok(bisAwait.length > 0 && bisAwait.length < dash.length, 'Reichweite: das erste await liegt in render()');
+  assert.match(bisAwait, /wireWallTimer\(/,
+    'die Wandflaeche bekommt ihren Takt, sobald sie im DOM steht - nicht erst, wenn die Daten da sind');
 });

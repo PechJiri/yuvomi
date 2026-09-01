@@ -3771,6 +3771,20 @@ export async function render(container, { user }) {
     ${wallMode ? '' : renderFab()}
   `);
 
+  const rerender = () => render(container, { user });
+
+  // DER TIMER HAENGT NICHT AN DEN DATEN (Review zu #844). Die Wandflaeche wird
+  // erst verdrahtet, wenn das Dashboard geladen hat - der Timer aber ist von
+  // diesen Daten unabhaengig, und ein Neuzeichnen bricht den vorigen Controller
+  // sofort ab. Startete jemand einen Timer, waehrend die Anfrage haengt, waeren
+  // Takt und `data-wall-timer` weg, bis die Antwort kommt: die Anzeige stuende
+  // still, es laeutete nicht, und der Screensaver duerfte sich darueberlegen.
+  //
+  // Er wird deshalb verdrahtet, sobald die Flaeche im DOM steht. Der Aufruf
+  // nach dem Laden bleibt und ersetzt diesen hier - `wireWallTimer` raeumt
+  // seinen vorigen Takt selbst ab.
+  if (wallMode) wireWallTimer(container.querySelector('.wall'), rerender, _fabController.signal);
+
   let data         = { upcomingEvents: [], urgentTasks: [], todayMeals: [], pinnedNotes: [], shoppingLists: [], birthdays: [], countdowns: [], users: [], budget: {}, rewards: {}, health: {}, housekeeping: {} };
   // Ein Stand von vorhin darf keine Kachel versprechen: erst nach dem Laden
   // wieder wahr (siehe die Notiz an `countdownAvailable`).
@@ -3887,7 +3901,6 @@ export async function render(container, { user }) {
     await ensureCycleSlice();
   }
 
-  const rerender = () => render(container, { user });
 
   // Einziger Persist-Pfad für Inline- UND Modal-Speichern. Legt vor dem Schreiben
   // einen Schnappschuss an und bietet — wenn sich etwas geändert hat — im Toast ein

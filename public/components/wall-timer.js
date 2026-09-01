@@ -198,6 +198,22 @@ function chime(ctx) {
  */
 let audioCtx = null;
 
+/**
+ * Der laufende Sekundentakt, modulweit gehalten.
+ *
+ * `wireWallTimer` wird auf einer Seite MEHRFACH gerufen: einmal auf der
+ * Ladeflaeche, sobald sie im DOM steht, und noch einmal, wenn die Daten da sind.
+ * Ein Intervall in der Aufruf-Closure ergaebe dann zwei Takte, die beim Ablauf
+ * beide laeuten und beide neu zeichnen. Ein Aufruf raeumt deshalb den
+ * vorherigen ab, bevor er seinen eigenen setzt.
+ */
+let tick = null;
+
+function stopTick() {
+  clearInterval(tick);
+  tick = null;
+}
+
 function makeAudioContext() {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -218,6 +234,9 @@ function makeAudioContext() {
  * @param {AbortSignal} signal   Raeumt Listener und Intervall beim Seitenwechsel ab.
  */
 export function wireWallTimer(wall, rerender, signal) {
+  // Auch ohne Flaeche: ein Takt aus einem frueheren Aufruf haette sonst
+  // weitergezaehlt und in ein DOM geschrieben, das es nicht mehr gibt.
+  stopTick();
   if (!wall) return;
 
   const setRunningAttr = (running) => {
@@ -249,13 +268,13 @@ export function wireWallTimer(wall, rerender, signal) {
   // Der Sekundentakt schreibt NUR in den einen Textknoten. Ein rerender() je
   // Sekunde baute die halbe Seite neu und liesse den Screensaver nie zur Ruhe
   // kommen - der Zustandswechsel am Ende ist der einzige, der einen braucht.
-  const tick = setInterval(() => {
+  tick = setInterval(() => {
     const next = readWallTimer();
     if (next.state === 'running') {
       value.textContent = formatWallTimer(next.remainingMs);
       return;
     }
-    clearInterval(tick);
+    stopTick();
     setRunningAttr(false);
     chime(audioCtx);
     rerender();
@@ -266,7 +285,7 @@ export function wireWallTimer(wall, rerender, signal) {
   // fuer den Rest der Sitzung an `<html>` haengengeblieben und haette den
   // Screensaver auf JEDER Seite unterdrueckt.
   signal.addEventListener('abort', () => {
-    clearInterval(tick);
+    stopTick();
     setRunningAttr(false);
   });
 }
