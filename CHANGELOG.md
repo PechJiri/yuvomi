@@ -7,25 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0] - 2026-09-01
+
 ### Added
 
-- **Yuvomi links to a user guide, and says whose it is** (#799). @Kyrodan built a documentation site
-  because the answers exist but are scattered across closed discussions. It stays in his repository
-  under his own hand, and the app, the README and yuvomi.cloud now point at it. The decision was not
-  the no-bundlers rule - there is no guard that covers `docs/`, so Docusaurus here would have been a
-  choice rather than a violation. It was maintenance: at 91 releases across 21 days, documentation
-  in this repository is documentation I owe at that cadence, and drifted documentation is worse than
-  none because people trust it. Every link therefore says "community-maintained" in its own text
-  rather than in a footnote, so nobody mistakes a lag for an official statement.
+- **An invitation now carries the permissions the new member starts with, and the preselection is
+  the narrow one** (#869). Until now a newly invited member could see every module at first login,
+  and an admin could only take things away afterwards. That was never decided for invitations: it
+  was inherited from migration v74, where storing permissions sparsely - no row means full access -
+  was the right call so that existing households behaved exactly as before after the update. The
+  reporter supplied the sentence that settles it for the other case: permissions can be opened
+  later, but somebody who has already seen private information cannot un-see it.
 
-### Changed
+  The invite form has a new **starting permissions** field with two templates. *Without personal
+  areas* is preselected and locks Health, Budget and Documents; *As the role profile* is the old
+  behaviour. Underneath, the form says what the choice means right now - which modules the template
+  locks, or, for a role, which ones that role already restricts, read from the stored profile
+  rather than described in the abstract.
 
-- **The page layout rules are now written where contributors can read them** (#929). They existed
-  and were enforced - the reading measure that hangs on the page, the scroll clearance that belongs
-  to whatever actually scrolls, one page stylesheet per route - but only in guards and in a file
-  that is not in this repository. From the outside a page composition system looked unwritten. It
-  was not; it was invisible, and a contributor proposing one was answering a real gap. CONTRIBUTING
-  now has a **Page layout** section that says what the guards check and names them as the authority.
+  **The default itself is untouched, and that is the point.** Nothing changes for existing
+  households, existing accounts or invitations already sent: what changed is the preselected value
+  of a form, not the stored default. Turning the default around would have locked out exactly the
+  households v74 set out to protect. The resolved set is stored with the invitation, so what the
+  admin saw when sending it is what applies at first login, even if the role profile changes in
+  between.
+
+  Which three modules, and why not fewer: the line is not "as little as possible" but *whose data
+  it is*. Health, Budget and Documents hold what belongs to a person; Calendar, Tasks and Shopping
+  are what somebody is invited for. Locking those would produce an empty app and a phone call, not
+  privacy. The templates stack with the role profile rather than replacing it - a role that
+  restricts more stays stricter.
+
+  There is deliberately no "full access" template. Sparse storage means a member override cannot
+  *widen* a role profile: a stored `write` does not exist, so no row can overrule a restricting
+  role. That has been true since v74; a template promising full access that quietly does nothing
+  would be a promise that does not hold. To give everyone in a role more, change the role profile.
+
+- **Each person chooses what their new health entries start as, per measurement** (#958). @cmjmmrp-byte
+  asked for blood pressure to default to family-visible, so that in an emergency somebody knows the
+  usual values. The shipped default stays `private`, and the choice moves to the household instead.
+
+  Flipping the shipped default would have been the small change and the wrong one. Stored entries
+  carry their own visibility, so nothing would have leaked retroactively - but somebody who learned
+  that health readings are private would, after an update, record one and share it without doing
+  anything. An opening nobody triggered is the one kind of privacy change that cannot be taken back:
+  the default reverts in a line, the rows written in the meantime do not.
+
+  The answer already existed inside the module. The cycle tab has had a personal default visibility
+  since v1.53.0, plus a switch that moves the existing entries along. The most sensitive area had it
+  and the other four did not, and that inconsistency - not the value of the default - was the actual
+  gap. Settings, Health now carries the same choice for vitals, medications, lab reports and
+  activities, and after a change it offers to move that area's existing entries too.
+
+  **Per metric for vitals, not per area.** Somebody who shares their blood pressure is not thereby
+  sharing their mood, and both live in the same list. A single "vitals" default would have produced
+  exactly the conflation the shipped default was defending against. Medications, lab reports and
+  activities get one each, because each is one kind of entry.
+
+  Two details worth stating: when a caregiver (#584) records for somebody else, the **owner's**
+  choice applies, since the row belongs to them - and the entry form still offers private/family on
+  every single entry, so the default is a starting point, never a decision made for you.
 
 - **The changelog now opens with what changed in YOUR app since you last looked** (#496). The most
   supported open request in the project is not a feature: it says releases come fast enough that
@@ -63,62 +104,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The `/api/v1/changelog` payload keeps `items` exactly as it was and carries the split as
   `entries` beside it - a promised surface does not change shape because the UI wants a nicer one.
 
-- **Each person chooses what their new health entries start as, per measurement** (#958). @cmjmmrp-byte
-  asked for blood pressure to default to family-visible, so that in an emergency somebody knows the
-  usual values. The shipped default stays `private`, and the choice moves to the household instead.
+- **Yuvomi links to a user guide, and says whose it is** (#799). @Kyrodan built a documentation site
+  because the answers exist but are scattered across closed discussions. It stays in his repository
+  under his own hand, and the app, the README and yuvomi.cloud now point at it. The decision was not
+  the no-bundlers rule - there is no guard that covers `docs/`, so Docusaurus here would have been a
+  choice rather than a violation. It was maintenance: at 91 releases across 21 days, documentation
+  in this repository is documentation I owe at that cadence, and drifted documentation is worse than
+  none because people trust it. Every link therefore says "community-maintained" in its own text
+  rather than in a footnote, so nobody mistakes a lag for an official statement.
 
-  Flipping the shipped default would have been the small change and the wrong one. Stored entries
-  carry their own visibility, so nothing would have leaked retroactively - but somebody who learned
-  that health readings are private would, after an update, record one and share it without doing
-  anything. An opening nobody triggered is the one kind of privacy change that cannot be taken back:
-  the default reverts in a line, the rows written in the meantime do not.
+### Changed
 
-  The answer already existed inside the module. The cycle tab has had a personal default visibility
-  since v1.53.0, plus a switch that moves the existing entries along. The most sensitive area had it
-  and the other four did not, and that inconsistency - not the value of the default - was the actual
-  gap. Settings, Health now carries the same choice for vitals, medications, lab reports and
-  activities, and after a change it offers to move that area's existing entries too.
-
-  **Per metric for vitals, not per area.** Somebody who shares their blood pressure is not thereby
-  sharing their mood, and both live in the same list. A single "vitals" default would have produced
-  exactly the conflation the shipped default was defending against. Medications, lab reports and
-  activities get one each, because each is one kind of entry.
-
-  Two details worth stating: when a caregiver (#584) records for somebody else, the **owner's**
-  choice applies, since the row belongs to them - and the entry form still offers private/family on
-  every single entry, so the default is a starting point, never a decision made for you.
-
-- **An invitation now carries the permissions the new member starts with, and the preselection is
-  the narrow one** (#869). Until now a newly invited member could see every module at first login,
-  and an admin could only take things away afterwards. That was never decided for invitations: it
-  was inherited from migration v74, where storing permissions sparsely - no row means full access -
-  was the right call so that existing households behaved exactly as before after the update. The
-  reporter supplied the sentence that settles it for the other case: permissions can be opened
-  later, but somebody who has already seen private information cannot un-see it.
-
-  The invite form has a new **starting permissions** field with two templates. *Without personal
-  areas* is preselected and locks Health, Budget and Documents; *As the role profile* is the old
-  behaviour. Underneath, the form says what the choice means right now - which modules the template
-  locks, or, for a role, which ones that role already restricts, read from the stored profile
-  rather than described in the abstract.
-
-  **The default itself is untouched, and that is the point.** Nothing changes for existing
-  households, existing accounts or invitations already sent: what changed is the preselected value
-  of a form, not the stored default. Turning the default around would have locked out exactly the
-  households v74 set out to protect. The resolved set is stored with the invitation, so what the
-  admin saw when sending it is what applies at first login, even if the role profile changes in
-  between.
-
-  Which three modules, and why not fewer: the line is not "as little as possible" but *whose data
-  it is*. Health, Budget and Documents hold what belongs to a person; Calendar, Tasks and Shopping
-  are what somebody is invited for. Locking those would produce an empty app and a phone call, not
-  privacy. The templates stack with the role profile rather than replacing it - a role that
-  restricts more stays stricter.
-
-  There is deliberately no "full access" template. Sparse storage means a member override cannot
-  *widen* a role profile: a stored `write` does not exist, so no row can overrule a restricting
-  role. That has been true since v74; a template promising full access that quietly does nothing
-  would be a promise that does not hold. To give everyone in a role more, change the role profile.
+- **The page layout rules are now written where contributors can read them** (#929). They existed
+  and were enforced - the reading measure that hangs on the page, the scroll clearance that belongs
+  to whatever actually scrolls, one page stylesheet per route - but only in guards and in a file
+  that is not in this repository. From the outside a page composition system looked unwritten. It
+  was not; it was invisible, and a contributor proposing one was answering a real gap. CONTRIBUTING
+  now has a **Page layout** section that says what the guards check and names them as the authority.
 
 ## [2.61.0] - 2026-09-01
 

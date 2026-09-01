@@ -25,6 +25,8 @@ Every table: `id INTEGER PRIMARY KEY`, `created_at TEXT`, `updated_at TEXT` (ISO
 | calendar_feed_token | TEXT | Secret token authenticating the user's read-only ICS export feed, nullable. Partial UNIQUE index on `calendar_feed_token` WHERE NOT NULL. |
 | calendar_feed_show_assignees | INTEGER | Opt-in flag (0/1, default 0): when set, the read-only ICS export feed appends the assigned members to each event's `SUMMARY`, e.g. `Pool party (Mom, Dad)`. |
 | onboarding_version | INTEGER | NOT NULL, default 0 (migration v168) — the walkthrough version this account has seen |
+| changelog_seen_version | TEXT | Nullable (migration v173) — the INSTALLED version at this account's last look at the changelog. Drives the "New in your app" list |
+| changelog_seen_latest | TEXT | Nullable (migration v173) — the last known PUBLISHED version this account saw. Drives the update dot in the navigation |
 
 **The onboarding walkthrough is remembered per account, not per browser (v2.52.0).** The marker used
 to live only in `localStorage`, so a new device or a private window showed the walkthrough again to
@@ -42,6 +44,32 @@ change. The `localStorage` key remains as an **additional** condition rather tha
 is how the visual-probe harness suppresses the dialog without marking a test account server-side.
 The install-to-home-screen banner is deliberately untouched — whether a device has the PWA installed
 is a property of that device, so it keeps its local 7-day snooze.
+
+**The changelog marks follow the same reasoning (v173, #496).** Both lived in `localStorage`, so
+reading the changes on the desktop left the tablet showing the same dot and the same "New in your
+app" list again. **Two columns, because they answer two questions:** `changelog_seen_version` is the
+installed version at the last look and bounds the list — an instance on 2.55 must not be told what
+2.61 brought, because for that household none of it happened; `changelog_seen_latest` is the last
+known published version and drives the dot. Merging them would answer one of the two wrongly as soon
+as an instance runs behind the release.
+
+`POST /api/v1/auth/changelog-seen` records both. The installed version comes from the **server**
+rather than the request body — which version runs here is server knowledge, and a client could claim
+the wrong one; an absent `latest` leaves the stored value alone instead of clearing it. Unlike the
+onboarding column, existing accounts are **not** backfilled: `NULL` means "never looked", which is a
+different state from "seen everything", and the list stays empty on a first look rather than
+declaring the entire history missed. What stays in `localStorage` is the cached GitHub answer and
+the timestamp of the last check — a scratchpad for something the server said, not a state belonging
+to a person.
+
+**What the view does with them:** the changelog opens with a "New in your app" block listing the
+lead sentences of everything that changed between `changelog_seen_version` and the running version,
+each expandable for the reasoning underneath. Those lead sentences exist because every entry has
+opened with a bolded one since v2.41.0, enforced by `npm run test:changelog` (#850) — the route
+previously stripped that emphasis and merged the follow-up lines back into prose, so the structure
+never reached the screen. `/api/v1/changelog` therefore carries `entries` (`{ lead, detail }`)
+beside the unchanged `items`, additively: a promised surface does not change shape because the UI
+wants a nicer one. Long gaps are capped at twelve lines with the remainder counted out loud.
 
 ### Two-Factor Authentication (migration v159, #672)
 
@@ -109,6 +137,7 @@ One pending invitation per row. The `users` row is only created when the invitat
 | accepted_at | TEXT | Set on redemption instead of deleting the row, so "who invited whom" stays traceable |
 | accepted_user_id | INTEGER | FK → Users, ON DELETE SET NULL |
 | revoked_at | TEXT | Set by an admin revoking the invitation. Also never deleted |
+| permissions | TEXT | Nullable JSON (migration v171) — the resolved starting permissions chosen at invite time, in the shape `normalizePermissionInput()` accepts. `NULL` = no override, which is how every invitation before v171 behaves |
 
 ### Tasks
 | Column | Type | Constraint |
@@ -2256,6 +2285,35 @@ including their `private` rows: a caregiver who could write but not read would l
 reading they just entered. The cycle tab is deliberately excluded from grants. Admins manage grants
 under Settings → Family; every member can ask `GET /health/caregivers/me` who they may record for.
 
+**`health_visibility_defaults`** — what a person's NEW entries start as (migration v172, #958).
+Sparse like `access_permissions`: only deviations from the shipped `private` are stored, so an
+account without a row behaves exactly as before the migration.
+
+| Column | Type | Constraint |
+|--------|------|-----------|
+| user_id | INTEGER | FK → Users (CASCADE delete), NOT NULL |
+| scope_key | TEXT | NOT NULL — `vital:<type>` per metric, plus `meds`, `labs`, `activities`. No CHECK: the metric list grows and an append-only migration must not freeze it |
+| visibility | TEXT | NOT NULL, CHECK IN ('private', 'family') |
+| updated_at | TEXT | ISO 8601, default now |
+| | | PRIMARY KEY (user_id, scope_key) |
+
+The request was to flip the shipped default for blood pressure to `family`, so that in an emergency
+somebody knows the usual values. The shipped value stays `private` and the choice moves to the
+household instead: stored rows carry their own visibility, so nothing leaks retroactively, but
+somebody who learned that health readings are private would, after an update, record one and share
+it without doing anything. **Per metric for vitals, not per area** — sharing a blood pressure is not
+sharing a mood, and both live in `VITAL_METRICS`; medications, lab reports and activities get one
+each, because each is one kind of entry. The cycle tab keeps its own switch
+(`cycle_settings.default_visibility`), which is where this pattern came from.
+
+Writing routes read the **owner's** choice, not the recording person's: when a caregiver records for
+somebody else, the row belongs to the subject and so does the decision. Setting an area back to
+`private` deletes the row rather than storing it, keeping "no row" the only spelling of the default.
+API: `GET/PUT /api/v1/health/visibility-defaults`, and `PATCH /api/v1/health/visibility-defaults/apply`
+to move the existing entries of one area — own rows only, and the target comes from the request
+because `private` is never stored. Settings → Personal → Health carries the choice; after a change it
+offers to move that area's existing entries too.
+
 **`medications`** — medication master data.
 
 | Column | Type | Constraint |
@@ -3198,6 +3256,20 @@ Admins invite new members with a link instead of setting a password for them and
 
 - **Creating (Settings → Administration → Family and roles → Invitations):** username and display name are optional; leaving them empty lets the invited person choose. Family role, the system-admin flag and an optional email address are set here. `POST /api/v1/auth/invites` returns the plaintext token exactly once — only its SHA-256 hash is stored, so a lost link cannot be recovered, only revoked and reissued. The admin UI builds `${location.origin}/join?token=…` client-side and shows it once with a copy button; the request `Host` header is fine here because a signed-in admin creates and forwards the link, with no third party in between.
 - **Sending by mail (optional):** with "send the invitation by email" the server mails the link itself and therefore uses `BASE_URL`, never the request host — the same rule as the password reset. The response field `email_sent` reports honestly whether delivery worked, so the UI never claims a mail that was not sent; without SMTP or `BASE_URL` the admin simply forwards the link by hand.
+- **Starting permissions (v171, #869):** the form carries a **starting permissions** choice next to
+  the family role, and its preselection is the narrow one. *Without personal areas* locks Health,
+  Budget and Documents; *As the role profile* is the behaviour up to v2.61. Underneath, the form
+  states what the choice means right now — which modules the template locks, or which ones the
+  chosen role already restricts, read from the stored profile via
+  `GET /api/v1/permissions/role/:familyRole`. The **stored default is untouched**: what changed is
+  the preselected value of a form, not `access_permissions`. Turning the default around would have
+  locked out exactly the households migration v74 set out to protect. The **resolved set** is stored
+  with the invitation, not the name of the template, so what the admin saw when sending it is what
+  applies at first login even if the role profile changes in between. There is deliberately no "full
+  access" template: sparse storage means a member override cannot *widen* a role profile — a stored
+  `write` does not exist, so no row can overrule a restricting role. To give everyone in a role more,
+  change the role profile.
+
 - **Accepting (`/join`):** the public page reads the token from the query string, checks it via `GET /api/v1/auth/invites/preview`, and pre-fills whatever the invitation dictates as read-only fields. `POST /api/v1/auth/invites/accept` creates the user; **role and family role always come from the invitation, never from the request body**, so an invited member cannot promote themselves to admin. The invited email becomes the new member's contact address, which is what makes the later password reset reachable. No session is established (like `/setup`); the page redirects to `/login`.
 - **Lifecycle:** invitations are valid for 7 days (fixed, no env var). Redeeming marks the row instead of deleting it, which keeps the "who invited whom" trail and drives the admin UI state. Revoking marks it too and kills the link immediately. The hourly cleanup only removes invitations that expired without ever being accepted or revoked. Redemption marks the invitation inside the same transaction that creates the user, so two parallel redemptions of one token produce exactly one account.
 - Both public routes (`preview`, `accept`) carry no CSRF, exactly like `/forgot-password` and `/reset-password`: the token is the secret. Both are rate-limited.
