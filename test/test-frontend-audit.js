@@ -14782,40 +14782,64 @@ test('der Lucide-Ausschnitt läuft nach dem Bundle und vor jedem Modul, das ihn 
   // egal, `<SCRIPT SRC=... DEFER>` ist gueltig. Ohne das Flag faende dieser Guard
   // eine grossgeschriebene Fassung nicht und waere gruen, ohne etwas geprueft zu
   // haben - genau der blinde Zustand, den er verhindern soll (CodeQL js/bad-tag-filter).
-  const scripts = [...read('../public/index.html').matchAll(/<script\b[^>]*>/gi)]
+  //
+  // Und ohne Kommentare: ein auskommentiertes `<script src="/lucide-scope.js">`
+  // steht weiter im Rohtext und laedt nichts. Jede Zusicherung hier unten waere
+  // erfuellt, waehrend der Patch in Wahrheit fehlt.
+  const scripts = [...withoutHtmlComments(read('../public/index.html')).matchAll(/<script\b[^>]*>/gi)]
     .map((m) => ({ tag: m[0], src: m[0].match(/\bsrc=["']([^"']+)["']/i)?.[1] }))
     .filter((s) => s.src);
   const isModule = (s) => /\btype=["']module["']/i.test(s.tag);
+  // `async` schlaegt `defer`: das Skript laeuft, sobald es da ist, in keiner
+  // festen Reihenfolge. Nur ein rein deferred Skript haelt seinen Platz.
+  const isDeferred = (s) => /\bdefer\b/i.test(s.tag) && !/\basync\b/i.test(s.tag);
 
-  const bundle = scripts.findIndex((s) => s.src === '/lucide.min.js');
-  const patch = scripts.findIndex((s) => s.src === '/lucide-scope.js');
-  assert.ok(bundle > -1, 'index.html lädt /lucide.min.js nicht mehr');
-  assert.ok(patch > -1,
+  const positionsOf = (src) => scripts.flatMap((s, i) => (s.src === src ? [i] : []));
+  const bundleAt = positionsOf('/lucide.min.js');
+  const patchAt = positionsOf('/lucide-scope.js');
+  assert.ok(bundleAt.length > 0, 'index.html lädt /lucide.min.js nicht mehr');
+  assert.ok(patchAt.length > 0,
     'index.html lädt /lucide-scope.js nicht mehr - createIcons({ el }) durchsucht dann wieder '
     + 'das ganze Dokument, und zwar an allen Aufrufstellen auf einmal');
+  // Genau einmal, und das ist keine Formalie: ein zweites Bundle-Tag NACH dem
+  // Patch laedt das UMD erneut und ersetzt `window.lucide` samt gepatchtem
+  // createIcons. Reihenfolge und defer stimmten weiter, der Ausschnitt waere weg.
+  assert.deepEqual([bundleAt.length, patchAt.length], [1, 1],
+    'lucide.min.js und lucide-scope.js stehen nicht mehr genau einmal in index.html. '
+    + 'Ein zweites Bundle-Tag hinter dem Patch ueberschreibt window.lucide und damit den Patch');
+  const [bundle] = bundleAt;
+  const [patch] = patchAt;
   assert.ok(patch > bundle,
     'lucide-scope.js steht vor lucide.min.js. Es findet `window.lucide` dann noch nicht und '
     + 'steigt still aus - der Ausschnitt ist wirkungslos, ohne dass irgendwo etwas bricht');
 
-  // Beide klassisch mit `defer`: ohne defer liefe der Patch sofort beim Parsen,
-  // also vor dem deferred Bundle - derselbe stille Ausstieg.
+  // Beide rein deferred: ohne `defer` liefe der Patch sofort beim Parsen, mit
+  // `async` in unbestimmter Reihenfolge. Beides endet im selben stillen
+  // Ausstieg, weil `window.lucide` dann noch nicht da ist.
   for (const i of [bundle, patch]) {
-    assert.match(scripts[i].tag, /\bdefer\b/i,
-      `${scripts[i].src} trägt kein defer mehr - die Reihenfolge zwischen Bundle und Patch `
-      + 'ist damit nicht mehr garantiert');
+    assert.ok(isDeferred(scripts[i]),
+      `${scripts[i].src} ist nicht mehr rein deferred (defer, kein async) - die Reihenfolge `
+      + 'zwischen Bundle und Patch ist damit nicht mehr garantiert');
   }
 
-  // Module laufen zwar nach den defer-Skripten, aber untereinander in
-  // Dokumentreihenfolge: eines vor dem Patch bekäme beim ersten createIcons
-  // noch das ungepatchte Original.
+  // Nicht-async-Module und defer-Skripte teilen sich EINE Warteschlange und
+  // laufen in Dokumentreihenfolge - Module sind keine spaetere Phase. Ein Modul
+  // vor dem Patch bekaeme beim ersten createIcons noch das ungepatchte Original.
   assert.deepEqual(
     scripts.filter((s, i) => i < patch && isModule(s)).map((s) => s.src), [],
     'Diese Module stehen in index.html vor lucide-scope.js und laufen damit vor dem Patch');
 
-  // Und die klassischen Skripte davor laufen ohne defer sofort beim Parsen,
-  // lange vor dem Bundle: dort ist jeder createIcons-Aufruf ungescopt.
+  // WER LAEUFT VOR DEM PATCH? Zwei Wege, und die Tag-Position beantwortet nur
+  // den einen. Ein klassisches Skript ohne `defer` blockiert den Parser und
+  // laeuft SOFORT an seiner Stelle, also vor jedem deferred Skript - auch wenn
+  // sein Tag hinter dem Patch steht. Ein deferred Skript oder Modul haelt
+  // dagegen seinen Platz in der Warteschlange und ist nur dann zu frueh, wenn
+  // es vor dem Patch steht. Die erste Fassung filterte nur nach Position und
+  // war fuer den ersten Fall blind.
+  const runsBeforePatch = (s, i) => (!isDeferred(s) && !isModule(s)) || i < patch;
   const early = scripts
-    .filter((s, i) => i < patch && !isModule(s) && !/\bdefer\b/i.test(s.tag))
+    // Bundle und Patch selbst rufen nicht auf, sie definieren bzw. ersetzen.
+    .filter((s, i) => runsBeforePatch(s, i) && i !== bundle && i !== patch)
     .filter((s) => existsSync(new URL(`../public${s.src}`, import.meta.url)))
     .filter((s) => /createIcons/.test(read(`../public${s.src}`)));
   assert.deepEqual(early.map((s) => s.src), [],

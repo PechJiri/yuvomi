@@ -42,6 +42,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createContext, runInContext } from 'node:vm';
 import { posix } from 'node:path';
+import { withoutHtmlComments } from './source-text.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const SRC = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
@@ -162,9 +163,13 @@ test('jedes eager geladene Stylesheet aus index.html ist precacht', () => {
   // Nur `rel="stylesheet"` ohne `media`/`onload`-Umweg: das sind die, die den
   // ersten Render blockieren. Ein per Router nachgeladenes Seiten-CSS zählt
   // nicht - es kommt erst, wenn die Shell schon steht.
+  // Schreibungstoleranz durchgehend: sobald der Regex `<LINK REL=...>` findet,
+  // muessen die Ausschluesse `MEDIA=`/`ONLOAD=` genauso finden - sonst zaehlt ein
+  // grossgeschriebenes Print-Stylesheet als eager und der Guard verlangt es im
+  // Precache, obwohl es den ersten Render nie blockiert.
   const eager = [...html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi)]
     .map((m) => m[0])
-    .filter((tag) => !/\bmedia=/.test(tag) && !/\bonload=/.test(tag))
+    .filter((tag) => !/\bmedia=/i.test(tag) && !/\bonload=/i.test(tag))
     .map((tag) => tag.match(/\bhref=["']([^"']+)["']/)?.[1])
     .filter(Boolean);
 
@@ -187,13 +192,19 @@ test('jedes eager geladene Stylesheet aus index.html ist precacht', () => {
 // Aufrufstellen seinen Ausschnitt (siehe Dateikopf). Offline fehlte es, und die
 // App liefe sichtbar unverändert weiter, nur langsamer.
 test('jedes von index.html geladene Skript ist precacht', () => {
-  const html = readFileSync(PUBLIC_DIR + 'index.html', 'utf8');
   // `i`, weil Tagname und Attribute in HTML schreibungsegal sind: eine
   // grossgeschriebene Fassung faende der Guard sonst nicht und meldete gruen,
-  // obwohl er nichts gesehen hat (CodeQL js/bad-tag-filter).
+  // obwohl er nichts gesehen hat (CodeQL js/bad-tag-filter). Und ohne
+  // Kommentare, damit ein auskommentiertes Tag nicht als geladen zaehlt.
+  const html = withoutHtmlComments(readFileSync(PUBLIC_DIR + 'index.html', 'utf8'));
   const scripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
     .map((m) => m[1])
-    .filter((src) => src.startsWith('/')); // fremde Herkunft precacht der SW nicht
+    // Ausgeschlossen wird nur echte Fremdherkunft (Schema oder protokollrelativ).
+    // Ein relatives `src="analytics.js"` ist same-origin und muss genauso
+    // precacht sein; ein Filter auf fuehrenden Slash haette es stillschweigend
+    // uebersprungen und den Guard fuer genau diesen Fall gruen gelassen.
+    .filter((src) => !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src))
+    .map((src) => (src.startsWith('/') ? src : posix.resolve('/', src)));
 
   // Reichweiten-Nachweis: findet das Muster nichts, prüft die Assertion nichts.
   assert.ok(scripts.length >= 5, `Nur ${scripts.length} Skripte gefunden - das Muster greift nicht mehr`);
