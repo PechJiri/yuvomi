@@ -712,3 +712,18 @@ test('ein geloeschtes primaeres Mitglied laesst die Kachel nicht farblos zurueck
   assert.equal(zeile.color, '#D8B349',
     'die Kachel faellt auf den verbliebenen Zugewiesenen zurueck, nicht auf den Modulton');
 });
+
+test('der Countdown zeigt kein Datum, an dem die Serie kein Vorkommen hat (#960)', () => {
+  // Ein Termin am 15. mit "am letzten Tag des Monats" hat am 15. kein
+  // Vorkommen. Dieser Zweig reichte das Startdatum ungeprueft durch, sobald es
+  // in der Zukunft lag - der Countdown kuendigte einen Termin an, den die
+  // Kalenderansicht nicht zeigte. Ueber die API angelegte Serien tragen seit
+  // dem Ziehen des Serienstarts ein passendes Datum; aus CalDAV eingelesene
+  // koennen weiter unsynchron sein.
+  const ev = { start_datetime: '2026-01-15', recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' };
+  assert.equal(nextEventDate(ev, '2026-01-01', null, GRACE), '2026-01-31');
+
+  // Ohne die Angabe bleibt der Start der naechste Termin.
+  assert.equal(nextEventDate({ ...ev, recurrence_rule: 'FREQ=MONTHLY' }, '2026-01-01', null, GRACE),
+    '2026-01-15');
+});

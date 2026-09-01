@@ -367,7 +367,15 @@ function lastOccurrenceOf(seriesStart, parsed) {
    * Serie mit COUNT=1 fuer immer weiter. Sie laesst sich hier genau rechnen,
    * weil jedes Vorkommen ausser dem ersten der letzte Tag seines Monats ist. */
   if (bymonthday === -1) {
-    if (count === 1) return String(seriesStart).slice(0, 10);
+    // AUCH HIER GILT: DTSTART IST NUR DANN VORKOMMEN 1, WENN ES AUF DER REGEL
+    // LIEGT. Bei einem unsynchronisierten Start (15. Januar) ist das erste
+    // Vorkommen der 31., und eine Grenze auf dem 15. wies genau dieses eine
+    // Vorkommen ab - eine Serie mit COUNT=1 verschwand, sobald DTSTART vorbei
+    // war, obwohl die Expansion sie noch lieferte.
+    const erstes = new Date(Date.UTC(
+      start.getUTCFullYear(), start.getUTCMonth() + 1, 0
+    )).toISOString().slice(0, 10);
+    if (count === 1) return erstes;
     const zielMonat = start.getUTCMonth() + (count - 1) * interval;
     const letzter = new Date(Date.UTC(start.getUTCFullYear(), zielMonat + 1, 0));
     return letzter.toISOString().slice(0, 10);

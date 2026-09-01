@@ -1098,6 +1098,13 @@ router.put('/:id', (req, res) => {
       // Markierung nicht stillschweigend löschen.
       countdown       = task.countdown,
     } = req.body;
+
+    // Auch beim Bearbeiten (#960), wie beim Kalender: der POST-Pfad zog schon,
+    // dieser nicht - wer die Wahl an einer BESTEHENDEN Aufgabe ankreuzt, haette
+    // ein Faelligkeitsdatum behalten, das nicht auf seiner Regel liegt, und es
+    // als DTSTART in den CalDAV-Push geschickt.
+    const faelligDanach = is_recurring ? seriesStartFor(due_date, recurrence_rule) : due_date;
+
     const points = req.body.points !== undefined ? clampPoints(req.body.points) : task.points;
     const visibility = req.body.visibility !== undefined
       ? normalizeVisibility(req.body.visibility, task.visibility)
@@ -1198,7 +1205,7 @@ router.put('/:id', (req, res) => {
           points = ?, visibility = ?, countdown = ?, locked = ?
         WHERE id = ?
       `).run(title.trim(), description, category, priority,
-             status, start_date, due_date, due_time, firstUid,
+             status, start_date, faelligDanach, due_time, firstUid,
              is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0,
              points, visibility, countdown ? 1 : 0, locked, req.params.id);
       setAssignments(db.get(), task.id, userIds);

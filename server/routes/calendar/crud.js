@@ -325,9 +325,26 @@ router.put('/:id', async (req, res) => {
     }
 
     const {
-      title, description, start_datetime, end_datetime,
+      title, description, start_datetime: rohStart, end_datetime: rohEnde,
       all_day, location, color: colorVal, recurrence_rule,
     } = req.body;
+
+    // AUCH BEIM BEARBEITEN (#960). Der POST-Pfad zog den Serienstart schon, der
+    // PUT-Pfad nicht - wer die Wahl an einem BESTEHENDEN Termin ankreuzt, haette
+    // damit weiterhin ein DTSTART bekommen, das nicht auf seiner Regel liegt.
+    // Gerechnet wird gegen die Regel, die NACH diesem Aufruf gilt, und gegen den
+    // Start, der nach ihm gilt: beides kann in derselben Anfrage neu kommen.
+    const regelDanach = recurrence_rule !== undefined ? recurrence_rule : event.recurrence_rule;
+    const startDanach = rohStart !== undefined ? rohStart : event.start_datetime;
+    const gezogen = seriesStartFor(startDanach, regelDanach);
+    const versatzMs = gezogen === startDanach
+      ? 0
+      : Date.parse(`${gezogen.slice(0, 10)}T00:00:00Z`) - Date.parse(`${String(startDanach).slice(0, 10)}T00:00:00Z`);
+    // Nur setzen, wenn der Aufrufer das Feld ueberhaupt geschickt hat oder das
+    // Ziehen etwas geaendert hat - sonst bliebe COALESCE wirkungslos.
+    const start_datetime = rohStart !== undefined || versatzMs ? gezogen : undefined;
+    const ende = rohEnde !== undefined ? rohEnde : event.end_datetime;
+    const end_datetime = versatzMs && ende ? verschiebeDatumsteil(ende, versatzMs) : rohEnde;
 
     // `color` ueberhaupt mitgeschickt? Nur dann wird die Spalte angefasst - der
     // Wert selbst darf dann auch null sein und heisst "keine eigene Farbe" (#891).

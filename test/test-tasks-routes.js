@@ -952,3 +952,16 @@ test('POST: eine Monatsletzten-Serie beginnt am ersten Monatsletzten (#960)', as
   });
   assert.equal(einmalig.body.data.due_date, '2026-01-15');
 });
+
+test('PUT: auch beim Bearbeiten wandert die Faelligkeit auf die Regel (#960)', async () => {
+  const admin = { id: ALICE, role: 'admin' };
+  const angelegt = await call('POST', '/', { as: admin, body: { title: 'Erst ohne Regel', due_date: '2026-01-15' } });
+  assert.equal(angelegt.body.data.due_date, '2026-01-15');
+
+  const bearbeitet = await call('PUT', `/${angelegt.body.data.id}`, {
+    as: admin,
+    body: { title: 'Erst ohne Regel', is_recurring: 1, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  });
+  assert.equal(bearbeitet.status, 200);
+  assert.equal(bearbeitet.body.data.due_date, '2026-01-31', 'nachtraeglich angekreuzt');
+});

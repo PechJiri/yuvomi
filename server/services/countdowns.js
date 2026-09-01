@@ -36,7 +36,7 @@
  * die dieses Widget je hat.
  */
 
-import { nextOccurrenceAfter } from './recurrence.js';
+import { nextOccurrenceAfter, seriesStartFor } from './recurrence.js';
 import { loadEventExceptions } from './calendar-events.js';
 import { visibilityWhere } from './visibility.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
@@ -147,9 +147,17 @@ export function nextEventDate(event, todayKey, exceptions = null, { graceDays = 
    *
    * Die Kalender-Oberflaeche bietet "endet nach N Malen" ausdruecklich an
    * (`allowCount` in pages/calendar.js), das ist also keine Sonderform. */
-  let candidate = startKey >= todayKey
-    ? startKey
-    : nextOccurrenceAfter(startKey, event.recurrence_rule, todayKey, { seriesStart: startKey });
+  // DER START IST NUR DANN DER NAECHSTE TERMIN, WENN ER AUF DER REGEL LIEGT.
+  // Ein Termin am 15. mit "am letzten Tag des Monats" hat am 15. kein
+  // Vorkommen - der Countdown zeigte es trotzdem an, weil dieser Zweig das
+  // Startdatum ungeprueft durchreicht, sobald es in der Zukunft liegt. Ueber
+  // die API angelegte Serien tragen seit dem Ziehen des Serienstarts ohnehin
+  // ein passendes Datum; aus CalDAV eingelesene koennen weiter unsynchron sein,
+  // und fuer die gilt dasselbe.
+  const ersterTreffer = seriesStartFor(startKey, event.recurrence_rule);
+  let candidate = ersterTreffer >= todayKey
+    ? ersterTreffer
+    : nextOccurrenceAfter(ersterTreffer, event.recurrence_rule, todayKey, { seriesStart: startKey });
 
   let skips = 0;
   while (candidate && exceptions?.has(candidate) && skips++ < MAX_EXCEPTION_SKIPS) {

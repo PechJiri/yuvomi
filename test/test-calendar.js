@@ -1236,6 +1236,17 @@ test('seriesStartFor laesst alles andere in Ruhe', () => {
   assert(seriesStartFor('kaputt', 'FREQ=MONTHLY;BYMONTHDAY=-1') === 'kaputt', 'unlesbar bleibt unlesbar');
 });
 
+test('lastOccurrenceOf: COUNT=1 bezieht sich auf das erste VORKOMMEN, nicht auf DTSTART', () => {
+  // DTSTART ist nur dann Vorkommen 1, wenn es auf der Regel liegt. Bei einem
+  // unsynchronisierten Start (15. Januar) ist das erste Vorkommen der 31., und
+  // eine Grenze auf dem 15. wies genau dieses eine ab: eine Serie mit COUNT=1
+  // verschwand, sobald DTSTART vorbei war, obwohl die Expansion sie lieferte.
+  const q = (ab) => nextOccurrenceAfter('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=1', ab,
+    { seriesStart: '2026-01-15' });
+  assert(q('2026-01-20') === '2026-01-31', `das eine Vorkommen bleibt: ${q('2026-01-20')}`);
+  assert(q('2026-02-05') === null, 'danach ist die Serie vorbei');
+});
+
 // --------------------------------------------------------
 // Ergebnis
 // --------------------------------------------------------

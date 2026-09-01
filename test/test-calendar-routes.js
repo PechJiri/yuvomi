@@ -907,3 +907,22 @@ test('POST / — eine Monatsletzten-Serie beginnt am ersten Monatsletzten (#960)
   });
   assert.match(ohne.body.data.start_datetime, /^2026-01-15/, 'ohne die Angabe bleibt der Start');
 });
+
+test('PUT / — auch beim Bearbeiten wandert der Serienstart auf die Regel (#960)', async () => {
+  // Der POST-Pfad zog schon, der PUT-Pfad nicht: wer die Wahl an einem
+  // BESTEHENDEN Termin ankreuzt, haette weiterhin ein DTSTART bekommen, das
+  // nicht auf seiner Regel liegt - und genau das geht nach draussen.
+  const angelegt = await call('POST', '/', {
+    body: { title: 'Erst ohne', start_datetime: '2026-01-15T09:00', end_datetime: '2026-01-15T11:00' },
+  });
+  assert.equal(angelegt.status, 201);
+  assert.match(angelegt.body.data.start_datetime, /^2026-01-15/, 'ohne Regel bleibt der Start');
+
+  const bearbeitet = await call('PUT', `/${angelegt.body.data.id}`, {
+    body: { recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1' },
+  });
+  assert.equal(bearbeitet.status, 200);
+  assert.match(bearbeitet.body.data.start_datetime, /^2026-01-31/,
+    `nachtraeglich angekreuzt: ${bearbeitet.body.data.start_datetime}`);
+  assert.match(bearbeitet.body.data.end_datetime, /^2026-01-31T11:00/, 'die Dauer wandert mit');
+});
