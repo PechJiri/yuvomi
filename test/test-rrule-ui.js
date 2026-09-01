@@ -307,3 +307,33 @@ test('eine fremde BYMONTHDAY-Regel kommt im Wortlaut zurueck, statt zu verschwin
   const eigen = 'FREQ=MONTHLY;BYMONTHDAY=-1';
   assert.equal(buildRRule(parseRRule(eigen)), eigen);
 });
+
+// --------------------------------------------------------
+// Was der Review zu #960 gefunden hat
+// --------------------------------------------------------
+
+test('der Schalter traegt die Spur der geteilten Toggle-Komponente', () => {
+  // `.toggle` blendet das native Kaestchen aus und zeigt Zustand UND Fokus
+  // ausschliesslich ueber `.toggle__track`. Ohne die Spur stand da nur Text:
+  // kein sichtbares An/Aus, kein Fokusring. Der Nachbar-Schalter in derselben
+  // Datei hat sie, meiner nicht - eine Komponente halb zu benutzen ist
+  // schlimmer, als sie gar nicht zu benutzen.
+  const html = renderRRuleFields('probe', 'FREQ=MONTHLY', {});
+  const block = html.slice(html.indexOf('probe-rrule-monthday'));
+  const label = block.slice(0, block.indexOf('</label>'));
+  assert.match(label, /class="toggle__track"/,
+    'ohne Spur ist der Schalter zustands- und fokuslos');
+  assert.match(label, /id="probe-rrule-last-day"/, 'Reichweite: es ist der richtige Schalter');
+});
+
+test('die Zusammenfassung nennt den letzten Tag', () => {
+  // Sonst liest sich eine am 15. begonnene Serie wie "monatlich" und sieht aus
+  // wie eine, die auch am 15. wiederkommt - waehrend ihr naechstes Vorkommen
+  // der 28. Februar ist.
+  const mit  = describeRRule('FREQ=MONTHLY;BYMONTHDAY=-1');
+  const ohne = describeRRule('FREQ=MONTHLY');
+  assert.notEqual(mit, ohne, 'die beiden Serien duerfen sich nicht gleich lesen');
+  assert.match(mit, /\(/, 'die Angabe steht in der Klammer, wie die Wochentage bei WEEKLY');
+  // Und nur dort, wo sie etwas bedeutet.
+  assert.equal(describeRRule('FREQ=YEARLY;BYMONTHDAY=-1'), describeRRule('FREQ=YEARLY'));
+});

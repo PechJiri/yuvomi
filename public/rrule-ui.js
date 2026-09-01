@@ -213,6 +213,7 @@ export function renderRRuleFields(prefix, existingRule, opts = {}) {
         <div class="rrule-monthday" id="${prefix}-rrule-monthday" ${parsed.freq === 'MONTHLY' ? '' : 'hidden'}>
           <label class="toggle" style="margin:0">
             <input type="checkbox" id="${prefix}-rrule-last-day" ${parsed.lastDay ? 'checked' : ''}>
+            <span class="toggle__track"></span>
             <span>${t('rrule.lastDayOfMonth')}</span>
           </label>
         </div>
@@ -288,6 +289,13 @@ export function describeRRule(rule, opts = {}) {
     const days = p.byday.map((d) => weekdays.find((w) => w.value === d)?.label).filter(Boolean);
     if (days.length) parts.push(`(${days.join(', ')})`);
   }
+
+  // Der letzte Tag gehört in die Zusammenfassung, sonst liest sich eine am 15.
+  // begonnene Serie wie „monatlich" und sieht damit aus wie eine, die auch am
+  // 15. wiederkommt - während ihr nächstes Vorkommen der 28. Februar ist. Die
+  // Angabe steht in der Klammer, wo bei WEEKLY die Wochentage stehen: beide
+  // beantworten dieselbe Frage.
+  if (p.freq === 'MONTHLY' && p.lastDay) parts.push(`(${t('rrule.lastDayOfMonth')})`);
 
   // Die Endebedingung ist eine eigene Aussage und bekommt einen Trenner:
   // „Alle 2 Monate 5 Termine" las sich wie ein verunglückter Satz.

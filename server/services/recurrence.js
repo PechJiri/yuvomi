@@ -52,6 +52,29 @@ function parseRRule(rule) {
   return { freq, interval, byday, until, count, bymonthday };
 }
 
+/**
+ * Der Tag im Zielmonat, aus der Regel oder dem Anker.
+ *
+ * NEGATIVE WERTE ZAEHLEN VOM MONATSENDE (RFC 5545): `-1` ist der letzte Tag,
+ * `-2` der vorletzte. Die erste Fassung behandelte nur `-1` und liess alles
+ * andere in ein `Math.max(tag, 1)` laufen - `BYMONTHDAY=-2` wurde damit zum
+ * ERSTEN des Monats. Das war schlechter als vorher: bis dahin wurde BYMONTHDAY
+ * ganz ignoriert, eine eingelesene Fremdserie behielt also wenigstens ihren
+ * DTSTART-Tag. Ein Wert, den Parser und Validator annehmen, darf nicht still
+ * falsch gerechnet werden.
+ *
+ * Die Oberflaeche erzeugt weiterhin nur `-1` (#960); gerechnet wird der ganze
+ * Bereich, weil Fremdkalender ihn liefern.
+ */
+function monthDayFor(bymonthday, lastDay, fallbackDay) {
+  const wanted = bymonthday === null || bymonthday === undefined
+    ? fallbackDay
+    : (bymonthday < 0 ? lastDay + 1 + bymonthday : bymonthday);
+  // Ein `-31` im Februar zeigt vor den Monatsanfang, ein `31` hinter sein Ende:
+  // beide landen am naechstgelegenen echten Tag, wie es die Klemmung immer tat.
+  return Math.min(Math.max(wanted, 1), lastDay);
+}
+
 function parseUntilDate(str) {
   // Akzeptiert YYYYMMDD oder YYYYMMDDTHHmmssZ
   const clean = str.replace(/[TZ]/g, '');
@@ -159,25 +182,22 @@ function nextOccurrence(baseDateStr, rrule, { anchor = null } = {}) {
     const year    = base.getUTCFullYear();
     const month   = base.getUTCMonth() + interval;
     const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    // `BYMONTHDAY=-1` heisst "letzter Tag", und zwar der des ZIELMONATS - das
-    // ist die eine Angabe, die sich nicht als fester Tag schreiben laesst und
-    // deshalb ueberhaupt in die Regel gehoert (#960).
-    const targetDay = parsed.bymonthday === -1
-      ? lastDay
-      : (parsed.bymonthday ?? anchorDay ?? base.getUTCDate());
-    next.setTime(Date.UTC(year, month, Math.min(Math.max(targetDay, 1), lastDay)));
+    const targetDay = monthDayFor(parsed.bymonthday, lastDay, anchorDay ?? base.getUTCDate());
+    next.setTime(Date.UTC(year, month, targetDay));
 
   } else if (freq === 'YEARLY') {
     // Monat UND Tag kommen aus dem Anker, wenn es einen gibt: sonst ist der 29.
     // Februar nach dem ersten Nicht-Schaltjahr fuer immer der 28. (#978).
-    const targetMonth = anchorDate ? anchorDate.getUTCMonth() : base.getUTCMonth();
+    // `anchorDay !== null`, nicht `anchorDate`: eine Invalid Date ist ein
+    // truthy Objekt, und `getUTCMonth()` daraus ist NaN. Das floss bis in
+    // `Date.UTC` und liess `toISOString()` mit RangeError abbrechen - genau das,
+    // was der Guard oben verhindern soll. Der Fallback-Test deckte nur MONTHLY.
+    const targetMonth = anchorDay !== null ? anchorDate.getUTCMonth() : base.getUTCMonth();
     const year        = base.getUTCFullYear() + interval;
     const lastDay     = new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate();
-    const targetDay   = parsed.bymonthday === -1
-      ? lastDay
-      : (parsed.bymonthday ?? anchorDay ?? base.getUTCDate());
     // Feb 29 in einem Nicht-Schaltjahr → Feb 28, aber ohne den Anker zu verlieren.
-    next.setTime(Date.UTC(year, targetMonth, Math.min(Math.max(targetDay, 1), lastDay)));
+    const targetDay = monthDayFor(parsed.bymonthday, lastDay, anchorDay ?? base.getUTCDate());
+    next.setTime(Date.UTC(year, targetMonth, targetDay));
   }
 
   // UNTIL-Grenze prüfen
@@ -323,8 +343,16 @@ function nextOccurrenceAfter(baseDateStr, rrule, notBeforeStr, { seriesStart = n
  * @returns {string|null} YYYY-MM-DD
  */
 function lastOccurrenceOf(seriesStart, parsed) {
-  const { freq, interval, byday, count } = parsed;
+  const { freq, interval, byday, count, bymonthday } = parsed;
   if (!count || byday.length) return null;
+
+  /* EINE REGEL MIT BYMONTHDAY LAEUFT NICHT AUF DEM RASTER IHRES STARTDATUMS.
+   * `FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3` ab dem 15. Januar bedeutet Jan 15,
+   * Feb 28, Mrz 31 - (COUNT - 1) Intervalle ab dem Start ergeben dagegen den
+   * 15. Maerz, und eine Grenze dort schneidet das letzte Vorkommen ab. Dieselbe
+   * Ueberlegung wie beim Tag > 28 gleich darunter, nur ist der Grund hier die
+   * Regel und nicht das Datum. */
+  if (bymonthday !== null && bymonthday !== undefined) return null;
 
   const start = new Date(`${String(seriesStart).slice(0, 10)}T00:00:00Z`);
   if (isNaN(start.getTime())) return null;

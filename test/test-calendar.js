@@ -319,7 +319,7 @@ test('Deep-Link-Instanz: expandiertes Event mit gleichem Datum wird bevorzugt', 
 // --------------------------------------------------------
 // nextOccurrence: INTERVAL-Korrektheit mit BYDAY
 // --------------------------------------------------------
-import { nextOccurrence } from '../server/services/recurrence.js';
+import { nextOccurrence, nextOccurrenceAfter } from '../server/services/recurrence.js';
 
 test('nextOccurrence: WEEKLY BYDAY=MO,TU,WE,TH,FR INTERVAL=2 — kein täglicher Übergang', () => {
   const rule = 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=2';
@@ -1148,6 +1148,49 @@ test('nextOccurrence: ein unlesbarer Anker aendert nichts', () => {
   const ohne = nextOccurrence('2026-01-31', 'FREQ=MONTHLY');
   assert(nextOccurrence('2026-01-31', 'FREQ=MONTHLY', { anchor: 'gestern' }) === ohne,
     'ein kaputter Anker faellt auf das bisherige Verhalten zurueck, statt NaN zu liefern');
+});
+
+// --------------------------------------------------------
+// Was der Review zu #960 gefunden hat
+// --------------------------------------------------------
+
+test('nextOccurrence: negative BYMONTHDAY zaehlen vom Monatsende, nicht auf den 1.', () => {
+  // Parser und Validator nehmen den ganzen RFC-Bereich an; nur `-1` zu
+  // behandeln und den Rest in ein Math.max(tag, 1) laufen zu lassen machte aus
+  // "vorletzter Tag" den ERSTEN. Das war schlechter als vorher, wo BYMONTHDAY
+  // ganz ignoriert wurde und die Fremdserie ihren DTSTART-Tag behielt.
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-2') === '2026-02-27',
+    'Februar 2026 hat 28 Tage, der vorletzte ist der 27.');
+  assert(nextOccurrence('2026-02-15', 'FREQ=MONTHLY;BYMONTHDAY=-3') === '2026-03-29',
+    'Maerz hat 31 Tage, der drittletzte ist der 29.');
+  // Positive Werte gelten unveraendert, und beide Enden werden geklemmt statt
+  // in einen anderen Monat zu rutschen.
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=15') === '2026-02-15');
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=31') === '2026-02-28',
+    'ein 31. im Februar klemmt auf dessen letzten Tag');
+  assert(nextOccurrence('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-31') === '2026-02-01',
+    'und ein -31 im Februar auf dessen ersten');
+});
+
+test('nextOccurrence: ein unlesbarer Anker wirft auch bei YEARLY nicht', () => {
+  // Eine Invalid Date ist ein truthy Objekt: der YEARLY-Zweig nahm sie als
+  // Anker, `getUTCMonth()` ergab NaN, und `toISOString()` brach mit RangeError
+  // ab - genau das, was der Guard verhindern soll. Der vorige Fallback-Test
+  // deckte nur MONTHLY.
+  const ohne = nextOccurrence('2024-02-29', 'FREQ=YEARLY');
+  assert(nextOccurrence('2024-02-29', 'FREQ=YEARLY', { anchor: 'gestern' }) === ohne,
+    'faellt auf das bisherige Verhalten zurueck');
+  assert(nextOccurrence('2024-02-29', 'FREQ=YEARLY', { anchor: '' }) === ohne);
+});
+
+test('nextOccurrenceAfter: COUNT begrenzt eine BYMONTHDAY-Serie nicht zu frueh', () => {
+  // `FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3` ab dem 15. Januar meint Jan 15,
+  // Feb 28, Mrz 31. (COUNT - 1) Intervalle ab dem Start ergaeben den 15. Maerz,
+  // und eine Grenze dort schneidet das letzte Vorkommen ab. Dieselbe
+  // Ueberlegung wie beim Starttag > 28, nur ist der Grund hier die Regel.
+  const treffer = nextOccurrenceAfter('2026-01-15', 'FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3',
+    '2026-03-01', { seriesStart: '2026-01-15' });
+  assert(treffer === '2026-03-31', `letztes Vorkommen erwartet, bekommen ${treffer}`);
 });
 
 // --------------------------------------------------------

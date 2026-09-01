@@ -115,6 +115,38 @@ describe('rruleToGraphRecurrence', () => {
     assert.equal(rruleToGraphRecurrence('', '2026-06-10'), null);
     assert.equal(rruleToGraphRecurrence('FREQ=DAILY', ''), null);
   });
+
+  it('"am letzten Tag des Monats" wird nicht zum Starttag (#960)', () => {
+    // absoluteMonthly nimmt nur eine feste Zahl, und die waere hier der Tag des
+    // Startdatums: dieselbe Serie liefe in Yuvomi, CalDAV, Google und ICS auf
+    // dem Monatsletzten und in Outlook auf dem 15. Eine Divergenz, die niemand
+    // bemerkt, bis die Termine auseinanderlaufen.
+    const r = rruleToGraphRecurrence('FREQ=MONTHLY;BYMONTHDAY=-1', '2026-01-15');
+    assert.equal(r.pattern.type, 'relativeMonthly');
+    assert.equal(r.pattern.index, 'last');
+    assert.equal(r.pattern.daysOfWeek.length, 7,
+      'das letzte Vorkommen IRGENDEINES Wochentags ist der letzte Tag des Monats');
+  });
+
+  it('ein positiver BYMONTHDAY schlaegt den Starttag', () => {
+    const r = rruleToGraphRecurrence('FREQ=MONTHLY;BYMONTHDAY=20', '2026-01-15');
+    assert.equal(r.pattern.type, 'absoluteMonthly');
+    assert.equal(r.pattern.dayOfMonth, 20);
+  });
+
+  it('ohne BYMONTHDAY bleibt es beim Starttag', () => {
+    const r = rruleToGraphRecurrence('FREQ=MONTHLY', '2026-01-15');
+    assert.equal(r.pattern.type, 'absoluteMonthly');
+    assert.equal(r.pattern.dayOfMonth, 15);
+  });
+
+  it('lieber gar keine Wiederholung als eine falsche', () => {
+    // "vorletzter Tag" hat in Graph keine Entsprechung. Als absoluten Tag zu
+    // pushen verschoebe jeden Termin; eine solche Regel kommt ohnehin nur aus
+    // einem Fremdkalender.
+    assert.equal(rruleToGraphRecurrence('FREQ=MONTHLY;BYMONTHDAY=-2', '2026-01-15'), null);
+    assert.equal(rruleToGraphRecurrence('FREQ=YEARLY;BYMONTHDAY=-1', '2026-01-15'), null);
+  });
 });
 
 // --------------------------------------------------------

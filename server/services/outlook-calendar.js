@@ -470,17 +470,35 @@ function rruleToGraphRecurrence(rrule, startDate, tz = outlookTimeZone()) {
       : [GRAPH_DAYS[start.getUTCDay()]];
     pattern = { type: 'weekly', interval: parsed.interval, daysOfWeek: days, firstDayOfWeek: 'monday' };
   } else if (parsed.freq === 'MONTHLY') {
-    pattern = { type: 'absoluteMonthly', interval: parsed.interval, dayOfMonth: start.getUTCDate() };
+    // "AM LETZTEN TAG DES MONATS" (#960) KENNT GRAPH NICHT ALS ABSOLUTEN TAG.
+    // `absoluteMonthly` nimmt nur eine feste Zahl, und die waere hier der Tag
+    // des Startdatums: eine am 15. begonnene Serie liefe in Yuvomi, CalDAV,
+    // Google und ICS auf dem Monatsletzten, in Outlook aber auf dem 15. - eine
+    // Divergenz, die niemand bemerkt, bis die Termine auseinanderlaufen.
+    //
+    // `relativeMonthly` mit `index: 'last'` ueber ALLE sieben Wochentage sagt
+    // dasselbe: das letzte Vorkommen irgendeines Wochentags im Monat ist dessen
+    // letzter Tag. Das ist der uebliche Weg, die Angabe in Graph auszudruecken.
+    pattern = parsed.bymonthday === -1
+      ? { type: 'relativeMonthly', interval: parsed.interval, daysOfWeek: [...GRAPH_DAYS], index: 'last' }
+      : { type: 'absoluteMonthly', interval: parsed.interval, dayOfMonth: parsed.bymonthday ?? start.getUTCDate() };
   } else if (parsed.freq === 'YEARLY') {
     pattern = {
       type: 'absoluteYearly',
       interval: parsed.interval,
-      dayOfMonth: start.getUTCDate(),
+      dayOfMonth: parsed.bymonthday && parsed.bymonthday > 0 ? parsed.bymonthday : start.getUTCDate(),
       month: start.getUTCMonth() + 1,
     };
   } else {
     return null;
   }
+
+  // LIEBER GAR KEINE WIEDERHOLUNG ALS EINE FALSCHE. Ein negativer BYMONTHDAY
+  // ausser `-1` zaehlt vom Monatsende rueckwaerts ("vorletzter Tag"), und dafuer
+  // hat Graph keine Entsprechung. Eine solche Regel kommt nur aus einem
+  // Fremdkalender; sie als absoluten Tag zu pushen verschoebe jeden Termin.
+  if (parsed.bymonthday !== null && parsed.bymonthday < 0 && parsed.bymonthday !== -1) return null;
+  if (parsed.freq === 'YEARLY' && parsed.bymonthday === -1) return null;
 
   let range;
   if (parsed.until) {
