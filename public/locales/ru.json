@@ -1463,7 +1463,8 @@
         "receiptsAttachedLabel_one": "Прикреплён чек: {{count}}",
         "loanPaidInstallmentsLabel": "Уже оплаченные платежи",
         "loanPaidInstallmentsHint": "Для займа, который уже выплачивается. Эти платежи фиксируются, но не проводятся по бюджету.",
-        "loanPaymentTypeLocked": "Доход или расход следует типу займа и меняется там."
+        "loanPaymentTypeLocked": "Доход или расход следует типу займа и меняется там.",
+        "planHistoricNote": "Сравнение с вашим текущим планом. Yuvomi не хранит, каким план был в прошлом месяце."
     },
     "settings": {
         "healthCycleEnableLabel": "Показать вкладку цикла",
@@ -4208,6 +4209,7 @@
         "loadError": "Не удалось загрузить награды.",
         "remainingToReward": "Ещё {{points}} до «{{reward}}»",
         "canRedeemNow": "Готово к обмену",
+        "progressLabel": "Прогресс к следующей награде",
         "noRewardsYet": "Наград пока нет",
         "redeem": "Обменять",
         "confirmRedeem": "Обменять",

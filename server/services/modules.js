@@ -145,6 +145,29 @@ export function normalizeManifest(raw, folderName) {
   const pathValue = String(menu.path || `/m/${id}`).trim();
   const routePath = pathValue === `/m/${id}` ? pathValue : `/m/${id}`;
 
+  const COMPOSITION = new Set(['reading', 'data', 'dashboard', 'form', 'split', 'full']);
+  const WIDTHS = new Set(['reading', 'content', 'wide']);
+  const pageRaw = manifest.page && typeof manifest.page === 'object' ? manifest.page : {};
+  const composition = COMPOSITION.has(String(pageRaw.composition || '').trim())
+    ? String(pageRaw.composition).trim()
+    : 'reading';
+  const width = WIDTHS.has(String(pageRaw.width || '').trim())
+    ? String(pageRaw.width).trim()
+    : (composition === 'data' ? 'content' : composition === 'dashboard' ? 'wide' : 'reading');
+  // Dieselbe Regel wie fuer composition und width: ein unbekannter Wert
+  // faellt auf den unterstuetzten zurueck, statt roh weitergereicht zu werden.
+  // MODULES.md verspricht `context.page` als NORMALISIERTE Erklaerung und
+  // nennt fuer beide Felder nur `standard`; ein Tippfehler im Manifest darf
+  // im Client keinen Zustand erzeugen, den es nicht gibt.
+  const NAVIGATION = new Set(['standard']);
+  const RESPONSIVE = new Set(['standard']);
+  const navigation = NAVIGATION.has(String(pageRaw.navigation || '').trim())
+    ? String(pageRaw.navigation).trim()
+    : 'standard';
+  const responsive = RESPONSIVE.has(String(pageRaw.responsive || '').trim())
+    ? String(pageRaw.responsive).trim()
+    : 'standard';
+
   return {
     id,
     name,
@@ -158,6 +181,12 @@ export function normalizeManifest(raw, folderName) {
     accent,
     entry,
     style: style || null,
+    page: {
+      composition,
+      width,
+      navigation,
+      responsive,
+    },
     route: {
       path: routePath,
       entry: modulePublicUrl(id, entry),

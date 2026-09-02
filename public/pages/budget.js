@@ -433,7 +433,7 @@ export async function render(container, { user }) {
   state.expensesOnly = localStorage.getItem(EXPENSES_ONLY_KEY) === '1';
 
   setHtml(container, `
-    <div class="budget-page page-measure--narrow">
+    <div class="budget-page app-page app-page--reading page-measure--narrow" data-composition="reading">
       <div class="page-toolbar page-toolbar--wrap page-toolbar--narrow budget-nav">
         <h1 class="page-toolbar__title">${t('budget.title')}</h1>
         <!-- Der Kopf-Slot bleibt auf jedem Tab besetzt: entweder Stepper oder
@@ -869,17 +869,8 @@ function renderBody() {
     }
   });
 
-  // Enter/Space auf der fokussierten Zeile öffnet Bearbeiten, analog zum Klick.
-  // Guard auf e.target === Zeile: Enter auf dem inneren Lösch-Button feuert
-  // bereits dessen click und darf nicht zusätzlich das Edit-Modal öffnen.
-  _container.querySelector('#budget-list')?.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const item = e.target.closest('.budget-entry[data-id]');
-    if (!item || e.target !== item) return;
-    e.preventDefault();
-    const entry = state.entries.find((x) => x.id === parseInt(item.dataset.id, 10));
-    if (entry) openBudgetModal({ mode: 'edit', entry });
-  });
+  // Kein keydown-Handler mehr: Enter/Space auf dem Titel-Button feuert dessen
+  // nativen click, der ueber die Delegation oben im Edit-Modal landet.
 }
 
 function updateTabs() {
@@ -1080,18 +1071,19 @@ function renderEntries() {
         </button>`
       : '';
 
-    // Die Zeile ist die Edit-Fläche und braucht deshalb Tastaturzugang
-    // (role=button + tabindex); ein echtes <button> geht nicht, weil der
-    // Lösch-Button darin verschachtelt ist. Das aria-label hält den
-    // Lösch-Button-Namen aus dem Zeilen-Namen heraus.
-    /* Eine maskierte Zeile ist keine Bedienflaeche: es gibt nichts zu oeffnen
-     * (der Server liefert die Felder gar nicht erst mit) und nichts zu
-     * loeschen oder zu bestaetigen - das darf ohnehin nur der Eigentuemer.
-     * Ohne role=button waere sie sonst ein Knopf, der nichts tut. */
-    const rowInteraction = masked
-      ? `aria-label="${esc(t('budget.maskedEntryTitle'))}, ${amountText}"`
-      : `data-id="${e.id}" role="button" tabindex="0"
-           aria-label="${esc(t('budget.editEntry'))}: ${esc(e.title)}, ${amountText}"`;
+    /* Tastatur- und Screenreader-Zugang zur Edit-Flaeche haengt am TITEL-
+     * Button, nicht an der Zeile: role=button auf der Zeile machte Loeschen/
+     * Bestaetigen zu verschachtelten Interaktiven (axe nested-interactive) -
+     * die Zeile als EIN Widget verdeckt ihre inneren Buttons. Die Zeile
+     * bleibt Maus-Klickflaeche (data-id + Delegation am #budget-list).
+     * Eine maskierte Zeile ist keine Bedienflaeche: es gibt nichts zu oeffnen
+     * (der Server liefert die Felder gar nicht erst mit) - sie bekommt weder
+     * data-id noch einen Titel-Button, ihr sichtbarer Text traegt alles. */
+    const rowInteraction = masked ? '' : `data-id="${e.id}"`;
+    const titleCell = masked
+      ? `<div class="list-row__name budget-entry__title">${esc(displayTitle)}${sharedBadge}${maskedBadge}${pendingBadge}</div>`
+      : `<button class="list-row__name budget-entry__title" type="button"
+           aria-label="${esc(t('budget.editEntry'))}: ${esc(e.title)}, ${amountText}">${esc(displayTitle)}${sharedBadge}${maskedBadge}${pendingBadge}</button>`;
     const rowActions = masked ? '' : `
           ${confirmBtn}
           <button class="row-action row-action--danger" data-action="delete" data-id="${e.id}" aria-label="${t('budget.deleteLabel')}">
@@ -1102,7 +1094,7 @@ function renderEntries() {
       <div class="list-row budget-entry${pending ? ' budget-entry--pending' : ''}${masked ? ' budget-entry--masked' : ''}" ${rowInteraction}>
         <div class="budget-entry__indicator ${indClass}"></div>
         <div class="list-row__main">
-          <div class="list-row__name budget-entry__title">${esc(displayTitle)}${sharedBadge}${maskedBadge}${pendingBadge}</div>
+          ${titleCell}
           <div class="list-row__meta budget-entry__meta">${date} · ${esc(categoryMeta)}${acctMeta}${recurTag}${receiptMark}</div>
         </div>
         <div class="budget-entry__amount ${amtClass}">${amountText}</div>

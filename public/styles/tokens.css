@@ -1257,6 +1257,10 @@
   --sidebar-width-expanded: 220px;   /* full sidebar (≥1024px), max 240px laut Spec */
   --content-max-width: 1280px;
   --content-max-width-narrow: 720px;
+  /* Page Composition System width tokens (PAGE-COMPOSITION.md) */
+  --layout-reading: var(--content-max-width-narrow);
+  --layout-content: 60rem;
+  --layout-wide: 75rem;
   /* Kanonisches horizontales Seiten-Padding. Ein Wert für den Gutter aller
    * Modul-Roots. Ab 1024px auf --space-8 angehoben (siehe Media-Query unter
    * :root), damit Kopf und Inhalt dieselbe Fluchtlinie haben (Issue #577). */

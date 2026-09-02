@@ -1463,7 +1463,8 @@
         "receiptsAttachedLabel_one": "{{count}} csatolt bizonylat",
         "loanPaidInstallmentsLabel": "Már kifizetett részletek",
         "loanPaidInstallmentsHint": "Már futó kölcsönhöz. Ezek a részletek rögzülnek, de nem kerülnek be a költségvetésbe.",
-        "loanPaymentTypeLocked": "A bevétel vagy kiadás a kölcsön típusát követi, és ott módosítható."
+        "loanPaymentTypeLocked": "A bevétel vagy kiadás a kölcsön típusát követi, és ott módosítható.",
+        "planHistoricNote": "A jelenlegi tervedhez mérve. A Yuvomi nem őrzi meg, mi volt a terv egy korábbi hónapban."
     },
     "settings": {
         "healthCycleEnableLabel": "Ciklus fül megjelenítése",
@@ -4208,6 +4209,7 @@
         "loadError": "A jutalmakat nem sikerült betölteni.",
         "remainingToReward": "Még {{points}} a(z) „{{reward}}” eléréséig",
         "canRedeemNow": "Beváltásra kész",
+        "progressLabel": "Haladás a következő jutalom felé",
         "noRewardsYet": "Még nincsenek jutalmak",
         "redeem": "Beváltás",
         "confirmRedeem": "Beváltás",

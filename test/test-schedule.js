@@ -427,7 +427,11 @@ test('Schedule uses the full desktop module shell and responsive library/statist
   const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
   const scheduleCss = readFileSync(new URL('../public/styles/schedule.css', import.meta.url), 'utf8');
   assert.doesNotMatch(schedulePage, /page-measure--narrow schedule-page/);
-  assert.match(schedulePage, /<div class=\"schedule-page\">/);
+  // Die Wurzel traegt die Modulklasse; seit dem Kompositionssystem stehen die
+  // Layout-Primitives daneben (app-page app-page--full). Geprueft wird die Sache -
+  // die Seite ist als schedule-page ausgezeichnet -, nicht die Schreibweise, sonst
+  // wird dieser Guard bei jeder korrekten Erweiterung des Wurzelmarkups rot.
+  assert.match(schedulePage, /<div class=\"schedule-page(?:\s[^\"]*)?\"/);
   assert.match(schedulePage, /schedule-library--shifts/);
   assert.match(scheduleCss, /container: schedule-page \/ inline-size/);
   assert.match(scheduleCss, /@container schedule-page \(min-width: 720px\)/);

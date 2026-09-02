@@ -1828,10 +1828,17 @@ function renderKanbanCard(task) {
         ? t('tasks.kanbanMoveToInProgress')
         : t('tasks.kanbanMoveToOpen');
   return `
+    <!-- KEIN draggable-Attribut, obwohl die Karte ziehbar ist: SortableJS zieht
+         ueber seine draggable-OPTION (einen Selektor), und ein echtes
+         DOM-draggable aktiviert natives HTML5-DnD, das der Pointer-Geste den Zug
+         wegnimmt (gemessen 2026-09-02: kein Ghost, kein Spaltenwechsel, sogar
+         der Titel-Klick blieb aus). Fuer Sonde 7 ist die Karte deshalb ueber
+         CARD_OBJECT_EXEMPT ausgenommen, nicht ueber das Attribut. -->
     <div class="kanban-card ${task.status === 'done' ? 'kanban-card--done' : ''}"
          data-task-id="${task.id}">
       <!-- Button statt div: einziger Tastaturweg in die Kartendetails; der
-           Board-Klick-Handler fängt ihn über den umschließenden [draggable]. -->
+           Board-Klick-Handler fängt ihn über die umschließende
+           .kanban-card[data-task-id]. -->
       <button type="button" class="kanban-card__title u-card-title u-compact">${esc(task.title)}</button>
       <div class="kanban-card__meta">
         ${renderPriorityBadge(task.priority)}
@@ -3382,7 +3389,7 @@ export async function render(container, { user }) {
   // Initiales Skeleton (all values are from i18n keys or hardcoded constants, no user data)
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <div class="tasks-page page-measure--narrow">
+    <div class="tasks-page app-page app-page--reading page-measure--narrow" data-composition="reading">
       <div class="page-toolbar page-toolbar--wrap tasks-toolbar">
         <h1 class="page-toolbar__title">${t('tasks.title')}</h1>
         ${renderPageSearch({

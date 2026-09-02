@@ -97,8 +97,8 @@ Schalte an, was dein Haushalt braucht; der Rest bleibt aus dem Weg.
 Zwei Dinge gibt es nur auf dem eigenen Server: der **Wandmodus** macht aus dem Küchen-Tablet eine
 Anzeige, die man quer durch den Raum liest, und ein **Immich-Bildschirmschoner** lässt die eigenen
 Fotos laufen, wenn der Bildschirm still steht. Jedes Modul im Detail steht in der
-[Spezifikation](docs/SPEC.md); wie du ein eigenes Modul einhängst, steht im
-[Modulhandbuch](MODULES.md).
+[Spezifikation](docs/SPEC.md); wie du ein eigenes Modul einhängst - mit eigenen
+Dashboard-Widgets, Rechten und Übersetzungen -, steht im [Modulhandbuch](MODULES.md).
 
 ---
 
@@ -213,7 +213,7 @@ kein Abo, keinen Upsell und keine Bezahlstufe.
 
 ## Dokumentation
 
-[Installation](docs/installation.md) &nbsp;·&nbsp; [Spezifikation &amp; Datenmodell](docs/SPEC.md) &nbsp;·&nbsp; [Fremdmodule](MODULES.md) &nbsp;·&nbsp; [Benachrichtigungs-Webhooks](docs/notification-webhooks.md) &nbsp;·&nbsp; [Immich-Bildschirmschoner](docs/immich-screensaver.md) &nbsp;·&nbsp; [Mitwirken](CONTRIBUTING.md) &nbsp;·&nbsp; [Sicherheit](SECURITY.md) &nbsp;·&nbsp; [Changelog](CHANGELOG.md) &nbsp;·&nbsp; [Backlog](BACKLOG.md)
+[Installation](docs/installation.md) &nbsp;·&nbsp; [Spezifikation &amp; Datenmodell](docs/SPEC.md) &nbsp;·&nbsp; [Fremdmodule](MODULES.md) &nbsp;·&nbsp; [Benachrichtigungs-Webhooks](docs/notification-webhooks.md) &nbsp;·&nbsp; [Immich-Bildschirmschoner](docs/immich-screensaver.md) &nbsp;·&nbsp; [Mitwirken](CONTRIBUTING.md) &nbsp;·&nbsp; [Sicherheit](SECURITY.md) &nbsp;·&nbsp; [Changelog](CHANGELOG.md) &nbsp;·&nbsp; [Backlog](BACKLOG.md) &nbsp;·&nbsp; [Rahmen](docs/SCOPE.md)
 
 **Nutzerhandbuch (aus der Community):** @Kyrodan schreibt eine [Nutzerdokumentation](https://kyrodan.github.io/yuvomi-docs/)
 in seinem eigenen Repository. Sie gehört nicht zu diesem Projekt und kann hinter einem Release

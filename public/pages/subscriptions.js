@@ -177,8 +177,14 @@ async function load({ refreshRates = false } = {}) {
 export async function render(target, { user } = {}) {
   container = target;
   state.user = user || null;
+  // `full`, nicht `reading`: die Seite ist nicht auf das Mass migriert. Ihr
+  // Analytik-Raster (drei Spalten, zusammen mindestens 724px) und die Liste
+  // kennen kein Lesemass; als `reading` haette nur das Kennzahlenband die
+  // 720px angenommen und den Sprung zu den Diagrammen darunter erzeugt - als
+  // Budget-Reiter wie als Gast-Route. Zielmodus ist `dashboard`, sobald
+  // Werkzeugzeile, Raster und Liste dasselbe Mass lesen.
   setHtml(container, `
-    <div class="subscriptions-page" aria-busy="true">
+    <div class="subscriptions-page app-page app-page--full" data-composition="full" aria-busy="true">
       <div class="subscriptions-toolbar">
         <label class="subscriptions-search">
           <i data-lucide="search" aria-hidden="true"></i>
@@ -409,7 +415,8 @@ function renderSummary() {
         <div class="metric-card__label">${t('subscriptions.monthlyBudget')}</div>
         <div class="metric-card__value">${money(budget)}</div>
         <div class="metric-card__progress${isOverBudget ? ' metric-card__progress--over' : ''}"
-             role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}" aria-valuetext="${realPercentage}%">
+             role="progressbar" aria-label="${esc(t('subscriptions.monthlyBudget'))}"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}" aria-valuetext="${realPercentage}%">
           <span style="--fill:${percentage / 100}"></span>
         </div>
       </article>

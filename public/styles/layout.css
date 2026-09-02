@@ -2170,11 +2170,17 @@ html.fab-anim-done .page-fab {
  * Prozent-Padding liest die Breite des Containing Blocks (der Kopf ist
  * full-bleed, also die Shell-Spalte); die Formel zieht deshalb beide
  * Innenabstaende ab, und max() haelt den regulaeren Abstand, wo die Spalte
- * schmaler als das Lesemass ist. */
+ * schmaler als das Mass ist.
+ *
+ * DAS MASS IST DAS DER SEITE, nicht das Lesemass: die erste Fassung rechnete
+ * mit `--content-max-width-narrow` und deckelte damit den Kopf der
+ * Hauswirtschaft (`data`, 960px) auf 720px - Titelzeile und Reiter endeten
+ * 240px vor ihren Karten. Auf einer Seite ohne Mass (`full`/`split`,
+ * `--page-measure: 100%`) faellt die Formel auf den regulaeren Abstand zurueck. */
 .page-toolbar--narrow:has(> .page-toolbar__bar) {
   padding-inline-end: max(
     var(--page-inline-pad),
-    calc(100% - var(--content-max-width-narrow) - var(--page-inline-pad))
+    calc(100% - var(--page-measure, var(--content-max-width-narrow)) - var(--page-inline-pad))
   );
 }
 
@@ -2295,6 +2301,183 @@ html.fab-anim-done .page-fab {
 }
 
 /* --------------------------------------------------------
+ * PAGE COMPOSITION SYSTEM (PAGE-COMPOSITION.md)
+ *
+ * Modules declare a composition mode on `.app-page`; geometry lives here,
+ * not in module CSS. See public/utils/page-layout.js for markup helpers.
+ * -------------------------------------------------------- */
+.app-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+}
+
+.app-page__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* Kopf-Koerper-Rhythmus gehoert der Seite, nicht dem Modul (docs/PAGE-COMPOSITION.md):
+ * Leiste und .app-page__body sind Geschwister auf .app-page, und der Abstand
+ * zwischen ihnen wohnt HIER. Als birthdays.css sein `gap` abgab, ersetzte es
+ * nichts - `.app-page--* > .app-page__body { gap }` spaciert nur das Innere
+ * des Koerpers. Begrenzt auf Wurzeln aus renderAppPage, damit eine Seite, die
+ * ihren Abstand noch selbst traegt, ihn nicht doppelt bekommt. */
+.app-page:has(> .app-page__body) {
+  gap: var(--space-3);
+}
+
+.app-page--reading,
+.app-page--form,
+.page-measure--narrow {
+  --page-measure: var(--layout-reading);
+}
+
+.app-page--data {
+  --page-measure: var(--layout-content);
+}
+
+.app-page--dashboard {
+  --page-measure: var(--layout-wide);
+}
+
+/* OHNE MASS HEISST `100%`, NICHT `none`. Die Variable steht nicht nur in
+ * `max-width` (wo `none` ginge), sondern in den Kopf-Formeln von
+ * `.page-toolbar--narrow` (`calc(100% - var(--page-measure))`), und in einem
+ * calc() ist `none` kein Wert: die ganze Deklaration wird erst beim Rechnen
+ * ungueltig und faellt auf `unset` - beim Bar-Padding also auf 0, nicht auf
+ * den regulaeren Abstand. Mit `100%` ergeben dieselben Formeln 0 bzw. den
+ * Rueckfall, und ein `--narrow`-Kopf ist auf diesen Seiten ein No-op statt
+ * ein Fehler. Fuer `max-width` ist `100%` an einem 100%-breiten Block
+ * dasselbe wie `none`. */
+.app-page--split,
+.app-page--full {
+  --page-measure: 100%;
+}
+
+/* `page.width` from an extension manifest refines the measure INSIDE a
+ * measured mode (router.js sets data-page-width on the module's page root).
+ * split/full have no measure and are not listed here, so a width declared on
+ * them stays without effect instead of capping a page that owns its width. */
+.app-page:is(.app-page--reading, .app-page--form, .app-page--data, .app-page--dashboard)[data-page-width="reading"] {
+  --page-measure: var(--layout-reading);
+}
+
+.app-page:is(.app-page--reading, .app-page--form, .app-page--data, .app-page--dashboard)[data-page-width="content"] {
+  --page-measure: var(--layout-content);
+}
+
+.app-page:is(.app-page--reading, .app-page--form, .app-page--data, .app-page--dashboard)[data-page-width="wide"] {
+  --page-measure: var(--layout-wide);
+}
+
+/* Calendar agenda (and similar): temporarily adopt reading measure without
+ * switching composition mode declaration (PAGE-001). */
+.app-page.is-reading-measure {
+  --page-measure: var(--layout-reading);
+}
+
+.page-measure {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--page-measure, none);
+  /* Left-aligned with the reading/data column (not centered): matches
+   * .row-carrier / historical page-measure--narrow behaviour. */
+}
+
+/* Der Kopf hat KEIN Rail-Element (docs/PAGE-COMPOSITION.md). Titel, Mitte und
+ * Aktionen sind direkte Kinder von .page-toolbar - die Large-Title-Regeln
+ * (typography.css) und Siegel/Dock-Titel (`:scope > .page-toolbar__title` in
+ * ux.js) haengen daran. Die Kante am Lesemass haelt .page-toolbar--narrow::after
+ * (weiter unten), ein Pseudo-Element, damit kein Wrapper noetig ist. Die erste
+ * Fassung von #995 hatte hier einen `--measured`-Modifier mit einem Rail-Kind
+ * als "echte Flex-Box fuer neue Seiten" - eine Box, die den Titel zum Enkel
+ * machte; der Helper baut sie in keiner Kombination mehr (sechste Runde), und
+ * ein Guard wird rot, sobald einer der beiden Klassennamen unter public/
+ * wieder auftaucht - auch in einem Kommentar wie diesem, deshalb steht er hier
+ * nicht ausgeschrieben. */
+
+.app-page--reading > .app-page__body,
+.app-page--form > .app-page__body,
+.app-page--data > .app-page__body {
+  padding-inline: var(--page-inline-pad);
+  gap: var(--space-3);
+}
+
+.app-page--dashboard > .app-page__body {
+  padding-inline: var(--page-inline-pad);
+  gap: var(--space-4);
+}
+
+.page-section {
+  min-width: 0;
+}
+
+.page-section--bleed {
+  margin-inline: calc(-1 * var(--page-inline-pad));
+  padding-inline: var(--page-inline-pad);
+}
+
+/* DAS SPLIT-RASTER LIEGT AM KOERPER, NICHT AN DER SEITE. Die erste Fassung
+ * machte `.app-page--split` selbst zum Raster - und renderAppPage() legt Kopf
+ * und Koerper als Geschwister darunter. Auto-Platzierung setzte dann den Kopf
+ * in die linke Spalte und den ganzen Koerper in die rechte, statt den Kopf
+ * ueber beide zu spannen und den Koerper zu teilen. Jetzt sind die beiden
+ * ersten Kinder von .app-page__body die Rails (Master links auf Lesemass,
+ * Detail rechts); der Kopf bleibt eine Zeile darueber. Unter 1024px bleibt der
+ * Koerper die Flex-Spalte aus der Basisregel und stapelt. */
+/* Und der Koerper traegt das Polster wie in reading/data/dashboard: der Kopf
+ * polstert sich ueber .page-toolbar selbst, und ohne dieselbe Kante am Koerper
+ * begannen die Rails bei x=0 - gestapelt an der Shell-Kante, im Raster links
+ * vom Titel (Codex, dritte Runde an #995). `full` bleibt bewusst ohne: dort
+ * gehoert die Kante der Seite (Kalender-Raster, Notizen-Masonry). Das `gap`
+ * hier gilt dem Stapel unter 1024px; das Raster darunter setzt seines. */
+.app-page--split > .app-page__body {
+  padding-inline: var(--page-inline-pad);
+  gap: var(--space-3);
+}
+
+/* DAS RASTER MISST DIE SEITE, NICHT DEN VIEWPORT - dieselbe Lehre wie in
+ * split-expenses.css: neben der ausgeklappten Sidebar (220px) hat die Seite
+ * bei 1024px Viewport rund 804px; eine Viewport-Query bei 1024px schaltete
+ * dort zweispaltig, und ein Master-Track bis 720px liess dem Detail nach
+ * Polster und Luecke ein paar Pixel (Codex, fuenfte Runde an #995). Deshalb
+ * ist die Wurzel ein Container, und der Master nimmt hoechstens die Haelfte:
+ * bei 768px Seitenbreite je ~350px, ab ~1500px das volle Lesemass links und
+ * der Rest rechts. Die Query ist namenlos, damit ein Seiten-CSS, das seinen
+ * Container bereits benennt (split-page), nicht mit ihr ringt. */
+.app-page--split {
+  container-type: inline-size;
+}
+
+@container (min-width: 768px) {
+  .app-page--split > .app-page__body {
+    display: grid;
+    grid-template-columns: minmax(0, min(var(--layout-reading), 50%)) minmax(0, 1fr);
+    grid-auto-rows: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+}
+
+/* DIE HOEHE KOMMT DURCH DIE WURZEL, wenn eine Seite sie verspricht. `flex: 1`
+ * an .app-page wirkt nur in einem Flex-Elternteil, und .page-transition ist
+ * ein Block mit `height: 100%` - die Wurzel blieb inhaltshoch, und der
+ * `flex: 1`-Koerper darunter hatte nichts zu fuellen. Kalender und Notizen
+ * merkten davon nichts, weil ihr Modul-CSS `height: 100%` selbst setzt; eine
+ * Erweiterung darf das nicht (MODULES.md), also stellt `full`/`split` die
+ * Shell-Hoehe hier bereit. Nur fuer Helper-Wurzeln, aus demselben Grund wie
+ * das `gap` oben: eine Kernseite, die ihre Hoehe noch selbst traegt, soll sie
+ * nicht doppelt bekommen. */
+.app-page--full:has(> .app-page__body),
+.app-page--split:has(> .app-page__body) {
+  height: 100%;
+}
+
+/* --------------------------------------------------------
  * DAS LESEMASS IST EINE EIGENSCHAFT DER SEITE, NICHT DES TRAEGERS
  * (Critique 2026-08-13, zweite Runde)
  *
@@ -2316,9 +2499,6 @@ html.fab-anim-done .page-fab {
  * die mitfluchten muss, liest dieselbe Variable. Wer sie nicht liest, faellt auf
  * `none` zurueck und ist damit ausdruecklich full-bleed, nicht versehentlich.
  * -------------------------------------------------------- */
-.page-measure--narrow {
-  --page-measure: var(--content-max-width-narrow);
-}
 
 /* Die Bedienzeilen und Inhaltsbloecke einer solchen Seite. Sie stehen zwischen
  * Kopf und Koerper oder ueber ihm und wirken auf ihn, also enden sie mit ihm.
@@ -2376,7 +2556,19 @@ html.fab-anim-done .page-fab {
   /* Der Diagrammabschnitt steht ueber der Buchungsliste und ist selbst eine
    * Zeilenfolge (Kategoriezeilen), also gilt dasselbe Mass. */
   .budget-chart-section,
+  /* Kennzahlenband teilt die Lesebahn mit Kopf und Liste (PAGE-002). */
+  .metric-grid,
   /* Die Mitarbeiterleiste ueber den Karten der Hauswirtschaft. */
+  .housekeeping-worker-strip
+),
+.app-page :is(
+  .tasks-filters-row,
+  .rewards-tabs,
+  .housekeeping-card,
+  .contact-group__header,
+  .rw-pending-panel,
+  .budget-chart-section,
+  .metric-grid,
   .housekeeping-worker-strip
 ) {
   max-width: var(--page-measure, none);
@@ -2390,7 +2582,7 @@ html.fab-anim-done .page-fab {
  * Marge wie das letzte Kind, damit sein Bezugsrahmen die Lesebahn wird statt
  * der Rail. */
 .page-measure--narrow .page-toolbar .budget-nav__month {
-  margin-inline-end: max(0px, calc(100% - var(--page-measure, var(--content-max-width-narrow))));
+  margin-inline-end: max(0px, calc(100% - var(--page-measure, var(--layout-reading))));
 }
 
 /* Opt-in: der Kopf sitzt UNTER einer Tab-Gruppenleiste (.sub-tabs-bar).
@@ -2483,7 +2675,7 @@ html.fab-anim-done .page-fab {
    * GRUND, aus dem es diesen Abstand gibt. Er steht deshalb, und der Mangel
    * landet bei den Slots, die dafuer gebaut sind - Suchfeld und Tab-Leisten
    * geben nach, der Seitentitel zuletzt (siehe unten). */
-  flex: 0 0 max(0px, calc(100% - var(--content-max-width-narrow)));
+  flex: 0 0 max(0px, calc(100% - var(--page-measure, var(--layout-reading))));
   min-width: 0;
   /* DEN EIGENEN ABSTAND ZURUECKNEHMEN. Als Marge am letzten Slot lag der
    * Rueckhalt INNERHALB von dessen Box und beruehrte den `gap` der Leiste nie.
@@ -5386,6 +5578,151 @@ textarea::placeholder {
   .grid--4 { grid-template-columns: repeat(4, 1fr); }
 }
 
+/* --------------------------------------------------------
+ * Layout-Primitives
+ *
+ * Wiederverwendbare Content-Area-Patterns für Desktop.
+ * Mobile: immer single-column (Stacking).
+ *
+ * .layout-master-detail  - Liste links, Detail rechts (Aufgaben, Einkauf)
+ * .layout-content-aside  - Hauptinhalt + schmale Seitenleiste (Kalender)
+ * .layout-center         - Zentrierter schmaler Content (Settings, Login)
+ * .layout-wide           - Volle Breite mit max-width (Dashboard)
+ * -------------------------------------------------------- */
+
+/* ── Master-Detail ──
+ * Mobile: gestapelt (Detail wird programmatisch ein-/ausgeblendet).
+ * Desktop: 2 Spalten - Liste ~40%, Detail ~60%.
+ */
+.layout-master-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+.layout-master-detail__master {
+  flex: 1;
+  min-width: 0;
+}
+
+.layout-master-detail__detail {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .layout-master-detail {
+    flex-direction: row;
+    gap: var(--space-6);
+  }
+
+  .layout-master-detail__master {
+    flex: 0 0 380px;
+    max-width: 420px;
+    overflow-y: auto;
+    max-height: calc(100dvh - var(--space-16));
+    position: sticky;
+    top: var(--space-8);
+  }
+
+  .layout-master-detail__detail {
+    flex: 1;
+  }
+}
+
+@media (min-width: 1440px) {
+  .layout-master-detail__master {
+    flex: 0 0 420px;
+    max-width: 460px;
+  }
+}
+
+/* ── Content + Aside ──
+ * Mobile: gestapelt.
+ * Desktop: Hauptinhalt nimmt Platz ein, Aside ist 280–320px.
+ */
+.layout-content-aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+.layout-content-aside__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.layout-content-aside__aside {
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .layout-content-aside {
+    flex-direction: row;
+    gap: var(--space-6);
+  }
+
+  .layout-content-aside__main {
+    flex: 1;
+  }
+
+  .layout-content-aside__aside {
+    flex: 0 0 280px;
+    overflow-y: auto;
+    max-height: calc(100dvh - var(--space-16));
+    position: sticky;
+    top: var(--space-8);
+  }
+}
+
+@media (min-width: 1440px) {
+  .layout-content-aside__aside {
+    flex: 0 0 320px;
+  }
+}
+
+/* ── Center ──
+ * Schmaler, zentrierter Content-Bereich (max. 720px).
+ * Ideal für Settings, Formulare, Einzelansichten.
+ */
+.layout-center {
+  max-width: var(--layout-reading);
+  margin: 0 auto;
+}
+
+/* ── Wide ──
+ * Volle verfügbare Breite mit max-width.
+ * Für Dashboard und andere Multi-Column-Ansichten.
+ */
+.layout-wide {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+/* ── Prose ──
+ * Text-Content mit optimaler Lesebreite.
+ */
+.prose {
+  max-width: var(--layout-reading);
+}
+
+/* ── Sticky-Header (Modul-Toolbars) ──
+ * Klebt am oberen Rand beim Scrollen.
+ */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  /* Opaque background required: backdrop-filter on position:sticky inside overflow:auto
+   * triggers a WebKit compositor bug that blanks the entire scroll container (iOS 26+). */
+  background-color: var(--color-bg);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+}
 
 /* Hier stand ein prefers-reduced-transparency-Fallback für fünf Modul-Köpfe -
  * der letzte Rest einer Annahme, die seit Issue #577 nicht mehr gilt. Er

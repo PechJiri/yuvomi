@@ -166,7 +166,7 @@ function updateHousekeepingFab() {
 function renderShell(container) {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <section class="housekeeping-page page-measure--narrow" aria-labelledby="housekeeping-title">
+    <section class="housekeeping-page app-page app-page--data" data-composition="data" aria-labelledby="housekeeping-title">
       <header class="page-toolbar page-toolbar--narrow housekeeping-toolbar">
         <h1 class="page-toolbar__title" id="housekeeping-title">${esc(t('housekeeping.title'))}</h1>
         <nav class="housekeeping-tabs page-toolbar__bar" role="tablist" aria-label="${esc(t('housekeeping.bottomNav'))}">
@@ -673,15 +673,19 @@ function openVisitReportModal(visit, content = null) {
 function renderStaff(content) {
   content.replaceChildren();
   const workerRows = state.workers.map((item) => `
+    <!-- Auswahl haengt am Namens-BUTTON, nicht am article: role=button auf dem
+         Container ist fuer <article> keine erlaubte Rolle und machte den
+         Edit-Button zum verschachtelten Interaktiven (axe). Der article bleibt
+         Maus-Klickflaeche ueber data-select-worker + Delegation. -->
     <article class="housekeeping-staff-row ${String(state.selectedStaffId || '') === String(item.id) ? 'housekeeping-staff-row--active' : ''}"
-             data-select-worker="${item.id}" role="button" tabindex="0">
+             data-select-worker="${item.id}">
       <div class="housekeeping-avatar" style="background:${esc(item.avatar_color) || 'var(--module-housekeeping)'}">
         ${item.avatar_data ? `<img src="${esc(item.avatar_data)}" alt="${esc(item.display_name)}">` : esc(initials(item.display_name))}
       </div>
-      <div>
+      <button class="housekeeping-staff-row__select" type="button">
         <strong>${esc(item.display_name)}</strong>
         <span>${esc(item.phone || item.email || '')}</span>
-      </div>
+      </button>
       <button class="btn btn--secondary btn--icon" type="button" data-edit-worker="${item.id}" aria-label="${esc(t('common.edit'))}">
         <i data-lucide="edit-2" aria-hidden="true"></i>
       </button>
@@ -709,13 +713,10 @@ function renderStaff(content) {
         window.yuvomi?.showToast(err.message, 'danger');
       }
     };
+    // Enter/Space auf dem Namens-Button feuert dessen nativen click und
+    // bubbelt hierher - ein eigener keydown-Handler entfiele als Doppelung.
     row.addEventListener('click', (event) => {
       if (event.target.closest('[data-edit-worker]')) return;
-      select();
-    });
-    row.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      event.preventDefault();
       select();
     });
   });
@@ -1229,7 +1230,7 @@ function openStaffModal(worker, content, options = {}) {
 export async function render(container) {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <section class="housekeeping-page page-measure--narrow housekeeping-page--loading" aria-busy="true">
+    <section class="housekeeping-page app-page app-page--data housekeeping-page--loading" data-composition="data" aria-busy="true">
       ${renderSkeletonList({ rows: 6, lines: 2 })}
     </section>
   `);
@@ -1257,7 +1258,7 @@ export async function render(container) {
     // sprachneutralen Statuscode und erzwingt den Wiederholen-CTA.
     container.replaceChildren();
     container.insertAdjacentHTML('beforeend',
-      '<section class="housekeeping-page page-measure--narrow"></section>');
+      '<section class="housekeeping-page app-page app-page--data" data-composition="data"></section>');
     mountLoadError(container.querySelector('.housekeeping-page'), {
       title: t('housekeeping.loadError'),
       description: t('common.loadErrorDescription'),
