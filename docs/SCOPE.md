@@ -29,14 +29,20 @@ engine.** Neither is a matter of effort; both are a matter of shape.
 
 Reading account data means going through PSD2 / open banking, and that access is licensed:
 either the software provider holds an AISP licence, or it runs through an aggregator -
-GoCardless Bank Account Data, Plaid, Akahu and friends - which means a contract,
-credentials and usually a bill. That model assumes **one company running one service for
-many users**.
+GoCardless Bank Account Data, Plaid, Akahu, Enable Banking and friends. The licence does
+assume **one company running one service for many users**, and Yuvomi is the opposite
+shape: everybody runs their own instance and there is no server of ours in the middle, so
+there is no set of credentials that could ship with the app.
 
-Yuvomi is the opposite shape. Everybody runs their own instance and there is no server of
-ours in the middle, so there is no set of credentials that could ship with the app. Every
-operator would have to register with an aggregator themselves, per instance - which for
-most households is more work than typing the transactions in. (#776)
+What that does *not* mean is that it is out of reach for an individual, and it is worth not
+overstating this. Several aggregators answer exactly this case with a restricted personal
+mode - Enable Banking's Restricted Production is free for private use, self-serve, and runs
+under *their* licence against accounts you link yourself; Firefly III documents an import
+built on it. So the obstacle is not the licence, it is that **every household would have to
+register its own application and link its own accounts**, and that each provider covers one
+region - Europe here, Akahu in New Zealand, Plaid elsewhere - so the core would collect one
+integration per region and maintain them all. That is the argument in section 2, and the
+answer is the same: this belongs in a sidecar, where #746 already does bank feeds. (#776)
 
 ### Another app's sync engine is a second data runtime
 
