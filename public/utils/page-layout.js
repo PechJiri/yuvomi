@@ -4,7 +4,7 @@
  * Modules provide content; core owns page geometry. Use these exports to build
  * Page → PageHeader + PageBody → Section markup without local width/padding hacks.
  *
- * Reference demo: public/pages/birthdays.js (mode reading, measured header rail).
+ * Reference demo: public/pages/birthdays.js (mode reading, narrow header).
  *
  * JEDER ATTRIBUT-WERT GEHT DURCH esc(), AUCH id UND className. Diese Helfer
  * sind die zugesagte Oberflaeche fuer Erweiterungen (MODULES.md), und eine id
@@ -105,7 +105,6 @@ ${header}${body}${trailing}
  * @param {boolean} [opts.wrap=false]
  * @param {boolean} [opts.narrow=true] - ::after spacer pulls the row end to --page-measure;
  *   a no-op in `full`/`split` (their measure is 100%), so the default is safe there
- * @param {boolean} [opts.measured=false] - without narrow: wrap primary slots in .page-toolbar__rail
  * @param {boolean} [opts.inGroup=false]
  * @param {boolean} [opts.capped=false]
  * @param {boolean} [opts.stacked=false]
@@ -119,7 +118,6 @@ export function renderPageHeader({
   bar = '',
   wrap = false,
   narrow = true,
-  measured = false,
   inGroup = false,
   capped = false,
   stacked = false,
@@ -127,7 +125,6 @@ export function renderPageHeader({
   const classes = [
     'page-toolbar',
     wrap && 'page-toolbar--wrap',
-    measured && 'page-toolbar--measured',
     narrow && 'page-toolbar--narrow',
     inGroup && 'page-toolbar--in-group',
     capped && 'page-toolbar--capped',
@@ -135,18 +132,22 @@ export function renderPageHeader({
     esc(className),
   ].filter(Boolean).join(' ');
 
-  const railSlots = [title, center, actions].filter(Boolean).join('\n');
-  // Der Rail ist nur dann ein Element, wenn er auch eine Box ist. Mit
-  // `narrow` haelt der ::after-Slot die Kante, und ein Wrapper um die Slots
-  // waere reine DOM-Tiefe - eine, die alles blind macht, was den Titel als
-  // DIREKTES Kind der Leiste sucht: das Absender-Siegel und der Dock-Titel
-  // (`:scope > .page-toolbar__title` in ux.js) und die Large-Title-Regeln
-  // (`.page-toolbar > .page-toolbar__title` in typography.css). `display:
-  // contents` hilft dort nicht, Selektoren sehen den DOM, nicht den Boxbaum.
-  const rail = measured && !narrow && railSlots
-    ? `<div class="page-toolbar__rail">\n${railSlots}\n</div>`
-    : railSlots;
-  const inner = [rail, bar].filter(Boolean).join('\n');
+  // KEIN WRAPPER UM DIE SLOTS, in keiner Kombination von Optionen. Titel,
+  // Mitte und Aktionen sind DIREKTE Kinder der Leiste, weil alles, was den
+  // Titel sucht, ihn genau dort erwartet: das Absender-Siegel und der
+  // Dock-Titel (`:scope > .page-toolbar__title` in ux.js) und die Large-Title-
+  // Regeln (`.page-toolbar > .page-toolbar__title` in typography.css). Die
+  // erste Fassung legte fuer eine `measured`-Option ohne `narrow` einen
+  // Rail-Wrapper um die Slots - eine echte Flex-Box, aber eine, die den Titel
+  // zum Enkel macht und damit Siegel und Dock-Titel verschwinden laesst.
+  // Runde eins an #995 nahm den Wrapper fuer `narrow` heraus, Runde sechs
+  // (Codex) fuer den Rest: die Kombination stand in der Doku, keine Seite
+  // nutzte sie, und `display: contents` haette nicht geholfen, Selektoren
+  // sehen den DOM, nicht den Boxbaum. Die Kante haelt der ::after-Slot von
+  // `narrow`; ohne `narrow` gibt es keine Kante zu halten (`full`/`split`).
+  // Ein Guard wird rot, sobald der Klassenname des Wrappers oder seines
+  // Modifiers irgendwo unter public/ wieder auftaucht.
+  const inner = [title, center, actions, bar].filter(Boolean).join('\n');
   return `<div class="${classes}">\n${inner}\n</div>`;
 }
 

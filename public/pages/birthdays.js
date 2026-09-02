@@ -287,7 +287,7 @@ function wireBirthdaySwipe(host) {
 
 function renderPage() {
   // Reference page for PAGE-COMPOSITION.md: geometry only via page-layout helpers.
-  // Header rail + body sections share --layout-reading (PAGE-002).
+  // Header and body sections share --layout-reading (PAGE-002).
   _container.replaceChildren();
   _container.insertAdjacentHTML('beforeend', renderAppPage({
     mode: 'reading',
@@ -295,7 +295,6 @@ function renderPage() {
     legacyAlias: false,
     header: renderPageHeader({
       wrap: true,
-      measured: true,
       narrow: true,
       className: 'birthdays-toolbar',
       title: renderPageTitle(t('birthdays.title')),

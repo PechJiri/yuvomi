@@ -152,7 +152,7 @@ Defined in [`public/styles/layout.css`](../public/styles/layout.css):
 | `.page-measure` | caps width to `--page-measure` (left-aligned) |
 | `.page-section` | semantic section; no page geometry |
 | `.page-section--bleed` | explicit full-bleed band |
-| `.page-toolbar--measured` + `.page-toolbar__rail` | header slots grouped for the measure axis |
+| `.page-toolbar--narrow` | header row ends at `--page-measure` via `::after`; the slots stay direct children (no rail element) |
 
 Mode modifiers set `--page-measure`:
 
@@ -183,7 +183,7 @@ module CSS sizing the page.
 | Export | Role |
 |--------|------|
 | `renderAppPage` | page root with mode + `data-composition` |
-| `renderPageHeader` | canonical `.page-toolbar` (+ optional measured rail) |
+| `renderPageHeader` | canonical `.page-toolbar`; title, center and actions are its direct children in every option combination |
 | `renderPageTitle` | `.page-toolbar__title` |
 | `renderPageActions` | `.page-toolbar__actions` |
 | `renderPageBody` | `.app-page__body` |
@@ -199,7 +199,6 @@ Modules must not set page width, gutters, or breakpoints. They pass content into
 |--------|-------------|
 | `.page-measure--narrow` | `.app-page--reading` |
 | `.budget-list-section` | `.page-section` |
-| `.page-toolbar--narrow::after` as *sole* alignment story | `.page-toolbar--measured` + `__rail` (narrow may remain until Large-Title selectors accept the rail) |
 
 New code must not introduce legacy aliases. Reference page already omits `.page-measure--narrow`.
 
@@ -254,7 +253,7 @@ Open **`/birthdays`** on a wide desktop (1440 / 1920) to see the structure:
 
 ```text
 .app-page--reading
-|- .page-toolbar.page-toolbar--measured.page-toolbar--narrow
+|- .page-toolbar.page-toolbar--narrow
 |  |- .page-toolbar__title                <- direct children, no rail element:
 |  |- .page-search                           the collapsing header and the
 |  |- .page-toolbar__actions                 large title select `> .page-toolbar__title`
@@ -264,11 +263,15 @@ Open **`/birthdays`** on a wide desktop (1440 / 1920) to see the structure:
    `- .page-section--list.page-measure    <- .row-carrier list
 ```
 
-There is no `.page-toolbar__rail` in this tree, and that is deliberate: with
-`narrow` the helper emits the slots directly under the toolbar and lets the
-`::after` spacer hold the edge. Do not recreate the wrapper by hand - it hides
-the title from the selectors that build the head seal and the dock title
-(PAGE-007b). The rail exists as an element only for `measured` without `narrow`.
+There is no `.page-toolbar__rail` in this tree, and no option combination
+produces one: the helper emits the slots directly under the toolbar in every
+case, and with `narrow` the `::after` spacer holds the edge. An earlier draft
+kept a rail box for `measured` without `narrow`; it made the title a grandchild
+and hid it from the selectors that build the head seal and the dock title, so
+the option and the element are gone (PAGE-007b, and a guard that fails on the
+class names anywhere under `public/`). Do not recreate the wrapper by hand; if a
+page ever needs one, `ux.js` and `typography.css` have to learn to find the
+title through it first.
 
 ### Visual regression (phase 2+)
 
@@ -283,7 +286,7 @@ overflow checks. Not wired into CI yet.
 |----------|--------|
 | Is Budget the layout reference? | **No.** There is no reference page. Budget is an offender; the rules are the contract. |
 | Must every page use `page-layout.js`? | Every page behind the app shell must declare a mode. Deep helper migration follows page by page; the three pending pages are named in the guard. |
-| Why still `page-toolbar--narrow`? | Large-Title / wrap CSS and the head seal (`:scope > .page-toolbar__title`) key off direct toolbar children. With `narrow` there is no rail element at all - `::after` holds the edge - so those selectors keep working; the rail box exists only without `narrow`. |
+| Why still `page-toolbar--narrow`? | Large-Title / wrap CSS and the head seal (`:scope > .page-toolbar__title`) key off direct toolbar children. `narrow` holds the row end with a pseudo-element, so no wrapper is needed and those selectors keep working. A `measured` rail box was tried and removed: it put the title one level down. |
 | Why `--layout-*` and `--content-max-width-narrow`? | `--layout-*` is the contract; narrow is a one-cycle alias. |
 | Can extensions invent width? | **No.** Declare `page.composition` and use helpers / `.app-page--*`. |
 | What about shopping / meals / settings / auth? | Documented v1 exceptions - do not force composition modes yet. |

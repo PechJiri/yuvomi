@@ -66,7 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the viewport: beside the expanded sidebar a 1024px screen leaves the page about 804px, and a
   master rail allowed 720px of that left the detail rail a few pixels wide on common laptops;
   the split root is a container now, the grid switches on the page's own width like the
-  expenses split already did, and the master rail never takes more than half. The budget
+  expenses split already did, and the master rail never takes more than half. A sixth round
+  found the header helper still building a rail box for `measured` without `narrow`, the one
+  combination the spec still offered: a real element, not a `display: contents` shim, and it
+  put the title one level below the toolbar where the large-title rules and the collapsing
+  header look for a direct child. No page used it. The option, the element and its rules are
+  gone, every option combination renders the slots as direct children, and a guard fails on
+  either class name anywhere under `public/`. The budget
   reports panel had declared itself a `dashboard` inside the `reading`
   budget page, which set the measure of its subtree to 1200px while the shared header and
   every other tab end at 720px; it declares the mode of the page it lives in, and a guard holds

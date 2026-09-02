@@ -15149,26 +15149,33 @@ test('PAGE-006b: a page without a measure does not narrow its header', () => {
   assert.ok(checked >= 2, `PAGE-006b: only ${checked} full/split pages found - calendar and notes should be two`);
 });
 
-test('PAGE-007b: a narrow header keeps its slots as direct children', async () => {
+test('PAGE-007b: a header keeps its slots as direct children, whatever the options', async () => {
   // Das Absender-Siegel und der Dock-Titel suchen `:scope > .page-toolbar__title`
   // (ux.js), die Large-Title-Regeln `.page-toolbar > .page-toolbar__title`
-  // (typography.css). Ein Rail-Wrapper um die Slots macht beides blind - auf
+  // (typography.css). Ein Wrapper um die Slots macht beides blind - auf
   // /birthdays fehlten Siegel und Dock-Titel, weil `measured` den Titel eine
-  // Ebene tiefer legte. Mit `narrow` haelt ::after die Kante; der Rail ist dort
-  // kein Element. Ohne `narrow` ist er eine echte Box und darf stehen.
+  // Ebene tiefer legte. Runde eins an #995 nahm den Rail fuer `narrow` heraus
+  // und liess ihn ohne `narrow` als "echte Box" stehen; Runde sechs (Codex)
+  // fand, dass die Box den Titel genauso versteckt - und die Kombination war
+  // dokumentiert. Der Helper darf in KEINER Kombination einen Wrapper bauen:
+  // zwischen der Leiste und ihrem Titel steht nichts.
   const { renderPageHeader } = await import('../public/utils/page-layout.js');
-  const slots = { title: '<h1 class="page-toolbar__title">T</h1>', actions: '<div class="page-toolbar__actions"></div>' };
-  const narrow = renderPageHeader({ ...slots, measured: true, narrow: true });
-  assert.doesNotMatch(narrow, /page-toolbar__rail/,
-    'PAGE-007b: measured + narrow must not wrap the slots in a rail');
-  assert.match(narrow, /<div class="page-toolbar[^"]*">\n<h1 class="page-toolbar__title">/,
-    'PAGE-007b: the title must be the first direct child of the toolbar');
-  const railed = renderPageHeader({ ...slots, measured: true, narrow: false });
-  assert.match(railed, /<div class="page-toolbar__rail">\n<h1 class="page-toolbar__title">/,
-    'PAGE-007b: without narrow the rail is a real flex box and wraps the slots');
-  // Und die Seite, die den Kopf so baut, verlangt genau diese Form.
-  assert.match(read('../public/pages/birthdays.js'), /measured:\s*true,\s*\n\s*narrow:\s*true/,
-    'PAGE-007b: birthdays is the measured + narrow case this guard is about');
+  const slots = {
+    title: '<h1 class="page-toolbar__title">T</h1>',
+    center: '<div class="page-search"></div>',
+    actions: '<div class="page-toolbar__actions"></div>',
+  };
+  const direct = [slots.title, slots.center, slots.actions].join('\n');
+  for (const opts of [{}, { narrow: true }, { narrow: false }, { measured: true, narrow: false }, { measured: true }]) {
+    const html = renderPageHeader({ ...slots, ...opts });
+    const inner = html.match(/^<div class="page-toolbar[^"]*">\n([\s\S]*)\n<\/div>$/);
+    assert.ok(inner, `PAGE-007b: ${JSON.stringify(opts)} did not render a single toolbar element`);
+    assert.equal(inner[1], direct,
+      `PAGE-007b: ${JSON.stringify(opts)} must emit the slots as direct children of the toolbar, nothing between`);
+  }
+  // Und die Referenzseite traegt keine Option, die es nicht mehr gibt.
+  assert.doesNotMatch(read('../public/pages/birthdays.js'), /measured:/,
+    'PAGE-007b: birthdays passes no `measured` option - the helper has none');
   // Das Beispiel in der Spec zeigt denselben Baum. Nach dem Fix oben stand
   // dort noch `.page-toolbar__rail -> title . search . actions` - eine
   // Anleitung, den Wrapper von Hand nachzubauen, den der Helper gerade
@@ -15455,7 +15462,8 @@ test('PAGE composition: birthdays stays free of page geometry in module CSS', ()
   assert.match(src, /mode:\s*'reading'/, 'birthdays.js must declare reading mode');
   assert.match(src, /legacyAlias:\s*false/,
     'birthdays.js must omit the .page-measure--narrow compat alias');
-  assert.match(src, /measured:\s*true/, 'birthdays.js header must use the measured rail');
+  assert.doesNotMatch(src, /measured:|page-toolbar__rail/,
+    'birthdays.js header has no rail element and no measured option (sixth round of #995)');
   assert.doesNotMatch(src, /page-measure--narrow/,
     'birthdays.js must not reintroduce page-measure--narrow');
   // Module CSS owns accent/list chrome only - no page geometry.
@@ -15472,12 +15480,30 @@ test('PAGE composition: birthdays stays free of page geometry in module CSS', ()
     'list gutter must come from composition body, not birthdays.css');
 });
 
-test('PAGE composition: measured toolbar rail exists in layout.css', () => {
+test('PAGE composition: there is no toolbar rail element anywhere under public/', () => {
+  // Bis zur sechsten Runde an #995 stand hier das Gegenteil: "measured toolbar
+  // rail exists in layout.css". Der Helper baute fuer `measured` ohne `narrow`
+  // einen `.page-toolbar__rail` um die Slots, layout.css hatte die Regeln dazu,
+  // die Doku nannte die Kombination - und jeder, der sie nahm, verlor Siegel
+  // und Dock-Titel (PAGE-007b). Rail und Modifier sind weg. Taucht einer der
+  // beiden Namen wieder auf, ist das der Wrapper auf dem Rueckweg, und dann
+  // muessen ZUERST ux.js und typography.css den Titel auch als Enkel finden.
+  const styleDir = new URL('../public/styles/', import.meta.url);
+  const files = [
+    ...readdirSync(styleDir).filter((f) => f.endsWith('.css')).map((f) => `../public/styles/${f}`),
+    ...walkFrontendFiles('../public/').filter((f) => !f.includes('/vendor/')),
+  ];
+  let seen = 0;
+  for (const file of files) {
+    seen++;
+    const src = read(file);
+    const hit = src.match(/page-toolbar__rail|page-toolbar--measured/);
+    const line = hit ? src.slice(0, hit.index).split('\n').length : 0;
+    assert.ok(!hit,
+      `${file}:${line}: "${hit?.[0]}" - the toolbar rail element is gone; the header slots are direct children (sixth round of #995)`);
+  }
+  assert.ok(seen > 100, `PAGE composition: only ${seen} files scanned for the rail - the walk is broken`);
   const layout = read('../public/styles/layout.css');
-  assert.match(layout, /\.page-toolbar--measured/,
-    'measured toolbar modifier must exist');
-  assert.match(layout, /\.page-toolbar__rail/,
-    'toolbar rail primitive must exist');
   assert.match(layout, /\.app-page--reading\s*>\s*\.app-page__body/,
     'reading body must own page-inline-pad gutters');
 });

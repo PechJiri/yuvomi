@@ -2389,38 +2389,17 @@ html.fab-anim-done .page-fab {
    * .row-carrier / historical page-measure--narrow behaviour. */
 }
 
-/* Measured toolbar rail (docs/PAGE-COMPOSITION.md).
- *
- * With .page-toolbar--narrow there is NO rail element: ::after owns the
- * primary edge, and title/center/actions stay direct children, which the
- * Large-Title rules (typography.css) and the head seal / dock title
- * (`:scope > .page-toolbar__title` in ux.js) depend on. A `display: contents`
- * wrapper would keep the flex participation but not the selectors.
- *
- * Without --narrow (new pages once selectors are migrated): rail is a real
- * flex box capped to --page-measure. */
-.page-toolbar--measured:not(.page-toolbar--narrow)::after {
-  content: none;
-  display: none;
-  flex: 0 0 0;
-  margin: 0;
-}
-
-.page-toolbar--measured:not(.page-toolbar--narrow) > .page-toolbar__rail {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--page-toolbar-gap, var(--space-2));
-  box-sizing: border-box;
-  width: 100%;
-  max-width: var(--page-measure, none);
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.page-toolbar--measured:not(.page-toolbar--narrow) > .page-toolbar__bar {
-  flex: 1 1 100%;
-}
+/* Der Kopf hat KEIN Rail-Element (docs/PAGE-COMPOSITION.md). Titel, Mitte und
+ * Aktionen sind direkte Kinder von .page-toolbar - die Large-Title-Regeln
+ * (typography.css) und Siegel/Dock-Titel (`:scope > .page-toolbar__title` in
+ * ux.js) haengen daran. Die Kante am Lesemass haelt .page-toolbar--narrow::after
+ * (weiter unten), ein Pseudo-Element, damit kein Wrapper noetig ist. Die erste
+ * Fassung von #995 hatte hier einen `--measured`-Modifier mit einem Rail-Kind
+ * als "echte Flex-Box fuer neue Seiten" - eine Box, die den Titel zum Enkel
+ * machte; der Helper baut sie in keiner Kombination mehr (sechste Runde), und
+ * ein Guard wird rot, sobald einer der beiden Klassennamen unter public/
+ * wieder auftaucht - auch in einem Kommentar wie diesem, deshalb steht er hier
+ * nicht ausgeschrieben. */
 
 .app-page--reading > .app-page__body,
 .app-page--form > .app-page__body,
