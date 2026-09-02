@@ -3506,12 +3506,40 @@ describe('Sonde 19 - in der regulaeren Groessenklasse traegt der Modulkopf eine 
                   const cs = getComputedStyle(el);
                   const contentLeft = el.getBoundingClientRect().left + parseFloat(cs.paddingInlineStart);
                   const inner = el.clientWidth - parseFloat(cs.paddingInlineStart) - parseFloat(cs.paddingInlineEnd);
-                  measure = parseFloat(getComputedStyle(document.documentElement)
-                    .getPropertyValue('--content-max-width-narrow'));
+                  // DAS MASS GEHOERT DER SEITE, NICHT DER WURZEL (#1008). Die
+                  // Regel in layout.css richtet den Kopf an `--page-measure`
+                  // aus und nimmt `--content-max-width-narrow` NUR als
+                  // Rueckfall fuer Seiten, die keins erklaeren. Diese Sonde las
+                  // den Rueckfall von :root und meldete damit jede Seite mit
+                  // eigener Komposition als defekt - housekeeping ist
+                  // `app-page--data` (--layout-content, 60rem), sein Kopf endete
+                  // korrekt bei 960px und wurde gegen 720px geprueft.
+                  //
+                  // Zwei Fallen dabei. Erstens liefert getComputedStyle fuer eine
+                  // Custom Property den SUBSTITUIERTEN, nicht den umgerechneten
+                  // Wert: hier steht `60rem`, und ein parseFloat darauf ergibt
+                  // 60. Deshalb laesst ein Messelement den Browser rechnen.
+                  // Zweitens ist `100%` ein legitimer Wert (--split, --full):
+                  // dort macht `max()` in der CSS-Regel den Abstand zum No-op,
+                  // und ein naiv umgerechnetes Prozent wuerde aus unbetroffenen
+                  // Seiten Fehlschlaege bei 100px machen. Prozent heisst hier
+                  // deshalb: nicht pruefen, genau wie im Stylesheet.
+                  const raw = (getComputedStyle(el).getPropertyValue('--page-measure') || '').trim()
+                    || (getComputedStyle(document.documentElement)
+                      .getPropertyValue('--content-max-width-narrow') || '').trim();
+                  if (raw.includes('%')) {
+                    measure = null;
+                  } else {
+                    const ruler = document.createElement('div');
+                    ruler.style.cssText = `position:absolute;visibility:hidden;height:0;width:${raw}`;
+                    document.documentElement.appendChild(ruler);
+                    measure = ruler.getBoundingClientRect().width;
+                    ruler.remove();
+                  }
                   // Nur pruefen, wo die Spalte ueberhaupt breiter als das
                   // Lesemass ist - darunter nimmt `max()` den Abstand zurueck
                   // und der Kopf endet richtigerweise an der Spaltenkante.
-                  if (inner > measure) {
+                  if (measure !== null && inner > measure) {
                     const last = [...el.children]
                       .filter((c) => getComputedStyle(c).display !== 'none')
                       .pop();
@@ -3532,10 +3560,11 @@ describe('Sonde 19 - in der regulaeren Groessenklasse traegt der Modulkopf eine 
               // Fassung dieses Fix liess ihn nachgeben, blieb einzeilig - und
               // schob das Kopfende um 69 bis 87px ueber die Koerperkante
               // hinaus. Kein Guard sah das, weil keiner die Kante mass.
-              if (head.narrowEnd !== null && Math.abs(head.narrowEnd - head.measure) > 1) {
+              if (head.narrowEnd !== null && head.measure !== null
+                && Math.abs(head.narrowEnd - head.measure) > 1) {
                 findings.push(
                   `${w}px (${why}) ${where}: Kopfende bei ${head.narrowEnd}px statt `
-                  + `${head.measure}px (Lesemass) - ${head.cls}`,
+                  + `${Math.round(head.measure)}px (Mass der Seite) - ${head.cls}`,
                 );
               }
               // EINE TITELZEILE, UND DAS IST WEITER DER #882-FALL: die
