@@ -231,6 +231,25 @@ export function cycleGaps(periods) {
   return gaps;
 }
 
+/**
+ * Zykluslängen-Verlauf für die Trend-Ansicht (Phase 4) - dieselben Abstände
+ * wie cycleGaps(), aber mit dem Datum des jeweils NEUEN Zyklus statt einer
+ * nackten Zahl, und über die GESAMTE Historie statt der letzten MAX_HISTORY:
+ * cycleStats() begrenzt den gleitenden Mittelwert bewusst, ein Trend-Chart
+ * soll dagegen genau zeigen, ob/wie sich der Rhythmus über die Zeit verändert.
+ * @param {Array<Object>} periods
+ * @returns {Array<{date: string, days: number}>}
+ */
+export function cycleLengthTrend(periods) {
+  const asc = sortPeriodsAsc(periods);
+  const trend = [];
+  for (let i = 1; i < asc.length; i += 1) {
+    const days = daysBetween(asc[i - 1].start_date, asc[i].start_date);
+    if (Number.isFinite(days) && days > 0) trend.push({ date: dayKey(asc[i].start_date), days });
+  }
+  return trend;
+}
+
 /** Periodenlängen (Ende − Start + 1) abgeschlossener Episoden. */
 export function periodLengths(periods) {
   return sortPeriodsAsc(periods)
@@ -361,6 +380,98 @@ function toCelsius(value, unit) {
 }
 
 /**
+ * Basaltemperatur-Messungen aus Tages-Logs, nach Celsius vereinheitlicht,
+ * chronologisch sortiert. Geteilte Grundlage für detectTemperatureShift() und
+ * bbtSeries() - beide brauchen dieselbe Extraktion, nur mit/ohne Zyklus-Filter.
+ * @param {Array<Object>} dayLogs
+ * @param {string} [sinceKey] - nur Messungen ab diesem Datum (YYYY-MM-DD).
+ */
+function temperatureReadings(dayLogs, sinceKey = null) {
+  const since = sinceKey ? dayKey(sinceKey) : null;
+  return (dayLogs || [])
+    .filter((l) => l && l.basal_temp != null && (!since || dayKey(l.log_date) >= since))
+    .map((l) => ({ date: dayKey(l.log_date), celsius: toCelsius(l.basal_temp, l.basal_temp_unit) }))
+    .filter((r) => r.celsius != null)
+    .sort((a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : 0)));
+}
+
+/**
+ * Basaltemperatur-Reihe für die Trend-Ansicht (Phase 4) - alle geloggten
+ * Messungen, nicht nur die des laufenden Zyklus (anders als
+ * detectTemperatureShift(), das bewusst nur den AKTUELLEN Zyklus bewertet).
+ * @param {Array<Object>} dayLogs
+ * @returns {Array<{date: string, celsius: number}>}
+ */
+export function bbtSeries(dayLogs) {
+  return temperatureReadings(dayLogs);
+}
+
+/**
+ * Symptom-Häufigkeit je Zyklus-Phase, für die Trend-Ansicht (Phase 4) -
+ * beantwortet "häufen sich meine Symptome vor der Periode" statt nur "wie oft
+ * kam Symptom X überhaupt vor".
+ *
+ * DREI EIMER STATT FÜNF, UND DAS IST ABSICHT: predictCycle()/buildCycleCalendar()
+ * kennen fünf Phasen, aber immer nur für EINEN (den aktuellen) Zyklus relativ zu
+ * "heute". Für JEDEN historischen Tag dieselben fünf Grenzen (insbesondere
+ * follikulär vs. fruchtbar) nachzubilden bräuchte eine zweite, über alle
+ * vergangenen Zyklen laufende Kopie dieser Logik - fehleranfällig für einen
+ * Nutzen, den ein grobes Raster schon trägt. Menstruation (geloggter Zeitraum)
+ * und Luteal (Eisprung-Tag bis zum nächsten Periodenbeginn, aus dem TATSÄCHLICHEN
+ * Abstand der jeweiligen Perioden - nicht aus einem Haushalts-Durchschnitt)
+ * beantworten die eigentlich gefragten Muster ("PMS-Symptome", "Periodenschmerz");
+ * alles andere fällt in PHASE.MENSTRUATION/PHASE.LUTEAL bzw. eine dritte
+ * "other"-Sammelkategorie - kein eigener PHASE-Wert, weil sie bewusst KEIN
+ * fruchtbares Fenster behauptet.
+ *
+ * Der letzte (ggf. noch laufende) Zyklus hat keinen "nächsten" Periodenstart -
+ * er fällt auf Ø-Zykluslänge (cycleStats()) zurück, dieselbe Regel wie
+ * predictCycle(). Tage vor der ersten geloggten Periode gehören zu keinem
+ * bekannten Zyklus und werden übersprungen, nicht geraten.
+ *
+ * @param {Array<Object>} dayLogs
+ * @param {Array<Object>} periods
+ * @param {Object} [settings] - cycle_settings-Zeile (für luteal_length).
+ * @returns {Array<{key: string, menstruation: number, luteal: number, other: number, total: number}>}
+ *          absteigend nach total sortiert.
+ */
+export function symptomFrequencyByPhase(dayLogs, periods, settings = {}) {
+  const asc = sortPeriodsAsc(periods);
+  if (!asc.length) return [];
+  const stats = cycleStats(asc, settings);
+
+  const cycles = asc.map((p, i) => {
+    const cycleStart = dayKey(p.start_date);
+    const nextStart = i + 1 < asc.length ? dayKey(asc[i + 1].start_date) : addLocalDays(cycleStart, stats.avgCycle);
+    const mensEnd = p.end_date ? dayKey(p.end_date) : addLocalDays(cycleStart, stats.avgPeriod - 1);
+    const lutealStart = addLocalDays(nextStart, -stats.lutealLength);
+    return { cycleStart, nextStart, mensEnd, lutealStart };
+  });
+
+  function phaseFor(dateKey) {
+    const cyc = cycles.find((c) => daysBetween(c.cycleStart, dateKey) >= 0 && daysBetween(dateKey, c.nextStart) > 0);
+    if (!cyc) return null;
+    if (daysBetween(cyc.cycleStart, dateKey) >= 0 && daysBetween(dateKey, cyc.mensEnd) >= 0) return PHASE.MENSTRUATION;
+    if (daysBetween(cyc.lutealStart, dateKey) >= 0) return PHASE.LUTEAL;
+    return 'other';
+  }
+
+  const counts = new Map();
+  for (const log of (dayLogs || [])) {
+    if (!log?.log_date) continue;
+    const phase = phaseFor(dayKey(log.log_date));
+    if (!phase) continue;
+    for (const entry of normalizeSymptomEntries(log.symptoms)) {
+      const c = counts.get(entry.key) || { key: entry.key, [PHASE.MENSTRUATION]: 0, [PHASE.LUTEAL]: 0, other: 0, total: 0 };
+      c[phase] += 1;
+      c.total += 1;
+      counts.set(entry.key, c);
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.total - a.total);
+}
+
+/**
  * Erkennt den Temperaturanstieg, der einen Eisprung bestätigt (Coverline-
  * Methode): der erste Tag, dessen Wert mindestens TEMP_SHIFT_THRESHOLD_C ueber
  * dem Mittel der TEMP_BASELINE_READINGS vorangehenden (niedrigeren) Messungen
@@ -379,12 +490,7 @@ function toCelsius(value, unit) {
  * @returns {string|null} Datum (YYYY-MM-DD) des ersten Tages im Anstieg, oder null ohne hinreichenden Befund.
  */
 export function detectTemperatureShift(dayLogs, cycleStart) {
-  const start = dayKey(cycleStart);
-  const readings = (dayLogs || [])
-    .filter((l) => l && l.basal_temp != null && dayKey(l.log_date) >= start)
-    .map((l) => ({ date: dayKey(l.log_date), celsius: toCelsius(l.basal_temp, l.basal_temp_unit) }))
-    .filter((r) => r.celsius != null)
-    .sort((a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : 0)));
+  const readings = temperatureReadings(dayLogs, cycleStart);
 
   if (readings.length < TEMP_BASELINE_READINGS + TEMP_SUSTAINED_DAYS) return null;
 

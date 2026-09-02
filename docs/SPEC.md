@@ -2536,6 +2536,26 @@ an outer ring around the marker; the fertile-window stat card's ovulation line s
 household-wide temperature-unit setting exists (matching `health_vitals.unit`'s per-entry
 convention); the unit travels with each reading and `detectTemperatureShift()` converts internally.
 
+**A Trends section** on the cycle tab (purely client-side aggregation, no new endpoints) shows up
+to three charts once there's enough history, each hidden individually when its own data is too
+thin: a **cycle-length line chart** (`cycleLengthTrend()`, every logged gap with its date, unlimited
+history — unlike `cycleStats()`'s rolling `MAX_HISTORY` window, a trend view exists specifically to
+show whether the rhythm is changing over time), a **BBT line chart** (`bbtSeries()`, all logged
+readings converted to Celsius), and a **symptom-frequency list** (`symptomFrequencyByPhase()`) as
+stacked proportion bars for the top 8 symptoms by total count. The two line charts reuse the shared
+chart geometry (`public/utils/chart.js`, the same one Vitals/Labs/Activity use) rather than a new
+chart system; the proportion bars follow this codebase's existing bar-with-track convention
+(`--seg-share` on a flex child, same idea as `.schedule-stat-row__track`) rather than the axis-chart
+geometry, since a share-of-whole isn't an axis quantity. Symptom frequency classifies each day log
+into one of three buckets — `menstruation` (within a logged period), `luteal` (from that specific
+cycle's own ovulation day, i.e. its actual next-period date minus luteal length — not a household
+average) to the next period, `other` (everything else) — deliberately coarser than the five
+ring/calendar phases: reconstructing follicular/fertile/ovulation boundaries correctly for every
+past cycle would need a second, error-prone copy of `predictCycle()`'s logic running over history
+instead of "today," for a distinction the two most commonly asked questions ("is this a period
+symptom" / "is this a PMS symptom") don't need. Days before the first logged period aren't
+classified and are excluded, not guessed.
+
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and
 fans out via Web Push and the household channels (Gotify, ntfy, webhook, email). Medications (`name`, `dosage_text`) and activities

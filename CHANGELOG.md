@@ -68,6 +68,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fertile window, the cycle ring's marker position, and the stat card's label all switch from
   "predicted" to "confirmed"; future cycles keep using the calendar method, since they have no
   readings yet.
+- **The cycle tab gains a Trends section** with a cycle-length chart, a basal-temperature chart,
+  and a symptom-frequency breakdown, each appearing only once there's enough history to be worth
+  showing. The two line charts reuse this app's existing shared chart geometry
+  (`public/utils/chart.js`, already used by Vitals/Labs/Activity) rather than a new charting
+  system. Symptom frequency groups every logged symptom into menstruation, luteal (PMS window), or
+  other, based on each cycle's own actual length rather than a household average, and shows the top
+  8 as stacked proportion bars - deliberately three buckets instead of the ring/calendar's five,
+  since accurately reconstructing follicular/fertile/ovulation boundaries for every past cycle
+  would need a second copy of the prediction logic running over history, for a distinction the
+  questions this view answers ("period symptom" or "PMS symptom") don't need.
 
 ### Fixed
 

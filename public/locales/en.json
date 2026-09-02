@@ -4140,6 +4140,13 @@
                 "empty": "No periods logged yet.",
                 "cycleLength": "Cycle {{value}} days"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Flow",
                 "none": "None",

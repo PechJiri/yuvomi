@@ -4140,6 +4140,13 @@
                 "empty": "अभी तक कोई माहवारी दर्ज नहीं।",
                 "cycleLength": "चक्र {{value}} दिन"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "रक्तस्राव की मात्रा",
                 "none": "कोई नहीं",

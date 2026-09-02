@@ -14,7 +14,7 @@
 import { api } from '/api.js';
 import { t, formatDate, formatTime, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
-import { CHART, chartScales, chartGridMarkup, chartXLabelsMarkup } from '/utils/chart.js';
+import { CHART, chartScales, chartGridMarkup, chartXLabelsMarkup, chartX, chartY } from '/utils/chart.js';
 import { scheduleUndoableDelete } from '/utils/ux.js';
 import { toLocalDateKey, parseLocalDateKey, addLocalDays, todayKey} from '/utils/date.js';
 import { zonedDateKey } from '/utils/timezone.js';
@@ -43,6 +43,7 @@ import {
   FLOW_LEVELS, flowLevel, SYMPTOM_TYPES, symptomType, MOOD_TYPES, PHASE,
   predictCycle, cycleStats, buildCycleCalendar, cycleRing, MIN_HISTORY_GAPS,
   normalizeSymptomEntries, symptomIntensityLabelKey,
+  cycleLengthTrend, symptomFrequencyByPhase, bbtSeries,
 } from '/utils/health-cycle.js';
 import { HEALTH_ROUTES, renderHealthTabsBar } from '/utils/health-tabs.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -4225,6 +4226,7 @@ function renderCycleShell() {
       ${cyclePregnancyMarkup(prediction, own)}
       ${own ? cycleTodayActionsMarkup(true) : ''}
       ${cycleCalendarMarkup(own)}
+      ${prediction.hasData ? cycleTrendsMarkup() : ''}
       ${prediction.hasData ? cycleHistoryMarkup(own) : ''}
       ${cycleFooterMarkup(own)}
     `);
@@ -4264,6 +4266,7 @@ function renderCycleShell() {
     </div>
     ${own ? cycleTodayActionsMarkup() : ''}
     ${cycleCalendarMarkup(own)}
+    ${cycleTrendsMarkup()}
     ${cycleHistoryMarkup(own)}
     ${cycleFooterMarkup(own)}
   `);
@@ -4582,6 +4585,159 @@ function cycleLegendMarkup() {
   ];
   return `<div class="cycle-legend">${items.map((i) => `
     <span class="cycle-legend__item"><span class="cycle-legend__swatch ${i.cls}"></span>${esc(t(i.key))}</span>`).join('')}</div>`;
+}
+
+// --------------------------------------------------------
+// Trends (Phase 4) — rein additiv über bereits vorhandenen Daten, deshalb
+// zuletzt gebaut: erst ab genug Historie zeigt ein Trend etwas.
+// --------------------------------------------------------
+
+// Drei Eimer statt der fünf Ring-/Kalender-Phasen (siehe symptomFrequencyByPhase()
+// im Util) - Menstruation und Luteal beantworten die eigentlich gefragten
+// Muster, "other" ist eine bewusste Sammelkategorie, kein eigener Phasenwert.
+// Farben: --cycle-period ist schon etabliert; Luteal bekommt den Modul-Akzent
+// statt eines neuen, unvalidierten Tons; "other" bleibt neutral/gedämpft, wie
+// eine Sammelkategorie es sein sollte.
+const SYMPTOM_PHASE_COLOR = {
+  [PHASE.MENSTRUATION]: 'var(--cycle-period)',
+  [PHASE.LUTEAL]: 'var(--module-health)',
+  other: 'var(--color-text-secondary)',
+};
+// BBT-Werte tragen 2 Nachkommastellen (0,01 °C ist die uebliche Aufloesung
+// eines Basalthermometers); fmtNum()s Standard (1 Stelle) wuerde die Ziffer
+// verschlucken, die detectTemperatureShift() tatsaechlich auswertet.
+const BBT_DECIMALS = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+
+const SYMPTOM_PHASE_LABEL_KEYS = {
+  [PHASE.MENSTRUATION]: 'health.cycle.phase.menstruation',
+  [PHASE.LUTEAL]: 'health.cycle.phase.luteal',
+  other: 'health.cycle.trends.phaseOther',
+};
+
+/**
+ * Ein einzelnes, unaufgefülltes Liniendiagramm (Zykluslänge, BBT) - dieselbe
+ * Geometrie wie die Vitalwerte-Charts (utils/chart.js), aber ohne deren
+ * Mehrkanal-/Zeitraum-Maschinerie, die hier keine Entsprechung hat: ein Trend
+ * zeigt die GESAMTE Historie, keinen gewählten Ausschnitt.
+ */
+function simpleLineChartMarkup({ points, titleText, formatPointTooltip, formatTableValue, tableHeader, formatTick }) {
+  if (points.length < 2) return '';
+  const { W, H } = CHART;
+  const { top, bottom } = chartScales();
+
+  const values = points.map((p) => p.value);
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (min === max) { min -= 1; max += 1; }
+  const pad = (max - min) * 0.1;
+  min -= pad; max += pad;
+
+  const x = (i) => chartX(i, points.length);
+  const y = (v) => chartY(v, min, max);
+
+  const spine = points.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  const area = `<polygon class="health-chart__area" points="${x(0).toFixed(1)},${bottom.toFixed(1)} ${spine} ${x(points.length - 1).toFixed(1)},${bottom.toFixed(1)}" />`;
+  const dots = points.map((p, i) =>
+    `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="3.5" fill="var(--module-health)"><title>${esc(formatPointTooltip(p))}</title></circle>`).join('');
+
+  const grid = chartGridMarkup(min, max, (val, wholeTicks) => (formatTick ? formatTick(val, wholeTicks) : String(wholeTicks ? Math.round(val) : val.toFixed(1))));
+  const xLabels = chartXLabelsMarkup(points.map((p) => formatDate(p.date)));
+  const table = chartTableMarkup(titleText, [t('health.cycle.trends.date'), tableHeader],
+    points.map((p) => [formatDate(p.date), formatTableValue(p.value)]));
+
+  return `
+    <div class="health-chart-section">
+      <div class="health-chart-section__head"><div class="health-chart-section__title">${esc(titleText)}</div></div>
+      <svg class="health-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(titleText)}">
+        ${grid}
+        ${area}
+        <polyline fill="none" stroke="var(--module-health)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${spine}" />
+        ${dots}
+        ${xLabels}
+      </svg>
+      ${table}
+    </div>`;
+}
+
+function cycleLengthTrendChartMarkup(trend) {
+  return simpleLineChartMarkup({
+    points: trend.map((e) => ({ date: e.date, value: e.days })),
+    titleText: t('health.cycle.trends.cycleLength'),
+    formatPointTooltip: (p) => `${formatDate(p.date)}: ${t('health.cycle.unit.days', { value: fmtNum(p.value) })}`,
+    formatTableValue: (v) => t('health.cycle.unit.days', { value: fmtNum(v) }),
+    tableHeader: t('health.cycle.trends.cycleLength'),
+  });
+}
+
+function bbtTrendChartMarkup(series) {
+  return simpleLineChartMarkup({
+    points: series.map((e) => ({ date: e.date, value: e.celsius })),
+    titleText: t('health.cycle.bbt.label'),
+    formatPointTooltip: (p) => `${formatDate(p.date)}: ${fmtNum(p.value, BBT_DECIMALS)} ${t('health.cycle.bbt.celsius')}`,
+    formatTableValue: (v) => `${fmtNum(v, BBT_DECIMALS)} ${t('health.cycle.bbt.celsius')}`,
+    tableHeader: t('health.cycle.bbt.label'),
+    // BBT-Spannen liegen typischerweise unter 1 °C - hier ist die Nachkommastelle
+    // die eigentliche Auskunft, nicht Pseudo-Präzision (siehe chart.js-Kommentar).
+    formatTick: (val) => fmtNum(val, BBT_DECIMALS),
+  });
+}
+
+/**
+ * Symptom-Häufigkeit je Phase als gestapelte Anteilsbalken (DESIGN.md: ein
+ * Verhältnis als Anteil am Element via flex-grow, eine Bahn, die Farbe traegt
+ * die Fuellung) - Top 8 nach Gesamthäufigkeit, damit die Liste nicht alle
+ * 20 Presets zeigt, auch wenn sie irgendwann alle mal vorkamen.
+ */
+function symptomFrequencyChartMarkup(freq) {
+  const top = freq.slice(0, 8);
+  const legend = Object.keys(SYMPTOM_PHASE_COLOR).map((key) => `
+    <span class="cycle-legend__item"><span class="cycle-legend__swatch" style="background:${SYMPTOM_PHASE_COLOR[key]}"></span>${esc(t(SYMPTOM_PHASE_LABEL_KEYS[key]))}</span>`).join('');
+
+  const rows = top.map((row) => {
+    const label = symptomType(row.key)?.labelKey ? t(symptomType(row.key).labelKey) : row.key;
+    const segs = Object.keys(SYMPTOM_PHASE_COLOR)
+      .map((key) => ({ key, count: row[key] || 0 }))
+      .filter((s) => s.count > 0)
+      .map((s) => `<span class="cycle-symptom-row__seg" style="--seg-share:${s.count};background:${SYMPTOM_PHASE_COLOR[s.key]}" title="${esc(`${t(SYMPTOM_PHASE_LABEL_KEYS[s.key])}: ${fmtNum(s.count)}`)}"></span>`)
+      .join('');
+    return `
+      <div class="cycle-symptom-row">
+        <div class="cycle-symptom-row__head">
+          <span class="cycle-symptom-row__name">${esc(label)}</span>
+          <strong>${esc(fmtNum(row.total))}</strong>
+        </div>
+        <div class="cycle-symptom-row__track">${segs}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="health-chart-section">
+      <div class="health-chart-section__head"><div class="health-chart-section__title">${esc(t('health.cycle.trends.symptomFrequency'))}</div></div>
+      <div class="cycle-legend">${legend}</div>
+      <div class="cycle-symptom-list">${rows}</div>
+    </div>`;
+}
+
+function cycleTrendsMarkup() {
+  const lengthTrend = cycleLengthTrend(cycle.periods);
+  const symptomFreq = symptomFrequencyByPhase(cycle.logs, cycle.periods, cycleSettings());
+  const bbt = bbtSeries(cycle.logs);
+
+  const sections = [
+    lengthTrend.length >= 2 ? cycleLengthTrendChartMarkup(lengthTrend) : '',
+    symptomFreq.length ? symptomFrequencyChartMarkup(symptomFreq) : '',
+    bbt.length >= 2 ? bbtTrendChartMarkup(bbt) : '',
+  ].filter(Boolean);
+
+  // Kein leerer Abschnitt: ohne genug Historie für auch nur EINEN Trend
+  // gibt es hier nichts zu zeigen - der Haupt-Leerzustand deckt das schon.
+  if (!sections.length) return '';
+
+  return `
+    <section class="cycle-trends">
+      <h3 class="cycle-section__title u-section-title">${esc(t('health.cycle.trends.title'))}</h3>
+      ${sections.join('')}
+    </section>`;
 }
 
 // --------------------------------------------------------

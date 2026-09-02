@@ -4140,6 +4140,13 @@
                 "empty": "Δεν έχουν καταχωριστεί περίοδοι ακόμη.",
                 "cycleLength": "Κύκλος {{value}} ημέρες"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Ένταση ροής",
                 "none": "Καμία",

@@ -4140,6 +4140,13 @@
                 "empty": "まだ生理が記録されていません。",
                 "cycleLength": "周期{{value}}日"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "経血量",
                 "none": "なし",

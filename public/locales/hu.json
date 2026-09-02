@@ -4140,6 +4140,13 @@
                 "empty": "Még nincs rögzített menstruáció.",
                 "cycleLength": "Ciklus {{value}} nap"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Vérzés erőssége",
                 "none": "Nincs",

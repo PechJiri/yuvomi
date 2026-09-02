@@ -4140,6 +4140,13 @@
                 "empty": "Noch keine Perioden erfasst.",
                 "cycleLength": "Zyklus {{value}} Tage"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Datum",
+                "cycleLength": "Zykluslänge",
+                "symptomFrequency": "Symptom-Häufigkeit",
+                "phaseOther": "Sonstige"
+            },
             "flow": {
                 "label": "Blutungsstärke",
                 "none": "Keine",

@@ -4140,6 +4140,13 @@
                 "empty": "Менструации ещё не записаны.",
                 "cycleLength": "Цикл {{value}} дн."
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Интенсивность выделений",
                 "none": "Нет",

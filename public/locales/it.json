@@ -4140,6 +4140,13 @@
                 "empty": "Ancora nessun ciclo registrato.",
                 "cycleLength": "Ciclo {{value}} giorni"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Intensità del flusso",
                 "none": "Nessuna",

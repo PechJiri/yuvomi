@@ -4140,6 +4140,13 @@
                 "empty": "Belum ada menstruasi yang dicatat.",
                 "cycleLength": "Siklus {{value}} hari"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Volume darah",
                 "none": "Tidak ada",

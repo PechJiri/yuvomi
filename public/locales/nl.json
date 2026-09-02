@@ -4140,6 +4140,13 @@
                 "empty": "Nog geen menstruaties geregistreerd.",
                 "cycleLength": "Cyclus {{value}} dagen"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Bloedverlies",
                 "none": "Geen",

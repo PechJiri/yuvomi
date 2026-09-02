@@ -4140,6 +4140,13 @@
                 "empty": "Henüz adet dönemi kaydedilmedi.",
                 "cycleLength": "Döngü {{value}} gün"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Kanama yoğunluğu",
                 "none": "Yok",

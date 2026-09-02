@@ -4140,6 +4140,13 @@
                 "empty": "Chưa ghi kỳ kinh nào.",
                 "cycleLength": "Chu kỳ {{value}} ngày"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Lượng máu",
                 "none": "Không",

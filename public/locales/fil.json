@@ -4140,6 +4140,13 @@
                 "empty": "Wala pang naitalang regla.",
                 "cycleLength": "Siklo {{value}} araw"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Daloy",
                 "none": "Wala",

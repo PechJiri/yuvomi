@@ -4140,6 +4140,13 @@
                 "empty": "هنوز قاعدگی‌ای ثبت نشده است.",
                 "cycleLength": "چرخه {{value}} روز"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "شدت خونریزی",
                 "none": "هیچ",

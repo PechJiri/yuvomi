@@ -19,6 +19,7 @@ const {
   daysBetween, sortPeriodsAsc, cycleGaps, periodLengths,
   cycleStats, predictCycle, buildCycleCalendar, cycleRing, pregnancyInfo,
   detectTemperatureShift,
+  cycleLengthTrend, symptomFrequencyByPhase, bbtSeries,
 } = await import('../public/utils/health-cycle.js');
 
 const de = JSON.parse(readFileSync(new URL('../public/locales/de.json', import.meta.url), 'utf8'));
@@ -417,6 +418,71 @@ test('cycleRing: bestätigter Eisprung positioniert den Marker am tatsächlichen
   assert.equal(ring.ovulationConfirmed, true);
   // Zyklustag 7 (06-07 ist der 7. Tag ab 06-01) von 28 Tagen Gesamtlaenge.
   assert.equal(ring.ovulationFrac, (7 - 0.5) / 28);
+});
+
+// --------------------------------------------------------
+// Trend-Aggregationen (Phase 4)
+// --------------------------------------------------------
+
+test('cycleLengthTrend: eine Lücke je Folgeperiode, mit deren Datum, über die GESAMTE Historie', () => {
+  const hist = periods(['2026-01-01', '2026-01-29', '2026-03-05', '2026-04-02'], 5); // 28/35/28
+  assert.deepEqual(cycleLengthTrend(hist), [
+    { date: '2026-01-29', days: 28 },
+    { date: '2026-03-05', days: 35 },
+    { date: '2026-04-02', days: 28 },
+  ]);
+});
+
+test('cycleLengthTrend: unter 2 Perioden gibt es keine Lücke', () => {
+  assert.deepEqual(cycleLengthTrend([]), []);
+  assert.deepEqual(cycleLengthTrend(periods(['2026-01-01'])), []);
+});
+
+test('bbtSeries: alle Messungen chronologisch, unabhängig vom Zyklus (anders als detectTemperatureShift)', () => {
+  const logs = tempLogs([['2026-06-02', 36.40], ['2026-06-01', 36.30], ['2026-05-15', 37.00, 'f']]);
+  // 37.00°F ≈ 2.78°C
+  assert.deepEqual(bbtSeries(logs), [
+    { date: '2026-05-15', celsius: (37.00 - 32) * 5 / 9 },
+    { date: '2026-06-01', celsius: 36.30 },
+    { date: '2026-06-02', celsius: 36.40 },
+  ]);
+});
+
+test('bbtSeries: leer ohne Messungen, überspringt Logs ohne basal_temp', () => {
+  assert.deepEqual(bbtSeries([]), []);
+  assert.deepEqual(bbtSeries([{ log_date: '2026-06-01', flow: 'light' }]), []);
+});
+
+test('symptomFrequencyByPhase: klassifiziert Menstruation/Luteal/Sonstige je nach TATSÄCHLICHEM Zyklus, sortiert nach Gesamthäufigkeit', () => {
+  // Zyklus 1: 2026-05-01..05-05 Periode, nächste Periode 2026-05-29 → Luteal
+  // (Lutealphase 14, Standard) ab 2026-05-15.
+  const hist = periods(['2026-05-01', '2026-05-29'], 5);
+  const logs = [
+    { log_date: '2026-05-02', symptoms: [{ key: 'cramps', intensity: 2 }] }, // Menstruation
+    { log_date: '2026-05-20', symptoms: [{ key: 'headache' }] }, // Luteal
+    { log_date: '2026-05-10', symptoms: [{ key: 'cramps' }, { key: 'fatigue' }] }, // Sonstige (follikulär)
+    { log_date: '2026-04-15', symptoms: [{ key: 'nausea' }] }, // vor der ersten Periode -> kein bekannter Zyklus, übersprungen
+  ];
+  const freq = symptomFrequencyByPhase(logs, hist, {});
+  assert.deepEqual(freq, [
+    { key: 'cramps', menstruation: 1, luteal: 0, other: 1, total: 2 },
+    { key: 'headache', menstruation: 0, luteal: 1, other: 0, total: 1 },
+    { key: 'fatigue', menstruation: 0, luteal: 0, other: 1, total: 1 },
+  ]);
+});
+
+test('symptomFrequencyByPhase: der letzte (offene) Zyklus fällt auf die Ø-Zykluslänge zurück', () => {
+  // Nur EINE Periode - keine "nächste", also nextStart = start + avgCycle (Default 28,
+  // da keine Historie für einen abgeleiteten Wert reicht).
+  const hist = periods(['2026-06-01'], 5);
+  const logs = [{ log_date: '2026-06-20', symptoms: [{ key: 'fatigue' }] }]; // Luteal: ab 06-01+28-14=06-15
+  assert.deepEqual(symptomFrequencyByPhase(logs, hist, {}), [
+    { key: 'fatigue', menstruation: 0, luteal: 1, other: 0, total: 1 },
+  ]);
+});
+
+test('symptomFrequencyByPhase: ohne jede Periode gibt es keine Klassifikation', () => {
+  assert.deepEqual(symptomFrequencyByPhase([{ log_date: '2026-06-01', symptoms: [{ key: 'cramps' }] }], [], {}), []);
 });
 
 // --------------------------------------------------------

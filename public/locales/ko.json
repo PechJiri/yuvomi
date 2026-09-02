@@ -4140,6 +4140,13 @@
                 "empty": "아직 기록된 생리가 없습니다.",
                 "cycleLength": "주기 {{value}}일"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "생리량",
                 "none": "없음",

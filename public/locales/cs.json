@@ -4140,6 +4140,13 @@
                 "empty": "Zatím nezaznamenána žádná menstruace.",
                 "cycleLength": "Cyklus {{value}} dní"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Intenzita krvácení",
                 "none": "Žádná",

@@ -4140,6 +4140,13 @@
                 "empty": "لم تُسجَّل أي دورات بعد.",
                 "cycleLength": "دورة {{value}} يوم"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "شدة النزيف",
                 "none": "لا شيء",

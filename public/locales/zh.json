@@ -4140,6 +4140,13 @@
                 "empty": "尚未记录任何月经。",
                 "cycleLength": "周期 {{value}} 天"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "经量",
                 "none": "无",

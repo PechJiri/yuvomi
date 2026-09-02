@@ -1918,6 +1918,49 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
 /* Die Legende spiegelt den Kalender-Marker 1:1 - also auch seinen Ton. */
 .cycle-legend__swatch.is-today { box-shadow: inset 0 0 0 2px var(--color-accent); }
 
+/* ---- Trends (Phase 4) ---- */
+
+.cycle-trends { margin-top: var(--space-6); }
+.cycle-trends > .health-chart-section { margin-top: var(--space-4); }
+
+/* Gestapelter Anteilsbalken: ein Verhaeltnis als Anteil AM ELEMENT (flex-grow
+ * ueber --seg-share, keine gerechnete Pixelbreite im Markup), eine neutrale
+ * Bahn, die Fuellung traegt die Farbe - dieselbe Grammatik wie
+ * .schedule-stat-row__track (schedule.css), hier mit mehreren Segmenten statt
+ * einem. 2px Fuge zwischen Segmenten trennt sie auf der Flaeche selbst, nicht
+ * nur per Legende. */
+.cycle-symptom-list {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.cycle-symptom-row {
+  display: grid;
+  gap: var(--space-1);
+}
+.cycle-symptom-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.cycle-symptom-row__head strong { font-variant-numeric: tabular-nums; }
+.cycle-symptom-row__track {
+  display: flex;
+  gap: 2px;
+  height: var(--space-2);
+  background-color: var(--color-fill-well);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.cycle-symptom-row__seg {
+  flex: var(--seg-share, 0) 0 0;
+  border-radius: var(--radius-full);
+}
+
 /* ---- Verlauf ---- */
 
 .cycle-history { margin-top: var(--space-6); }

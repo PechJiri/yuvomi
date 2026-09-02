@@ -4140,6 +4140,13 @@
                 "empty": "Inga menstruationer registrerade ännu.",
                 "cycleLength": "Cykel {{value}} dagar"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Flöde",
                 "none": "Ingen",
