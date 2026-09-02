@@ -379,6 +379,27 @@ Otherwise: user-oriented language, and `-` rather than `—` or `–`. An entry 
 
 ---
 
+## Release cadence
+
+Yuvomi releases on two tracks. The rule exists because of [#496](https://github.com/ulsklyc/yuvomi/discussions/496): between 13 August and 2 September 2026 there were 92 releases across 19 active days, and **72 of them changed the interface** - roughly three and a half times a day. The complaint was never "too many tags". It was that somebody learning the app watched it move while they were still learning it.
+
+So the limit is on the interface, not on the release count:
+
+| Track | What it carries | When it ships |
+|---|---|---|
+| **Weekly train** | Anything under `public/pages/`, `public/styles/`, `public/utils/`, `public/components/`, `public/settings/` | **Tuesdays only** |
+| **Everything else** | Server, database, docs, tests, deploy descriptors, translations | Any day, **at most one release per calendar day** |
+
+Tuesday, because a household planner gets used most at the weekend: an interface change then has four days to settle before the family is standing in front of it on Saturday.
+
+**Security fixes and data-loss bugs are not held back.** They ship the moment they are ready, on any day, through the same escape hatch the guard provides.
+
+`npm run check:release-cadence` decides this, and it runs before the tag rather than after. A release that carries interface changes on a Thursday fails it; so does a second same-day release on the other track. The escape hatch is `--hotfix "<reason>"`, and the reason is mandatory and printed - an exception nobody has to write down is just a rule that quietly stopped applying.
+
+This is a promise the project can keep because it is not a promise: it is a condition that has to pass. That distinction is the whole point. A cadence held by good intentions erodes without anyone noticing except the people who reported the problem.
+
+---
+
 ## AI Assistance
 
 Asked for in [#687](https://github.com/ulsklyc/yuvomi/discussions/687). Yuvomi holds a household's calendar, health notes, documents and finances, so it is fair to ask who - or what - wrote the code that handles them.

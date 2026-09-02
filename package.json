@@ -291,7 +291,8 @@
     "test:schedule": "DB_PATH=:memory: node --test test/test-schedule.js",
     "test:schedule-default-off-migration": "node --experimental-sqlite --test test/test-schedule-default-off-migration.js",
     "test:docs-landing": "node --test test/test-docs-landing.js",
-    "test:readme-consistency": "node --test test/test-readme-consistency.js"
+    "test:readme-consistency": "node --test test/test-readme-consistency.js",
+    "check:release-cadence": "node scripts/check-release-cadence.mjs"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
