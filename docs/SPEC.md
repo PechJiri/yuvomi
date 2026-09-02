@@ -2555,6 +2555,13 @@ them.
 | note | TEXT | optional |
 | created_at | TEXT | ISO 8601 |
 
+`POST /overrides/fill` (`user_id`, `from`, `to`, `shift_type_id`, `note`) writes the same upsert
+across an inclusive date range in one call, for covering an absence (vacation, a temporary
+reassignment) instead of one `PUT` per day. Its cap is a separate constant from `/entries`'
+`MAX_RANGE_DAYS` (731 days) — `MAX_FILL_DAYS` (100 days) is deliberately smaller, because a fill
+*writes* real rows, cutting against the "computed on read, never materialized" rule above if it
+were allowed to run for years at a time; the number is sized for an absence, not a shadow pattern.
+
 ### Access Permissions (migration v74)
 
 Role- and member-based access control for interactive users (#467). Governs which modules a
@@ -2735,13 +2742,14 @@ tone): light 3.65-5.18:1, dark 7.42-12.24:1, all above the 3:1 asked of graphics
 - Rewards (v0.96.0): family points leaderboard — top 5 enabled participants by ledger balance, the leader row subtly tinted (no medal/emoji), plus a "N to approve" footer when redemptions are pending
 - Health (v0.96.0): today's medication doses as a "taken/total" progress bar with the next open dose and a low-stock reorder chip. **Personal scope (v1.50.1 · #592):** only the signed-in user's **own** medications are aggregated (private *and* family-visible ones); another member's medication never surfaces here, not even with `visibility = 'family'`. Shared medications stay on the Health page, which keeps its family-visible read scope
 - Housekeeping (v0.96.0): compact status — currently-present indicator (worker + since-time) or last visit + this-month visit count, plus an outstanding-amount chip
+- Schedule (Schedule v2): who is on shift or free today, one row per member with a resolved entry (the widget reuses `resolveEntries()`'s own rule — a member with neither a pattern nor an override for today has no row at all, the same as the module's own "today" card). Like Cycle, its own slice: `/dashboard` never carries it, the tile fetches `GET /schedule/entries` (household-wide, no owner scoping needed) plus the shift-type list client-side, and only when the tile is enabled. Default-hidden, offered as an opt-in in Customize; hidden when the Schedule module is disabled
 - Cycle (v0.98.0): **owner-only, opt-in** prediction glance — current phase, cycle day in a mini progress ring, and the next period as a countdown + date. Unlike the family-visible widgets, cycle data is **never aggregated into the shared `/dashboard` payload**: the tile fetches the signed-in user's own `/health/cycle` data client-side, and only when the tile is enabled. Default-hidden, offered as an opt-in in Customize; hidden when the Health module is disabled
 - Clock (v1.84.0 · #651): time and weekday + date, built for a wall tablet without a system bar. The digits scale with the tile width (container query on the existing `dashboard-widget` container, capped by row count so a one-row tile does not blow the date off the card), follow the user's 12h/24h and date-format preferences, and tick on the minute rather than the second (the display has no seconds). A `visibilitychange` refresh catches up after a throttled background tab. **Default-hidden:** on a device with a system clock a second one is duplication, so it is offered as an opt-in in Customize
 - Metrics row: up to four module tiles in one row, each carrying a count and a jump target, for the modules that are reachable only through "More". The row shows what is **not already on the screen**: a module the "Heute" panel already summarises is skipped, and so is one whose own widget is visible, so it follows the current layout instead of holding its own idea of it. In practice it leads with the modules a standard dashboard has no widget for at all - rewards, health and the housekeeping log. Where a household does not use those, no tile appears and the widget renders nothing. Counts come from the shared `/dashboard` payload (`openTaskCount` and the per-module figures beside it), not from one request per module. It is a widget like any other: it moves, hides and resizes in Customize, and it can be locked for a member. Its `permissions.js` entry carries `module: null`, like Family, Weather and Clock - it belongs to no single module, and it does not need to, because **each tile checks its own module** and a locked budget therefore never produces a budget tile. What the row-level lock adds is the ability to take away the row as such
 - Quick links (#469): a row of household links - name, address, picture, and who sees it. Not a module and therefore without a page of its own: managing them starts from the tile, because whoever sees the row is already where it belongs. Each tile opens in a new tab with `rel="noopener noreferrer"` and `referrerpolicy="no-referrer"`, so a target on the home network learns nothing about where this household runs its Yuvomi. A private link carries a lock mark. **Default-hidden:** on day one the row has nothing to show, and a tile that only asks to be set up is not worth adding to every existing dashboard unasked - it is offered as an opt-in in Customize. Its `permissions.js` entry carries `module: null`, like Family, Weather and Clock
 - FAB (quick actions): + Task, + Event, + Shopping list item, + Note
 
-The three newer modules (Rewards, Health, Housekeeping) start **hidden** by default — they are specialised and not active in every household, so they are offered as opt-ins in **Customize** rather than adding empty tiles to a fresh dashboard. Existing saved layouts are untouched.
+The newer modules (Rewards, Health, Housekeeping, Schedule) start **hidden** by default — they are specialised and not active in every household, so they are offered as opt-ins in **Customize** rather than adding empty tiles to a fresh dashboard. Existing saved layouts are untouched.
 
 **Widget sizes:** each widget has a configurable size using named presets (Tiny, Narrow, Tall, Standard, Large, Full) that map to `columns × rows` in the CSS grid. List widgets (tasks, calendar) default to the tall/narrow **Tall** (1×2) preset so a short list keeps useful height without occupying a full two-column row. Sizes are persisted in user preferences and survive page reloads.
 
@@ -3170,10 +3178,35 @@ Off by default. Four tabs (shift types, patterns, overrides, statistics) plus a 
   is not.
 - **Overnight shifts** stay on their start day, so a night shift does not smear across two calendar
   days. `end_time <= start_time` is what marks one; `end == start` is a 24-hour shift.
+- **Quick-start presets:** the Shift Types tab's empty state offers a one-click "quick start" that
+  creates seven common presets (Early/Late/Night/Day/24-hour, plus Vacation/Sick) client-side,
+  sequentially, against the existing unrestricted `POST /shift-types` — reusing the same preset
+  values that already prefill the create-shift-type form, rather than a dedicated bulk-create
+  endpoint. Vacation and Sick carry no start/end time on purpose - a shift type without times is
+  already a valid, "all day" type (`start_time`/`end_time` are nullable as a pair), so an absence
+  reason is just a shift type nobody works, not a new concept or column.
+- **Fill a date range:** `POST /overrides/fill` writes an override across an inclusive range in one
+  call (e.g. a vacation), instead of one `PUT` per day — see Schedule Overrides above for its cap.
+  The client always confirms before submitting, since it silently overwrites any existing overrides
+  in range the way the single-date `PUT` already does, just at a larger blast radius.
+- **Grouped display and range editing:** the Overrides tab groups consecutive days for the same
+  member with the same shift type (or free day) and note into a single row — display and
+  bulk-action only, the table stays exactly one row per day. Editing a group shows its current
+  From/To as editable fields; saving reconciles automatically (`POST /overrides/fill` for the new
+  span, `DELETE /overrides` for whatever fell outside it) rather than requiring a manual
+  delete-then-refill. Deleting a group removes its whole span in one `DELETE /overrides` call and
+  always confirms first, unlike the original single-day delete (now just a group of size one).
+- **Dashboard widget:** an opt-in "who's working today" tile (off by default, like the module
+  itself), reusing `GET /entries?from=<today>&to=<today>` (no `user_id` → the whole household) —
+  the same query the page's own "today" card uses. It lists only members who have a resolved entry
+  today (a pattern or an override), matching `resolveEntries()`'s own rule that a member with
+  neither produces no entry at all; a household with shift types but nothing resolved today shows
+  its own "nothing today" state, distinct from "the module isn't set up yet."
 - **API:** `GET /api/v1/schedule/entries?from=&to=&user_id=`, `GET/POST/PUT/DELETE
   /api/v1/schedule/shift-types[/:id]`, `GET/POST/PUT/DELETE /api/v1/schedule/patterns[/:id]`,
   `GET/PUT /api/v1/schedule/patterns/:id/days[/:position]`, `GET /api/v1/schedule/overrides`,
-  `PUT/DELETE /api/v1/schedule/overrides/:dateKey`.
+  `POST /api/v1/schedule/overrides/fill`, `DELETE /api/v1/schedule/overrides` (a date range, for a
+  grouped row), `PUT/DELETE /api/v1/schedule/overrides/:dateKey`.
 
 ### Rewards (`/rewards`)
 
