@@ -1675,7 +1675,7 @@ function metricTileFor(id, data, currency) {
       return {
         id, route, icon: widgetIcon('birthdays'), label: t('nav.birthdays'),
         value: days === 0 ? t('common.today') : days === 1 ? t('common.tomorrow') : t('dashboard.daysLeft', { count: days }),
-        note: next.name,
+        note: next.kind === 'name_day' ? `${next.name} · ${t('birthdays.nameDay')}` : next.name,
       };
     }
     case 'meals': {

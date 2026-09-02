@@ -34,6 +34,7 @@ const { default: birthdaysRouter } = await import('../server/routes/birthdays.js
 const { default: calendarRouter } = await import('../server/routes/calendar.js');
 const { default: preferencesRouter } = await import('../server/routes/preferences.js');
 const { buildFeed } = await import('../server/services/ics-export.js');
+const { hydrateBirthday, syncBirthdayArtifacts } = await import('../server/services/birthdays.js');
 const db = dbmod.get();
 
 const USER = db.prepare(
@@ -86,7 +87,7 @@ test('GET /calendar liefert birthday_name+birthday_date für Geburtstags-Termine
   assert.equal(bday.title, 'Birthday: Lina Müller');
 });
 
-test('Namenstag erhält einen eigenen lokalisierten Kalendertermin und Reminder mit demselben Vorlauf', async () => {
+test('a name day gets its own localized calendar event and the same reminder offset', async () => {
   await asAdmin(() => call('PUT', '/preferences', { language: 'de' }));
   const created = await call('POST', '/birthdays', {
     name: 'Jiří',
@@ -105,29 +106,34 @@ test('Namenstag erhält einen eigenen lokalisierten Kalendertermin und Reminder 
   assert.notEqual(links.calendar_event_id, links.name_day_calendar_event_id);
 
   const nameDayEvent = db.prepare(`
-    SELECT title, description, start_datetime, recurrence_rule
+    SELECT title, description, start_datetime, recurrence_rule, icon
     FROM calendar_events WHERE id = ?
   `).get(links.name_day_calendar_event_id);
   assert.equal(nameDayEvent.title, 'Namenstag: Jiří');
   assert.equal(nameDayEvent.description, 'Jiří hat Namenstag.');
   assert.equal(nameDayEvent.start_datetime.slice(5), '04-24');
   assert.equal(nameDayEvent.recurrence_rule, 'FREQ=YEARLY;INTERVAL=1');
+  assert.equal(nameDayEvent.icon, 'balloon');
+  assert.equal(
+    db.prepare('SELECT icon FROM calendar_events WHERE id = ?').get(links.calendar_event_id).icon,
+    'cake',
+  );
 
   const reminders = db.prepare(`
     SELECT entity_id, remind_at FROM reminders
     WHERE entity_type = 'event' AND entity_id IN (?, ?)
     ORDER BY entity_id
   `).all(links.calendar_event_id, links.name_day_calendar_event_id);
-  assert.equal(reminders.length, 2, 'jedno společné nastavení vytvoří reminder pro oba termíny');
+  assert.equal(reminders.length, 2, 'one shared setting creates reminders for both occurrences');
 
   const calendar = await call('GET', '/calendar?from=2026-01-01&to=2026-12-31');
   const nameDay = calendar.body.data.find((event) => event.id === links.name_day_calendar_event_id);
-  assert.equal(nameDay.birthday_name, 'Jiří', 'stejný marker drží termín ve vrstvě narozenin');
+  assert.equal(nameDay.birthday_name, 'Jiří', 'the shared marker keeps the occurrence in the birthday layer');
   assert.equal(nameDay.birthday_event_kind, 'name_day');
   assert.equal(nameDay.name_day, '04-24');
 });
 
-test('odebrání Namenstagu smaže jen jeho kalendářový termín a reminder', async () => {
+test('clearing a name day removes only its calendar event and reminder', async () => {
   const created = await call('POST', '/birthdays', {
     name: 'Klára',
     birth_date: '1991-08-12',
@@ -153,6 +159,43 @@ test('odebrání Namenstagu smaže jen jeho kalendářový termín a reminder', 
     db.prepare('SELECT id FROM calendar_events WHERE id = ?').get(links.calendar_event_id),
     'Geburtstag bleibt bestehen',
   );
+});
+
+test('29 February name day resolves to the same non-leap-year date in list and calendar', async () => {
+  setConfig('household_timezone', 'UTC');
+  const created = await call('POST', '/birthdays', {
+    name: 'Leap name day',
+    birth_date: '1990-08-10',
+    name_day: '02-29',
+  });
+  assert.equal(created.status, 201);
+
+  const row = db.prepare('SELECT * FROM birthdays WHERE id = ?').get(created.body.data.id);
+  const listed = hydrateBirthday(db, row, new Date('2027-02-01T12:00:00Z'));
+  assert.equal(listed.next_name_day, '2027-02-28');
+
+  const calendar = await call('GET', '/calendar?from=2027-02-01&to=2027-03-05');
+  const occurrence = calendar.body.data.find((event) =>
+    event.id === row.name_day_calendar_event_id && event.birthday_event_kind === 'name_day');
+  assert.ok(occurrence);
+  assert.equal(occurrence.start_datetime.slice(0, 10), listed.next_name_day);
+});
+
+test('name-day reminder uses local noon in the household time zone', () => {
+  setConfig('household_timezone', 'Europe/Prague');
+  const id = db.prepare(`
+    INSERT INTO birthdays (name, birth_date, name_day, reminder_offset, created_by)
+    VALUES ('Prague name day', '1990-08-10', '05-24', '1440', ?)
+  `).run(USER).lastInsertRowid;
+  const row = db.prepare('SELECT * FROM birthdays WHERE id = ?').get(id);
+  const synced = syncBirthdayArtifacts(db, row, new Date('2026-01-15T12:00:00Z'));
+  const reminder = db.prepare(`
+    SELECT remind_at FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND dismissed = 0
+  `).get(synced.name_day_calendar_event_id);
+
+  assert.equal(reminder.remind_at, '2026-05-23T10:00:00.000Z');
+  setConfig('household_timezone', 'UTC');
 });
 
 test('Nicht-Geburtstags-Termine tragen KEIN birthday_name-Feld', async () => {

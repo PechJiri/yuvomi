@@ -111,7 +111,7 @@ test('POST /: legt Geburtstag an; created_by, Hydration, Foto, Kalender-Artefakt
   assert.equal(rem.n, 1);
 });
 
-test('POST /: speichert einen optionalen Namenstag ohne künstliches Jahr', async () => {
+test('POST /: stores an optional name day without an invented year', async () => {
   const r = await call('POST', '/', {
     name: 'Mila',
     birth_date: '1990-07-20',
@@ -123,19 +123,19 @@ test('POST /: speichert einen optionalen Namenstag ohne künstliches Jahr', asyn
   assert.equal(Number.isInteger(r.body.data.name_day_days_until), true);
 });
 
-test('POST /: lehnt nicht-kanonische und unmögliche Namenstage ab', async () => {
+test('POST /: rejects non-canonical and impossible name days', async () => {
   for (const nameDay of ['24-05', '2026-05-24', '2-03', '02-30', '13-01', '00-10']) {
     const r = await call('POST', '/', {
       name: `Ungültig ${nameDay}`,
       birth_date: '1990-07-20',
       name_day: nameDay,
     });
-    assert.equal(r.status, 400, `${nameDay} muss abgelehnt werden`);
+    assert.equal(r.status, 400, `${nameDay} must be rejected`);
     assert.match(r.body.error, /Name day/);
   }
 });
 
-test('POST /: erlaubt den 29. Februar als Namenstag', async () => {
+test('POST /: accepts 29 February as a name day', async () => {
   const r = await call('POST', '/', {
     name: 'Leap',
     birth_date: '1992-02-29',
@@ -202,6 +202,28 @@ test('GET /upcoming: limit=2 = erste zwei von GET / (gleiche Sortierung)', async
   assert.equal(up.status, 200);
   assert.equal(up.body.data.length, 2);
   assert.deepEqual(up.body.data.map((b) => b.id), all.body.data.slice(0, 2).map((b) => b.id));
+});
+
+test('GET /upcoming: a closer name day does not change birthday ordering', async () => {
+  const monthDayAfter = (days) => {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() + days);
+    return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+  const closerBirthday = await call('POST', '/', {
+    name: 'Closer birthday',
+    birth_date: `1990-${monthDayAfter(5)}`,
+  });
+  const closerNameDay = await call('POST', '/', {
+    name: 'Closer name day',
+    birth_date: `1990-${monthDayAfter(40)}`,
+    name_day: monthDayAfter(1),
+  });
+
+  const upcoming = await call('GET', '/upcoming?limit=50');
+  const ids = upcoming.body.data.map((birthday) => birthday.id);
+  assert.ok(ids.indexOf(closerBirthday.body.data.id) < ids.indexOf(closerNameDay.body.data.id));
 });
 
 test('GET /upcoming: ungültiges limit → Default 5', async () => {
@@ -286,7 +308,7 @@ test('PUT /:id: notes leer → NULL; Name aktualisierbar', async () => {
   assert.equal(row.notes, null);
 });
 
-test('PUT /:id: Namenstag bleibt bei partiellem Update erhalten und lässt sich leeren', async () => {
+test('PUT /:id: preserves a name day on partial update and can clear it', async () => {
   const base = await call('POST', '/', {
     name: 'NamenstagPut',
     birth_date: '1988-08-08',
@@ -337,7 +359,7 @@ test('DELETE /:id: nicht existent → 404', async () => {
   assert.equal(r.status, 404);
 });
 
-test('DELETE /:id: löscht Geburtstag und Namenstag inkl. beider Kalender-Events + Reminder', async () => {
+test('DELETE /:id: removes birthday and name day with both calendar events and reminders', async () => {
   const created = await call('POST', '/', {
     name: 'ToDelete',
     birth_date: '1993-04-04',

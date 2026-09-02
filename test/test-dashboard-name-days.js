@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 const dashboard = await import('../public/pages/dashboard.js');
 
-test('Geburtstagswidget zeigt den Namenstag als eigenen beschrifteten Eintrag', () => {
+test('birthday widget renders a name day as its own labelled occurrence', () => {
   assert.equal(typeof dashboard.renderUpcomingBirthdays, 'function');
   const html = dashboard.renderUpcomingBirthdays([{
     id: 7,
@@ -22,7 +22,7 @@ test('Geburtstagswidget zeigt den Namenstag als eigenen beschrifteten Eintrag', 
   assert.match(html, /2026-04-24/);
 });
 
-test('Narozeninový řádek dál zobrazuje věk', () => {
+test('birthday occurrence continues to show the upcoming age', () => {
   assert.equal(typeof dashboard.renderUpcomingBirthdays, 'function');
   const html = dashboard.renderUpcomingBirthdays([{
     id: 8,
@@ -39,7 +39,7 @@ test('Narozeninový řádek dál zobrazuje věk', () => {
   assert.doesNotMatch(html, /birthdays\.nameDay/);
 });
 
-test('starší narozeninová data bez věku nevypíší prázdný věk', () => {
+test('legacy birthday data without an age does not render an empty age label', () => {
   const html = dashboard.renderUpcomingBirthdays([{
     id: 9,
     name: 'Bez věku',
@@ -52,4 +52,26 @@ test('starší narozeninová data bez věku nevypíší prázdný věk', () => {
 
   assert.doesNotMatch(html, /birthdays\.turnsAge/);
   assert.doesNotMatch(html, />null</);
+});
+
+test('birthday metric identifies a name-day occurrence instead of calling it a birthday', () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { yuvomi: { isModuleDisabled: () => false } };
+  try {
+    const tiles = dashboard.__test.selectMetricTiles({
+      budget: { entryCount: 1, income: 1, balance: 0 },
+      birthdays: [{
+        id: 10,
+        kind: 'name_day',
+        name: 'Jiří',
+        days_until: 2,
+      }],
+    }, 'EUR');
+
+    const birthdayTile = tiles.find((tile) => tile.id === 'birthdays');
+    assert.ok(birthdayTile);
+    assert.equal(birthdayTile.note, 'Jiří · birthdays.nameDay');
+  } finally {
+    globalThis.window = previousWindow;
+  }
 });

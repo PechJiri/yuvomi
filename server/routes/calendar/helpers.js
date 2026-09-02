@@ -45,7 +45,7 @@ export const VALID_EVENT_ICONS = new Set([
   'popcorn', 'sandwich', 'salad', 'shopping-bag', 'shopping-cart', 'gift',
   'package', 'shirt', 'tag', 'credit-card', 'wallet', 'banknote', 'coins',
   'piggy-bank', 'receipt', 'landmark', 'music', 'guitar', 'film', 'theater',
-  'ticket', 'gamepad-2', 'camera', 'party-popper', 'users', 'baby', 'dog',
+  'ticket', 'gamepad-2', 'camera', 'party-popper', 'balloon', 'users', 'baby', 'dog',
   'cat', 'paw-print', 'wrench', 'hammer', 'paintbrush', 'lightbulb', 'sofa',
   'bed', 'bath', 'washing-machine', 'refrigerator', 'star', 'flag', 'target',
   'flame', 'leaf', 'tree-pine', 'flower', 'sun', 'moon', 'cloud-sun',

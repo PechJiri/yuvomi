@@ -207,11 +207,10 @@ async function loadData() {
 }
 
 /**
- * Wie viele Geburtstags- oder Namenstagsereignisse stehen unmittelbar an?
- * Beide Abstaende rechnet der Server (`hydrateBirthday`), hier wird nur der
- * Schnitt gezogen - deshalb liefert dieselbe Regel auch fuer den Startwert aus
- * `/dashboard` dieselbe Zahl. Eine Person kann dabei zweimal zaehlen: Der Badge
- * beschreibt anstehende Anlaesse, nicht Personen.
+ * How many birthday or name-day occurrences are imminent?
+ * The server computes both distances (`hydrateBirthday`); this function only
+ * applies the cutoff, so `/dashboard` uses the same rule for its initial count.
+ * One person may count twice because the badge describes occurrences, not people.
  */
 export function countBirthdaysSoon(birthdays) {
   return birthdays.reduce((count, birthday) => count

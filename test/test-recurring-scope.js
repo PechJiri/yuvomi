@@ -13,7 +13,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const { withoutBlockComments } = await import('./source-text.js');
 
@@ -289,7 +289,9 @@ test('Jede fremde Serie bekommt die Auskunft, die auf sie zutrifft', () => {
   assert.ok(chooser.includes('subscription_id'),
     'der Loeschpfad erkennt keinen Termin aus einem ICS-Abo - er verspricht ihm dann eine '
     + 'Loeschung an der Quelle, die es dort gar nicht gibt');
-  for (const n of ['BirthdayEvent', 'SubscribedSeries', 'ExternalSeries']) {
+  assert.ok(chooser.includes("birthday_event_kind === 'name_day'"),
+    'the delete prompt does not distinguish a name day from a birthday');
+  for (const n of ['NameDayEvent', 'BirthdayEvent', 'SubscribedSeries', 'ExternalSeries']) {
     assert.ok(chooser.includes(`calendar.delete${n}Detail`), `der Fall ${n} hat keinen eigenen Text`);
   }
 
@@ -302,8 +304,8 @@ test('Jede fremde Serie bekommt die Auskunft, die auf sie zutrifft', () => {
 test('Jede Rückfrage ist als zerstörend ausgewiesen', () => {
   const src = calendarSrc.slice(calendarSrc.indexOf('function confirmExternalSeriesDelete'));
   const chooser = src.slice(0, src.indexOf('\n}'));
-  assert.equal((chooser.match(/danger:\s*true/g) || []).length, 3,
-    'nicht alle drei Rückfragen sind als zerstörend ausgewiesen');
+  assert.equal((chooser.match(/danger:\s*true/g) || []).length, 4,
+    'not all four delete prompts are marked as destructive');
 });
 
 test('Die Schlüssel beider Rückfragen stehen in allen Locales', () => {
@@ -311,19 +313,24 @@ test('Die Schlüssel beider Rückfragen stehen in allen Locales', () => {
   // Die Schlüssel werden im Code aus einem Präfix ZUSAMMENGESETZT
   // (`${prompt}Title`), tauchen also nirgends vollständig auf. Ein fehlender
   // fiele erst im Dialog auf - deshalb hier vollständig aufgeführt.
-  const keys = ['External Series', 'Birthday Event', 'Subscribed Series']
+  const keys = ['External Series', 'Name Day Event', 'Birthday Event', 'Subscribed Series']
     .flatMap((n) => ['Title', 'Detail', 'Confirm']
       .map((part) => `delete${n.replace(/ /g, '')}${part}`));
-  const locales = ['de', 'en', 'fr', 'es', 'uk', 'zh', 'ar', 'ja'];
+  const locales = readdirSync(dir)
+    .filter((file) => file.endsWith('.json'))
+    .map((file) => file.replace(/\.json$/, ''));
+  assert.equal(locales.length, 24);
   for (const loc of locales) {
     const cal = JSON.parse(readFileSync(new URL(`${loc}.json`, dir), 'utf-8')).calendar;
     for (const k of keys) {
       assert.ok(typeof cal?.[k] === 'string' && cal[k].trim(), `${loc}.json: calendar.${k} fehlt oder ist leer`);
     }
-    for (const k of ['deleteExternalSeriesDetail', 'deleteBirthdayEventDetail', 'deleteSubscribedSeriesDetail']) {
+    for (const k of ['deleteExternalSeriesDetail', 'deleteNameDayEventDetail', 'deleteBirthdayEventDetail', 'deleteSubscribedSeriesDetail']) {
       assert.ok(cal[k].includes('{{title}}'), `${loc}.json: ${k} nennt den Termin nicht`);
     }
   }
+  const cs = JSON.parse(readFileSync(new URL('cs.json', dir), 'utf-8')).calendar;
+  assert.equal(cs.deleteNameDayEventTitle, 'Odstranit svátek?');
 });
 
 test('truncateRuleBefore behaelt "am letzten Tag des Monats" (#960)', async () => {

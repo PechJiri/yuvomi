@@ -194,7 +194,7 @@ function syncBirthdayCalendarEvent(database, birthday, kind = 'birthday') {
     all_day: 1,
     location: null,
     color: BIRTHDAY_COLOR,
-    icon: 'cake',
+    icon: isNameDay ? 'balloon' : 'cake',
     assigned_to: null,
     recurrence_rule: BIRTHDAY_RRULE,
     created_by: birthday.created_by,

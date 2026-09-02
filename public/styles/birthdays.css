@@ -200,10 +200,10 @@
   }
 }
 
-/* S narozeninami i svátkem může metadatový řádek na úzké kartě přesáhnout
- * dostupnou šířku. Na širší ploše zůstávají oba termíny za sebou; pod 840 px
- * dostane svátek vlastní řádek a smí se zalomit. Poznámka je stejně jako v
- * původním mobilním pravidle nejméně důležitá informace, proto zde ustoupí. */
+/* A birthday plus a name day can overflow the metadata row on a narrow card.
+ * Wider layouts keep both dates inline; below 840px the name day gets its own
+ * wrapping row. Notes remain the least important metadata, matching the
+ * original mobile rule, so they yield the space first. */
 @container birthdays-list (max-width: 840px) {
   .birthday-item__meta--with-name-day {
     flex-wrap: wrap;

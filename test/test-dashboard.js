@@ -807,7 +807,7 @@ test('Dashboard-Geburtstagswidget lädt Geburtstage haushaltsweit (Issue #406)',
     nodeAssert.equal(nameDay.days_until, 0);
     nodeAssert.equal(nameDay.next_date, today);
     nodeAssert.equal(nameDay.next_age, null);
-    nodeAssert.ok(body.birthdaySoonCount >= 3, 'der Drei-Tage-Badge zählt beide Vorkommensarten');
+    nodeAssert.equal(body.birthdaySoonCount, 3, 'the three-day badge counts both occurrence kinds exactly once');
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

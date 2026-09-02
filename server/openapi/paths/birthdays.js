@@ -13,7 +13,11 @@ export function birthdaysPaths() {
       }),
     },
     '/api/v1/birthdays/upcoming': {
-      get: op({ summary: 'List upcoming birthdays', tag: 'Birthdays' }),
+      get: op({
+        summary: 'List upcoming birthdays',
+        description: 'Ordered by distance to each person’s next birthday; optional name-day fields do not affect ordering.',
+        tag: 'Birthdays',
+      }),
     },
     '/api/v1/birthdays/import/candidates': {
       get: op({ summary: 'List contacts eligible for birthday import', tag: 'Birthdays' }),
