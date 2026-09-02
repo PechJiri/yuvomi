@@ -41,7 +41,7 @@ import {
 import { upcomingDoses, computeAdherenceStreak } from '/utils/health-overview.js';
 import {
   FLOW_LEVELS, flowLevel, SYMPTOM_TYPES, symptomType, MOOD_TYPES, PHASE,
-  predictCycle, cycleStats, buildCycleCalendar, cycleRing,
+  predictCycle, cycleStats, buildCycleCalendar, cycleRing, MIN_HISTORY_GAPS,
 } from '/utils/health-cycle.js';
 import { HEALTH_ROUTES, renderHealthTabsBar } from '/utils/health-tabs.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -4407,19 +4407,39 @@ function cycleStatsMarkup(prediction) {
 
   // Ø Zyklus + Ø Periode teilen sich EINE volle-Breite-Kachel statt zweier fast
   // identischer Tiles — bricht die „identical card grid"-Wiederholung auf.
+  const sourceText = cycleStatsSourceText(stats);
   tiles.push(`
     <div class="cycle-stat cycle-stat--dual">
-      <div class="cycle-stat__pair-item">
-        <span class="cycle-stat__head"><i data-lucide="repeat" aria-hidden="true"></i>${esc(t('health.cycle.status.avgCycle'))}</span>
-        <span class="cycle-stat__value">${esc(t('health.cycle.unit.days', { value: fmtNum(stats.avgCycle) }))}</span>
+      <div class="cycle-stat__pair-row">
+        <div class="cycle-stat__pair-item">
+          <span class="cycle-stat__head"><i data-lucide="repeat" aria-hidden="true"></i>${esc(t('health.cycle.status.avgCycle'))}</span>
+          <span class="cycle-stat__value">${esc(t('health.cycle.unit.days', { value: fmtNum(stats.avgCycle) }))}</span>
+        </div>
+        <div class="cycle-stat__pair-item">
+          <span class="cycle-stat__head"><i data-lucide="droplet" aria-hidden="true"></i>${esc(t('health.cycle.status.avgPeriod'))}</span>
+          <span class="cycle-stat__value">${esc(t('health.cycle.unit.days', { value: fmtNum(stats.avgPeriod) }))}</span>
+        </div>
       </div>
-      <div class="cycle-stat__pair-item">
-        <span class="cycle-stat__head"><i data-lucide="droplet" aria-hidden="true"></i>${esc(t('health.cycle.status.avgPeriod'))}</span>
-        <span class="cycle-stat__value">${esc(t('health.cycle.unit.days', { value: fmtNum(stats.avgPeriod) }))}</span>
-      </div>
+      ${sourceText ? `<span class="cycle-stat__sub">${esc(sourceText)}</span>` : ''}
     </div>`);
 
   return `<div class="cycle-stats">${tiles.join('')}</div>`;
+}
+
+// Erklärt, worauf Ø Zyklus/Periode gerade beruhen — sonst nicht von der UI
+// unterscheidbar, ob ein Wert aus echter Historie stammt oder (zufällig
+// identisch mit dem Default) nur die Kaltstart-Annahme ist.
+function cycleStatsSourceText(stats) {
+  if (stats.source === 'settings') return '';
+  if (stats.source === 'history') {
+    return t('health.cycle.stats.source.history', { count: stats.count });
+  }
+  if (stats.source === 'insufficient_history') {
+    const gapsSoFar = Math.max(0, stats.count - 1);
+    const remaining = Math.max(1, MIN_HISTORY_GAPS - gapsSoFar);
+    return t('health.cycle.stats.source.insufficientHistory', { count: remaining });
+  }
+  return t('health.cycle.stats.source.default');
 }
 
 // --------------------------------------------------------

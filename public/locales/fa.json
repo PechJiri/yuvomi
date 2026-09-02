@@ -4092,6 +4092,13 @@
                 "notEnoughData": "داده کافی نیست",
                 "noPrediction": "برای پیش‌بینی یک قاعدگی ثبت کنید."
             },
+            "stats": {
+                "source": {
+                    "history": "Based on your last {{count}} periods",
+                    "insufficientHistory": "Default for now — log {{count}} more period(s) for a personalized prediction",
+                    "default": "Default assumption (no history logged yet)"
+                }
+            },
             "unit": {
                 "days": "{{value}} روز"
             },

@@ -4092,6 +4092,13 @@
                 "notEnoughData": "Ανεπαρκή δεδομένα",
                 "noPrediction": "Καταχώρισε μια περίοδο για προβλέψεις."
             },
+            "stats": {
+                "source": {
+                    "history": "Based on your last {{count}} periods",
+                    "insufficientHistory": "Default for now — log {{count}} more period(s) for a personalized prediction",
+                    "default": "Default assumption (no history logged yet)"
+                }
+            },
             "unit": {
                 "days": "{{value}} ημέρες"
             },

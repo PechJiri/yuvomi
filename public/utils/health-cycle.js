@@ -92,6 +92,9 @@ const DEFAULT_PERIOD = 5;
 const DEFAULT_LUTEAL = 14;
 const FERTILE_WINDOW_DAYS = 6; // Eisprungtag + 5 Tage davor
 const MAX_HISTORY = 6;         // gleitender Mittelwert über bis zu 6 Zyklen
+// erst ab 3 Lücken (4 geloggte Perioden) gilt der Mittelwert als belastbar; exportiert,
+// damit die UI dieselbe Schwelle für die "noch X Perioden"-Hinweise nutzen kann.
+export const MIN_HISTORY_GAPS = 3;
 const GESTATION_DAYS = 280;    // Naegele-Regel: 40 Wochen von der letzten Periode
 
 // --------------------------------------------------------
@@ -165,7 +168,11 @@ export function periodLengths(periods) {
 
 /**
  * Kennzahlen aus der Perioden-Historie. Nutzer-Einstellungen (settings) haben
- * Vorrang vor den abgeleiteten Mittelwerten; fehlt beides, greifen Defaults.
+ * Vorrang vor den abgeleiteten Mittelwerten; der abgeleitete Mittelwert greift
+ * erst ab MIN_HISTORY_GAPS Lücken, sonst (und ganz ohne Historie) greift der
+ * Default. `source` unterscheidet die vier Fälle: 'settings' | 'history' |
+ * 'insufficient_history' (Historie vorhanden, aber noch unter der Schwelle) |
+ * 'default'.
  * @returns {{ count, avgCycle, avgPeriod, lutealLength, minCycle, maxCycle,
  *             variation, regular, trackFertility, source }}
  */
@@ -174,8 +181,13 @@ export function cycleStats(periods, settings = {}) {
   const gaps = cycleGaps(asc).slice(-MAX_HISTORY);
   const lengths = periodLengths(asc).slice(-MAX_HISTORY);
 
-  const derivedCycle = clampInt(mean(gaps), 15, 60);
-  const derivedPeriod = clampInt(mean(lengths), 1, 15);
+  // Ein einzelner (oder zweiter) Zyklus kann ein Ausreißer sein - der abgeleitete
+  // Mittelwert gilt erst ab MIN_HISTORY_GAPS Lücken als belastbar genug, um den
+  // DEFAULT_CYCLE-Fallback zu ersetzen. Darunter bleibt es beim Default, auch wenn
+  // schon (wenige) Perioden geloggt sind - das unterscheidet 'insufficient_history'
+  // von einem echten Kaltstart ohne jede Historie.
+  const derivedCycle = gaps.length >= MIN_HISTORY_GAPS ? clampInt(mean(gaps), 15, 60) : null;
+  const derivedPeriod = lengths.length >= MIN_HISTORY_GAPS ? clampInt(mean(lengths), 1, 15) : null;
 
   // Achtung: Number(null) === 0 (nicht NaN) — NULL/'' erst zu null normalisieren,
   // sonst würde eine leere Einstellung fälschlich auf die Clamp-Untergrenze fallen.
@@ -202,7 +214,7 @@ export function cycleStats(periods, settings = {}) {
     variation,
     regular,
     trackFertility: settings.track_fertility === undefined ? true : !!settings.track_fertility,
-    source: settingCycle ? 'settings' : (derivedCycle ? 'history' : 'default'),
+    source: settingCycle ? 'settings' : (derivedCycle ? 'history' : (gaps.length > 0 ? 'insufficient_history' : 'default')),
   };
 }
 

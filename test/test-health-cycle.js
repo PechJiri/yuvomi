@@ -112,12 +112,37 @@ test('cycleGaps / periodLengths', () => {
 // --------------------------------------------------------
 
 test('cycleStats: Mittelwerte aus Historie + Regelmäßigkeit', () => {
-  const s = cycleStats(periods(['2026-01-01', '2026-01-29', '2026-02-26'], 5));
-  assert.equal(s.count, 3);
+  // 4 Perioden -> 3 Lücken, erreicht MIN_HISTORY_GAPS.
+  const s = cycleStats(periods(['2026-01-01', '2026-01-29', '2026-02-26', '2026-03-26'], 5));
+  assert.equal(s.count, 4);
   assert.equal(s.avgCycle, 28);
   assert.equal(s.avgPeriod, 5);
   assert.equal(s.regular, true);
   assert.equal(s.source, 'history');
+});
+
+test('cycleStats: unter MIN_HISTORY_GAPS bleibt es beim Default, aber mit source "insufficient_history"', () => {
+  const noHistory = cycleStats([]);
+  assert.equal(noHistory.avgCycle, 28);
+  assert.equal(noHistory.source, 'default');
+
+  const oneGap = cycleStats(periods(['2026-01-01', '2026-01-29'], 5)); // 1 Lücke
+  assert.equal(oneGap.avgCycle, 28); // Default-Fallback, NICHT der (zufällig gleiche) Ein-Punkt-Mittelwert
+  assert.equal(oneGap.source, 'insufficient_history');
+
+  const twoGaps = cycleStats(periods(['2026-01-01', '2026-01-31', '2026-03-01'], 5)); // 30/29, noch unter der Schwelle
+  assert.equal(twoGaps.avgCycle, 28); // weiterhin Default, nicht der abgeleitete ~29.5-Mittelwert
+  assert.equal(twoGaps.source, 'insufficient_history');
+
+  const threeGaps = cycleStats(periods(['2026-01-01', '2026-01-31', '2026-03-01', '2026-04-01'], 5)); // 30/29/31
+  assert.equal(threeGaps.avgCycle, 30); // jetzt greift der abgeleitete Mittelwert
+  assert.equal(threeGaps.source, 'history');
+});
+
+test('cycleStats: manuelle Einstellung gewinnt unabhängig von der Lücken-Anzahl', () => {
+  const s = cycleStats(periods(['2026-01-01', '2026-01-29'], 5), { cycle_length_avg: 35 }); // nur 1 Lücke
+  assert.equal(s.avgCycle, 35);
+  assert.equal(s.source, 'settings');
 });
 
 test('cycleStats: unregelmäßig, wenn Schwankung > 7 Tage', () => {
@@ -142,7 +167,7 @@ test('cycleStats: Einstellungen überschreiben Historie, Defaults ohne Daten', (
 test('cycleStats: explizite NULL-Einstellungen fallen auf Historie zurück (Number(null)≠0-Falle)', () => {
   // GET /cycle/settings liefert cycle_length_avg=null etc. — darf NICHT auf die
   // Clamp-Untergrenze (15/1) fallen, sondern die abgeleiteten Werte nutzen.
-  const s = cycleStats(periods(['2026-01-01', '2026-01-29', '2026-02-26'], 5),
+  const s = cycleStats(periods(['2026-01-01', '2026-01-29', '2026-02-26', '2026-03-26'], 5),
     { cycle_length_avg: null, period_length_avg: null, luteal_length: null, track_fertility: 1 });
   assert.equal(s.avgCycle, 28);
   assert.equal(s.avgPeriod, 5);

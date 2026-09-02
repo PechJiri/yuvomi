@@ -1690,6 +1690,11 @@ button.health-med-card:hover {
    gleichförmige 2×2-Kartenwiederholung und spart einen doppelten Rahmen. */
 .cycle-stat--dual {
   grid-column: 1 / -1;
+  gap: var(--space-1);
+}
+
+.cycle-stat__pair-row {
+  display: flex;
   flex-direction: row;
   gap: 0;
 }
