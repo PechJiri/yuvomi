@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0] - 2026-09-02
+
+### Added
+
+- **A written scope: what Yuvomi will not become.** [`docs/SCOPE.md`](docs/SCOPE.md) names three
+  boundaries that used to be re-argued in every second thread - direct bank connections, third-party
+  services in the core, and the dependency rule - and says for each one what is ruled out, what is
+  still open, and why. It is linked from the README, the backlog and the contributing guide, so a
+  feature request that runs into one of them gets an answer that does not depend on which thread it
+  landed in.
+
+### Changed
+
+- **`GET /api/v1/budget/plans` reports `isCurrentMonth`, and `over`/`met` are `null` outside the
+  current month.** The planned, actual, remaining and ratio fields are unchanged. If you read
+  `over` as a plain boolean, treat `null` as "no verdict available" rather than as "within budget";
+  the reason is in the Fixed entry below.
+
 ### Fixed
 
 - **The budget plan no longer passes judgement on a month that is already over.** Editing a
