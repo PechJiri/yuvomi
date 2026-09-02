@@ -48,11 +48,11 @@ Application
 | Mode | Purpose | Width token |
 |------|---------|-------------|
 | `reading` | contacts, recipes, tasks list, forms | `--layout-reading` (~720px) |
-| `data` | tables, inventory, documents list, large datasets | `--layout-content` (~960px) |
+| `data` | tables, inventory, large datasets | `--layout-content` (~960px) |
 | `dashboard` | KPI grids, health, analytics | `--layout-wide` (~1200px) |
 | `form` | complex forms inside reading column | `--layout-reading` |
 | `split` | master/detail; stacks on mobile | split rails |
-| `full` | calendar month, kanban, notes masonry, immersive | usable width |
+| `full` | calendar month, kanban, notes masonry, schedule, documents browser, immersive | usable width |
 
 Arbitrary values such as `max-width: 843px` are prohibited.
 
@@ -300,7 +300,8 @@ overflow checks. Not wired into CI yet.
 |------|------|---------|-------------------|
 | Reference | `reading` | **birthdays** | **Done (helpers + CSS)** |
 | A | `reading` | contacts, rewards, pantry, recipes | Mode declared |
-| B | `data` | inventory, schedule, documents, housekeeping | Mode declared |
+| B | `data` | inventory, housekeeping | Mode declared |
+| B' | `full` | schedule, documents | Mode declared. Both were `data` until the seventh review round: their headers run full width (no `--narrow`), so the 960px measure was visible only on the primitives that happen to consume it - the KPI band of the schedule statistics ended at 960 while the filter card and the result cards beside it did not. `full` sets the measure to 100% and caps nothing, which is what these pages looked like before this PR. PAGE-016 keeps it that way: a measured mode needs a narrow header, or nothing on the page may consume the measure |
 | C | budget family | budget + stats/plans | Mode declared (`reading`); stats and plans are tab panels inside the Budget page and inherit its measure. A per-tab mode (reports as `dashboard`) also means switching the shared header per tab - an open design decision, not done here |
 | C' | `full` / `split` | subscriptions (`full`), split-expenses (`split`) | Mode declared; content not on a measure yet (analytics grid / two-column layout own their width) |
 | D | `dashboard` / `full` | calendar, tasks, notes, health, dashboard | Mode declared |

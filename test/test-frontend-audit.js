@@ -15379,6 +15379,68 @@ test('PAGE-015: a tab panel inside a page declares the mode of that page', () =>
   }
 });
 
+test('PAGE-016: a page whose header runs full width puts nothing on the measure', () => {
+  // Codex, siebte Runde an #995: schedule stand auf `data` (960px), sein Kopf
+  // laeuft aber ohne --narrow voll durch, und vom Inhalt nahm nur das
+  // Kennzahlenband der Statistik das Mass - es endete bei 960, Filterkarte und
+  // Ergebniskarten daneben bei voller Breite (auf main war nichts gekappt).
+  // Ein Mass, das der Kopf nicht zeigt, sieht man an genau den Elementen, die
+  // es zufaellig konsumieren. Notes (Runde eins) und Subscriptions (Runde
+  // zwei) waren derselbe Fall; beim dritten Mal wird es eine Regel: entweder
+  // der Kopf traegt das Mass (--narrow, oder der Helfer mit seinem Default),
+  // oder die Seite ist full/split - dann ist das Mass 100% und nichts kappt.
+  //
+  // WER DAS MASS KONSUMIERT, STEHT IN DEN STYLESHEETS, nicht hier: jede Regel
+  // mit `max-width: ... --page-measure` nennt ihre Klassen selbst. Der Guard
+  // liest sie, damit ein neuer Konsument automatisch mitzaehlt.
+  const styleDir = new URL('../public/styles/', import.meta.url);
+  const consumers = new Map();
+  for (const file of readdirSync(styleDir).filter((f) => f.endsWith('.css'))) {
+    for (const { selector, body } of eachRule(read(`../public/styles/${file}`))) {
+      if (!/max-width\s*:[^;]*--page-measure/.test(body)) continue;
+      for (const fragment of selector.split(',')) {
+        // Nur das letzte Compound zaehlt: `.app-page :is(.a, .b)` kappt .a und
+        // .b, nicht jede Seite. Das :is() zerfaellt am Komma in seine Glieder.
+        const subject = fragment.trim().split(/\s*[>+~]\s*|\s+/).pop();
+        for (const cls of subject.matchAll(/\.([A-Za-z0-9_-]+)/g)) {
+          consumers.set(cls[1], `${file}: ${selector.replace(/\s+/g, ' ').trim().slice(0, 80)}`);
+        }
+      }
+    }
+  }
+  for (const known of ['page-measure', 'list-rows', 'metric-grid']) {
+    assert.ok(consumers.has(known), `PAGE-016: ${known} is not read as a consumer - the stylesheet scan is blind`);
+  }
+  assert.ok(consumers.size >= 10, `PAGE-016: only ${consumers.size} consumers found - the stylesheet scan is blind`);
+
+  let measuredWithFullHeader = 0;
+  for (const name of compositionScope()) {
+    const src = withoutBlockComments(withoutHtmlComments(read(`../public/pages/${name}`)));
+    const mode = COMPOSITION_MODES.find((m) =>
+      new RegExp(`app-page--${m}|data-composition="${m}"|mode:\\s*'${m}'`).test(src));
+    if (!mode || mode === 'full' || mode === 'split') continue;
+    const ownHeader = /page-toolbar/.test(src) || /renderPageHeader\(/.test(src);
+    // Ohne eigenen Kopf ist die Datei ein Panel; PAGE-015 bindet es an den Kopf
+    // seiner Seite.
+    if (!ownHeader) continue;
+    const narrow = /page-toolbar--narrow/.test(src)
+      || (/renderPageHeader\(/.test(src) && !/narrow:\s*false/.test(src));
+    if (narrow) continue;
+    measuredWithFullHeader += 1;
+    for (const [cls, rule] of consumers) {
+      const hit = new RegExp(`class="[^"]*(?<![\\w-])${cls}(?![\\w-])`).test(src);
+      assert.ok(!hit,
+        `PAGE-016 ${name}: mode ${mode} caps .${cls} (${rule}) at the measure while the header runs `
+        + 'full width - either narrow the header (page-toolbar--narrow) so the measure is visible '
+        + 'from the top, or declare full/split so nothing on this page is capped');
+    }
+  }
+  // Der Zweig existiert nur, solange es Seiten mit Mass und durchlaufendem Kopf
+  // gibt (health, dashboard); verschwinden sie, ist der Guard leer und sagt es.
+  assert.ok(measuredWithFullHeader >= 1,
+    'PAGE-016: no measured page with a full-width header left - drop this guard or its scope changed');
+});
+
 test('PAGE-010: full-bleed is an explicit --bleed declaration', () => {
   const layout = read('../public/styles/layout.css');
   assert.match(layout, /\.page-section--bleed\s*\{[\s\S]*?padding-inline:\s*var\(--page-inline-pad\)/,

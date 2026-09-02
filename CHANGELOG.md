@@ -72,7 +72,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   put the title one level below the toolbar where the large-title rules and the collapsing
   header look for a direct child. No page used it. The option, the element and its rules are
   gone, every option combination renders the slots as direct children, and a guard fails on
-  either class name anywhere under `public/`. The budget
+  either class name anywhere under `public/`. A seventh round found the schedule page declared
+  `data` (960px) under a header that runs full width: nothing showed the measure except the
+  primitives that happen to consume it, so the KPI band of the statistics ended at 960 while
+  the filter card and the result cards beside it did not (on main nothing was capped).
+  Schedule and documents, the two pages with that shape, declare `full` and cap nothing,
+  which is what they looked like before; the page's own rows inside its full-width cards
+  follow suit and no longer stop at the reading width. A guard reads the measure consumers
+  from the stylesheets and fails on any measured page whose header does not narrow but whose
+  markup contains one of them. The budget
   reports panel had declared itself a `dashboard` inside the `reading`
   budget page, which set the measure of its subtree to 1200px while the shared header and
   every other tab end at 720px; it declares the mode of the page it lives in, and a guard holds
