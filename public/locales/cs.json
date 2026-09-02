@@ -1465,7 +1465,8 @@
         "receiptsAttachedLabel_one": "Připojený doklad: {{count}}",
         "loanPaidInstallmentsLabel": "Již zaplacené splátky",
         "loanPaidInstallmentsHint": "Pro půjčku, která již běží. Tyto splátky se doplní, ale nezaúčtují se do rozpočtu.",
-        "loanPaymentTypeLocked": "Příjem nebo výdaj se řídí typem půjčky a mění se tam."
+        "loanPaymentTypeLocked": "Příjem nebo výdaj se řídí typem půjčky a mění se tam.",
+        "planHistoricNote": "Měřeno vůči vašemu aktuálnímu plánu. Yuvomi si nepamatuje, jaký byl plán v dřívějším měsíci."
     },
     "settings": {
         "healthCycleEnableLabel": "Zobrazit kartu cyklu",
@@ -4222,6 +4223,7 @@
         "loadError": "Odměny se nepodařilo načíst.",
         "remainingToReward": "Ještě {{points}} do „{{reward}}“",
         "canRedeemNow": "Připraveno k vyzvednutí",
+        "progressLabel": "Pokrok k další odměně",
         "noRewardsYet": "Zatím žádné odměny",
         "redeem": "Vyzvednout",
         "confirmRedeem": "Vyzvednout",

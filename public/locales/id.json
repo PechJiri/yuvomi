@@ -1477,7 +1477,8 @@
         "receiptsAttachedLabel_one": "{{count}} bukti terlampir",
         "loanPaidInstallmentsLabel": "Cicilan yang sudah dibayar",
         "loanPaidInstallmentsHint": "Untuk pinjaman yang sudah berjalan. Cicilan ini dicatat, tetapi tidak dibukukan ke anggaran.",
-        "loanPaymentTypeLocked": "Pemasukan atau pengeluaran mengikuti jenis pinjaman dan diubah di sana."
+        "loanPaymentTypeLocked": "Pemasukan atau pengeluaran mengikuti jenis pinjaman dan diubah di sana.",
+        "planHistoricNote": "Diukur terhadap rencana Anda saat ini. Yuvomi tidak menyimpan berapa rencana pada bulan sebelumnya."
     },
     "settings": {
         "healthCycleEnableLabel": "Tampilkan tab siklus",
@@ -4222,6 +4223,7 @@
         "loadError": "Hadiah tidak dapat dimuat.",
         "remainingToReward": "Kurang {{points}} untuk “{{reward}}”",
         "canRedeemNow": "Siap ditukar",
+        "progressLabel": "Kemajuan menuju hadiah berikutnya",
         "noRewardsYet": "Belum ada hadiah",
         "redeem": "Tukar",
         "confirmRedeem": "Tukar",

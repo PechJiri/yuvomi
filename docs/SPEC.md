@@ -1394,7 +1394,7 @@ Planned/estimated budget (Budget → Plan). A **steady monthly plan**: one amoun
 | created_by | TEXT | User id that last set the plan, nullable |
 | updated_at | TEXT | ISO 8601 datetime, default now |
 
-`GET /api/v1/budget/plans?month=YYYY-MM` returns each category's planned vs. actual (with `remaining`, `ratio`, `over`) and the savings goal's planned vs. net balance (`met`). `PUT /api/v1/budget/plans/:category` upserts a positive amount (validated against real expense category keys or the savings sentinel); `DELETE` removes it. The Statistics tab overlays a category target marker at the planned amount (month range only); the dashboard Budget widget shows savings-goal progress when a goal is set. No FK on the category so category rename/delete never orphans the app.
+`GET /api/v1/budget/plans?month=YYYY-MM` returns each category's planned vs. actual (with `remaining`, `ratio`, `over`) and the savings goal's planned vs. net balance (`met`), plus `isCurrentMonth` for the requested month. **The verdict fields are scoped to the current month (v2.64.0):** because the table holds one amount per category with no time axis, nothing records what the plan said in an earlier month, so editing a plan today would otherwise rewrite the "over budget" answer for months that have long closed. For any month other than the current one, `over` and `met` are therefore `null` while `planned`, `actual`, `remaining` and `ratio` are still returned - the facts stay, the judgement does not. A real plan history would remove the distinction again. `PUT /api/v1/budget/plans/:category` upserts a positive amount (validated against real expense category keys or the savings sentinel); `DELETE` removes it. The Statistics tab overlays a category target marker at the planned amount (month range only); the dashboard Budget widget shows savings-goal progress when a goal is set. No FK on the category so category rename/delete never orphans the app.
 
 ### Reminders
 
@@ -3458,6 +3458,16 @@ modules/
 | `menu.show` | | Set `false` to hide from navigation. |
 | `menu.label` | | Navigation label (falls back to `name`). |
 | `menu.order` | | Integer sort order in the navigation list. |
+| `menu.labelKey` | | i18n key for the navigation label, resolved through the module's locale files (#919). |
+| `manifestVersion` | | Integer format number of the manifest itself, not of the module. Omitted means 1; a higher number than this Yuvomi reads is rejected outright, never read in part. |
+| `page.composition` | | Composition mode of the module page: `reading` \| `data` \| `dashboard` \| `form` \| `split` \| `full` (#929, [`PAGE-COMPOSITION.md`](PAGE-COMPOSITION.md)). The router mounts the module in the declared `.app-page--<mode>` root; `render()` receives that root as `container`. |
+| `page.width` | | `reading` \| `content` \| `wide`; refines the measure inside a measured mode, ignored by `split` and `full`. `page.navigation` / `page.responsive` accept `standard` only. |
+| `capabilities.permissions` | | Registers the module as `ext:<module-id>` in household permissions, with optional per-widget keys (#919). Required when widgets or an API prefix are declared. |
+| `capabilities.widgets[]` | | Dashboard widgets (`<module-id>:<widget-id>`): `entry` exporting `renderWidget(container, { size, options, user })`, `defaultSize`, `defaultVisible`, optional `optionsSchema` (up to 8 keys). |
+| `capabilities.api.prefix` | | Exactly `/api/extensions/<module-id>`; any other prefix, including a core path, is rejected and the module loads as errored, so it cannot take over a core token scope. |
+| `i18n.defaultLocale` | | Fallback language for `locales/{locale}.json` shipped with the module; lookup order is UI locale, this default, `en`, `de`, then the static manifest labels. |
+
+The full contract for every optional block lives in [`MODULES.md`](../MODULES.md); this table names the fields so the data model is complete.
 
 **Where a third-party module is controlled:**
 - **Settings → Modules → Active modules** (admin-only): enable/disable an individual third-party module without restarting the server.

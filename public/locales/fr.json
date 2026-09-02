@@ -1465,7 +1465,8 @@
         "receiptsAttachedLabel_one": "{{count}} justificatif joint",
         "loanPaidInstallmentsLabel": "Échéances déjà payées",
         "loanPaidInstallmentsHint": "Pour un prêt déjà en cours. Ces échéances sont enregistrées mais non comptabilisées dans le budget.",
-        "loanPaymentTypeLocked": "Revenu ou dépense suit le type de prêt et se modifie à cet endroit."
+        "loanPaymentTypeLocked": "Revenu ou dépense suit le type de prêt et se modifie à cet endroit.",
+        "planHistoricNote": "Mesuré par rapport à votre plan actuel. Yuvomi ne conserve pas le plan tel qu’il était un mois plus tôt."
     },
     "settings": {
         "healthCycleEnableLabel": "Afficher l’onglet cycle",
@@ -4222,6 +4223,7 @@
         "loadError": "Impossible de charger les récompenses.",
         "remainingToReward": "{{points}} pour « {{reward}} »",
         "canRedeemNow": "Prêt à échanger",
+        "progressLabel": "Progression vers la prochaine récompense",
         "noRewardsYet": "Aucune récompense pour le moment",
         "redeem": "Échanger",
         "confirmRedeem": "Échanger",

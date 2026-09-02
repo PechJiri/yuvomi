@@ -48,7 +48,7 @@ async function load() {
 function renderShell() {
   view.root.replaceChildren();
   view.root.insertAdjacentHTML('beforeend', `
-    <div class="budget-plan">
+    <div class="budget-plan app-page app-page--reading page-measure--narrow" data-composition="reading">
       <div id="budget-plan-body"></div>
     </div>
   `);
@@ -77,6 +77,10 @@ function renderBody(body) {
   const d = view.data;
   body.replaceChildren();
   body.insertAdjacentHTML('beforeend', `
+    ${d.isCurrentMonth ? '' : `
+      <p class="budget-plan__historic-note">
+        <i data-lucide="info" class="icon-md" aria-hidden="true"></i>${t('budget.planHistoricNote')}
+      </p>`}
     ${renderSavingsCard(d.savings)}
     <div class="budget-plan__section">
       <div class="budget-plan__section-head">
@@ -110,15 +114,19 @@ function renderSavingsCard(savings) {
   const ratio = Math.max(0, Math.min(1, savings.ratio));
   const pct = Math.round(savings.ratio * 100);
   // Sparziel: erreichen/übertreffen ist gut (grün), knapp darunter amber, im Minus rot.
-  const tone = savings.met ? 'under' : (savings.actual < 0 ? 'over' : 'near');
+  const tone = savings.met == null
+    ? 'near'
+    : savings.met ? 'under' : (savings.actual < 0 ? 'over' : 'near');
   const R = 52, C = 2 * Math.PI * R;
   const dash = (ratio * C).toFixed(2);
 
-  const status = savings.met
-    ? t('budget.planSavingsMet')
-    : savings.actual < 0
-      ? t('budget.planSavingsNegative')
-      : t('budget.planSavingsShort', { amount: fmt(Math.max(0, savings.remaining)) });
+  const status = savings.met == null
+    ? ''
+    : savings.met
+      ? t('budget.planSavingsMet')
+      : savings.actual < 0
+        ? t('budget.planSavingsNegative')
+        : t('budget.planSavingsShort', { amount: fmt(Math.max(0, savings.remaining)) });
 
   return `
     <button type="button" class="budget-plan-savings budget-plan-savings--tone-${tone}" id="budget-plan-savings">
@@ -137,7 +145,7 @@ function renderSavingsCard(savings) {
           <strong>${fmt(savings.actual)}</strong>
           <span>/ ${fmt(savings.planned)}</span>
         </div>
-        <div class="budget-plan-savings__status budget-plan-savings__status--${tone}">${status}</div>
+        ${status ? `<div class="budget-plan-savings__status budget-plan-savings__status--${tone}">${status}</div>` : ''}
       </div>
       <i data-lucide="pencil" class="budget-plan-savings__edit" aria-hidden="true"></i>
       <span class="sr-only">${t('budget.planEditAction')}</span>
@@ -156,9 +164,13 @@ function renderRows(plans) {
   return plans.map((p) => {
     const tone = toneForRatio(p.ratio, p.over);
     const pct = Math.max(0, Math.min(100, Math.round(p.ratio * 100)));
-    const foot = p.over
-      ? t('budget.planOverBy', { amount: fmt(Math.abs(p.remaining)) })
-      : t('budget.planLeft', { amount: fmt(Math.max(0, p.remaining)) });
+    // over === null: vergangener Monat, kein Urteil (#1005). Ein „noch X uebrig"
+    // waere hier falsch - der Plan von heute galt damals nicht.
+    const foot = p.over === null
+      ? ''
+      : p.over
+        ? t('budget.planOverBy', { amount: fmt(Math.abs(p.remaining)) })
+        : t('budget.planLeft', { amount: fmt(Math.max(0, p.remaining)) });
     return `
       <button type="button" class="budget-plan-row budget-plan-row--tone-${tone}" data-category="${view.ctx.esc(p.category)}">
         <div class="budget-plan-row__top">
@@ -168,7 +180,7 @@ function renderRows(plans) {
         <div class="budget-plan-row__track">
           <div class="budget-plan-row__fill" style="--plan-scale:${pct / 100}"></div>
         </div>
-        <div class="budget-plan-row__foot">${foot}</div>
+        ${foot ? `<div class="budget-plan-row__foot">${foot}</div>` : ''}
         <span class="sr-only">${t('budget.planEditAction')}</span>
       </button>`;
   }).join('');

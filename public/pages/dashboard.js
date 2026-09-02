@@ -3918,7 +3918,7 @@ export async function render(container, { user }) {
   const wallMode = isWallActive();
 
   setHtml(container, `
-    <div class="dashboard${wallMode ? ' dashboard--wall' : ''}">
+    <div class="dashboard app-page app-page--dashboard${wallMode ? ' dashboard--wall' : ''}" data-composition="dashboard">
       <h1 class="sr-only">${t('dashboard.title')}</h1>
       <div class="dashboard-shell" id="dashboard-shell">
         ${wallMode ? renderWallSurface(null, null, { loading: true }) : renderDashboardSkeleton()}

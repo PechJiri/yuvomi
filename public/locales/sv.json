@@ -1465,7 +1465,8 @@
         "receiptsAttachedLabel_one": "{{count}} kvitto bifogat",
         "loanPaidInstallmentsLabel": "Redan betalda delbetalningar",
         "loanPaidInstallmentsHint": "För ett lån som redan löper. Dessa delbetalningar registreras men bokförs inte i budgeten.",
-        "loanPaymentTypeLocked": "Inkomst eller utgift följer typen av lån och ändras där."
+        "loanPaymentTypeLocked": "Inkomst eller utgift följer typen av lån och ändras där.",
+        "planHistoricNote": "Mätt mot din nuvarande plan. Yuvomi sparar inte vad planen var en tidigare månad."
     },
     "settings": {
         "healthCycleEnableLabel": "Visa cykelfliken",
@@ -4222,6 +4223,7 @@
         "loadError": "Belöningarna kunde inte laddas.",
         "remainingToReward": "{{points}} kvar till ”{{reward}}”",
         "canRedeemNow": "Redo att lösa in",
+        "progressLabel": "Framsteg mot nästa belöning",
         "noRewardsYet": "Inga belöningar ännu",
         "redeem": "Lös in",
         "confirmRedeem": "Lös in",

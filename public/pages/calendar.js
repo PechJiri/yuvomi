@@ -1309,7 +1309,7 @@ export async function render(container, { user }) {
 
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <div class="calendar-page" id="calendar-page">
+    <div class="calendar-page app-page app-page--full" id="calendar-page" data-composition="full">
       <div class="page-toolbar page-toolbar--wrap cal-toolbar" id="cal-toolbar"></div>
       <div id="cal-body" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div>
       <button class="page-fab" id="fab-new-event" aria-label="${t('calendar.newEvent')}" data-dock-label="${t('newLabel.calendar')}">
@@ -1813,7 +1813,7 @@ function renderView() {
    * Kanten-Guard kennt diese Bauart (test-frontend-audit: Lesemass-Toggle
    * am Koerper ohne Kopf-Toggle). */
   _container.querySelector('#calendar-page')
-    ?.classList.toggle('page-measure--narrow', state.view === 'agenda');
+    ?.classList.toggle('is-reading-measure', state.view === 'agenda');
   // Monats-Resize-Observer lösen, bevor das alte #month-grid detached wird;
   // nur die Monatsansicht setzt ihn danach wieder auf.
   _monthGridResizeObserver?.disconnect();

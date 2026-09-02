@@ -559,21 +559,32 @@
   background-color: transparent;
 }
 
-.housekeeping-staff-row[role="button"] {
+/* Die Rolle sitzt auf dem Namens-Button (siehe housekeeping.js, axe
+ * nested-interactive); Klick-Cursor und Hover-Optik traegt weiter die ganze
+ * Zeile ueber ihr data-Attribut, den Tastaturfokus zeigt :has auf den Button -
+ * :focus-within griffe auch beim Edit-Button und faerbte die falsche Geste. */
+.housekeeping-staff-row[data-select-worker] {
   cursor: pointer;
 }
 
-.housekeeping-staff-row[role="button"]:hover,
-.housekeeping-staff-row[role="button"]:focus-visible,
+.housekeeping-staff-row[data-select-worker]:hover,
+.housekeeping-staff-row:has(> .housekeeping-staff-row__select:focus-visible),
 .housekeeping-staff-row--active {
   border-color: var(--module-accent);
   background-color: color-mix(in srgb, var(--module-accent) var(--tint-state), var(--color-surface-hover));
 }
 
-.housekeeping-staff-row div:nth-child(2) {
+.housekeeping-staff-row__select {
   display: grid;
   gap: var(--space-0h);
   min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 
 .housekeeping-staff-row span {

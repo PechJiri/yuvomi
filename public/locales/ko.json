@@ -1477,7 +1477,8 @@
         "receiptsAttachedLabel_one": "영수증 {{count}}건 첨부됨",
         "loanPaidInstallmentsLabel": "이미 상환한 회차",
         "loanPaidInstallmentsHint": "이미 상환 중인 대출용입니다. 해당 회차는 기록되지만 가계부에는 반영되지 않습니다.",
-        "loanPaymentTypeLocked": "수입인지 지출인지는 대출 유형을 따르며 거기에서 변경합니다."
+        "loanPaymentTypeLocked": "수입인지 지출인지는 대출 유형을 따르며 거기에서 변경합니다.",
+        "planHistoricNote": "현재 계획을 기준으로 비교한 값입니다. Yuvomi는 이전 달의 계획이 얼마였는지 보관하지 않습니다."
     },
     "settings": {
         "healthCycleEnableLabel": "주기 탭 표시",
@@ -4222,6 +4223,7 @@
         "loadError": "보상을 불러오지 못했습니다.",
         "remainingToReward": "“{{reward}}”까지 {{points}} 남음",
         "canRedeemNow": "교환 가능",
+        "progressLabel": "다음 보상까지의 진행률",
         "noRewardsYet": "아직 상품이 없습니다",
         "redeem": "교환",
         "confirmRedeem": "교환",

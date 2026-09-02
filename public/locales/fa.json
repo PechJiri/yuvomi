@@ -1477,7 +1477,8 @@
         "receiptsAttachedLabel_one": "رسیدهای پیوست‌شده: {{count}}",
         "loanPaidInstallmentsLabel": "اقساط پرداخت‌شده",
         "loanPaidInstallmentsHint": "برای وامی که از قبل در جریان است. این اقساط ثبت می‌شوند اما در بودجه لحاظ نمی‌شوند.",
-        "loanPaymentTypeLocked": "درآمد یا هزینه بودن از نوع وام پیروی می‌کند و آنجا تغییر می‌کند."
+        "loanPaymentTypeLocked": "درآمد یا هزینه بودن از نوع وام پیروی می‌کند و آنجا تغییر می‌کند.",
+        "planHistoricNote": "بر اساس برنامهٔ فعلی شما سنجیده شده است. Yuvomi نگه نمی‌دارد که برنامه در ماه‌های گذشته چه بوده است."
     },
     "settings": {
         "healthCycleEnableLabel": "نمایش برگهٔ چرخه",
@@ -4222,6 +4223,7 @@
         "loadError": "بارگذاری پاداش‌ها ممکن نشد.",
         "remainingToReward": "{{points}} تا «{{reward}}» باقی مانده",
         "canRedeemNow": "آماده برای دریافت",
+        "progressLabel": "پیشرفت به سوی پاداش بعدی",
         "noRewardsYet": "هنوز جایزه‌ای نیست",
         "redeem": "دریافت",
         "confirmRedeem": "دریافت",

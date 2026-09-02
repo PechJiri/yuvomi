@@ -1465,7 +1465,8 @@
         "receiptsAttachedLabel_one": "{{count}} fiş eklendi",
         "loanPaidInstallmentsLabel": "Halihazırda ödenen taksitler",
         "loanPaidInstallmentsHint": "Zaten devam eden bir kredi için. Bu taksitler kaydedilir, ancak bütçeye işlenmez.",
-        "loanPaymentTypeLocked": "Gelir mi gider mi olduğu kredi türüne bağlıdır ve orada değiştirilir."
+        "loanPaymentTypeLocked": "Gelir mi gider mi olduğu kredi türüne bağlıdır ve orada değiştirilir.",
+        "planHistoricNote": "Mevcut planınıza göre ölçülmüştür. Yuvomi, önceki bir aydaki planın ne olduğunu saklamaz."
     },
     "settings": {
         "healthCycleEnableLabel": "Döngü sekmesini göster",
@@ -4222,6 +4223,7 @@
         "loadError": "Ödüller yüklenemedi.",
         "remainingToReward": "“{{reward}}” için {{points}} kaldı",
         "canRedeemNow": "Kullanmaya hazır",
+        "progressLabel": "Bir sonraki ödüle ilerleme",
         "noRewardsYet": "Henüz ödül yok",
         "redeem": "Kullan",
         "confirmRedeem": "Kullan",

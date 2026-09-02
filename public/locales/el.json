@@ -1465,7 +1465,8 @@
         "receiptsAttachedLabel_one": "{{count}} συνημμένη απόδειξη",
         "loanPaidInstallmentsLabel": "Ήδη πληρωμένες δόσεις",
         "loanPaidInstallmentsHint": "Για δάνειο που τρέχει ήδη. Οι δόσεις αυτές καταχωρούνται χωρίς να περάσουν στον προϋπολογισμό.",
-        "loanPaymentTypeLocked": "Το έσοδο ή το έξοδο ακολουθεί τον τύπο του δανείου και αλλάζει εκεί."
+        "loanPaymentTypeLocked": "Το έσοδο ή το έξοδο ακολουθεί τον τύπο του δανείου και αλλάζει εκεί.",
+        "planHistoricNote": "Μετρημένο με βάση το τρέχον σχέδιό σας. Το Yuvomi δεν κρατά τι ήταν το σχέδιο σε προηγούμενο μήνα."
     },
     "settings": {
         "healthCycleEnableLabel": "Εμφάνιση καρτέλας κύκλου",
@@ -4222,6 +4223,7 @@
         "loadError": "Δεν ήταν δυνατή η φόρτωση των επιβραβεύσεων.",
         "remainingToReward": "Ακόμη {{points}} για «{{reward}}»",
         "canRedeemNow": "Έτοιμο για εξαργύρωση",
+        "progressLabel": "Πρόοδος προς την επόμενη ανταμοιβή",
         "noRewardsYet": "Δεν υπάρχουν ακόμη βραβεία",
         "redeem": "Εξαργύρωση",
         "confirmRedeem": "Εξαργύρωση",

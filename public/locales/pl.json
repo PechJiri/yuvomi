@@ -1477,7 +1477,8 @@
         "receiptsAttachedLabel_one": "Załączone dowody: {{count}}",
         "loanPaidInstallmentsLabel": "Już zapłacone raty",
         "loanPaidInstallmentsHint": "Dla pożyczki, która już trwa. Te raty zostaną uzupełnione, ale nie trafią do budżetu.",
-        "loanPaymentTypeLocked": "Przychód lub wydatek wynika z rodzaju pożyczki i tam się go zmienia."
+        "loanPaymentTypeLocked": "Przychód lub wydatek wynika z rodzaju pożyczki i tam się go zmienia.",
+        "planHistoricNote": "Mierzone względem Twojego bieżącego planu. Yuvomi nie zapisuje, jaki był plan we wcześniejszym miesiącu."
     },
     "settings": {
         "healthCycleEnableLabel": "Pokaż kartę cyklu",
@@ -4222,6 +4223,7 @@
         "loadError": "Nie udało się wczytać nagród.",
         "remainingToReward": "Jeszcze {{points}} do „{{reward}}”",
         "canRedeemNow": "Gotowe do wymiany",
+        "progressLabel": "Postęp do następnej nagrody",
         "noRewardsYet": "Brak nagród",
         "redeem": "Wymień",
         "confirmRedeem": "Wymień",

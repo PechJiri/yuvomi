@@ -66,8 +66,13 @@ function groupIcon(type) {
 export async function render(container, { user } = {}) {
   _container = container;
   state.user = user || null;
+  // `split`, nicht `reading`: Kopf und Kennzahlenband stehen ueber einem
+  // zweispaltigen .split-layout (Gruppen links, Detail rechts) - das IST die
+  // Bauart des Modus. Das Raster selbst traegt die Seite noch in eigenem CSS
+  // (Container-Queries statt Viewport-Breite, siehe split-expenses.css);
+  // das Shell-Raster wirkt nur auf .app-page__body, den es hier nicht gibt.
   setHtml(container, `
-    <div class="split-page">
+    <div class="split-page app-page app-page--split" data-composition="split">
       <header class="panel-head split-topbar">
         <div>
           <h1 class="split-title">${t('splitExpenses.title')}</h1>

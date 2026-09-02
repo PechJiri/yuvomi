@@ -1,6 +1,6 @@
 {
   "name": "yuvomi",
-  "version": "2.62.0",
+  "version": "2.64.0",
   "description": "Self-hosted family planner - calendar, tasks, shopping, meal planning, budget and more. Private, open-source, no subscription.",
   "main": "server/index.js",
   "type": "module",
@@ -291,7 +291,8 @@
     "test:schedule": "DB_PATH=:memory: node --test test/test-schedule.js",
     "test:schedule-default-off-migration": "node --experimental-sqlite --test test/test-schedule-default-off-migration.js",
     "test:docs-landing": "node --test test/test-docs-landing.js",
-    "test:readme-consistency": "node --test test/test-readme-consistency.js"
+    "test:readme-consistency": "node --test test/test-readme-consistency.js",
+    "check:release-cadence": "node scripts/check-release-cadence.mjs"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -314,6 +315,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "axe-core": "^4.13.0",
     "puppeteer": "^25.9.0",
     "sharp": "^0.35.4"
   },

@@ -1465,7 +1465,8 @@
         "receiptsAttachedLabel_one": "{{count}} bon bijgevoegd",
         "loanPaidInstallmentsLabel": "Al betaalde termijnen",
         "loanPaidInstallmentsHint": "Voor een lening die al loopt. Deze termijnen worden vastgelegd, maar niet in het budget geboekt.",
-        "loanPaymentTypeLocked": "Inkomst of uitgave volgt de soort lening en wordt daar gewijzigd."
+        "loanPaymentTypeLocked": "Inkomst of uitgave volgt de soort lening en wordt daar gewijzigd.",
+        "planHistoricNote": "Gemeten aan je huidige plan. Yuvomi bewaart niet wat het plan in een eerdere maand was."
     },
     "settings": {
         "healthCycleEnableLabel": "Cyclustabblad tonen",
@@ -4222,6 +4223,7 @@
         "loadError": "Beloningen konden niet worden geladen.",
         "remainingToReward": "Nog {{points}} tot “{{reward}}”",
         "canRedeemNow": "Klaar om in te wisselen",
+        "progressLabel": "Voortgang naar de volgende beloning",
         "noRewardsYet": "Nog geen beloningen",
         "redeem": "Inwisselen",
         "confirmRedeem": "Inwisselen",

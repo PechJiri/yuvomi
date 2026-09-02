@@ -1465,7 +1465,8 @@
         "receiptsAttachedLabel_one": "إيصال واحد مرفق",
         "loanPaidInstallmentsLabel": "الأقساط المدفوعة بالفعل",
         "loanPaidInstallmentsHint": "لقرض قيد السداد بالفعل. تُضاف هذه الأقساط دون تسجيلها في الميزانية.",
-        "loanPaymentTypeLocked": "الدخل أو المصروف يتبع نوع القرض ويُغيَّر هناك."
+        "loanPaymentTypeLocked": "الدخل أو المصروف يتبع نوع القرض ويُغيَّر هناك.",
+        "planHistoricNote": "مقاسة على خطتك الحالية. لا يحتفظ Yuvomi بما كانت عليه الخطة في شهر سابق."
     },
     "settings": {
         "healthCycleEnableLabel": "إظهار علامة تبويب الدورة",
@@ -4222,6 +4223,7 @@
         "loadError": "تعذّر تحميل المكافآت.",
         "remainingToReward": "يتبقى {{points}} للوصول إلى «{{reward}}»",
         "canRedeemNow": "جاهز للاستبدال",
+        "progressLabel": "التقدم نحو المكافأة التالية",
         "noRewardsYet": "لا توجد جوائز بعد",
         "redeem": "استبدال",
         "confirmRedeem": "استبدال",
