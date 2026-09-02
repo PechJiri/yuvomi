@@ -1330,6 +1330,21 @@
   text-overflow: ellipsis;
 }
 
+/* Der Titel ist ein BUTTON (Tastatur-/SR-Zugang der Edit-Fläche; role=button
+ * auf der Zeile war axe nested-interactive, siehe budget.js). Optisch bleibt
+ * er die Textzeile - der Reset gilt nur dem Button-UA-Stylesheet. */
+button.budget-entry__title {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
 /* EINE Zeile, und sie bricht nicht um.
  *
  * Gemessen bei 390x844 mit dem Demo-Haushalt: 156px Textspalte, vier Angaben

@@ -4208,6 +4208,7 @@
         "loadError": "Δεν ήταν δυνατή η φόρτωση των επιβραβεύσεων.",
         "remainingToReward": "Ακόμη {{points}} για «{{reward}}»",
         "canRedeemNow": "Έτοιμο για εξαργύρωση",
+        "progressLabel": "Πρόοδος προς την επόμενη ανταμοιβή",
         "noRewardsYet": "Δεν υπάρχουν ακόμη βραβεία",
         "redeem": "Εξαργύρωση",
         "confirmRedeem": "Εξαργύρωση",

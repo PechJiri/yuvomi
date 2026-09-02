@@ -4208,6 +4208,7 @@
         "loadError": "Не вдалося завантажити нагороди.",
         "remainingToReward": "Ще {{points}} до «{{reward}}»",
         "canRedeemNow": "Готово до обміну",
+        "progressLabel": "Прогрес до наступної винагороди",
         "noRewardsYet": "Нагород ще немає",
         "redeem": "Обміняти",
         "confirmRedeem": "Обміняти",

@@ -1788,7 +1788,11 @@ button.health-med-card:hover {
 }
 
 .cycle-cal__day:disabled { cursor: default; }
-.cycle-cal__day.is-out { opacity: 0.4; }
+/* Nachbarmonatstage: gedimmte Zahl in kontrastfester Sekundaerfarbe, Marker
+ * ueber --cycle-marker-alpha abgeschwaecht. NICHT opacity auf der Zelle - die
+ * drueckte die Zahl auf getoenten Phasenflaechen unter 4.5:1 (gemessen 2.12:1
+ * auf is-out.is-menstruation, axe color-contrast). */
+.cycle-cal__day.is-out { color: var(--color-text-secondary); --cycle-marker-alpha: 0.45; }
 button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2); }
 .cycle-cal__num { position: relative; z-index: 1; }
 
@@ -1796,32 +1800,32 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
    Farbschwäche unterscheidbar sind (WCAG 1.4.1): Menstruation = Vollfläche,
    fruchtbar = Diagonal-Schraffur (Textur), Eisprung = kräftiger Rand-Ring (Form),
    vorhergesagt = weicher Umriss statt Füllung. */
-.cycle-cal__day.is-menstruation { background: color-mix(in oklab, var(--cycle-period) 22%, transparent); }
+.cycle-cal__day.is-menstruation { background: color-mix(in oklab, var(--cycle-period) calc(22% * var(--cycle-marker-alpha, 1)), transparent); }
 
 .cycle-cal__day.is-fertile {
-  background-color: color-mix(in oklab, var(--cycle-fertile) 12%, transparent);
+  background-color: color-mix(in oklab, var(--cycle-fertile) calc(12% * var(--cycle-marker-alpha, 1)), transparent);
   background-image: repeating-linear-gradient(45deg,
-    color-mix(in oklab, var(--cycle-fertile) 42%, transparent) 0 1.5px,
+    color-mix(in oklab, var(--cycle-fertile) calc(42% * var(--cycle-marker-alpha, 1)), transparent) 0 1.5px,
     transparent 1.5px 5px);
 }
 
 .cycle-cal__day.is-ovulation {
-  background: color-mix(in oklab, var(--cycle-ovulation) 20%, transparent);
+  background: color-mix(in oklab, var(--cycle-ovulation) calc(20% * var(--cycle-marker-alpha, 1)), transparent);
   font-weight: 700;
 }
 .cycle-cal__day.is-ovulation::after {
   content: "";
   position: absolute;
   inset: 3px;
-  border: 2px solid var(--cycle-ovulation);
+  border: 2px solid color-mix(in oklab, var(--cycle-ovulation) calc(100% * var(--cycle-marker-alpha, 1)), transparent);
   border-radius: var(--radius-sm);
   pointer-events: none;
 }
 
 /* Vorhergesagte Periode: Umriss statt Füllung (grenzt sie von geloggten Tagen ab). */
 .cycle-cal__day.is-menstruation.is-predicted {
-  background: color-mix(in oklab, var(--cycle-period) 8%, transparent);
-  box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--cycle-period) 55%, transparent);
+  background: color-mix(in oklab, var(--cycle-period) calc(8% * var(--cycle-marker-alpha, 1)), transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--cycle-period) calc(55% * var(--cycle-marker-alpha, 1)), transparent);
 }
 
 /* HEUTE IST DIE STIMME, KEINE PHASE.
@@ -1858,7 +1862,7 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
   width: 5px;
   height: 5px;
   border-radius: var(--radius-full);
-  background: var(--cycle-period);
+  background: color-mix(in oklab, var(--cycle-period) calc(100% * var(--cycle-marker-alpha, 1)), transparent);
   z-index: 1;
 }
 

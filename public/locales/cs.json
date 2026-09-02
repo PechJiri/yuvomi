@@ -4208,6 +4208,7 @@
         "loadError": "Odměny se nepodařilo načíst.",
         "remainingToReward": "Ještě {{points}} do „{{reward}}“",
         "canRedeemNow": "Připraveno k vyzvednutí",
+        "progressLabel": "Pokrok k další odměně",
         "noRewardsYet": "Zatím žádné odměny",
         "redeem": "Vyzvednout",
         "confirmRedeem": "Vyzvednout",

@@ -312,6 +312,7 @@ function renderStandingRow(member) {
                "37 von 60 Punkten" lautet und nicht "62 Prozent" - der Prozent-
                wert ist hier die Ableitung, nicht die Aussage. -->
           <div class="rw-progress__track" role="progressbar"
+               aria-label="${esc(t('rewards.progressLabel'))}"
                aria-valuenow="${Math.round(Math.max(0, Math.min(100, hint.pct)))}"
                aria-valuemin="0" aria-valuemax="100"
                aria-valuetext="${esc(hint.label)}"><div class="rw-progress__fill" style="--rw-progress:${Math.max(0, Math.min(1, hint.pct / 100))}"></div></div>

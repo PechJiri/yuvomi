@@ -4208,6 +4208,7 @@
         "loadError": "Impossibile caricare le ricompense.",
         "remainingToReward": "Ancora {{points}} per «{{reward}}»",
         "canRedeemNow": "Pronto per il riscatto",
+        "progressLabel": "Progresso verso il prossimo premio",
         "noRewardsYet": "Nessun premio ancora",
         "redeem": "Riscatta",
         "confirmRedeem": "Riscatta",

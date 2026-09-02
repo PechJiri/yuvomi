@@ -4208,6 +4208,7 @@
         "loadError": "Hadiah tidak dapat dimuat.",
         "remainingToReward": "Kurang {{points}} untuk “{{reward}}”",
         "canRedeemNow": "Siap ditukar",
+        "progressLabel": "Kemajuan menuju hadiah berikutnya",
         "noRewardsYet": "Belum ada hadiah",
         "redeem": "Tukar",
         "confirmRedeem": "Tukar",

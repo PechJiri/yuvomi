@@ -4208,6 +4208,7 @@
         "loadError": "Beloningen konden niet worden geladen.",
         "remainingToReward": "Nog {{points}} tot “{{reward}}”",
         "canRedeemNow": "Klaar om in te wisselen",
+        "progressLabel": "Voortgang naar de volgende beloning",
         "noRewardsYet": "Nog geen beloningen",
         "redeem": "Inwisselen",
         "confirmRedeem": "Inwisselen",

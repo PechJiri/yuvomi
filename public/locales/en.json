@@ -4208,6 +4208,7 @@
         "loadError": "Rewards could not be loaded.",
         "remainingToReward": "{{points}} more to “{{reward}}”",
         "canRedeemNow": "Ready to redeem",
+        "progressLabel": "Progress toward the next reward",
         "noRewardsYet": "No rewards yet",
         "redeem": "Redeem",
         "confirmRedeem": "Redeem",

@@ -4208,6 +4208,7 @@
         "loadError": "Không thể tải phần thưởng.",
         "remainingToReward": "Còn {{points}} nữa để đạt “{{reward}}”",
         "canRedeemNow": "Sẵn sàng đổi",
+        "progressLabel": "Tiến độ đến phần thưởng tiếp theo",
         "noRewardsYet": "Chưa có phần thưởng",
         "redeem": "Đổi",
         "confirmRedeem": "Đổi",

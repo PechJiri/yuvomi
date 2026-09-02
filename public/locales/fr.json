@@ -4208,6 +4208,7 @@
         "loadError": "Impossible de charger les récompenses.",
         "remainingToReward": "{{points}} pour « {{reward}} »",
         "canRedeemNow": "Prêt à échanger",
+        "progressLabel": "Progression vers la prochaine récompense",
         "noRewardsYet": "Aucune récompense pour le moment",
         "redeem": "Échanger",
         "confirmRedeem": "Échanger",

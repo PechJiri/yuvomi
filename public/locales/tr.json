@@ -4208,6 +4208,7 @@
         "loadError": "Ödüller yüklenemedi.",
         "remainingToReward": "“{{reward}}” için {{points}} kaldı",
         "canRedeemNow": "Kullanmaya hazır",
+        "progressLabel": "Bir sonraki ödüle ilerleme",
         "noRewardsYet": "Henüz ödül yok",
         "redeem": "Kullan",
         "confirmRedeem": "Kullan",

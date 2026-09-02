@@ -4208,6 +4208,7 @@
         "loadError": "No se pudieron cargar las recompensas.",
         "remainingToReward": "{{points}} más para «{{reward}}»",
         "canRedeemNow": "Listo para canjear",
+        "progressLabel": "Progreso hacia la próxima recompensa",
         "noRewardsYet": "Aún no hay premios",
         "redeem": "Canjear",
         "confirmRedeem": "Canjear",

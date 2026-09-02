@@ -4208,6 +4208,7 @@
         "loadError": "보상을 불러오지 못했습니다.",
         "remainingToReward": "“{{reward}}”까지 {{points}} 남음",
         "canRedeemNow": "교환 가능",
+        "progressLabel": "다음 보상까지의 진행률",
         "noRewardsYet": "아직 상품이 없습니다",
         "redeem": "교환",
         "confirmRedeem": "교환",

@@ -415,7 +415,8 @@ function renderSummary() {
         <div class="metric-card__label">${t('subscriptions.monthlyBudget')}</div>
         <div class="metric-card__value">${money(budget)}</div>
         <div class="metric-card__progress${isOverBudget ? ' metric-card__progress--over' : ''}"
-             role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}" aria-valuetext="${realPercentage}%">
+             role="progressbar" aria-label="${esc(t('subscriptions.monthlyBudget'))}"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}" aria-valuetext="${realPercentage}%">
           <span style="--fill:${percentage / 100}"></span>
         </div>
       </article>

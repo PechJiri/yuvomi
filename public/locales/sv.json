@@ -4208,6 +4208,7 @@
         "loadError": "Belöningarna kunde inte laddas.",
         "remainingToReward": "{{points}} kvar till ”{{reward}}”",
         "canRedeemNow": "Redo att lösa in",
+        "progressLabel": "Framsteg mot nästa belöning",
         "noRewardsYet": "Inga belöningar ännu",
         "redeem": "Lös in",
         "confirmRedeem": "Lös in",

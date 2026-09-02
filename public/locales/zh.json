@@ -4208,6 +4208,7 @@
         "loadError": "无法加载奖励。",
         "remainingToReward": "距离“{{reward}}”还差 {{points}}",
         "canRedeemNow": "可以兑换",
+        "progressLabel": "距下一个奖励的进度",
         "noRewardsYet": "暂无奖品",
         "redeem": "兑换",
         "confirmRedeem": "兑换",

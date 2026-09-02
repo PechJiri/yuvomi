@@ -4208,6 +4208,7 @@
         "loadError": "بارگذاری پاداش‌ها ممکن نشد.",
         "remainingToReward": "{{points}} تا «{{reward}}» باقی مانده",
         "canRedeemNow": "آماده برای دریافت",
+        "progressLabel": "پیشرفت به سوی پاداش بعدی",
         "noRewardsYet": "هنوز جایزه‌ای نیست",
         "redeem": "دریافت",
         "confirmRedeem": "دریافت",

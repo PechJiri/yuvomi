@@ -4208,6 +4208,7 @@
         "loadError": "पुरस्कार लोड नहीं हो सके।",
         "remainingToReward": "«{{reward}}» तक {{points}} और",
         "canRedeemNow": "भुनाने के लिए तैयार",
+        "progressLabel": "अगले इनाम की ओर प्रगति",
         "noRewardsYet": "अभी कोई इनाम नहीं",
         "redeem": "भुनाएँ",
         "confirmRedeem": "भुनाएँ",

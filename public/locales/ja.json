@@ -4208,6 +4208,7 @@
         "loadError": "ごほうびを読み込めませんでした。",
         "remainingToReward": "「{{reward}}」まであと{{points}}",
         "canRedeemNow": "交換できます",
+        "progressLabel": "次のごほうびへの進捗",
         "noRewardsYet": "景品はまだありません",
         "redeem": "交換",
         "confirmRedeem": "交換",
