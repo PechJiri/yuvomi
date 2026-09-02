@@ -197,13 +197,15 @@ questions:
 
 ### The two cases that produced this rule
 
-- **#642, non-Gregorian birthdays.** Converting a lunar date is astronomy plus leap months,
-  not arithmetic, so it means vendored data or a library. Under the four questions above
-  that is allowed, and the precedent is already in the tree. What still has to be decided
-  is the part the dependency question was hiding: which year range the data covers and what
-  happens outside it, whether the conversion runs in the browser or on the server, and the
-  data model - a birthday that carries *which calendar it is in*, rather than a Chinese
-  special case, because Vietnamese, Korean and Hijri households have the same problem.
+- **#642, non-Gregorian birthdays.** This one is in the list as a warning, because the
+  dependency question was answered before it was asked. Converting a lunar date looks like
+  it needs vendored astronomical data - and it needs nothing at all: `Intl.DateTimeFormat`
+  with `-u-ca-chinese` does it from the ICU data the runtime already carries, in Node and
+  in the browser, with leap months preserved (`6bis`, not `6`), and `dangi`, `islamic` and
+  `hebrew` come along with it. The reverse direction is a short search using the same API.
+  Before question 1 gets asked, it is worth asking whether the platform already answers it.
+  What remains is product design: which calendar a birthday is stored in, and what a
+  birthday in a leap month does in a year that has no such month.
 - **#656, filling forms from free text.** Here the dependency question mostly dissolves:
   the deterministic tier needs no library, and a local model speaks HTTP, so it needs no
   SDK either. What remains is question 4 and one thing that is not about dependencies at
