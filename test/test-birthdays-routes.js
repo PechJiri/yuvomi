@@ -213,11 +213,11 @@ test('GET /upcoming: a closer name day does not change birthday ordering', async
   };
   const closerBirthday = await call('POST', '/', {
     name: 'Closer birthday',
-    birth_date: `1990-${monthDayAfter(5)}`,
+    birth_date: `2000-${monthDayAfter(5)}`,
   });
   const closerNameDay = await call('POST', '/', {
     name: 'Closer name day',
-    birth_date: `1990-${monthDayAfter(40)}`,
+    birth_date: `2000-${monthDayAfter(40)}`,
     name_day: monthDayAfter(1),
   });
 

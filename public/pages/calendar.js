@@ -307,7 +307,7 @@ const EVENT_ICONS = EVENT_ICON_CATEGORIES().flatMap((cat) => cat.icons);
 // `balloon` was added to Lucide after the app's vendored v0.469.0 bundle. Keep
 // this single glyph local instead of turning name-day polish into a full icon
 // library upgrade. Its SVG paths come from Lucide v0.557.0 and are covered by
-// public/vendor/lucide/LICENSE.
+// public/vendor/lucide/LICENSE.balloon-v0.557.0.
 const CUSTOM_EVENT_ICON_PATHS = Object.freeze({
   tooth: [
     'M8.5 3.5c1.2 0 2.1.5 3.5.5s2.3-.5 3.5-.5c2.4 0 4 1.8 4 4.4 0 2.2-1 4.2-1.7 5.7-.7 1.6-.8 3.1-1.1 4.7-.3 1.7-1.1 3.2-2.4 3.2-1.1 0-1.5-1.1-1.8-2.7-.2-1.2-.4-2.1-.5-2.1s-.3.9-.5 2.1c-.3 1.6-.7 2.7-1.8 2.7-1.3 0-2.1-1.5-2.4-3.2-.3-1.6-.4-3.1-1.1-4.7C5.5 12.1 4.5 10.1 4.5 7.9c0-2.6 1.6-4.4 4-4.4Z',

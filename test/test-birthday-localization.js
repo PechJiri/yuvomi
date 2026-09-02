@@ -157,7 +157,7 @@ test('clearing a name day removes only its calendar event and reminder', async (
   );
   assert.ok(
     db.prepare('SELECT id FROM calendar_events WHERE id = ?').get(links.calendar_event_id),
-    'Geburtstag bleibt bestehen',
+    'the birthday event remains in place',
   );
 });
 

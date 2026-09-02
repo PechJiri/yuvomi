@@ -801,7 +801,7 @@ test('Dashboard-Geburtstagswidget lädt Geburtstage haushaltsweit (Issue #406)',
     nodeAssert.deepEqual(
       ownerRows.map((item) => item.kind).sort(),
       ['birthday', 'name_day'],
-      'dieselbe Person erscheint für Geburtstag und Namenstag als zwei Vorkommen',
+      'the same person appears as separate birthday and name-day occurrences',
     );
     const nameDay = ownerRows.find((item) => item.kind === 'name_day');
     nodeAssert.equal(nameDay.days_until, 0);

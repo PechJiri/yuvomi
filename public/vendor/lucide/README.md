@@ -9,7 +9,8 @@
   "in the root directory of this source tree" — this is that file).
 - **Newer standalone glyph:** `public/pages/calendar.js` carries only the Balloon SVG
   paths from Lucide v0.557.0 as a custom event icon. Keeping that one licensed glyph
-  local avoids upgrading the entire v0.469.0 bundle for a single generated event type.
+  local avoids upgrading the entire v0.469.0 bundle for a single generated event type;
+  its release-specific notices are retained in `LICENSE.balloon-v0.557.0`.
 
 ## Updating
 
