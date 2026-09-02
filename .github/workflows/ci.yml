@@ -5,6 +5,15 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Von Hand startbar, weil ein Push zweimal ganz durchgefallen ist: am 2.9.2026
+  # legte GitHub fuer die neuen Heads von #930 und #993 GAR KEINEN Lauf an -
+  # keinen wartenden, keinen fehlgeschlagenen. Ohne diesen Trigger bleibt als
+  # Ausweg nur, den PR zu schliessen und wieder zu oeffnen, was den Beitragenden
+  # zwei Benachrichtigungen schickt, die nach Ablehnung aussehen.
+  # GRENZE: `workflow_dispatch` laeuft gegen einen Ref in DIESEM Repo. Fuer einen
+  # Branch aus einem Fork hilft er daher nicht ohne Weiteres - dort bleibt der
+  # Reopen. Fuer Branches im Repo selbst (integrate/*, fix/*) ist er der Ausweg.
+  workflow_dispatch:
 
 permissions:
   contents: read
