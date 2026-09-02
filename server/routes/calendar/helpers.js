@@ -45,7 +45,7 @@ export const VALID_EVENT_ICONS = new Set([
   'popcorn', 'sandwich', 'salad', 'shopping-bag', 'shopping-cart', 'gift',
   'package', 'shirt', 'tag', 'credit-card', 'wallet', 'banknote', 'coins',
   'piggy-bank', 'receipt', 'landmark', 'music', 'guitar', 'film', 'theater',
-  'ticket', 'gamepad-2', 'camera', 'party-popper', 'users', 'baby', 'dog',
+  'ticket', 'gamepad-2', 'camera', 'party-popper', 'balloon', 'users', 'baby', 'dog',
   'cat', 'paw-print', 'wrench', 'hammer', 'paintbrush', 'lightbulb', 'sofa',
   'bed', 'bath', 'washing-machine', 'refrigerator', 'star', 'flag', 'target',
   'flame', 'leaf', 'tree-pine', 'flower', 'sun', 'moon', 'cloud-sun',
@@ -268,11 +268,23 @@ export function serializeEvent(event) {
   // nur bei Geburtstags-Terminen gesetzt. Nicht-Geburtstage behalten so ihre
   // bisherige Objektform; der Client lokalisiert Titel/Beschreibung anhand von
   // birthday_name (Issue #524).
-  const { assigned_users_json, birthday_name, birthday_date, ...rest } = event;
+  const {
+    assigned_users_json,
+    birthday_name,
+    birthday_date,
+    birthday_event_kind,
+    name_day,
+    ...rest
+  } = event;
   const documentId = event.attachment_document_id ?? null;
   return {
     ...rest,
-    ...(birthday_name ? { birthday_name, birthday_date: birthday_date ?? null } : {}),
+    ...(birthday_name ? {
+      birthday_name,
+      birthday_date: birthday_date ?? null,
+      birthday_event_kind: birthday_event_kind ?? 'birthday',
+      name_day: name_day ?? null,
+    } : {}),
     assigned_users,
     attachment_document_id: documentId,
     attachment_data: documentId ? null : attachmentDataUrl(event),

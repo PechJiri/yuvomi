@@ -1034,6 +1034,16 @@ const MIGRATIONS_SQL = {
       PRIMARY KEY (user_id, scope_key)
     );
   `,
+
+  // SQL for migration v174 (mirrored from db.js MIGRATIONS):
+  // Optional name day and its own generated calendar event.
+  174: `
+    ALTER TABLE birthdays ADD COLUMN name_day TEXT;
+    ALTER TABLE birthdays ADD COLUMN name_day_calendar_event_id INTEGER
+      REFERENCES calendar_events(id) ON DELETE SET NULL;
+    CREATE INDEX IF NOT EXISTS idx_birthdays_name_day_calendar_ref
+      ON birthdays(name_day_calendar_event_id);
+  `,
 };
 
 export { MIGRATIONS_SQL };

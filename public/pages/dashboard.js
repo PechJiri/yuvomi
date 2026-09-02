@@ -1063,7 +1063,7 @@ function listRowCap(size) {
   return Number(String(size ?? '1x1').split('x')[1]) >= 2 ? LIST_ROWS_TALL : LIST_ROWS_SHORT;
 }
 
-function renderUpcomingBirthdays(allBirthdays, size) {
+export function renderUpcomingBirthdays(allBirthdays, size) {
   // Der Vorrat kommt fuer die groesste Fassung vom Server (routes/dashboard.js);
   // was davon erscheint, entscheidet die Kachel. Die Badge zaehlt weiter die
   // gezeigten Zeilen - sie sagt „so viele stehen hier", nicht „so viele hat der
@@ -1094,6 +1094,11 @@ function renderUpcomingBirthdays(allBirthdays, size) {
     const avatarStyle = b.family_user_color
       ? ` style="background-color:${esc(b.family_user_color)};color:${getReadableTextColor(b.family_user_color)}"`
       : '';
+    const occasionLabel = b.kind === 'name_day'
+      ? t('birthdays.nameDay')
+      : b.next_age != null
+        ? t('birthdays.turnsAge', { age: b.next_age })
+        : '';
     return `
       <div class="birthday-widget-item" data-route="/birthdays" role="button" tabindex="0">
         <div class="birthday-widget-item__avatar"${avatarStyle}>
@@ -1101,9 +1106,9 @@ function renderUpcomingBirthdays(allBirthdays, size) {
         </div>
         <div class="birthday-widget-item__body">
           <div class="birthday-widget-item__name">${esc(b.name)}</div>
-          <div class="birthday-widget-item__meta">${formatDate(b.next_birthday)} · ${daysLabel}</div>
+          <div class="birthday-widget-item__meta">${formatDate(b.next_date ?? b.next_birthday)} · ${daysLabel}</div>
         </div>
-        ${b.next_age != null ? `<div class="birthday-widget-item__age">${esc(t('birthdays.turnsAge', { age: b.next_age }))}</div>` : ''}
+        ${occasionLabel ? `<div class="birthday-widget-item__age">${esc(occasionLabel)}</div>` : ''}
       </div>
     `;
   }).join('');
@@ -1671,7 +1676,7 @@ function metricTileFor(id, data, currency) {
       return {
         id, route, icon: widgetIcon('birthdays'), label: t('nav.birthdays'),
         value: days === 0 ? t('common.today') : days === 1 ? t('common.tomorrow') : t('dashboard.daysLeft', { count: days }),
-        note: next.name,
+        note: next.kind === 'name_day' ? `${next.name} · ${t('birthdays.nameDay')}` : next.name,
       };
     }
     case 'meals': {

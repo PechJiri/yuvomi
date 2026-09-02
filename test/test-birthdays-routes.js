@@ -111,6 +111,40 @@ test('POST /: legt Geburtstag an; created_by, Hydration, Foto, Kalender-Artefakt
   assert.equal(rem.n, 1);
 });
 
+test('POST /: stores an optional name day without an invented year', async () => {
+  const r = await call('POST', '/', {
+    name: 'Mila',
+    birth_date: '1990-07-20',
+    name_day: '05-24',
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.name_day, '05-24');
+  assert.equal(r.body.data.next_name_day.slice(5), '05-24');
+  assert.equal(Number.isInteger(r.body.data.name_day_days_until), true);
+});
+
+test('POST /: rejects non-canonical and impossible name days', async () => {
+  for (const nameDay of ['24-05', '2026-05-24', '2-03', '02-30', '13-01', '00-10']) {
+    const r = await call('POST', '/', {
+      name: `Ungültig ${nameDay}`,
+      birth_date: '1990-07-20',
+      name_day: nameDay,
+    });
+    assert.equal(r.status, 400, `${nameDay} must be rejected`);
+    assert.match(r.body.error, /Name day/);
+  }
+});
+
+test('POST /: accepts 29 February as a name day', async () => {
+  const r = await call('POST', '/', {
+    name: 'Leap',
+    birth_date: '1992-02-29',
+    name_day: '02-29',
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.name_day, '02-29');
+});
+
 test('POST /: reminder_offset "" (keine Benachrichtigung) → kein Kalender-Event', async () => {
   const r = await call('POST', '/', { name: 'Stumm', birth_date: '1985-03-03', reminder_offset: '' });
   assert.equal(r.status, 201);
@@ -168,6 +202,28 @@ test('GET /upcoming: limit=2 = erste zwei von GET / (gleiche Sortierung)', async
   assert.equal(up.status, 200);
   assert.equal(up.body.data.length, 2);
   assert.deepEqual(up.body.data.map((b) => b.id), all.body.data.slice(0, 2).map((b) => b.id));
+});
+
+test('GET /upcoming: a closer name day does not change birthday ordering', async () => {
+  const monthDayAfter = (days) => {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() + days);
+    return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+  const closerBirthday = await call('POST', '/', {
+    name: 'Closer birthday',
+    birth_date: `2000-${monthDayAfter(5)}`,
+  });
+  const closerNameDay = await call('POST', '/', {
+    name: 'Closer name day',
+    birth_date: `2000-${monthDayAfter(40)}`,
+    name_day: monthDayAfter(1),
+  });
+
+  const upcoming = await call('GET', '/upcoming?limit=50');
+  const ids = upcoming.body.data.map((birthday) => birthday.id);
+  assert.ok(ids.indexOf(closerBirthday.body.data.id) < ids.indexOf(closerNameDay.body.data.id));
 });
 
 test('GET /upcoming: ungültiges limit → Default 5', async () => {
@@ -252,6 +308,25 @@ test('PUT /:id: notes leer → NULL; Name aktualisierbar', async () => {
   assert.equal(row.notes, null);
 });
 
+test('PUT /:id: preserves a name day on partial update and can clear it', async () => {
+  const base = await call('POST', '/', {
+    name: 'NamenstagPut',
+    birth_date: '1988-08-08',
+    name_day: '03-19',
+  });
+  const id = base.body.data.id;
+
+  const partial = await call('PUT', `/${id}`, { notes: 'unverändert am Namenstag' });
+  assert.equal(partial.status, 200);
+  assert.equal(partial.body.data.name_day, '03-19');
+
+  const cleared = await call('PUT', `/${id}`, { name_day: null });
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.body.data.name_day, null);
+  assert.equal(cleared.body.data.next_name_day, null);
+  assert.equal(cleared.body.data.name_day_days_until, null);
+});
+
 test('PUT /:id: ungültiges Foto → 400 (Bestand unverändert)', async () => {
   const base = await call('POST', '/', { name: 'FotoPut', birth_date: '1994-02-02', photo_data: VALID_PHOTO });
   const id = base.body.data.id;
@@ -284,16 +359,25 @@ test('DELETE /:id: nicht existent → 404', async () => {
   assert.equal(r.status, 404);
 });
 
-test('DELETE /:id: löscht Geburtstag inkl. Kalender-Event + Reminder', async () => {
-  const created = await call('POST', '/', { name: 'ToDelete', birth_date: '1993-04-04' });
+test('DELETE /:id: removes birthday and name day with both calendar events and reminders', async () => {
+  const created = await call('POST', '/', {
+    name: 'ToDelete',
+    birth_date: '1993-04-04',
+    name_day: '04-05',
+  });
   const id = created.body.data.id;
-  const eventId = db.prepare('SELECT calendar_event_id FROM birthdays WHERE id = ?').get(id).calendar_event_id;
-  assert.ok(eventId);
+  const links = db.prepare(`
+    SELECT calendar_event_id, name_day_calendar_event_id FROM birthdays WHERE id = ?
+  `).get(id);
+  assert.ok(links.calendar_event_id);
+  assert.ok(links.name_day_calendar_event_id);
   const r = await call('DELETE', `/${id}`);
   assert.equal(r.status, 204);
   assert.equal(db.prepare('SELECT id FROM birthdays WHERE id = ?').get(id), undefined);
-  assert.equal(db.prepare('SELECT id FROM calendar_events WHERE id = ?').get(eventId), undefined);
-  assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM reminders WHERE entity_id = ?`).get(eventId).n, 0);
+  for (const eventId of [links.calendar_event_id, links.name_day_calendar_event_id]) {
+    assert.equal(db.prepare('SELECT id FROM calendar_events WHERE id = ?').get(eventId), undefined);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM reminders WHERE entity_id = ?`).get(eventId).n, 0);
+  }
 });
 
 // --------------------------------------------------------------------------

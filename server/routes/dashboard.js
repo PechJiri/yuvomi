@@ -7,7 +7,7 @@
 import { createLogger } from '../logger.js';
 import express from 'express';
 import * as db from '../db.js';
-import { hydrateBirthday } from '../services/birthdays.js';
+import { hydrateBirthdayOccurrences } from '../services/birthdays.js';
 import { getUpcomingEvents } from '../services/calendar-events.js';
 import { taskScopeWhere, taskCategoryWhere, categoryBindings, normalizeCategoryFilter } from '../services/task-scope.js';
 import { getCountdowns } from '../services/countdowns.js';
@@ -423,8 +423,10 @@ router.get('/', (req, res) => {
        ORDER BY b.name COLLATE NOCASE ASC
     `).all();
     const hydrated = rows
-      .map((row) => hydrateBirthday(db.get(), row))
-      .sort((a, b) => a.days_until - b.days_until || a.name.localeCompare(b.name));
+      .flatMap((row) => hydrateBirthdayOccurrences(d, row))
+      .sort((a, b) => a.days_until - b.days_until
+        || a.name.localeCompare(b.name)
+        || a.kind.localeCompare(b.kind));
 
     /* DIE ZAHL FUERS NAV-BADGE, UNGEDECKELT (#868).
      *

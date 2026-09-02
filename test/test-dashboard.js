@@ -774,8 +774,8 @@ test('Dashboard-Geburtstagswidget lädt Geburtstage haushaltsweit (Issue #406)',
     VALUES ('dashboard-birthday-other', 'Other', 'x', '#34C759', 'member')
   `).run().lastInsertRowid;
 
-  routeDb.prepare('INSERT INTO birthdays (name, birth_date, created_by) VALUES (?, ?, ?)')
-    .run('Widget Owner Today', `2012-${today.slice(5)}`, routeUser1);
+  routeDb.prepare('INSERT INTO birthdays (name, birth_date, name_day, created_by) VALUES (?, ?, ?, ?)')
+    .run('Widget Owner Today', `2012-${today.slice(5)}`, today.slice(5), routeUser1);
   routeDb.prepare('INSERT INTO birthdays (name, birth_date, created_by) VALUES (?, ?, ?)')
     .run('Widget Other Today', `2011-${today.slice(5)}`, routeUser2);
 
@@ -797,6 +797,17 @@ test('Dashboard-Geburtstagswidget lädt Geburtstage haushaltsweit (Issue #406)',
     nodeAssert.equal(response.status, 200);
     nodeAssert.equal(body.birthdayCount, 2);
     nodeAssert.ok(names.includes('Widget Other Today'), 'Dashboard widget must include birthdays created by other users');
+    const ownerRows = body.birthdays.filter((item) => item.name === 'Widget Owner Today');
+    nodeAssert.deepEqual(
+      ownerRows.map((item) => item.kind).sort(),
+      ['birthday', 'name_day'],
+      'the same person appears as separate birthday and name-day occurrences',
+    );
+    const nameDay = ownerRows.find((item) => item.kind === 'name_day');
+    nodeAssert.equal(nameDay.days_until, 0);
+    nodeAssert.equal(nameDay.next_date, today);
+    nodeAssert.equal(nameDay.next_age, null);
+    nodeAssert.equal(body.birthdaySoonCount, 3, 'the three-day badge counts both occurrence kinds exactly once');
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -1281,6 +1292,8 @@ cdb.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL, birth_date TEXT NOT NULL,
     calendar_event_id INTEGER REFERENCES calendar_events(id) ON DELETE SET NULL,
+    name_day TEXT,
+    name_day_calendar_event_id INTEGER REFERENCES calendar_events(id) ON DELETE SET NULL,
     created_by INTEGER REFERENCES users(id) ON DELETE CASCADE
   );
 `);
@@ -1473,6 +1486,8 @@ test('getUpcomingEvents: private ICS-Termine fremder User werden ausgeblendet', 
       name TEXT NOT NULL, birth_date TEXT NOT NULL, notes TEXT,
       photo_data TEXT, created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
       calendar_event_id INTEGER REFERENCES calendar_events(id) ON DELETE SET NULL,
+      name_day TEXT,
+      name_day_calendar_event_id INTEGER REFERENCES calendar_events(id) ON DELETE SET NULL,
       reminder_offset TEXT, reminder_custom_amount TEXT, reminder_custom_unit TEXT,
       updated_at TEXT
     );

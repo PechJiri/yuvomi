@@ -21,12 +21,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deleting fourteen rows one at a time to adjust a two-week range. An opt-in dashboard widget shows
   who has a shift or is free today, off by default like the module itself.
 
+- **A person can now have an optional name day beside their birthday.** The advanced section of the
+  birthday form stores a month and day without inventing a year; leaving it empty keeps the existing
+  behaviour. A saved name day becomes its own yearly entry in the birthday calendar layer, uses the
+  birthday's existing reminder lead time and appears as a separately labelled row in the dashboard
+  widget. The navigation badge counts both kinds of upcoming occasion, while the main Birthdays list
+  remains one row per person. Name-day labels, validation and calendar text are included in all 24
+  supported interface languages.
+
 ### Fixed
 
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
   the native colour input to fill its grid cell; on the mobile layout, where the two-column form
   collapses to one, that cell is the whole form width. It now carries a fixed size, matching the
   compact colour swatches used elsewhere in the app.
+
+- **Clearing a birthday reminder no longer leaves its reminder row behind.** Setting
+  `reminder_offset` to empty deleted the generated calendar event but not the reminder that
+  hung off it, so the household kept getting notified for an event that no longer existed. The
+  orphan is now removed with the event.
 
 ## [2.64.0] - 2026-09-02
 

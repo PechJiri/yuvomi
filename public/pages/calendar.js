@@ -304,7 +304,22 @@ const EVENT_ICON_CATEGORIES = () => [
 // Flache Liste aller Icons für Kompatibilität (z.B. eventIconName-Validierung)
 const EVENT_ICONS = EVENT_ICON_CATEGORIES().flatMap((cat) => cat.icons);
 
-const CUSTOM_EVENT_ICONS = new Set(['tooth']);
+// `balloon` was added to Lucide after the app's vendored v0.469.0 bundle. Keep
+// this single glyph local instead of turning name-day polish into a full icon
+// library upgrade. Its SVG paths come from Lucide v0.557.0 and are covered by
+// public/vendor/lucide/LICENSE.balloon-v0.557.0.
+const CUSTOM_EVENT_ICON_PATHS = Object.freeze({
+  tooth: [
+    'M8.5 3.5c1.2 0 2.1.5 3.5.5s2.3-.5 3.5-.5c2.4 0 4 1.8 4 4.4 0 2.2-1 4.2-1.7 5.7-.7 1.6-.8 3.1-1.1 4.7-.3 1.7-1.1 3.2-2.4 3.2-1.1 0-1.5-1.1-1.8-2.7-.2-1.2-.4-2.1-.5-2.1s-.3.9-.5 2.1c-.3 1.6-.7 2.7-1.8 2.7-1.3 0-2.1-1.5-2.4-3.2-.3-1.6-.4-3.1-1.1-4.7C5.5 12.1 4.5 10.1 4.5 7.9c0-2.6 1.6-4.4 4-4.4Z',
+    'M10 6.2c.7.3 1.3.5 2 .5s1.3-.2 2-.5',
+  ],
+  balloon: [
+    'M12 16v1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v1',
+    'M12 6a2 2 0 0 1 2 2',
+    'M18 8c0 4-3.5 8-6 8s-6-4-6-8a6 6 0 0 1 12 0',
+  ],
+});
+const CUSTOM_EVENT_ICONS = new Set(Object.keys(CUSTOM_EVENT_ICON_PATHS));
 
 const ATTACHMENT_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const CALENDAR_VIEW_STORAGE_KEY = 'yuvomi:calendar:view';
@@ -712,7 +727,9 @@ function formatDateTime(datetimeStr) {
 
 function eventIconName(icon) {
   const normalized = EVENT_ICON_ALIASES[icon] || icon;
-  return EVENT_ICONS.some((item) => item.value === normalized) ? normalized : 'calendar';
+  return CUSTOM_EVENT_ICONS.has(normalized) || EVENT_ICONS.some((item) => item.value === normalized)
+    ? normalized
+    : 'calendar';
 }
 
 /**
@@ -732,10 +749,10 @@ function hasEventIcon(icon) {
 }
 
 function customEventIconHtml(icon, className) {
-  if (icon !== 'tooth') return '';
+  const paths = CUSTOM_EVENT_ICON_PATHS[icon];
+  if (!paths) return '';
   return `<svg class="${className} event-icon--custom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M8.5 3.5c1.2 0 2.1.5 3.5.5s2.3-.5 3.5-.5c2.4 0 4 1.8 4 4.4 0 2.2-1 4.2-1.7 5.7-.7 1.6-.8 3.1-1.1 4.7-.3 1.7-1.1 3.2-2.4 3.2-1.1 0-1.5-1.1-1.8-2.7-.2-1.2-.4-2.1-.5-2.1s-.3.9-.5 2.1c-.3 1.6-.7 2.7-1.8 2.7-1.3 0-2.1-1.5-2.4-3.2-.3-1.6-.4-3.1-1.1-4.7C5.5 12.1 4.5 10.1 4.5 7.9c0-2.6 1.6-4.4 4-4.4Z"/>
-    <path d="M10 6.2c.7.3 1.3.5 2 .5s1.3-.2 2-.5"/>
+    ${paths.map((path) => `<path d="${path}"/>`).join('\n    ')}
   </svg>`;
 }
 
@@ -755,7 +772,8 @@ function calendarRepeatIconHtml() {
 
 function eventIconElement(icon, className = 'event-icon') {
   const name = eventIconName(icon);
-  if (name === 'tooth') {
+  const customPaths = CUSTOM_EVENT_ICON_PATHS[name];
+  if (customPaths) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('class', `${className} event-icon--custom`);
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -766,13 +784,11 @@ function eventIconElement(icon, className = 'event-icon') {
     svg.setAttribute('stroke-linejoin', 'round');
     svg.setAttribute('aria-hidden', 'true');
 
-    const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    outline.setAttribute('d', 'M8.5 3.5c1.2 0 2.1.5 3.5.5s2.3-.5 3.5-.5c2.4 0 4 1.8 4 4.4 0 2.2-1 4.2-1.7 5.7-.7 1.6-.8 3.1-1.1 4.7-.3 1.7-1.1 3.2-2.4 3.2-1.1 0-1.5-1.1-1.8-2.7-.2-1.2-.4-2.1-.5-2.1s-.3.9-.5 2.1c-.3 1.6-.7 2.7-1.8 2.7-1.3 0-2.1-1.5-2.4-3.2-.3-1.6-.4-3.1-1.1-4.7C5.5 12.1 4.5 10.1 4.5 7.9c0-2.6 1.6-4.4 4-4.4Z');
-
-    const ridge = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    ridge.setAttribute('d', 'M10 6.2c.7.3 1.3.5 2 .5s1.3-.2 2-.5');
-
-    svg.append(outline, ridge);
+    for (const pathData of customPaths) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', pathData);
+      svg.append(path);
+    }
     return svg;
   }
 
@@ -3039,6 +3055,8 @@ export const __test = {
   monthDayClasses,
   pickerColors,
   colorToSave,
+  eventIconName,
+  eventIconHtml,
   sameColor,
   EVENT_COLORS,
 };
@@ -4532,6 +4550,13 @@ function getRecurringScope(root, prefix) {
  */
 function confirmExternalSeriesDelete(event) {
   const title = event.title;
+  if (event.birthday_name && event.birthday_event_kind === 'name_day') {
+    return confirmModal(t('calendar.deleteNameDayEventTitle'), {
+      detail:       t('calendar.deleteNameDayEventDetail', { title }),
+      confirmLabel: t('calendar.deleteNameDayEventConfirm'),
+      danger:       true,
+    });
+  }
   if (event.birthday_name) {
     return confirmModal(t('calendar.deleteBirthdayEventTitle'), {
       detail:       t('calendar.deleteBirthdayEventDetail', { title }),
