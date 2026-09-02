@@ -62,7 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   either in it became three attributes, one of them live, while the new guard stayed green with
   its quote-based payload. Keys are now validated against an attribute-name pattern and an
   invalid one throws like an unknown mode does; the guard tokenizes the opening tag the way a
-  browser does instead of reading the string. The budget reports panel had declared itself a `dashboard` inside the `reading`
+  browser does instead of reading the string. A fifth round caught the split grid measuring
+  the viewport: beside the expanded sidebar a 1024px screen leaves the page about 804px, and a
+  master rail allowed 720px of that left the detail rail a few pixels wide on common laptops;
+  the split root is a container now, the grid switches on the page's own width like the
+  expenses split already did, and the master rail never takes more than half. The budget
+  reports panel had declared itself a `dashboard` inside the `reading`
   budget page, which set the measure of its subtree to 1200px while the shared header and
   every other tab end at 720px; it declares the mode of the page it lives in, and a guard holds
   the two budget panels to that. A split body now carries the page gutter like the measured

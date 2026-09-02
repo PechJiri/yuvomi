@@ -164,10 +164,12 @@ Mode modifiers set `--page-measure`:
   they resolve to zero, so a narrow header is a no-op on these pages instead of an
   invalid declaration)
 
-`split` puts the two-column grid on `.app-page__body` from 1024px: the body's
-first child is the master rail (up to `--layout-reading`), the second the detail
-rail; the header stays a full row above. Below 1024px the body stacks. The split
-body carries the page gutter (`padding-inline: var(--page-inline-pad)`) like the
+`split` puts the two-column grid on `.app-page__body` once the *page* is at
+least 768px wide (a container query on the split root, not a viewport query:
+beside the expanded sidebar a 1024px viewport leaves the page about 804px). The
+body's first child is the master rail (up to `--layout-reading`, but never more
+than half of the body), the second the detail rail; the header stays a full row
+above. Below 768px of page width the body stacks. The split body carries the page gutter (`padding-inline: var(--page-inline-pad)`) like the
 measured modes do, so the rails start on the same edge as the title; `full` is
 the one mode whose body has no gutter, because there the page owns its edges.
 `full` and `split` roots built with `renderAppPage()` take the shell height

@@ -2462,10 +2462,23 @@ html.fab-anim-done .page-fab {
   gap: var(--space-3);
 }
 
-@media (min-width: 1024px) {
+/* DAS RASTER MISST DIE SEITE, NICHT DEN VIEWPORT - dieselbe Lehre wie in
+ * split-expenses.css: neben der ausgeklappten Sidebar (220px) hat die Seite
+ * bei 1024px Viewport rund 804px; eine Viewport-Query bei 1024px schaltete
+ * dort zweispaltig, und ein Master-Track bis 720px liess dem Detail nach
+ * Polster und Luecke ein paar Pixel (Codex, fuenfte Runde an #995). Deshalb
+ * ist die Wurzel ein Container, und der Master nimmt hoechstens die Haelfte:
+ * bei 768px Seitenbreite je ~350px, ab ~1500px das volle Lesemass links und
+ * der Rest rechts. Die Query ist namenlos, damit ein Seiten-CSS, das seinen
+ * Container bereits benennt (split-page), nicht mit ihr ringt. */
+.app-page--split {
+  container-type: inline-size;
+}
+
+@container (min-width: 768px) {
   .app-page--split > .app-page__body {
     display: grid;
-    grid-template-columns: minmax(0, var(--layout-reading)) minmax(0, 1fr);
+    grid-template-columns: minmax(0, min(var(--layout-reading), 50%)) minmax(0, 1fr);
     grid-auto-rows: minmax(0, 1fr);
     gap: var(--space-4);
   }

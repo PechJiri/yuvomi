@@ -15210,11 +15210,22 @@ test('PAGE-009: composition mode owns responsive split/full behaviour', () => {
   // in die linke Spalte und den ganzen Koerper in die rechte (Codex, zweite
   // Runde an #995). Die Regel muss in der 1024px-Query stehen und auf
   // `> .app-page__body` zielen; die Wurzel selbst darf kein Raster werden.
-  const splitGrid = layout.match(/@media \(min-width: 1024px\) \{\s*\.app-page--split > \.app-page__body \{([^}]*)\}/);
-  assert.ok(splitGrid, 'PAGE-009: split mode must put its two-column grid on > .app-page__body inside the 1024px query');
+  // Und es misst die SEITE, nicht den Viewport: neben der Sidebar hat die
+  // Seite bei 1024px Viewport ~804px, und ein Master bis 720px liess dem
+  // Detail ein paar Pixel (Codex, fuenfte Runde). Container-Query an der
+  // Wurzel, Master hoechstens die Haelfte. Eine namenlose @container-Query
+  // ohne Container-Vorfahren matcht NIE - der Fehler waere still (immer
+  // gestapelt), also gehoert die container-type-Deklaration mit zum Guard.
+  const splitGrid = layout.match(/@container \(min-width: 768px\) \{\s*\.app-page--split > \.app-page__body \{([^}]*)\}/);
+  assert.ok(splitGrid, 'PAGE-009: split mode must put its two-column grid on > .app-page__body inside a 768px container query');
   assert.match(splitGrid[1], /display:\s*grid/, 'PAGE-009: the split body is a grid');
-  assert.match(splitGrid[1], /grid-template-columns:\s*minmax\(0, var\(--layout-reading\)\) minmax\(0, 1fr\)/,
-    'PAGE-009: master rail on the reading measure, detail takes the rest');
+  assert.match(splitGrid[1], /grid-template-columns:\s*minmax\(0, min\(var\(--layout-reading\), 50%\)\) minmax\(0, 1fr\)/,
+    'PAGE-009: master rail up to the reading measure but never more than half, detail takes the rest');
+  assert.doesNotMatch(layout, /@media \(min-width: \d+px\) \{\s*\.app-page--split > \.app-page__body/,
+    'PAGE-009: the split grid must not be gated by a viewport query - the page is narrower than the viewport beside the sidebar');
+  const splitRoot = [...layout.matchAll(/\.app-page--split\s*\{([^}]*)\}/g)].map((m) => m[1]);
+  assert.ok(splitRoot.some((body) => /container-type:\s*inline-size/.test(body)),
+    'PAGE-009: .app-page--split must be an inline-size container, or the @container query never matches');
   for (const rule of layout.matchAll(/\.app-page--split\s*(?:,[^{]*)?\{([^}]*)\}/g)) {
     assert.doesNotMatch(rule[1], /display:\s*grid|grid-template-columns/,
       'PAGE-009: .app-page--split itself must not be a grid - header and body would become its two cells');
