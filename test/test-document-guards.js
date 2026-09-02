@@ -1450,6 +1450,25 @@ async function cardColumns(page) {
   });
 }
 
+/**
+ * Klassenname -> Grund. Bauform-Ausnahmen von Sonde 7: Karten, die WIRKLICH
+ * eigenstaendige Objekte sind und keine Listenzeilen im Kartenkostuem.
+ *
+ * Der draggable-Ausweg der Messung ist fuer sie unerreichbar: SortableJS zieht
+ * ueber seine draggable-OPTION (einen Selektor) und traegt das DOM-Attribut
+ * nicht ein - und ein von Hand gesetztes draggable="true" aktiviert natives
+ * HTML5-DnD, das der Pointer-Geste den Zug wegnimmt (gemessen 2026-09-02 am
+ * Board: Baseline gruen, mit Attribut kein Ghost, kein Spaltenwechsel, kein
+ * Titel-Klick). Deshalb eine BENANNTE Ausnahme statt eines Attributs.
+ *
+ * Jeder Eintrag muss im Lauf gesehen werden (Assert unten), sonst ist er eine
+ * Leiche - dasselbe Veraltungsmuster wie bei SHAPE_EXEMPT/TARGET_EXEMPT.
+ */
+const CARD_OBJECT_EXEMPT = new Map([
+  ['kanban-card', 'Drag-Objekt zwischen Board-Spalten; die Kartenoptik ist die '
+    + 'Greif-Affordance, und ein Schatten je Karte ist dort die Aussage, nicht der Streifen.'],
+]);
+
 test('Sonde 7 - eine Zeilenfolge ist keine Spalte aus Karten', async () => {
   const perDevice = new Map();
   let viewsSeen = 0;
@@ -1478,9 +1497,22 @@ test('Sonde 7 - eine Zeilenfolge ist keine Spalte aus Karten', async () => {
   // dem Desktop nebeneinander, ist ein Raster, das umbricht.
   const desktop = perDevice.get('desktop');
   const mobile = perDevice.get('mobile');
+  const seenExempt = new Set();
   const findings = [...desktop.entries()]
     .filter(([cls]) => mobile.has(cls))
+    .filter(([cls]) => {
+      if (CARD_OBJECT_EXEMPT.has(cls)) { seenExempt.add(cls); return false; }
+      return true;
+    })
     .map(([cls, hit]) => `${hit.where} · .${cls}: ${hit.count} Karten in .${hit.parent}, getrennt ueber gap ${hit.gap}px.`);
+
+  // Veraltungs-Nachweis: eine Ausnahme, deren Karte der Lauf nicht mehr sieht,
+  // deckt nichts mehr und darf nicht stehen bleiben (SHAPE_EXEMPT-Lehre).
+  for (const cls of CARD_OBJECT_EXEMPT.keys()) {
+    assert.ok(seenExempt.has(cls),
+      `CARD_OBJECT_EXEMPT('${cls}') ohne Fundstelle im Lauf - die Bauform gibt es `
+      + 'so nicht mehr, der Eintrag ist eine Leiche und gehoert neu bewertet.');
+  }
 
   // Eine Sonde, die nichts gesehen hat, darf nicht urteilen (dieselbe
   // Zusicherung wie bei Sonde 3, 4, 5 und 6) - und hier ist es die REICHWEITE,
