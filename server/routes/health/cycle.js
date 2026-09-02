@@ -6,8 +6,12 @@
  *        Person/Tag → Upsert) und die per-Person-Einstellungen (cycle_settings,
  *        nur der Eigentümer selbst) plus der Perioden-CSV-Export. Die
  *        Vorhersage-Logik (nächste Periode, Eisprung, fruchtbares Fenster) liegt
- *        bewusst rein clientseitig in public/utils/health-cycle.js - der Server
- *        speichert nur.
+ *        bewusst in EINER Datei, public/utils/health-cycle.js, absichtlich
+ *        DOM-frei geschrieben, damit sie auch außerhalb des Browsers läuft.
+ *        Dieser Router speichert nur - aber server/services/cycle-reminders.js
+ *        importiert dieselbe Datei für die Erinnerungs-Zeitpunkte, statt eine
+ *        zweite Rechnung zu führen; zwei Kopien derselben Mathematik wären
+ *        zwei Wahrheiten, die auseinanderlaufen können.
  *
  *        BEWUSSTE AUSNAHME von der Betreuung (#584): Wo Vitalwerte, Medikamente,
  *        Laborbefunde und Aktivitäten `careAwareClause()` verwenden, bleibt es
@@ -22,6 +26,7 @@ import express from 'express';
 import * as db from '../../db.js';
 import * as v from '../../middleware/validate.js';
 import { cycleToCsv } from '../../services/health-export.js';
+import { syncCycleRemindersForUser } from '../../services/cycle-reminders.js';
 import {
   log, VISIBILITIES, FLOW_LEVELS, MAX_UNIT, MAX_SYMPTOMS,
   viewerId, visibilityClause, toBit, applyUpdate, badRequest,
@@ -214,7 +219,11 @@ router.delete('/cycle/logs/:id', (req, res) => {
 
 /** Voreinstellungen, falls die Person noch keine Zeile hat. */
 function defaultCycleSettings(userId) {
-  return { user_id: userId, cycle_length_avg: null, period_length_avg: null, luteal_length: 14, track_fertility: 1, pregnancy_mode: 0, pregnancy_due_date: null, default_visibility: 'private' };
+  return {
+    user_id: userId, cycle_length_avg: null, period_length_avg: null, luteal_length: 14, track_fertility: 1,
+    pregnancy_mode: 0, pregnancy_due_date: null, default_visibility: 'private',
+    remind_period_days_before: null, remind_log_daily: 0,
+  };
 }
 
 // GET /cycle/settings  (immer die eigenen; Vorhersagen sind persönlich)
@@ -248,15 +257,21 @@ router.put('/cycle/settings', (req, res) => {
     const pregnancy = toBit(b.pregnancy_mode);
     const dueDate   = v.date(b.pregnancy_due_date, 'pregnancy_due_date');
     const defVis    = v.oneOf(b.default_visibility, VISIBILITIES, 'default_visibility');
+    // NULL = aus (Standard); sonst der Vorlauf in Tagen vor dem vorhergesagten
+    // Periodenbeginn. Obergrenze wie luteal_length: mehr Vorlauf als eine
+    // typische Lutealphase waere keine Vorwarnung mehr, sondern Dauerlaerm.
+    const remindDaysBefore = intInRange(b.remind_period_days_before, 'remind_period_days_before', 0, 14);
+    const remindLogDaily   = toBit(b.remind_log_daily);
 
-    const errors = v.collectErrors([cycleLen, periodLen, luteal, dueDate, defVis]);
+    const errors = v.collectErrors([cycleLen, periodLen, luteal, dueDate, defVis, remindDaysBefore]);
     if (b.track_fertility !== undefined && track === undefined) errors.push('track_fertility must be a boolean.');
     if (b.pregnancy_mode !== undefined && pregnancy === undefined) errors.push('pregnancy_mode must be a boolean.');
+    if (b.remind_log_daily !== undefined && remindLogDaily === undefined) errors.push('remind_log_daily must be a boolean.');
     if (errors.length) return badRequest(res, errors);
 
     db.get().prepare(`
-      INSERT INTO cycle_settings (user_id, cycle_length_avg, period_length_avg, luteal_length, track_fertility, pregnancy_mode, pregnancy_due_date, default_visibility)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO cycle_settings (user_id, cycle_length_avg, period_length_avg, luteal_length, track_fertility, pregnancy_mode, pregnancy_due_date, default_visibility, remind_period_days_before, remind_log_daily)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         cycle_length_avg = excluded.cycle_length_avg,
         period_length_avg = excluded.period_length_avg,
@@ -264,12 +279,24 @@ router.put('/cycle/settings', (req, res) => {
         track_fertility = excluded.track_fertility,
         pregnancy_mode = excluded.pregnancy_mode,
         pregnancy_due_date = excluded.pregnancy_due_date,
-        default_visibility = excluded.default_visibility
+        default_visibility = excluded.default_visibility,
+        remind_period_days_before = excluded.remind_period_days_before,
+        remind_log_daily = excluded.remind_log_daily
     `).run(viewer, cycleLen.value, periodLen.value, luteal.value === null ? 14 : luteal.value,
            track === undefined ? 1 : track,
            pregnancy === undefined ? 0 : pregnancy,
            dueDate.value,
-           defVis.value || 'private');
+           defVis.value || 'private',
+           remindDaysBefore.value,
+           remindLogDaily === undefined ? 0 : remindLogDaily);
+
+    // Sofort wirksam statt erst beim naechsten periodischen Lauf - gleiche
+    // Erwartung wie ueberall sonst (server/routes/schedule-preferences.js).
+    try {
+      syncCycleRemindersForUser(db.get(), viewer);
+    } catch (err) {
+      log.error('Error syncing cycle reminders after settings change:', err.message);
+    }
 
     res.json({ data: db.get().prepare('SELECT * FROM cycle_settings WHERE user_id = ?').get(viewer) });
   } catch (err) {

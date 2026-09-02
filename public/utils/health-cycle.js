@@ -12,12 +12,24 @@
  *        - cycleRing(): Segment-Brüche (0..1) für das SVG-Ring-Widget.
  *        Bewusst KEINE i18n/DOM — in Node ohne Browser testbar (labelKeys liefern
  *        die Übersetzung erst im UI).
- * Abhängigkeiten: /utils/date.js (ebenfalls DOM-frei).
+ * Abhängigkeiten: ./date.js (ebenfalls DOM-frei; relativer Import, siehe
+ *                 Kommentar dort - server/services/cycle-reminders.js
+ *                 importiert diese Datei direkt).
  */
 
 // `todayKey` heisst hier schon ein Parameter (bzw. eine lokale Bindung), der den
 // Bezugstag traegt - der Import kommt deshalb unter eigenem Namen herein.
-import { addLocalDays, startOfLocalWeekKey, todayKey as householdToday } from '/utils/date.js';
+//
+// RELATIV, NICHT '/utils/date.js': anders als der Rest der App (die feste
+// Wurzel-Pfade fuer browser-weite Eindeutigkeit nutzt) muss DIESE Datei auch
+// ausserhalb des Browsers ohne Loader-Trick importierbar bleiben - Node
+// kennt '/utils/date.js' nicht als Web-Root-Pfad, sondern als absoluten
+// Dateisystempfad, der nicht existiert. server/services/cycle-reminders.js
+// importiert diese Datei direkt (Single Source of Truth fuer die
+// Vorhersage-Mathematik, server und Client rechnen dasselbe), und date.js
+// liegt im selben Verzeichnis - ein relativer Import loest in beiden Welten
+// identisch auf.
+import { addLocalDays, startOfLocalWeekKey, todayKey as householdToday } from './date.js';
 
 // --------------------------------------------------------
 // Preset-Definitionen

@@ -29,6 +29,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains one row per person. Name-day labels, validation and calendar text are included in all 24
   supported interface languages.
 
+- **The Health module's cycle tracker gains reminders and a more honest prediction.** `cycleStats()`
+  now requires at least three logged cycle gaps (four periods) before trusting a derived average
+  over the 28-day default - with only one or two gaps a single atypical cycle could silently drive
+  the prediction, and the UI had no way to tell a genuine derived average apart from a coincidental
+  match with the default. A new `insufficient_history` source value, surfaced as a caption on the
+  cycle stat card, makes the distinction visible. Two new opt-in reminders - an upcoming-period
+  notice (configurable lead time) and a daily nudge to log today, suppressed once a log for the day
+  exists - reuse the same push/notification-channel pipeline as every other reminder source
+  (`reminders.entity_type` widened for `cycle_period`/`cycle_log_nudge`, migration 175). Neither a
+  predicted date nor "not yet logged" is a stored row, so both anchor to a new
+  `cycle_reminder_anchors` table, the same pattern Schedule uses for its own computed-on-read
+  entries. `server/services/cycle-reminders.js` reuses `predictCycle()` from
+  `public/utils/health-cycle.js` directly rather than a second copy of the prediction math - which
+  required switching that file's one dependency (`date.js`) from a browser-root absolute import to
+  a relative one, so it resolves in Node without a test loader.
+
 ### Fixed
 
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched

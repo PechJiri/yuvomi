@@ -2487,7 +2487,21 @@ is writable by anyone for themselves.
 | pregnancy_mode | INTEGER | 0/1, default 0 — when 1, all cycle predictions pause (migration 82) |
 | pregnancy_due_date | TEXT | nullable YYYY-MM-DD estimated due date; cleared when pregnancy_mode is off |
 | default_visibility | TEXT | `private` \| `family`, default `private` (migration 96) — pre-selects the visibility for newly logged periods and day logs; per-entry override always available |
+| remind_period_days_before | INTEGER | nullable, 0–14 (migration 174) — NULL = off; days of lead time before the predicted next period for a `cycle_period` reminder |
+| remind_log_daily | INTEGER | 0/1, default 0 (migration 174) — daily nudge to log today, suppressed once a `cycle_day_logs` row exists for the day |
 | created_at / updated_at | TEXT | ISO 8601, default now |
+
+**Cycle reminders** (migration 174) widen `reminders.entity_type` with `cycle_period` and
+`cycle_log_nudge`, following the same pipeline as every other reminder source (Web Push +
+household notification channels via `server/services/notifications.js`). Neither a predicted
+period date nor "not yet logged today" is a stored row, so both anchor to
+`cycle_reminder_anchors` (`user_id`, `anchor_date`, `kind`) the same way Schedule's pattern days
+anchor to `schedule_reminder_entries` — a stable id for `reminders.entity_id` to reference.
+`server/services/cycle-reminders.js` reuses `predictCycle()` from `public/utils/health-cycle.js`
+directly (imported server-side via a relative path so it resolves in Node without a browser or a
+test loader) rather than a second copy of the prediction math. Both reminder types are derived,
+server-sync-owned entity types (`DERIVED_ENTITY_TYPES` in `server/routes/reminders.js`) — a caller
+cannot hand-set one via the generic reminders API, matching `pantry_item`'s existing precedent.
 
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and

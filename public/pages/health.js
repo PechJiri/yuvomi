@@ -4908,6 +4908,19 @@ function openCycleSettingsModal() {
           </select>
           <p class="cycle-hint" id="cs-default-visibility-hint">${esc(t('health.cycle.settings.defaultVisibilityHint'))}</p>
         </div>
+        <hr class="cycle-settings__sep">
+        <div class="form-field">
+          <label class="label" for="cs-remind-days">${esc(t('health.cycle.settings.remindPeriodDaysBefore'))}</label>
+          <select class="input" id="cs-remind-days" aria-describedby="cs-remind-days-hint">
+            <option value="" ${s.remind_period_days_before == null ? 'selected' : ''}>${esc(t('health.cycle.settings.remindOff'))}</option>
+            ${[0, 1, 2, 3, 5, 7, 10, 14].map((d) => `<option value="${d}" ${Number(s.remind_period_days_before) === d ? 'selected' : ''}>${esc(d === 0 ? t('health.cycle.settings.remindSameDay') : t('health.cycle.unit.days', { value: d }))}</option>`).join('')}
+          </select>
+          <p class="cycle-hint" id="cs-remind-days-hint">${esc(t('health.cycle.settings.remindPeriodDaysBeforeHint'))}</p>
+        </div>
+        <label class="cycle-toggle">
+          <input type="checkbox" id="cs-remind-log" ${s.remind_log_daily ? 'checked' : ''}>
+          <span>${esc(t('health.cycle.settings.remindLogDaily'))}</span>
+        </label>
         <div class="form-field cycle-bulk">
           <button type="button" class="btn btn--secondary" data-action="cycle-apply-visibility"
             aria-describedby="cs-bulk-hint">${esc(t('health.cycle.settings.applyToAll'))}</button>
@@ -4993,6 +5006,8 @@ function openCycleSettingsModal() {
           luteal_length: numOr('#cs-luteal') ?? 14,
           track_fertility: panel.querySelector('#cs-fertility').checked,
           default_visibility: panel.querySelector('#cs-default-visibility').value || 'private',
+          remind_period_days_before: numOr('#cs-remind-days'),
+          remind_log_daily: panel.querySelector('#cs-remind-log').checked,
           pregnancy_mode: pregnant,
           // Termin auch beim Ausschalten behalten (nur im aktiven Modus genutzt) —
           // versehentliches Umschalten löscht die Eingabe dann nicht.

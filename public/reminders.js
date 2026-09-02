@@ -169,6 +169,8 @@ const REMINDER_ORIGINS = {
   inventory_item:         { accent: 'var(--module-inventory)', icon: 'package',      labelKey: 'nav.inventory' },
   inventory_tracked_date: { accent: 'var(--module-inventory)', icon: 'package',      labelKey: 'nav.inventory' },
   pantry_item:            { accent: 'var(--module-pantry)',    icon: 'archive',      labelKey: 'nav.pantry' },
+  cycle_period:           { accent: 'var(--module-health)',    icon: 'droplet',      labelKey: 'health.cycle.title' },
+  cycle_log_nudge:        { accent: 'var(--module-health)',    icon: 'droplet',      labelKey: 'health.cycle.title' },
 };
 
 function createOriginSeal(entityType) {
