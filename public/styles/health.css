@@ -2035,6 +2035,23 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
   font-weight: 600;
 }
 
+/* Intensitaets-Punkte auf einem ausgewaehlten Symptom-Chip (Phase 2): drei
+ * feste Punkte, von links gefuellt bis zur aktuellen Stufe - dieselbe stille
+ * Fuell-Metapher wie der Zyklus-Ring, kein zusaetzliches Steuerelement. */
+.health-choice__dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-inline-start: var(--space-1);
+}
+.health-choice__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.25;
+}
+.health-choice__dot--filled { opacity: 1; }
+
 .cycle-toggle {
   display: flex;
   align-items: center;

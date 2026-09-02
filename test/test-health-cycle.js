@@ -13,6 +13,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 const {
   FLOW_LEVELS, FLOW_VALUES, flowLevel,
   SYMPTOM_TYPES, SYMPTOM_VALUES, symptomType,
+  INTENSITY_LEVELS, symptomIntensityLabelKey, normalizeSymptomEntries,
   MOOD_TYPES, MOOD_VALUES, moodType,
   PHASE,
   daysBetween, sortPeriodsAsc, cycleGaps, periodLengths,
@@ -52,16 +53,68 @@ test('SYMPTOM_TYPES / MOOD_TYPES: vollständige labelKeys + icons', () => {
   for (const s of SYMPTOM_TYPES) {
     assert.ok(s.labelKey.startsWith('health.cycle.symptom.'));
     assert.equal(typeof s.icon, 'string');
+    assert.equal(s.hasIntensity, true);
   }
   assert.ok(SYMPTOM_VALUES.includes('cramps'));
   assert.equal(symptomType('cramps').value, 'cramps');
   assert.equal(symptomType('unknown'), null);
+  // Jeder Wert kommt genau einmal vor - eine versehentliche Dopplung beim
+  // Erweitern der Liste würde SYMPTOM_VALUES sonst still verkürzt lassen.
+  assert.equal(new Set(SYMPTOM_VALUES).size, SYMPTOM_VALUES.length);
   for (const m of MOOD_TYPES) {
     assert.ok(m.labelKey.startsWith('health.cycle.mood.'));
     assert.equal(typeof m.icon, 'string');
   }
   assert.equal(moodType('great').value, 'great');
   assert.equal(moodType('unknown'), null);
+});
+
+test('INTENSITY_LEVELS: drei Stufen, symptomIntensityLabelKey löst sie auf', () => {
+  assert.deepEqual(INTENSITY_LEVELS.map((l) => l.value), [1, 2, 3]);
+  for (const l of INTENSITY_LEVELS) assert.ok(l.labelKey.startsWith('health.cycle.intensity.'));
+  assert.equal(symptomIntensityLabelKey(1), 'health.cycle.intensity.mild');
+  assert.equal(symptomIntensityLabelKey(2), 'health.cycle.intensity.moderate');
+  assert.equal(symptomIntensityLabelKey(3), 'health.cycle.intensity.severe');
+  assert.equal(symptomIntensityLabelKey(0), null);
+  assert.equal(symptomIntensityLabelKey(4), null);
+  assert.equal(symptomIntensityLabelKey(undefined), null);
+});
+
+test('normalizeSymptomEntries: aktuelles Array-Format mit Intensität', () => {
+  const entries = normalizeSymptomEntries([{ key: 'Cramps', intensity: 2 }, { key: 'headache', intensity: '3' }]);
+  assert.deepEqual(entries, [{ key: 'cramps', intensity: 2 }, { key: 'headache', intensity: 3 }]);
+});
+
+test('normalizeSymptomEntries: dedupliziert nach key, letzter Eintrag gewinnt', () => {
+  const entries = normalizeSymptomEntries([{ key: 'cramps', intensity: 1 }, { key: 'cramps', intensity: 3 }]);
+  assert.deepEqual(entries, [{ key: 'cramps', intensity: 3 }]);
+});
+
+test('normalizeSymptomEntries: ungültige Intensität wird zu null, nicht verworfen', () => {
+  assert.deepEqual(normalizeSymptomEntries([{ key: 'cramps', intensity: 9 }]), [{ key: 'cramps', intensity: null }]);
+  assert.deepEqual(normalizeSymptomEntries([{ key: 'cramps', intensity: 0 }]), [{ key: 'cramps', intensity: null }]);
+  assert.deepEqual(normalizeSymptomEntries([{ key: 'cramps' }]), [{ key: 'cramps', intensity: null }]);
+  assert.deepEqual(normalizeSymptomEntries([{ key: 'cramps', intensity: 'nope' }]), [{ key: 'cramps', intensity: null }]);
+});
+
+test('normalizeSymptomEntries: unlesbare/ungültige Schlüssel fallen still raus', () => {
+  assert.deepEqual(normalizeSymptomEntries([{ key: 'bad key!' }, { key: '' }, { key: 'a'.repeat(33) }]), []);
+});
+
+// Abwärtskompatibilität: vor Phase 2 gespeicherte Werte kamen als Komma-String
+// oder reines String-Array, beide ohne Intensität.
+test('normalizeSymptomEntries: Komma-String und String-Array (Vor-Phase-2-Format)', () => {
+  assert.deepEqual(normalizeSymptomEntries('cramps,headache,cramps'),
+    [{ key: 'cramps', intensity: null }, { key: 'headache', intensity: null }]);
+  assert.deepEqual(normalizeSymptomEntries(['cramps', 'headache']),
+    [{ key: 'cramps', intensity: null }, { key: 'headache', intensity: null }]);
+});
+
+test('normalizeSymptomEntries: leer/null/undefined ergibt ein leeres Array', () => {
+  assert.deepEqual(normalizeSymptomEntries(undefined), []);
+  assert.deepEqual(normalizeSymptomEntries(null), []);
+  assert.deepEqual(normalizeSymptomEntries(''), []);
+  assert.deepEqual(normalizeSymptomEntries([]), []);
 });
 
 // MOOD_VALUES ist die Auswahl-Reihenfolge der Stimmungs-Chips, nicht nur eine
@@ -265,6 +318,24 @@ test('buildCycleCalendar: geloggte + vorhergesagte Periode, Eisprung, Flow, heut
   assert.equal(at('2026-06-29').predicted, true);
   // Fruchtbares Fenster (06-10..06-15) enthält 06-11.
   assert.equal(at('2026-06-11').phase, PHASE.FERTILE);
+});
+
+// symptoms ist seit Phase 2 ein Array ({key, intensity}[]) statt eines
+// Komma-Strings - ein LEERES Array ist in JS wahr, ein reines `!!log.symptoms`
+// würde einen Tag ohne jeden Eintrag fälschlich als geloggt zählen.
+test('buildCycleCalendar: hasLog zählt ein leeres symptoms-Array nicht als Log', () => {
+  const cal = buildCycleCalendar('2026-06-15', {
+    periods: periods(['2026-06-01'], 5),
+    logs: [
+      { log_date: '2026-06-05', symptoms: [] },
+      { log_date: '2026-06-06', symptoms: [{ key: 'cramps', intensity: 2 }] },
+    ],
+    todayKey: '2026-06-15',
+    weekStartsOn: 1,
+  });
+  const at = (k) => cal.weeks.flat().find((c) => c.dateKey === k);
+  assert.equal(at('2026-06-05').hasLog, false);
+  assert.equal(at('2026-06-06').hasLog, true);
 });
 
 // --------------------------------------------------------

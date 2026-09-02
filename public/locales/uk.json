@@ -4158,7 +4158,22 @@
                 "fatigue": "Втома",
                 "nausea": "Нудота",
                 "cravings": "Тяга до їжі",
-                "insomnia": "Безсоння"
+                "insomnia": "Безсоння",
+                "constipation": "Constipation",
+                "diarrhea": "Diarrhea",
+                "jointPain": "Joint pain",
+                "dizziness": "Dizziness",
+                "hotFlashes": "Hot flashes",
+                "swelling": "Swelling",
+                "libidoChange": "Libido change",
+                "dischargeChange": "Discharge change",
+                "appetiteChange": "Appetite change",
+                "concentrationDifficulty": "Difficulty concentrating"
+            },
+            "intensity": {
+                "mild": "Mild",
+                "moderate": "Moderate",
+                "severe": "Severe"
             },
             "mood": {
                 "label": "Настрій",

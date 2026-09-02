@@ -661,13 +661,17 @@ test('Cycle-Log: Upsert je Person/Tag (zweiter POST aktualisiert)', async () => 
   const first = await call('POST', '/cycle/logs', { log_date: '2026-05-02', flow: 'light', symptoms: ['cramps', 'fatigue'], mood: 'sad' });
   assert.equal(first.status, 201);
   assert.equal(first.body.data.flow, 'light');
-  assert.equal(first.body.data.symptoms, 'cramps,fatigue');
+  // symptoms ist seit Phase 2 {key, intensity}[] statt einer Komma-Zeile - das
+  // alte String-Array-Format bleibt als Eingabe gültig, ergibt aber
+  // intensity: null (die gab es vor Phase 2 nicht).
+  assert.deepEqual(first.body.data.symptoms, [{ key: 'cramps', intensity: null }, { key: 'fatigue', intensity: null }]);
   const firstId = first.body.data.id;
 
-  const second = await call('POST', '/cycle/logs', { log_date: '2026-05-02', flow: 'heavy', symptoms: ['cramps'] });
+  const second = await call('POST', '/cycle/logs', { log_date: '2026-05-02', flow: 'heavy', symptoms: [{ key: 'cramps', intensity: 2 }] });
   assert.equal(second.body.data.id, firstId); // gleiche Zeile
   assert.equal(second.body.data.flow, 'heavy');
-  assert.equal(second.body.data.symptoms, 'cramps');
+  // Voller Ersatz, kein Merge: 'fatigue' aus dem ersten POST ist weg.
+  assert.deepEqual(second.body.data.symptoms, [{ key: 'cramps', intensity: 2 }]);
 
   const list = await call('GET', '/cycle/logs');
   assert.equal(list.body.data.filter((l) => l.log_date === '2026-05-02').length, 1);
@@ -1002,9 +1006,26 @@ test('Cycle: Perioden from/to-Filter + Log löschen', async () => {
 
 test('Cycle-Log: zu lange Symptomliste → 400', async () => {
   asA();
-  const many = Array.from({ length: 40 }, (_, i) => `symptomlongtoken${i}`);
+  // Deckel liegt seit Phase 2 auf der ANZAHL (MAX_SYMPTOMS_COUNT = 40), nicht
+  // mehr auf der Zeichenlänge einer Komma-Zeile - 41 eindeutige Einträge
+  // reißen die Grenze, 40 selbst nicht.
+  const many = Array.from({ length: 41 }, (_, i) => `symptomlongtoken${i}`);
   const r = await call('POST', '/cycle/logs', { log_date: '2028-05-01', symptoms: many });
   assert.equal(r.status, 400);
+});
+
+test('Cycle-Log: Symptom-Intensität wird gespeichert, gelesen und über PATCH-artigen Re-POST ersetzt', async () => {
+  asA();
+  const created = await call('POST', '/cycle/logs', {
+    log_date: '2028-05-02',
+    symptoms: [{ key: 'headache', intensity: 3 }, { key: 'nausea' }],
+  });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body.data.symptoms, [{ key: 'headache', intensity: 3 }, { key: 'nausea', intensity: null }]);
+
+  const list = await call('GET', '/cycle/logs?from=2028-05-02&to=2028-05-02');
+  const row = list.body.data.find((l) => l.log_date === '2028-05-02');
+  assert.deepEqual(row.symptoms, [{ key: 'headache', intensity: 3 }, { key: 'nausea', intensity: null }]);
 });
 
 test('Cycle-Periode: PATCH aller Felder + Fremdzugriff-404', async () => {

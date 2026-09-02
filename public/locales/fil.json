@@ -4158,7 +4158,22 @@
                 "fatigue": "Pagkapagod",
                 "nausea": "Pagduduwal",
                 "cravings": "Paglilihi sa pagkain",
-                "insomnia": "Hirap matulog"
+                "insomnia": "Hirap matulog",
+                "constipation": "Constipation",
+                "diarrhea": "Diarrhea",
+                "jointPain": "Joint pain",
+                "dizziness": "Dizziness",
+                "hotFlashes": "Hot flashes",
+                "swelling": "Swelling",
+                "libidoChange": "Libido change",
+                "dischargeChange": "Discharge change",
+                "appetiteChange": "Appetite change",
+                "concentrationDifficulty": "Difficulty concentrating"
+            },
+            "intensity": {
+                "mild": "Mild",
+                "moderate": "Moderate",
+                "severe": "Severe"
             },
             "mood": {
                 "label": "Kalooban",

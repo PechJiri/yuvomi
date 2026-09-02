@@ -44,6 +44,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `public/utils/health-cycle.js` directly rather than a second copy of the prediction math - which
   required switching that file's one dependency (`date.js`) from a browser-root absolute import to
   a relative one, so it resolves in Node without a test loader.
+- **Cycle day logs can now grade a symptom's severity, not just note its presence.** The symptom
+  picker grew from 10 to 20 presets, and each one accepts an optional mild/moderate/severe rating -
+  one tap on a symptom chip cycles through off, mild, moderate, severe, and back to off, with a
+  small dot indicator showing the current grade. Storage moved from a comma-separated column to a
+  normalized `cycle_day_log_symptoms` table (migration 175, backfilled from the old column, which
+  is now frozen and no longer read or written); `normalizeSymptomEntries()` in
+  `public/utils/health-cycle.js` is the single normalizer for both the new `{key, intensity}[]`
+  shape and, for backward compatibility, the old comma-string/string-array shape. Also fixed a
+  latent bug this surfaced: the month calendar's "does this day have a log" check treated the
+  `symptoms` field as a plain truthy value, which is correct for a string but wrong for an array -
+  an empty array is truthy in JavaScript, so a day with no flow, mood, or note but an empty symptom
+  list would have been misreported as logged.
 
 ### Fixed
 

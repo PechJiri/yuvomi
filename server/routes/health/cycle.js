@@ -27,24 +27,35 @@ import * as db from '../../db.js';
 import * as v from '../../middleware/validate.js';
 import { cycleToCsv } from '../../services/health-export.js';
 import { syncCycleRemindersForUser } from '../../services/cycle-reminders.js';
+import { normalizeSymptomEntries } from '../../../public/utils/health-cycle.js';
 import {
-  log, VISIBILITIES, FLOW_LEVELS, MAX_UNIT, MAX_SYMPTOMS,
+  log, VISIBILITIES, FLOW_LEVELS, MAX_UNIT,
   viewerId, visibilityClause, toBit, applyUpdate, badRequest,
   exportFilename, sendCsv, exportRange,
 } from './helpers.js';
 
 const router = express.Router();
 
-/** Normalisiert Symptome (Array oder Komma-String) zu einer bereinigten Komma-Liste. */
-function normalizeSymptoms(raw) {
-  if (raw === undefined || raw === null || raw === '') return { value: null, error: null };
-  const list = Array.isArray(raw) ? raw : String(raw).split(',');
-  const tokens = list
-    .map((s) => String(s).trim().toLowerCase())
-    .filter((s) => /^[a-z0-9_]{1,32}$/.test(s));
-  const joined = [...new Set(tokens)].join(',');
-  if (joined.length > MAX_SYMPTOMS) return { value: null, error: `symptoms may be at most ${MAX_SYMPTOMS} characters long.` };
-  return { value: joined || null, error: null };
+// Deckel auf die ANZAHL Symptome je Tag, nicht mehr auf die Zeichenlaenge der
+// (seit Migration 175 nur noch historischen) Komma-Spalte - die Symptom-Liste
+// waechst mit SYMPTOM_TYPES (aktuell 20), 40 laesst reichlich Raum, auch fuer
+// spaeter erweiterte Presets, ohne eine Endlos-Liste durchzulassen.
+const MAX_SYMPTOMS_COUNT = 40;
+
+/** Symptom-Zeilen eines Tages-Logs, in Einfuegereihenfolge. */
+function symptomsForLog(database, dayLogId) {
+  return database.prepare(
+    'SELECT symptom_key AS key, intensity FROM cycle_day_log_symptoms WHERE day_log_id = ? ORDER BY id'
+  ).all(dayLogId);
+}
+
+/** Ersetzt die Symptom-Zeilen eines Tages-Logs vollstaendig (loeschen + neu anlegen). */
+function replaceSymptoms(database, dayLogId, entries) {
+  database.prepare('DELETE FROM cycle_day_log_symptoms WHERE day_log_id = ?').run(dayLogId);
+  const insert = database.prepare(
+    'INSERT INTO cycle_day_log_symptoms (day_log_id, symptom_key, intensity) VALUES (?, ?, ?)'
+  );
+  for (const entry of entries) insert.run(dayLogId, entry.key, entry.intensity);
 }
 
 // ---- Perioden-Episoden ----
@@ -159,7 +170,12 @@ router.get('/cycle/logs', (req, res) => {
     if (req.query.from) { sql += ' AND l.log_date >= ?'; params.push(String(req.query.from)); }
     if (req.query.to)   { sql += ' AND l.log_date <= ?'; params.push(String(req.query.to)); }
     sql += ' ORDER BY l.log_date DESC, l.id DESC';
-    res.json({ data: db.get().prepare(sql).all(...params) });
+    const database = db.get();
+    const rows = database.prepare(sql).all(...params);
+    // `symptoms` kommt seit Migration 175 aus der eigenen Tabelle, nicht mehr
+    // aus der (nur noch historischen) Komma-Spalte - `SELECT l.*` liefert die
+    // alte Spalte zwar mit, der Überschreib unten ersetzt sie in der Antwort.
+    res.json({ data: rows.map((row) => ({ ...row, symptoms: symptomsForLog(database, row.id) })) });
   } catch (err) {
     log.error('Error listing cycle logs:', err.message);
     res.status(500).json({ error: 'Internal error.', code: 500 });
@@ -176,21 +192,30 @@ router.post('/cycle/logs', (req, res) => {
     const mood       = v.str(b.mood, 'mood', { max: MAX_UNIT, required: false });
     const note       = v.str(b.note, 'note', { max: v.MAX_TEXT, required: false });
     const visibility = v.oneOf(b.visibility, VISIBILITIES, 'visibility');
-    const symptoms   = normalizeSymptoms(b.symptoms);
+    const symptoms   = normalizeSymptomEntries(b.symptoms);
 
-    const errors = v.collectErrors([logDate, flow, mood, note, visibility, symptoms]);
+    const errors = v.collectErrors([logDate, flow, mood, note, visibility]);
+    if (symptoms.length > MAX_SYMPTOMS_COUNT) errors.push(`symptoms may include at most ${MAX_SYMPTOMS_COUNT} entries.`);
     if (errors.length) return badRequest(res, errors);
 
-    db.get().prepare(`
-      INSERT INTO cycle_day_logs (user_id, log_date, flow, symptoms, mood, note, visibility)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(user_id, log_date) DO UPDATE SET
-        flow = excluded.flow, symptoms = excluded.symptoms, mood = excluded.mood,
-        note = excluded.note, visibility = excluded.visibility
-    `).run(viewer, logDate.value, flow.value, symptoms.value, mood.value, note.value, visibility.value || 'private');
+    const database = db.get();
+    // Log-Zeile und ihre Symptome zusammen, sonst koennte ein Absturz
+    // dazwischen die eine ohne die andere zurücklassen.
+    const dayLogId = database.transaction(() => {
+      database.prepare(`
+        INSERT INTO cycle_day_logs (user_id, log_date, flow, mood, note, visibility)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, log_date) DO UPDATE SET
+          flow = excluded.flow, mood = excluded.mood,
+          note = excluded.note, visibility = excluded.visibility
+      `).run(viewer, logDate.value, flow.value, mood.value, note.value, visibility.value || 'private');
+      const id = database.prepare('SELECT id FROM cycle_day_logs WHERE user_id = ? AND log_date = ?').get(viewer, logDate.value).id;
+      replaceSymptoms(database, id, symptoms);
+      return id;
+    })();
 
-    const row = db.get().prepare('SELECT * FROM cycle_day_logs WHERE user_id = ? AND log_date = ?').get(viewer, logDate.value);
-    res.status(201).json({ data: row });
+    const row = database.prepare('SELECT * FROM cycle_day_logs WHERE id = ?').get(dayLogId);
+    res.status(201).json({ data: { ...row, symptoms: symptomsForLog(database, dayLogId) } });
   } catch (err) {
     log.error('Error saving cycle log:', err.message);
     res.status(500).json({ error: 'Internal error.', code: 500 });

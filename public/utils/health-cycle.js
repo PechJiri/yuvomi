@@ -10,6 +10,8 @@
  *                          nächsten Periode, fruchtbares Fenster = 6 Tage).
  *        - buildCycleCalendar(): Monatsraster mit farbcodierten Phasen je Tag.
  *        - cycleRing(): Segment-Brüche (0..1) für das SVG-Ring-Widget.
+ *        - normalizeSymptomEntries() (Phase 2): Symptom-Auswahl eines Tages zu
+ *                          `{key, intensity}[]`, Intensität 1-3 optional.
  *        Bewusst KEINE i18n/DOM — in Node ohne Browser testbar (labelKeys liefern
  *        die Übersetzung erst im UI).
  * Abhängigkeiten: ./date.js (ebenfalls DOM-frei; relativer Import, siehe
@@ -50,21 +52,80 @@ export function flowLevel(value) {
   return FLOW_LEVELS.find((f) => f.value === value) || null;
 }
 
-// Symptome (Mehrfachauswahl je Tag). Icon = Lucide-Name.
+// Symptome (Mehrfachauswahl je Tag, seit Phase 2 mit optionaler 1-3-
+// Intensitaet je Auswahl). Icon = Lucide-Name. `hasIntensity` steht an jedem
+// Eintrag (nicht als globale Regel), damit ein Preset ohne sinnvolle Abstufung
+// (kaeme eines dazu) sie auslassen koennte, ohne die Form der Liste zu aendern.
 export const SYMPTOM_TYPES = Object.freeze([
-  { value: 'cramps',        labelKey: 'health.cycle.symptom.cramps',        icon: 'zap' },
-  { value: 'headache',      labelKey: 'health.cycle.symptom.headache',      icon: 'brain' },
-  { value: 'backache',      labelKey: 'health.cycle.symptom.backache',      icon: 'move-vertical' },
-  { value: 'bloating',      labelKey: 'health.cycle.symptom.bloating',      icon: 'circle-dot' },
-  { value: 'tender_breasts', labelKey: 'health.cycle.symptom.tenderBreasts', icon: 'heart' },
-  { value: 'acne',          labelKey: 'health.cycle.symptom.acne',          icon: 'sparkle' },
-  { value: 'fatigue',       labelKey: 'health.cycle.symptom.fatigue',       icon: 'battery-low' },
-  { value: 'nausea',        labelKey: 'health.cycle.symptom.nausea',        icon: 'thermometer' },
-  { value: 'cravings',      labelKey: 'health.cycle.symptom.cravings',      icon: 'cookie' },
-  { value: 'insomnia',      labelKey: 'health.cycle.symptom.insomnia',      icon: 'moon' },
+  { value: 'cramps',        labelKey: 'health.cycle.symptom.cramps',        icon: 'zap',            hasIntensity: true },
+  { value: 'headache',      labelKey: 'health.cycle.symptom.headache',      icon: 'brain',           hasIntensity: true },
+  { value: 'backache',      labelKey: 'health.cycle.symptom.backache',      icon: 'move-vertical',   hasIntensity: true },
+  { value: 'bloating',      labelKey: 'health.cycle.symptom.bloating',      icon: 'circle-dot',      hasIntensity: true },
+  { value: 'tender_breasts', labelKey: 'health.cycle.symptom.tenderBreasts', icon: 'heart',          hasIntensity: true },
+  { value: 'acne',          labelKey: 'health.cycle.symptom.acne',          icon: 'sparkle',         hasIntensity: true },
+  { value: 'fatigue',       labelKey: 'health.cycle.symptom.fatigue',       icon: 'battery-low',     hasIntensity: true },
+  { value: 'nausea',        labelKey: 'health.cycle.symptom.nausea',        icon: 'thermometer',     hasIntensity: true },
+  { value: 'cravings',      labelKey: 'health.cycle.symptom.cravings',      icon: 'cookie',          hasIntensity: true },
+  { value: 'insomnia',      labelKey: 'health.cycle.symptom.insomnia',      icon: 'moon',            hasIntensity: true },
+  { value: 'constipation',  labelKey: 'health.cycle.symptom.constipation',  icon: 'circle-dashed',   hasIntensity: true },
+  { value: 'diarrhea',      labelKey: 'health.cycle.symptom.diarrhea',      icon: 'droplets',        hasIntensity: true },
+  { value: 'joint_pain',    labelKey: 'health.cycle.symptom.jointPain',     icon: 'bone',             hasIntensity: true },
+  { value: 'dizziness',     labelKey: 'health.cycle.symptom.dizziness',     icon: 'waves',            hasIntensity: true },
+  { value: 'hot_flashes',   labelKey: 'health.cycle.symptom.hotFlashes',    icon: 'thermometer-sun',  hasIntensity: true },
+  { value: 'swelling',      labelKey: 'health.cycle.symptom.swelling',      icon: 'glass-water',      hasIntensity: true },
+  { value: 'libido_change', labelKey: 'health.cycle.symptom.libidoChange',  icon: 'flame',            hasIntensity: true },
+  { value: 'discharge_change', labelKey: 'health.cycle.symptom.dischargeChange', icon: 'droplet',     hasIntensity: true },
+  { value: 'appetite_change', labelKey: 'health.cycle.symptom.appetiteChange', icon: 'utensils',      hasIntensity: true },
+  { value: 'concentration_difficulty', labelKey: 'health.cycle.symptom.concentrationDifficulty', icon: 'brain-circuit', hasIntensity: true },
 ]);
 
 export const SYMPTOM_VALUES = Object.freeze(SYMPTOM_TYPES.map((s) => s.value));
+
+// Abstufung einer Symptom-Auswahl (1-3, optional). Kein 4./5. Grad - drei
+// Stufen sind schnell antippbar und decken, was ein Tagesprotokoll braucht;
+// mehr waere eine klinische Skala, die dieses Modul nicht sein will (siehe
+// "kein Medizinprodukt" in docs/SPEC.md).
+export const INTENSITY_LEVELS = Object.freeze([
+  { value: 1, labelKey: 'health.cycle.intensity.mild' },
+  { value: 2, labelKey: 'health.cycle.intensity.moderate' },
+  { value: 3, labelKey: 'health.cycle.intensity.severe' },
+]);
+
+/** labelKey zu einer Intensitaet (1-3) oder null, wenn keine gueltige Stufe. */
+export function symptomIntensityLabelKey(intensity) {
+  const level = INTENSITY_LEVELS.find((l) => l.value === Number(intensity));
+  return level ? level.labelKey : null;
+}
+
+const SYMPTOM_KEY_RE = /^[a-z0-9_]{1,32}$/;
+
+/**
+ * Normalisiert eine Symptom-Auswahl zu `{ key, intensity }[]`, dedupliziert
+ * nach `key` (letzter Eintrag gewinnt) und klemmt `intensity` auf 1-3 oder
+ * `null`. Nimmt sowohl das aktuelle Array-Format
+ * (`[{ key, intensity }, ...]`) als auch, für Abwärtskompatibilität mit vor
+ * Phase 2 gespeicherten Werten, einen Komma-String oder ein reines
+ * String-Array ohne Intensität entgegen - beide ergeben `intensity: null`.
+ * Unbekannte/unlesbare Einträge werden still verworfen, nicht als Fehler
+ * gemeldet: dieselbe Haltung wie die frühere `normalizeSymptoms()`.
+ *
+ * @param {Array<string|{key: string, intensity?: number}>|string} raw
+ * @returns {Array<{key: string, intensity: number|null}>}
+ */
+export function normalizeSymptomEntries(raw) {
+  if (raw === undefined || raw === null || raw === '') return [];
+  const list = typeof raw === 'string' ? raw.split(',') : (Array.isArray(raw) ? raw : []);
+  const byKey = new Map();
+  for (const item of list) {
+    const isObj = item !== null && typeof item === 'object';
+    const key = String(isObj ? (item.key ?? '') : item).trim().toLowerCase();
+    if (!SYMPTOM_KEY_RE.test(key)) continue;
+    const n = isObj ? Number(item.intensity) : NaN;
+    const intensity = Number.isInteger(n) && n >= 1 && n <= 3 ? n : null;
+    byKey.set(key, { key, intensity });
+  }
+  return [...byKey.values()];
+}
 
 /** Preset-Definition zu einem Symptom-Wert oder null (unbekannt/entfernt). */
 export function symptomType(value) {
@@ -462,7 +523,10 @@ export function buildCycleCalendar(anchorKey, { periods = [], logs = [], setting
       phase,
       predicted,
       flow: log?.flow || null,
-      hasLog: !!log && !!(log.flow || log.symptoms || log.mood || log.note),
+      // symptoms ist seit Phase 2 ein Array ({key, intensity}[], vom Server
+      // aus cycle_day_log_symptoms zusammengesetzt) - ein LEERES Array ist in
+      // JS wahr, `.length` ist die eigentliche Frage "gibt es welche".
+      hasLog: !!log && !!(log.flow || log.symptoms?.length || log.mood || log.note),
     };
   };
 

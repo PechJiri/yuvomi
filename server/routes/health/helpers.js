@@ -26,7 +26,6 @@ export const VISIBILITIES = ['private', 'family'];
 export const LOG_STATUS   = ['taken', 'skipped', 'pending'];
 export const FLOW_LEVELS  = ['spotting', 'light', 'medium', 'heavy'];
 export const MAX_UNIT     = 30;
-export const MAX_SYMPTOMS = 300;
 
 export function viewerId(req) {
   return req.authUserId || req.session.userId;

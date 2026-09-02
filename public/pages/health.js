@@ -42,6 +42,7 @@ import { upcomingDoses, computeAdherenceStreak } from '/utils/health-overview.js
 import {
   FLOW_LEVELS, flowLevel, SYMPTOM_TYPES, symptomType, MOOD_TYPES, PHASE,
   predictCycle, cycleStats, buildCycleCalendar, cycleRing, MIN_HISTORY_GAPS,
+  normalizeSymptomEntries, symptomIntensityLabelKey,
 } from '/utils/health-cycle.js';
 import { HEALTH_ROUTES, renderHealthTabsBar } from '/utils/health-tabs.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -4752,19 +4753,33 @@ async function deletePeriod(period) {
 // Tages-Log-Modal (Flow, Symptome, Stimmung)
 // --------------------------------------------------------
 
+/** Drei feste Punkte, von links bis `level` gefuellt (0 = keiner). */
+function symptomIntensityDotsHTML(level) {
+  if (!level) return '';
+  const dots = [1, 2, 3].map((n) => `<span class="health-choice__dot${n <= level ? ' health-choice__dot--filled' : ''}"></span>`).join('');
+  const labelKey = symptomIntensityLabelKey(level);
+  return `<span class="health-choice__dots" role="img" aria-label="${esc(labelKey ? t(labelKey) : '')}">${dots}</span>`;
+}
+
 function openDayLogModal(dateKey) {
   const key = String(dateKey).slice(0, 10);
   const existing = cycle.logs.find((l) => String(l.log_date).slice(0, 10) === key) || null;
-  const activeSymptoms = new Set((existing?.symptoms ? String(existing.symptoms).split(',') : []).filter(Boolean));
+  // Intensitaet je Symptom-Wert (0 = nicht ausgewaehlt, sonst 1-3) - die
+  // einzige Quelle, die der Chip fuer seinen Zustand braucht.
+  const activeIntensity = new Map(normalizeSymptomEntries(existing?.symptoms).map((e) => [e.key, e.intensity ?? 1]));
   const currentFlow = existing?.flow || '';
   const currentMood = existing?.mood || '';
 
   const flowButtons = [{ value: '', labelKey: 'health.cycle.flow.none' }, ...FLOW_LEVELS.map((f) => ({ value: f.value, labelKey: f.labelKey }))]
     .map((f) => `<button type="button" class="health-choice" data-flow="${esc(f.value)}" aria-pressed="${f.value === currentFlow}">${esc(t(f.labelKey))}</button>`).join('');
 
-  const symptomButtons = SYMPTOM_TYPES.map((s) =>
-    `<button type="button" class="health-choice health-choice--chip" data-symptom="${esc(s.value)}" aria-pressed="${activeSymptoms.has(s.value)}">
-      <i data-lucide="${esc(s.icon)}" aria-hidden="true"></i>${esc(t(s.labelKey))}</button>`).join('');
+  // Ein Tap zyklisch durch 0 (aus) -> 1 -> 2 -> 3 -> 0: Auswahl UND Abstufung
+  // sind derselbe Antipper, kein zweites Steuerelement je Chip.
+  const symptomButtons = SYMPTOM_TYPES.map((s) => {
+    const level = activeIntensity.get(s.value) || 0;
+    return `<button type="button" class="health-choice health-choice--chip" data-symptom="${esc(s.value)}" data-intensity="${level}" aria-pressed="${level > 0}">
+      <i data-lucide="${esc(s.icon)}" aria-hidden="true"></i>${esc(t(s.labelKey))}${symptomIntensityDotsHTML(level)}</button>`;
+  }).join('');
 
   const moodOptions = [`<option value="" ${currentMood ? '' : 'selected'}>${esc(t('health.cycle.mood.none'))}</option>`,
     ...MOOD_TYPES.map((m) => `<option value="${esc(m.value)}" ${m.value === currentMood ? 'selected' : ''}>${esc(t(m.labelKey))}</option>`)].join('');
@@ -4806,10 +4821,16 @@ function openDayLogModal(dateKey) {
         </div>
       </form>`,
     onSave(panel) {
-      // Flow: Einfachauswahl (Toggle). Symptome: Mehrfachauswahl.
+      // Flow: Einfachauswahl (Toggle). Symptome: Mehrfachauswahl mit Stufe -
+      // ein Tap zyklisch durch aus -> mild -> maessig -> stark -> aus.
       wireChoiceGroup(panel, 'flow');
-      panel.querySelectorAll('[data-symptom]').forEach((btn) =>
-        btn.addEventListener('click', () => btn.setAttribute('aria-pressed', btn.getAttribute('aria-pressed') === 'true' ? 'false' : 'true')));
+      panel.querySelectorAll('[data-symptom]').forEach((btn) => btn.addEventListener('click', () => {
+        const next = (Number(btn.dataset.intensity) + 1) % 4;
+        btn.dataset.intensity = String(next);
+        btn.setAttribute('aria-pressed', String(next > 0));
+        btn.querySelector('.health-choice__dots')?.remove();
+        btn.insertAdjacentHTML('beforeend', symptomIntensityDotsHTML(next));
+      }));
 
       panel.querySelector('[data-action="cancel"]')?.addEventListener('click', () => closeModal({ force: true }));
       panel.querySelector('[data-action="cycle-delete-log"]')?.addEventListener('click', () => deleteDayLog(existing));
@@ -4818,7 +4839,8 @@ function openDayLogModal(dateKey) {
         e.preventDefault();
         const submitBtn = panel.querySelector('[type="submit"]');
         const flowBtn = panel.querySelector('[data-group="flow"] .health-choice[aria-pressed="true"]');
-        const symptoms = [...panel.querySelectorAll('[data-symptom][aria-pressed="true"]')].map((b) => b.dataset.symptom);
+        const symptoms = [...panel.querySelectorAll('[data-symptom][aria-pressed="true"]')]
+          .map((b) => ({ key: b.dataset.symptom, intensity: Number(b.dataset.intensity) || null }));
         const body = {
           log_date: key,
           flow: flowBtn?.dataset.flow || '',

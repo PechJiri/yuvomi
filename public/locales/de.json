@@ -4158,7 +4158,22 @@
                 "fatigue": "Müdigkeit",
                 "nausea": "Übelkeit",
                 "cravings": "Heißhunger",
-                "insomnia": "Schlaflosigkeit"
+                "insomnia": "Schlaflosigkeit",
+                "constipation": "Verstopfung",
+                "diarrhea": "Durchfall",
+                "jointPain": "Gelenkschmerzen",
+                "dizziness": "Schwindel",
+                "hotFlashes": "Hitzewallungen",
+                "swelling": "Wassereinlagerungen",
+                "libidoChange": "Veränderte Libido",
+                "dischargeChange": "Veränderter Ausfluss",
+                "appetiteChange": "Veränderter Appetit",
+                "concentrationDifficulty": "Konzentrationsschwierigkeiten"
+            },
+            "intensity": {
+                "mild": "Leicht",
+                "moderate": "Mäßig",
+                "severe": "Stark"
             },
             "mood": {
                 "label": "Stimmung",
