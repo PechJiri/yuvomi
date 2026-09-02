@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The Schedule module gained a quick-start for shift types, a range fill for overrides, grouped
+  range display and editing, and a "who's working today" dashboard widget.** A household with no
+  shift types yet can create seven common presets (Early/Late/Night/Day/24-hour, plus Vacation and
+  Sick - both without a start/end time, since an absence is already a valid "all day" shift type,
+  not a new concept) in one click instead of one at a time. Marking a whole date range as free (or
+  on a specific shift) - a vacation, a temporary reassignment - now takes one action instead of one
+  per day, capped separately from the read-side range limit since a fill writes real rows rather
+  than computing them on read. The Overrides tab groups consecutive same-type days into a single row
+  instead of one per day, and editing a group's From/To reconciles the change automatically - no more
+  deleting fourteen rows one at a time to adjust a two-week range. An opt-in dashboard widget shows
+  who has a shift or is free today, off by default like the module itself.
+
 - **A person can now have an optional name day beside their birthday.** The advanced section of the
   birthday form stores a month and day without inventing a year; leaving it empty keeps the existing
   behaviour. A saved name day becomes its own yearly entry in the birthday calendar layer, uses the
@@ -18,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supported interface languages.
 
 ### Fixed
+
+- **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
+  the native colour input to fill its grid cell; on the mobile layout, where the two-column form
+  collapses to one, that cell is the whole form width. It now carries a fixed size, matching the
+  compact colour swatches used elsewhere in the app.
 
 - **Clearing a birthday reminder no longer leaves its reminder row behind.** Setting
   `reminder_offset` to empty deleted the generated calendar event but not the reminder that
