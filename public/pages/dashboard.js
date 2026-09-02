@@ -2058,8 +2058,15 @@ function renderScheduleWidget(schedule, users, size) {
   // 1x2 nur der Punkt, an dem der Ueberlauf von fuenf Mitgliedern auf sechs
   // verschoben wird, nicht behoben - genau der Fehler, den #928 bei den
   // Notizen schon hatte (renderPinnedNotes ist das Vorbild hier).
+  //
+  // Der Deckel allein reicht nicht: `entries` kommt in `users ORDER BY id`,
+  // nicht "im Dienst zuerst" - ohne Sortierung koennte der Header "2" zaehlen,
+  // waehrend die abgeschnittenen Zeilen zufaellig beide "Freier Tag" zeigen
+  // (Review #930: sechs Mitglieder, die zwei im Dienst mit den hoechsten ids).
+  // Im-Dienst-Eintraege zuerst, stabil sortiert, dann erst der Deckel.
   const onShift = entries.filter((entry) => entry.shift_type).length;
-  const rows = entries.slice(0, listRowCap(size)).map((entry) => {
+  const sorted = [...entries].sort((a, b) => (a.shift_type ? 0 : 1) - (b.shift_type ? 0 : 1));
+  const rows = sorted.slice(0, listRowCap(size)).map((entry) => {
     const user = users.find((item) => Number(item.id) === Number(entry.user_id));
     const type = entry.shift_type;
     const accent = user?.avatar_color || AVATAR_FALLBACK_COLOR;

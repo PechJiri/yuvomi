@@ -724,15 +724,20 @@ async function action(event) {
       openScheduleCreateModal(button.dataset.view || activeView);
       return;
     }
-    // `state.types.length` schuetzt vor einem Doppelklick: die Schaltflaeche
-    // bleibt bis zum naechsten renderPage() im DOM, und ein zweiter Klick vor
-    // dem ersten `load()` wuerde sonst alle sieben Presets doppelt anlegen.
+    // Ein zweiter Klick vor dem ersten `load()` darf nicht alle sieben Presets
+    // doppelt anlegen. `state.types.length` allein schuetzt davor nicht: es
+    // wird erst von `load()` im `finally` aktualisiert, ein zweiter Klick
+    // waehrend der sieben Requests sieht also noch `state.types.length === 0`
+    // (Review #930: `schedule_shift_types` hat kein UNIQUE auf name/short_code,
+    // ein zweiter Durchlauf legt also still 14 Typen mit doppelten Namen an).
+    // Die Schaltflaeche synchron zu deaktivieren schliesst genau dieses Fenster.
     // `finally` statt nur dem Erfolgspfad: schlaegt ein Preset mitten in der
     // Schleife fehl (Netzwerk, doppelter Kurzcode), sollen die bereits
     // angelegten trotzdem sichtbar werden - sonst zeigt die Seite weiter den
     // Leerzustand, obwohl schon Typen existieren.
     if (button.dataset.action === 'quick-start-shifts') {
       if (state.types.length) return;
+      button.disabled = true;
       try {
         for (const preset of SHIFT_PRESETS) {
           await api.post('/schedule/shift-types', {

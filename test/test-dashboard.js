@@ -2118,6 +2118,25 @@ test('Schedule-Widget: die Zeilenzahl kommt aus der Kachelgroesse, nicht aus der
   nodeAssert.match(html, /class="widget__badge">6</, 'der Header muss die volle Anzahl "on shift" zeigen, nicht die gedeckelte Zeilenzahl');
 });
 
+test('Schedule-Widget: der Zeilendeckel zeigt die Im-Dienst-Eintraege zuerst, nicht die ersten in API-Reihenfolge', async () => {
+  const { __test } = await import('../public/pages/dashboard.js');
+  // Sechs Mitglieder, `users ORDER BY id` - die zwei im Dienst (Emi, Finn)
+  // haben bewusst die hoechsten ids, damit ein ungefilterter `slice(0, N)`
+  // sie abschneiden wuerde (Review #930: Header zaehlt "2", jede sichtbare
+  // Zeile zeigt "Freier Tag").
+  const users = ['Anna', 'Ben', 'Cara', 'Dax', 'Emi', 'Finn'].map((name, i) => ({ id: i + 1, display_name: name }));
+  const type = { id: 1, name: 'Früh', short_code: 'F', color: '#6C3AED' };
+  const schedule = {
+    hasTypes: true,
+    entries: users.map((u) => ({ user_id: u.id, shift_type: ['Emi', 'Finn'].includes(u.display_name) ? type : null })),
+  };
+
+  const html = __test.renderScheduleWidget(schedule, users, '1x1'); // deckelt bei 3 von 6
+  nodeAssert.match(html, /class="widget__badge">2</, 'der Header muss 2 im Dienst zeigen');
+  nodeAssert.match(html, /Emi/, 'Emi ist im Dienst und muss trotz Deckel sichtbar sein');
+  nodeAssert.match(html, /Finn/, 'Finn ist im Dienst und muss trotz Deckel sichtbar sein');
+});
+
 test('Kennzahlreihe fuehrt mit den Modulen, die sonst kein Widget zeigen', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
   // Die drei Opt-in-Module sind im Werks-Layout unsichtbar (DEFAULT_HIDDEN_WIDGETS)
