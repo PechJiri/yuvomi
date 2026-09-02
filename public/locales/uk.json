@@ -1462,7 +1462,8 @@
         "receiptsAttachedLabel_one": "Прикріплено чек: {{count}}",
         "loanPaidInstallmentsLabel": "Уже сплачені платежі",
         "loanPaidInstallmentsHint": "Для позики, що вже виплачується. Ці платежі фіксуються, але не проводяться в бюджеті.",
-        "loanPaymentTypeLocked": "Дохід або витрата залежить від типу позики й змінюється там."
+        "loanPaymentTypeLocked": "Дохід або витрата залежить від типу позики й змінюється там.",
+        "planHistoricNote": "Порівняно з вашим поточним планом. Yuvomi не зберігає, яким був план у попередньому місяці."
     },
     "settings": {
         "healthCycleEnableLabel": "Показати вкладку циклу",

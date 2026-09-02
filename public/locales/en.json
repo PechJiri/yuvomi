@@ -1462,7 +1462,8 @@
         "receiptsAttachedLabel_one": "{{count}} receipt attached",
         "loanPaidInstallmentsLabel": "Installments already paid",
         "loanPaidInstallmentsHint": "For a loan that is already running. These installments are recorded but not booked to the budget.",
-        "loanPaymentTypeLocked": "Income or expense follows the loan type and is changed there."
+        "loanPaymentTypeLocked": "Income or expense follows the loan type and is changed there.",
+        "planHistoricNote": "Measured against your current plan. Yuvomi does not record what the plan was in an earlier month."
     },
     "settings": {
         "healthCycleEnableLabel": "Show cycle tab",

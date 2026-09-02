@@ -1462,7 +1462,8 @@
         "receiptsAttachedLabel_one": "Připojený doklad: {{count}}",
         "loanPaidInstallmentsLabel": "Již zaplacené splátky",
         "loanPaidInstallmentsHint": "Pro půjčku, která již běží. Tyto splátky se doplní, ale nezaúčtují se do rozpočtu.",
-        "loanPaymentTypeLocked": "Příjem nebo výdaj se řídí typem půjčky a mění se tam."
+        "loanPaymentTypeLocked": "Příjem nebo výdaj se řídí typem půjčky a mění se tam.",
+        "planHistoricNote": "Měřeno vůči vašemu aktuálnímu plánu. Yuvomi si nepamatuje, jaký byl plán v dřívějším měsíci."
     },
     "settings": {
         "healthCycleEnableLabel": "Zobrazit kartu cyklu",

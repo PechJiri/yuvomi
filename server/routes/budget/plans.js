@@ -23,11 +23,21 @@ export const BUDGET_SAVINGS_KEY = '__savings__';
  * Plan = stetiger Monatsbetrag je Ausgabenkategorie; Ist = tatsächliche Ausgaben
  * des Monats (positiv dargestellt). Das Sparziel vergleicht den geplanten Betrag
  * mit dem Netto-Saldo (Einnahmen − Ausgaben) des Monats.
- * @returns {object} { month, plans: [], savings: {}|null, totalPlanned, totalActual }
+ *
+ * **Kein Urteil über die Vergangenheit (#1005).** `budget_plans` haelt EINEN Betrag je
+ * Kategorie ohne Zeitachse - kein `created_at`, und `updated_at` wird bei jeder Aenderung
+ * ueberschrieben. Die DB weiss also nicht, was der Plan in einem frueheren Monat sagte.
+ * Wer heute seinen Plan senkt, drehte damit das „ueber Budget" auf laengst abgeschlossenen
+ * Monaten um. Fuer jeden Monat ausser dem laufenden bleiben `over`/`met` deshalb `null`:
+ * geplant und ist sind Tatsachen und werden weiter geliefert, das Urteil nicht. Faellt
+ * spaeter eine echte Plan-Historie an (#1001), kann `isCurrentMonth` ersatzlos weg.
+ *
+ * @returns {object} { month, isCurrentMonth, plans: [], savings: {}|null, totalPlanned, totalActual }
  */
 export function computePlanProgress(database, month) {
   const from = `${month}-01`;
   const to   = `${month}-31`;
+  const isCurrentMonth = month === thisMonthLocalKey();
 
   const planRows = database.prepare('SELECT category, amount FROM budget_plans').all();
   const planMap  = new Map(planRows.map((r) => [r.category, cents(r.amount)]));
@@ -49,7 +59,7 @@ export function computePlanProgress(database, month) {
       actual,
       remaining: cents(planned - actual),
       ratio: planned > 0 ? actual / planned : 0,
-      over: actual > planned + 0.005,
+      over: isCurrentMonth ? actual > planned + 0.005 : null,
     });
   }
   // Höchste Auslastung zuerst → die Familie sieht gefährdete Budgets oben.
@@ -72,11 +82,11 @@ export function computePlanProgress(database, month) {
     actual: balance,
     remaining: cents(savingsPlanned - balance),
     ratio: savingsPlanned > 0 ? balance / savingsPlanned : 0,
-    met: balance >= savingsPlanned - 0.005,
+    met: isCurrentMonth ? balance >= savingsPlanned - 0.005 : null,
     income,
   } : null;
 
-  return { month, plans, savings, totalPlanned, totalActual };
+  return { month, isCurrentMonth, plans, savings, totalPlanned, totalActual };
 }
 
 /**

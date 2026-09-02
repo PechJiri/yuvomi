@@ -1462,7 +1462,8 @@
         "receiptsAttachedLabel_one": "{{count}} रसीद संलग्न",
         "loanPaidInstallmentsLabel": "पहले से चुकाई गई किस्तें",
         "loanPaidInstallmentsHint": "पहले से चल रहे ऋण के लिए। ये किस्तें दर्ज होती हैं, पर बजट में नहीं जोड़ी जातीं।",
-        "loanPaymentTypeLocked": "आय या व्यय ऋण के प्रकार पर निर्भर करता है और वहीं बदला जाता है।"
+        "loanPaymentTypeLocked": "आय या व्यय ऋण के प्रकार पर निर्भर करता है और वहीं बदला जाता है।",
+        "planHistoricNote": "आपकी मौजूदा योजना के आधार पर मापा गया। Yuvomi यह नहीं रखता कि पिछले महीने योजना क्या थी।"
     },
     "settings": {
         "healthCycleEnableLabel": "चक्र टैब दिखाएँ",

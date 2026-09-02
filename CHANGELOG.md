@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The budget plan no longer passes judgement on a month that is already over.** Editing a
+  plan changed the "over budget" verdict on months that had long closed: lower your grocery
+  budget today, and last August turned red for spending that was within the plan you
+  actually had at the time. The plan is deliberately one steady amount per category rather
+  than a value per month, and nothing records what it said back then - so for any month
+  other than the current one, Yuvomi now shows the planned and actual amounts and says
+  plainly that it is measuring against your current plan, instead of declaring a winner.
+  The current month is unchanged.
+
 ## [2.63.0] - 2026-09-02
 
 ### Added

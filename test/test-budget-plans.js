@@ -21,7 +21,11 @@ let passed = 0;
 const test = async (name, fn) => { try { await fn(); console.log(`  ✓ ${name}`); passed++; } catch (e) { console.log(`  ✗ ${name}: ${e.message}`); process.exitCode = 1; } };
 
 const database = db.get();
-const MONTH = '2026-07';
+// Das Urteil (over/met) liefert computePlanProgress nur fuer den LAUFENDEN Monat (#1005),
+// also laeuft die Suite darauf - sonst pruefte sie eine Zusicherung, die es dort nicht gibt.
+const { thisMonthLocalKey } = await import('../server/routes/budget/helpers.js');
+const MONTH = thisMonthLocalKey();
+const PAST_MONTH = '2026-01';
 
 database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('owner', 'Owner', 'x', 'admin')").run();
 
@@ -97,6 +101,40 @@ try {
     const r = computePlanProgress(database, MONTH);
     assert.equal(r.savings.met, false);
     assert.equal(r.savings.remaining, 650); // 3000 - 2350
+  });
+
+  // ---- Kein Urteil ueber die Vergangenheit (#1005) ---------------------------
+  await test('vergangener Monat: geplant/ist bleiben, over faellt weg', () => {
+    seedEntries();
+    database.prepare('INSERT INTO budget_plans (category, amount) VALUES (?, ?)').run(catB, 400);
+    const now  = computePlanProgress(database, MONTH);
+    const past = computePlanProgress(database, PAST_MONTH);
+    assert.equal(now.isCurrentMonth, true);
+    assert.equal(past.isCurrentMonth, false);
+    assert.equal(now.plans[0].over, true, 'laufender Monat behaelt sein Urteil');
+    const pastRow = past.plans.find((p) => p.category === catB);
+    assert.ok(pastRow, 'der Plan wird weiter ausgewiesen');
+    assert.equal(pastRow.planned, 400, 'geplant ist eine Tatsache und bleibt');
+    assert.equal(pastRow.over, null, 'ueber das Damals urteilt Yuvomi nicht');
+  });
+
+  await test('vergangener Monat: Planaenderung dreht kein altes Urteil mehr um', () => {
+    // Der Kern von #1005: budget_plans hat keine Zeitachse, ein spaeter gesetzter
+    // Betrag kippte vorher das "ueber Budget" eines abgeschlossenen Monats.
+    seedEntries();
+    database.prepare('INSERT INTO budget_plans (category, amount) VALUES (?, ?)').run(catB, 500);
+    const before = computePlanProgress(database, PAST_MONTH).plans.find((p) => p.category === catB);
+    database.prepare('UPDATE budget_plans SET amount = ? WHERE category = ?').run(400, catB);
+    const after = computePlanProgress(database, PAST_MONTH).plans.find((p) => p.category === catB);
+    assert.equal(before.over, null);
+    assert.equal(after.over, null, 'kein Urteil, also auch kein rueckwirkend gedrehtes');
+  });
+
+  await test('vergangener Monat: auch das Sparziel urteilt nicht', () => {
+    seedEntries();
+    database.prepare('INSERT INTO budget_plans (category, amount) VALUES (?, ?)').run(BUDGET_SAVINGS_KEY, 2000);
+    assert.equal(computePlanProgress(database, MONTH).savings.met, true);
+    assert.equal(computePlanProgress(database, PAST_MONTH).savings.met, null);
   });
 
   // ---- Routen ---------------------------------------------------------------

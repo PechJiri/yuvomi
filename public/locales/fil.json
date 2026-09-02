@@ -1474,7 +1474,8 @@
         "receiptsAttachedLabel_one": "{{count}} resibo ang nakalakip",
         "loanPaidInstallmentsLabel": "Mga hulog na nabayaran na",
         "loanPaidInstallmentsHint": "Para sa utang na tumatakbo na. Naitatala ang mga hulog na ito ngunit hindi ibinibilang sa badyet.",
-        "loanPaymentTypeLocked": "Ang kita o gastos ay sumusunod sa uri ng utang at doon binabago."
+        "loanPaymentTypeLocked": "Ang kita o gastos ay sumusunod sa uri ng utang at doon binabago.",
+        "planHistoricNote": "Sinusukat laban sa iyong kasalukuyang plano. Hindi itinatala ng Yuvomi kung ano ang plano noong nakaraang buwan."
     },
     "settings": {
         "healthCycleEnableLabel": "Ipakita ang tab ng siklo",

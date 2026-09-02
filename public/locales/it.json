@@ -1462,7 +1462,8 @@
         "receiptsAttachedLabel_one": "{{count}} ricevuta allegata",
         "loanPaidInstallmentsLabel": "Rate già pagate",
         "loanPaidInstallmentsHint": "Per un prestito già in corso. Queste rate vengono registrate ma non contabilizzate nel budget.",
-        "loanPaymentTypeLocked": "Entrata o uscita segue il tipo di prestito e si modifica lì."
+        "loanPaymentTypeLocked": "Entrata o uscita segue il tipo di prestito e si modifica lì.",
+        "planHistoricNote": "Misurato sul tuo piano attuale. Yuvomi non conserva quale fosse il piano in un mese precedente."
     },
     "settings": {
         "healthCycleEnableLabel": "Mostra la scheda ciclo",
