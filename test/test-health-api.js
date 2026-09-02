@@ -1028,6 +1028,47 @@ test('Cycle-Log: Symptom-Intensität wird gespeichert, gelesen und über PATCH-a
   assert.deepEqual(row.symptoms, [{ key: 'headache', intensity: 3 }, { key: 'nausea', intensity: null }]);
 });
 
+test('Cycle-Log: Basaltemperatur wird gespeichert, gelesen und beim Weglassen gelöscht', async () => {
+  asA();
+  const created = await call('POST', '/cycle/logs', { log_date: '2028-05-03', basal_temp: 36.42, basal_temp_unit: 'c' });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.data.basal_temp, 36.42);
+  assert.equal(created.body.data.basal_temp_unit, 'c');
+
+  const list = await call('GET', '/cycle/logs?from=2028-05-03&to=2028-05-03');
+  const row = list.body.data.find((l) => l.log_date === '2028-05-03');
+  assert.equal(row.basal_temp, 36.42);
+  assert.equal(row.basal_temp_unit, 'c');
+
+  // Voller Ersatz wie bei allen anderen Feldern dieser Route: weggelassen heißt geloescht.
+  const cleared = await call('POST', '/cycle/logs', { log_date: '2028-05-03', flow: 'light' });
+  assert.equal(cleared.body.data.basal_temp, null);
+  assert.equal(cleared.body.data.basal_temp_unit, null);
+});
+
+test('Cycle-Log: Basaltemperatur ohne Einheit, mit unbekannter Einheit oder außerhalb des Plausibilitätsbereichs → 400', async () => {
+  asA();
+  const noUnit = await call('POST', '/cycle/logs', { log_date: '2028-05-04', basal_temp: 36.5 });
+  assert.equal(noUnit.status, 400);
+
+  const badUnit = await call('POST', '/cycle/logs', { log_date: '2028-05-04', basal_temp: 36.5, basal_temp_unit: 'k' });
+  assert.equal(badUnit.status, 400);
+
+  const tooLowC = await call('POST', '/cycle/logs', { log_date: '2028-05-04', basal_temp: 10, basal_temp_unit: 'c' });
+  assert.equal(tooLowC.status, 400);
+
+  const tooHighF = await call('POST', '/cycle/logs', { log_date: '2028-05-04', basal_temp: 200, basal_temp_unit: 'f' });
+  assert.equal(tooHighF.status, 400);
+});
+
+test('Cycle-Log: Basaltemperatur in Fahrenheit wird unverändert gespeichert (keine serverseitige Umrechnung)', async () => {
+  asA();
+  const r = await call('POST', '/cycle/logs', { log_date: '2028-05-05', basal_temp: 97.9, basal_temp_unit: 'f' });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.basal_temp, 97.9);
+  assert.equal(r.body.data.basal_temp_unit, 'f');
+});
+
 test('Cycle-Periode: PATCH aller Felder + Fremdzugriff-404', async () => {
   asA();
   const p = await call('POST', '/cycle/periods', { start_date: '2028-06-01' });

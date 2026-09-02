@@ -4084,6 +4084,7 @@
                 "nextPeriod": "अगली माहवारी",
                 "fertileWindow": "उपजाऊ अवधि",
                 "ovulation": "ओव्यूलेशन",
+                "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "औसत चक्र अवधि",
                 "avgPeriod": "औसत माहवारी अवधि",
                 "regularity": "नियमितता",
@@ -4174,6 +4175,14 @@
                 "mild": "Mild",
                 "moderate": "Moderate",
                 "severe": "Severe"
+            },
+            "bbt": {
+                "label": "Basal body temperature",
+                "placeholder": "e.g. 36.50",
+                "unitLabel": "Unit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optional. With regular measurements, a temperature rise can confirm ovulation for the current cycle."
             },
             "mood": {
                 "label": "मनोदशा",

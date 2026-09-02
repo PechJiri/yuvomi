@@ -2474,6 +2474,8 @@ is writable by anyone for themselves.
 | mood | TEXT | |
 | note | TEXT | |
 | visibility | TEXT | `private` \| `family`, default `private` |
+| basal_temp | REAL | nullable (migration 176) — optional daily basal body temperature |
+| basal_temp_unit | TEXT | nullable, `c` \| `f` — required together with `basal_temp`; free-text-per-entry like `health_vitals.unit` (no household-wide C/F setting exists), but constrained to these two at the route since the shift-detection algorithm must convert reliably |
 | created_at / updated_at | TEXT | ISO 8601, default now |
 
 **`cycle_day_log_symptoms`** (migration 175) — graded symptom selections for a day log, normalized
@@ -2518,6 +2520,21 @@ directly (imported server-side via a relative path so it resolves in Node withou
 test loader) rather than a second copy of the prediction math. Both reminder types are derived,
 server-sync-owned entity types (`DERIVED_ENTITY_TYPES` in `server/routes/reminders.js`) — a caller
 cannot hand-set one via the generic reminders API, matching `pantry_item`'s existing precedent.
+
+**Optional basal body temperature (BBT) tracking** (migration 176) lets a day log carry a daily
+temperature reading. `detectTemperatureShift()` (`public/utils/health-cycle.js`) implements a
+coverline method: the first reading at least 0.2°C above the mean of the 6 preceding (lower)
+readings, sustained for 3 consecutive readings, confirms ovulation — the same "3-over-6" rule
+fertility-awareness methods use, deliberately without the single-outlier-day exception those
+methods allow (a simple, checkable rule over a more forgiving but harder-to-verify one). It works
+on the *sequence* of logged readings, not calendar days, so missing days aren't a special case.
+When a shift is detected within the current cycle, `predictCycle()` (given the day logs as its 4th
+argument) replaces the calendar-method ovulation date with the confirmed one and sets
+`ovulationConfirmed: true`; future cycles stay calendar-method, since they have no readings yet.
+The cycle ring repositions its ovulation marker to the confirmed date's actual cycle day and gains
+an outer ring around the marker; the fertile-window stat card's ovulation line switches label. No
+household-wide temperature-unit setting exists (matching `health_vitals.unit`'s per-entry
+convention); the unit travels with each reading and `detectTemperatureShift()` converts internally.
 
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and

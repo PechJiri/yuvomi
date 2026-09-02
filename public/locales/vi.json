@@ -4084,6 +4084,7 @@
                 "nextPeriod": "Kỳ kinh tiếp theo",
                 "fertileWindow": "Cửa sổ dễ thụ thai",
                 "ovulation": "Rụng trứng",
+                "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "Độ dài chu kỳ TB",
                 "avgPeriod": "Độ dài kỳ kinh TB",
                 "regularity": "Độ đều đặn",
@@ -4174,6 +4175,14 @@
                 "mild": "Mild",
                 "moderate": "Moderate",
                 "severe": "Severe"
+            },
+            "bbt": {
+                "label": "Basal body temperature",
+                "placeholder": "e.g. 36.50",
+                "unitLabel": "Unit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optional. With regular measurements, a temperature rise can confirm ovulation for the current cycle."
             },
             "mood": {
                 "label": "Tâm trạng",

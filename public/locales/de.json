@@ -4084,6 +4084,7 @@
                 "nextPeriod": "Nächste Periode",
                 "fertileWindow": "Fruchtbares Fenster",
                 "ovulation": "Eisprung",
+                "ovulationConfirmed": "Eisprung bestätigt",
                 "avgCycle": "Ø Zykluslänge",
                 "avgPeriod": "Ø Periodenlänge",
                 "regularity": "Regelmäßigkeit",
@@ -4174,6 +4175,14 @@
                 "mild": "Leicht",
                 "moderate": "Mäßig",
                 "severe": "Stark"
+            },
+            "bbt": {
+                "label": "Basaltemperatur",
+                "placeholder": "z. B. 36,50",
+                "unitLabel": "Einheit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optional. Bei regelmäßiger Messung kann ein Temperaturanstieg den Eisprung im aktuellen Zyklus bestätigen."
             },
             "mood": {
                 "label": "Stimmung",

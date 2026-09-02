@@ -4084,6 +4084,7 @@
                 "nextPeriod": "다음 생리",
                 "fertileWindow": "가임기",
                 "ovulation": "배란",
+                "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "평균 주기 길이",
                 "avgPeriod": "평균 생리 기간",
                 "regularity": "규칙성",
@@ -4174,6 +4175,14 @@
                 "mild": "Mild",
                 "moderate": "Moderate",
                 "severe": "Severe"
+            },
+            "bbt": {
+                "label": "Basal body temperature",
+                "placeholder": "e.g. 36.50",
+                "unitLabel": "Unit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optional. With regular measurements, a temperature rise can confirm ovulation for the current cycle."
             },
             "mood": {
                 "label": "기분",

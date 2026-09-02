@@ -4084,6 +4084,7 @@
                 "nextPeriod": "Następna miesiączka",
                 "fertileWindow": "Okno płodności",
                 "ovulation": "Owulacja",
+                "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "Śr. długość cyklu",
                 "avgPeriod": "Śr. długość miesiączki",
                 "regularity": "Regularność",
@@ -4174,6 +4175,14 @@
                 "mild": "Mild",
                 "moderate": "Moderate",
                 "severe": "Severe"
+            },
+            "bbt": {
+                "label": "Basal body temperature",
+                "placeholder": "e.g. 36.50",
+                "unitLabel": "Unit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optional. With regular measurements, a temperature rise can confirm ovulation for the current cycle."
             },
             "mood": {
                 "label": "Nastrój",

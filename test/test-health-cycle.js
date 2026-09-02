@@ -18,6 +18,7 @@ const {
   PHASE,
   daysBetween, sortPeriodsAsc, cycleGaps, periodLengths,
   cycleStats, predictCycle, buildCycleCalendar, cycleRing, pregnancyInfo,
+  detectTemperatureShift,
 } = await import('../public/utils/health-cycle.js');
 
 const de = JSON.parse(readFileSync(new URL('../public/locales/de.json', import.meta.url), 'utf8'));
@@ -30,6 +31,13 @@ function periods(starts, periodLen = 5) {
     d.setUTCDate(d.getUTCDate() + periodLen - 1);
     return { id: i + 1, start_date: start, end_date: d.toISOString().slice(0, 10) };
   });
+}
+
+// Baut Tages-Logs mit Basaltemperatur aus [datum, wert, einheit?]-Tripeln
+// (einheit default 'c'). Nur die fuer detectTemperatureShift() relevanten
+// Felder.
+function tempLogs(entries) {
+  return entries.map(([log_date, basal_temp, basal_temp_unit = 'c']) => ({ log_date, basal_temp, basal_temp_unit }));
 }
 
 // --------------------------------------------------------
@@ -279,6 +287,136 @@ test('predictCycle: überfällig, wenn heute nach vorhergesagtem Start', () => {
   const p = predictCycle(periods(['2026-06-01'], 5), {}, '2026-07-05'); // nextStart 06-29
   assert.equal(p.isPredictedOverdue, true);
   assert.ok(p.daysUntilNext < 0);
+});
+
+// --------------------------------------------------------
+// detectTemperatureShift (BBT, Phase 3)
+// --------------------------------------------------------
+
+test('detectTemperatureShift: klarer Anstieg nach 6 niedrigen Werten wird erkannt', () => {
+  const logs = tempLogs([
+    ['2026-06-01', 36.30], ['2026-06-02', 36.30], ['2026-06-03', 36.30],
+    ['2026-06-04', 36.30], ['2026-06-05', 36.30], ['2026-06-06', 36.30],
+    ['2026-06-07', 36.55], ['2026-06-08', 36.60], ['2026-06-09', 36.58],
+  ]);
+  assert.equal(detectTemperatureShift(logs, '2026-06-01'), '2026-06-07');
+});
+
+test('detectTemperatureShift: zu wenig Messwerte (< 6 Basislinie + 3 Anstieg) → null', () => {
+  const logs = tempLogs([
+    ['2026-06-01', 36.30], ['2026-06-02', 36.30], ['2026-06-03', 36.30],
+    ['2026-06-04', 36.30], ['2026-06-05', 36.30], ['2026-06-06', 36.30],
+    ['2026-06-07', 36.55], ['2026-06-08', 36.60],
+  ]);
+  assert.equal(detectTemperatureShift(logs, '2026-06-01'), null);
+});
+
+test('detectTemperatureShift: kein Anstieg (flache Reihe) → null', () => {
+  const logs = tempLogs(Array.from({ length: 9 }, (_, i) => [`2026-06-${String(i + 1).padStart(2, '0')}`, 36.30]));
+  assert.equal(detectTemperatureShift(logs, '2026-06-01'), null);
+});
+
+// Ein einzelner Ausreisser-Tag unter der Schwelle laesst BEIDE benachbarten
+// Kandidaten-Fenster scheitern - bewusst keine Ausnahme-Regel (siehe
+// Modulkommentar bei detectTemperatureShift).
+test('detectTemperatureShift: ein Ausreisser-Tag verhindert die Erkennung (keine Rauschtoleranz)', () => {
+  const logs = tempLogs([
+    ['2026-06-01', 36.30], ['2026-06-02', 36.30], ['2026-06-03', 36.30],
+    ['2026-06-04', 36.30], ['2026-06-05', 36.30], ['2026-06-06', 36.30],
+    ['2026-06-07', 36.55], ['2026-06-08', 36.15], ['2026-06-09', 36.60], ['2026-06-10', 36.65],
+  ]);
+  assert.equal(detectTemperatureShift(logs, '2026-06-01'), null);
+});
+
+test('detectTemperatureShift: rechnet Fahrenheit korrekt in Celsius um, auch gemischt mit Celsius-Werten', () => {
+  // 97.5°F ≈ 36.39°C (Basislinie), 98.0°F ≈ 36.67°C (Anstieg, Δ ≈ 0.28°C ≥ 0,2).
+  const allFahrenheit = tempLogs([
+    ['2026-06-01', 97.5, 'f'], ['2026-06-02', 97.5, 'f'], ['2026-06-03', 97.5, 'f'],
+    ['2026-06-04', 97.5, 'f'], ['2026-06-05', 97.5, 'f'], ['2026-06-06', 97.5, 'f'],
+    ['2026-06-07', 98.0, 'f'], ['2026-06-08', 98.0, 'f'], ['2026-06-09', 98.0, 'f'],
+  ]);
+  assert.equal(detectTemperatureShift(allFahrenheit, '2026-06-01'), '2026-06-07');
+
+  // Basislinie in Celsius, Anstieg in Fahrenheit (97.9°F ≈ 36.61°C, Δ ≈ 0.31°C).
+  const mixedUnits = tempLogs([
+    ['2026-06-01', 36.30], ['2026-06-02', 36.30], ['2026-06-03', 36.30],
+    ['2026-06-04', 36.30], ['2026-06-05', 36.30], ['2026-06-06', 36.30],
+    ['2026-06-07', 97.9, 'f'], ['2026-06-08', 97.9, 'f'], ['2026-06-09', 97.9, 'f'],
+  ]);
+  assert.equal(detectTemperatureShift(mixedUnits, '2026-06-01'), '2026-06-07');
+});
+
+test('detectTemperatureShift: Messwerte vor cycleStart zählen nicht zur Basislinie', () => {
+  const logs = tempLogs([
+    ['2026-05-20', 40.00], // extremer Wert vor Zyklusbeginn - darf die Basislinie nicht verzerren
+    ['2026-06-01', 36.30], ['2026-06-02', 36.30], ['2026-06-03', 36.30],
+    ['2026-06-04', 36.30], ['2026-06-05', 36.30], ['2026-06-06', 36.30],
+    ['2026-06-07', 36.55], ['2026-06-08', 36.60], ['2026-06-09', 36.58],
+  ]);
+  assert.equal(detectTemperatureShift(logs, '2026-06-01'), '2026-06-07');
+});
+
+test('detectTemperatureShift: Tage ohne basal_temp werden übersprungen, kein Absturz', () => {
+  const logs = [
+    ...tempLogs([['2026-05-30', 36.30], ['2026-05-31', 36.30], ['2026-06-01', 36.30], ['2026-06-02', 36.30]]),
+    { log_date: '2026-06-03', basal_temp: null, basal_temp_unit: null },
+    { log_date: '2026-06-04', flow: 'light' }, // basal_temp fehlt ganz
+    ...tempLogs([['2026-06-05', 36.30], ['2026-06-06', 36.30],
+      ['2026-06-07', 36.55], ['2026-06-08', 36.60], ['2026-06-09', 36.58]]),
+  ];
+  // 6 gültige Basislinien-Werte (05-30, 05-31, 06-01, 06-02, 06-05, 06-06),
+  // die beiden Lücken (null, fehlendes Feld) übersprungen, dann der Anstieg.
+  assert.equal(detectTemperatureShift(logs, '2026-05-30'), '2026-06-07');
+});
+
+test('detectTemperatureShift: leere/fehlende Eingabe → null, kein Absturz', () => {
+  assert.equal(detectTemperatureShift([], '2026-06-01'), null);
+  assert.equal(detectTemperatureShift(null, '2026-06-01'), null);
+  assert.equal(detectTemperatureShift(undefined, '2026-06-01'), null);
+});
+
+test('predictCycle: bestätigter Temperaturanstieg ersetzt das kalendarische Eisprungdatum', () => {
+  const hist = periods(['2026-04-06', '2026-05-04', '2026-06-01'], 5); // Ø-Zyklus 28, Lutealphase 14 → kalendarisch 06-15
+  const logs = tempLogs([
+    ['2026-06-01', 36.30], ['2026-06-02', 36.30], ['2026-06-03', 36.30],
+    ['2026-06-04', 36.30], ['2026-06-05', 36.30], ['2026-06-06', 36.30],
+    ['2026-06-07', 36.55], ['2026-06-08', 36.60], ['2026-06-09', 36.58],
+  ]);
+  const withoutTemps = predictCycle(hist, {}, '2026-06-10');
+  assert.equal(withoutTemps.ovulationDate, '2026-06-15');
+  assert.equal(withoutTemps.ovulationConfirmed, false);
+
+  const withTemps = predictCycle(hist, {}, '2026-06-10', logs);
+  assert.equal(withTemps.ovulationDate, '2026-06-07');
+  assert.equal(withTemps.ovulationConfirmed, true);
+  // Fruchtbares Fenster folgt dem BESTÄTIGTEN Datum, nicht mehr dem kalendarischen.
+  assert.equal(withTemps.fertileEnd, '2026-06-07');
+});
+
+test('predictCycle: track_fertility=0 ruft erst gar keine Temperatur-Erkennung auf', () => {
+  const hist = periods(['2026-04-06', '2026-05-04', '2026-06-01'], 5);
+  const logs = tempLogs([
+    ['2026-06-01', 36.30], ['2026-06-02', 36.30], ['2026-06-03', 36.30],
+    ['2026-06-04', 36.30], ['2026-06-05', 36.30], ['2026-06-06', 36.30],
+    ['2026-06-07', 36.55], ['2026-06-08', 36.60], ['2026-06-09', 36.58],
+  ]);
+  const p = predictCycle(hist, { track_fertility: 0 }, '2026-06-10', logs);
+  assert.equal(p.ovulationDate, null);
+  assert.equal(p.ovulationConfirmed, false);
+});
+
+test('cycleRing: bestätigter Eisprung positioniert den Marker am tatsächlichen Zyklustag, nicht am kalendarischen', () => {
+  const hist = periods(['2026-04-06', '2026-05-04', '2026-06-01'], 5);
+  const logs = tempLogs([
+    ['2026-06-01', 36.30], ['2026-06-02', 36.30], ['2026-06-03', 36.30],
+    ['2026-06-04', 36.30], ['2026-06-05', 36.30], ['2026-06-06', 36.30],
+    ['2026-06-07', 36.55], ['2026-06-08', 36.60], ['2026-06-09', 36.58],
+  ]);
+  const prediction = predictCycle(hist, {}, '2026-06-10', logs);
+  const ring = cycleRing(prediction);
+  assert.equal(ring.ovulationConfirmed, true);
+  // Zyklustag 7 (06-07 ist der 7. Tag ab 06-01) von 28 Tagen Gesamtlaenge.
+  assert.equal(ring.ovulationFrac, (7 - 0.5) / 28);
 });
 
 // --------------------------------------------------------

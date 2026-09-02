@@ -42,6 +42,26 @@ const router = express.Router();
 // spaeter erweiterte Presets, ohne eine Endlos-Liste durchzulassen.
 const MAX_SYMPTOMS_COUNT = 40;
 
+// Anders als health_vitals.unit (freier Text, viele Metriken) macht fuer eine
+// Basaltemperatur nur eine von zwei Einheiten Sinn - und detectTemperatureShift()
+// muss beide zuverlaessig in Celsius umrechnen koennen, ein freies Textfeld
+// waere dafuer die falsche Grundlage. Plausibilitaets-Grenzen sind grosszuegige
+// Koerpertemperatur-Baender, keine medizinische Norm.
+const BASAL_TEMP_RANGE = { c: [34, 42], f: [93, 108] };
+
+/** Validiert (basal_temp, basal_temp_unit) zusammen - beide oder keins. */
+function validateBasalTemp(rawTemp, rawUnit) {
+  if (rawTemp === undefined || rawTemp === null || rawTemp === '') return { temp: null, unit: null, error: null };
+  const unit = String(rawUnit || '').toLowerCase();
+  const range = BASAL_TEMP_RANGE[unit];
+  if (!range) return { temp: null, unit: null, error: 'basal_temp_unit must be "c" or "f" when basal_temp is set.' };
+  const n = Number(rawTemp);
+  if (!Number.isFinite(n) || n < range[0] || n > range[1]) {
+    return { temp: null, unit: null, error: `basal_temp must be a number between ${range[0]} and ${range[1]} for unit "${unit}".` };
+  }
+  return { temp: n, unit, error: null };
+}
+
 /** Symptom-Zeilen eines Tages-Logs, in Einfuegereihenfolge. */
 function symptomsForLog(database, dayLogId) {
   return database.prepare(
@@ -193,9 +213,11 @@ router.post('/cycle/logs', (req, res) => {
     const note       = v.str(b.note, 'note', { max: v.MAX_TEXT, required: false });
     const visibility = v.oneOf(b.visibility, VISIBILITIES, 'visibility');
     const symptoms   = normalizeSymptomEntries(b.symptoms);
+    const basalTemp  = validateBasalTemp(b.basal_temp, b.basal_temp_unit);
 
     const errors = v.collectErrors([logDate, flow, mood, note, visibility]);
     if (symptoms.length > MAX_SYMPTOMS_COUNT) errors.push(`symptoms may include at most ${MAX_SYMPTOMS_COUNT} entries.`);
+    if (basalTemp.error) errors.push(basalTemp.error);
     if (errors.length) return badRequest(res, errors);
 
     const database = db.get();
@@ -203,12 +225,13 @@ router.post('/cycle/logs', (req, res) => {
     // dazwischen die eine ohne die andere zurücklassen.
     const dayLogId = database.transaction(() => {
       database.prepare(`
-        INSERT INTO cycle_day_logs (user_id, log_date, flow, mood, note, visibility)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO cycle_day_logs (user_id, log_date, flow, mood, note, visibility, basal_temp, basal_temp_unit)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id, log_date) DO UPDATE SET
           flow = excluded.flow, mood = excluded.mood,
-          note = excluded.note, visibility = excluded.visibility
-      `).run(viewer, logDate.value, flow.value, mood.value, note.value, visibility.value || 'private');
+          note = excluded.note, visibility = excluded.visibility,
+          basal_temp = excluded.basal_temp, basal_temp_unit = excluded.basal_temp_unit
+      `).run(viewer, logDate.value, flow.value, mood.value, note.value, visibility.value || 'private', basalTemp.temp, basalTemp.unit);
       const id = database.prepare('SELECT id FROM cycle_day_logs WHERE user_id = ? AND log_date = ?').get(viewer, logDate.value).id;
       replaceSymptoms(database, id, symptoms);
       return id;

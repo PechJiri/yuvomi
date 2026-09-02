@@ -4084,6 +4084,7 @@
                 "nextPeriod": "Próximo período",
                 "fertileWindow": "Janela fértil",
                 "ovulation": "Ovulação",
+                "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "Duração média do ciclo",
                 "avgPeriod": "Duração média do período",
                 "regularity": "Regularidade",
@@ -4174,6 +4175,14 @@
                 "mild": "Mild",
                 "moderate": "Moderate",
                 "severe": "Severe"
+            },
+            "bbt": {
+                "label": "Basal body temperature",
+                "placeholder": "e.g. 36.50",
+                "unitLabel": "Unit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optional. With regular measurements, a temperature rise can confirm ovulation for the current cycle."
             },
             "mood": {
                 "label": "Humor",

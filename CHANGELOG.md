@@ -56,6 +56,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `symptoms` field as a plain truthy value, which is correct for a string but wrong for an array -
   an empty array is truthy in JavaScript, so a day with no flow, mood, or note but an empty symptom
   list would have been misreported as logged.
+- **Day logs can optionally track basal body temperature, and a sustained rise now confirms
+  ovulation for the current cycle instead of only estimating it from the calendar.** A day log
+  accepts a temperature reading and unit (migration 176); `detectTemperatureShift()` in
+  `public/utils/health-cycle.js` implements the standard "3-over-6" coverline method - the first
+  reading at least 0.2°C above the mean of the 6 preceding readings, sustained for 3 readings in a
+  row, confirms ovulation. It works over the sequence of logged readings rather than calendar days
+  (missing days aren't a special case) and, deliberately, skips the single-outlier-day exception
+  real fertility-awareness methods allow, favoring a rule that's simple to check over one that's
+  more forgiving. When a shift is found in the current cycle, the prediction's ovulation date, the
+  fertile window, the cycle ring's marker position, and the stat card's label all switch from
+  "predicted" to "confirmed"; future cycles keep using the calendar method, since they have no
+  readings yet.
 
 ### Fixed
 

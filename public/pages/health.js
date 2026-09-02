@@ -4207,7 +4207,9 @@ function renderCycleShell() {
   }
 
   const own = isOwnCycleView();
-  const prediction = predictCycle(cycle.periods, cycleSettings());
+  // dayLogs mitgeben: Phase 3, ein bestätigter Temperaturanstieg im laufenden
+  // Zyklus ersetzt das kalendarische Eisprungdatum (siehe predictCycle()-Doku).
+  const prediction = predictCycle(cycle.periods, cycleSettings(), todayKey(), cycle.logs);
 
   const persons = `
     ${personSwitcherMarkup(cycle.members, cycle.personId, cycle.meId,
@@ -4336,6 +4338,12 @@ function cycleRingMarkup(prediction) {
   let markers = '';
   if (ring.ovulationFrac != null) {
     const [ox, oy] = cyclePolar(CX, CY, R, ring.ovulationFrac);
+    // Bestätigt (Temperaturanstieg, Phase 3) bekommt einen zusätzlichen
+    // Aussenring - derselbe Punkt, ein sichtbar anderer Zustand, keine zweite
+    // Farbe (die bliebe ohne Legende unerklärt).
+    if (ring.ovulationConfirmed) {
+      markers += `<circle cx="${ox.toFixed(1)}" cy="${oy.toFixed(1)}" r="8" fill="none" stroke="var(--cycle-ovulation)" stroke-width="2" />`;
+    }
     markers += `<circle cx="${ox.toFixed(1)}" cy="${oy.toFixed(1)}" r="5.5" fill="var(--cycle-ovulation)" stroke="var(--color-surface)" stroke-width="2.5" />`;
   }
   const [tx, ty] = cyclePolar(CX, CY, R, ring.currentFrac);
@@ -4393,11 +4401,17 @@ function cycleStatsMarkup(prediction) {
   }));
 
   if (prediction.trackFertility) {
+    // Bestätigt (Phase 3, Temperaturanstieg) vs. vorhergesagt (Kalendermethode) -
+    // derselbe Unterschied, den predictCycle()/cycleRing() schon tragen, hier nur
+    // sichtbar gemacht.
+    const ovulationLabel = prediction.ovulationConfirmed
+      ? t('health.cycle.status.ovulationConfirmed')
+      : t('health.cycle.status.ovulation');
     tiles.push(cycleStatCardMarkup({
       icon: 'sparkles',
       labelKey: 'health.cycle.status.fertileWindow',
       value: `${formatDate(prediction.fertileStart)} – ${formatDate(prediction.fertileEnd)}`,
-      sub: `${t('health.cycle.status.ovulation')}: ${formatDate(prediction.ovulationDate)}`,
+      sub: `${ovulationLabel}: ${formatDate(prediction.ovulationDate)}`,
     }));
   } else {
     const reg = stats.regular === null
@@ -4784,6 +4798,9 @@ function openDayLogModal(dateKey) {
   const moodOptions = [`<option value="" ${currentMood ? '' : 'selected'}>${esc(t('health.cycle.mood.none'))}</option>`,
     ...MOOD_TYPES.map((m) => `<option value="${esc(m.value)}" ${m.value === currentMood ? 'selected' : ''}>${esc(t(m.labelKey))}</option>`)].join('');
 
+  const bbtUnit = existing?.basal_temp_unit === 'f' ? 'f' : 'c';
+  const bbtValue = existing?.basal_temp != null ? String(existing.basal_temp) : '';
+
   openModal({
     title: `${t('health.cycle.dayLog.title')} · ${formatDate(key)}`,
     size: 'md',
@@ -4797,6 +4814,20 @@ function openDayLogModal(dateKey) {
           <span class="label">${esc(t('health.cycle.symptom.label'))}</span>
           <div class="health-choices health-choices--wrap" data-group="symptoms">${symptomButtons}</div>
         </div>
+        <div class="modal-grid modal-grid--2">
+          <div class="form-field">
+            <label class="label" for="cycle-bbt">${esc(t('health.cycle.bbt.label'))}</label>
+            <input class="input" id="cycle-bbt" type="number" inputmode="decimal" step="0.01" placeholder="${esc(t('health.cycle.bbt.placeholder'))}" value="${esc(bbtValue)}">
+          </div>
+          <div class="form-field">
+            <label class="label" for="cycle-bbt-unit">${esc(t('health.cycle.bbt.unitLabel'))}</label>
+            <select class="input" id="cycle-bbt-unit">
+              <option value="c" ${bbtUnit === 'c' ? 'selected' : ''}>${esc(t('health.cycle.bbt.celsius'))}</option>
+              <option value="f" ${bbtUnit === 'f' ? 'selected' : ''}>${esc(t('health.cycle.bbt.fahrenheit'))}</option>
+            </select>
+          </div>
+        </div>
+        <p class="cycle-hint">${esc(t('health.cycle.bbt.hint'))}</p>
         <div class="modal-grid modal-grid--2">
           <div class="form-field">
             <label class="label" for="cycle-mood">${esc(t('health.cycle.mood.label'))}</label>
@@ -4841,10 +4872,13 @@ function openDayLogModal(dateKey) {
         const flowBtn = panel.querySelector('[data-group="flow"] .health-choice[aria-pressed="true"]');
         const symptoms = [...panel.querySelectorAll('[data-symptom][aria-pressed="true"]')]
           .map((b) => ({ key: b.dataset.symptom, intensity: Number(b.dataset.intensity) || null }));
+        const bbtRaw = panel.querySelector('#cycle-bbt').value.trim();
         const body = {
           log_date: key,
           flow: flowBtn?.dataset.flow || '',
           symptoms,
+          basal_temp: bbtRaw === '' ? null : Number(bbtRaw),
+          basal_temp_unit: bbtRaw === '' ? null : panel.querySelector('#cycle-bbt-unit').value,
           mood: panel.querySelector('#cycle-mood').value || null,
           visibility: panel.querySelector('#cycle-log-visibility').value || 'private',
           note: panel.querySelector('#cycle-log-note').value.trim() || null,

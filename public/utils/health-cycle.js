@@ -342,20 +342,82 @@ export function pregnancyInfo(settings = {}, todayKey = householdToday()) {
 }
 
 // --------------------------------------------------------
+// Basaltemperatur (BBT) — Eisprung-Bestätigung per Temperaturanstieg
+// --------------------------------------------------------
+
+// 0,2 °C ist die uebliche Schwelle der "3-ueber-6"-Coverline-Methode
+// (Fruchtbarkeitsbewusstsein-Praxis, nicht klinisch normiert - siehe
+// "kein Medizinprodukt" in docs/SPEC.md). Sechs Tage Basislinie, drei Tage
+// ueber der Schwelle in Folge.
+const TEMP_SHIFT_THRESHOLD_C = 0.2;
+const TEMP_BASELINE_READINGS = 6;
+const TEMP_SUSTAINED_DAYS = 3;
+
+/** Celsius aus einem Wert + Einheit ('c'|'f'), oder null bei unbrauchbarer Eingabe. */
+function toCelsius(value, unit) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return unit === 'f' ? (n - 32) * 5 / 9 : n;
+}
+
+/**
+ * Erkennt den Temperaturanstieg, der einen Eisprung bestätigt (Coverline-
+ * Methode): der erste Tag, dessen Wert mindestens TEMP_SHIFT_THRESHOLD_C ueber
+ * dem Mittel der TEMP_BASELINE_READINGS vorangehenden (niedrigeren) Messungen
+ * liegt, sofern die naechsten TEMP_SUSTAINED_DAYS − 1 Tage denselben Schwellwert
+ * halten. Arbeitet auf der REIHENFOLGE der tatsaechlich geloggten Messungen,
+ * nicht auf Kalendertagen - fehlende Tage sind damit kein Sonderfall.
+ *
+ * Bewusst KEINE Ausnahme-Regel fuer einen einzelnen Ausreisser-Tag (wie echte
+ * Fruchtbarkeitsbewusstsein-Methoden sie kennen) - eine einfache, nachvoll-
+ * ziehbare Regel statt einer zweiten, die niemand ohne Anleitung nachrechnen
+ * kann. Rauschen (ein Tag unter der Schwelle innerhalb der drei) lässt diesen
+ * Kandidaten scheitern; die Schleife prüft den nächsten möglichen Starttag.
+ *
+ * @param {Array<Object>} dayLogs  - cycle_day_logs-Zeilen (log_date, basal_temp, basal_temp_unit).
+ * @param {string} cycleStart      - Beginn des aktuellen Zyklus (YYYY-MM-DD); Messungen davor zählen nicht.
+ * @returns {string|null} Datum (YYYY-MM-DD) des ersten Tages im Anstieg, oder null ohne hinreichenden Befund.
+ */
+export function detectTemperatureShift(dayLogs, cycleStart) {
+  const start = dayKey(cycleStart);
+  const readings = (dayLogs || [])
+    .filter((l) => l && l.basal_temp != null && dayKey(l.log_date) >= start)
+    .map((l) => ({ date: dayKey(l.log_date), celsius: toCelsius(l.basal_temp, l.basal_temp_unit) }))
+    .filter((r) => r.celsius != null)
+    .sort((a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : 0)));
+
+  if (readings.length < TEMP_BASELINE_READINGS + TEMP_SUSTAINED_DAYS) return null;
+
+  for (let i = TEMP_BASELINE_READINGS; i <= readings.length - TEMP_SUSTAINED_DAYS; i += 1) {
+    const baseline = mean(readings.slice(i - TEMP_BASELINE_READINGS, i).map((r) => r.celsius));
+    if (baseline == null) continue;
+    const threshold = baseline + TEMP_SHIFT_THRESHOLD_C;
+    const sustained = readings.slice(i, i + TEMP_SUSTAINED_DAYS).every((r) => r.celsius >= threshold);
+    if (sustained) return readings[i].date;
+  }
+  return null;
+}
+
+// --------------------------------------------------------
 // Vorhersage
 // --------------------------------------------------------
 
 /**
  * Leitet den aktuellen Zyklusstand + die Vorhersagen ab.
  * Kalendermethode: Eisprung = nächster Periodenstart − Lutealphase; fruchtbares
- * Fenster = Eisprungtag und die 5 Tage davor. Rein statistische Schätzung.
+ * Fenster = Eisprungtag und die 5 Tage davor. Rein statistische Schätzung -
+ * bestätigt ein Temperaturanstieg (detectTemperatureShift()) den Eisprung des
+ * LAUFENDEN Zyklus, ersetzt dessen Datum das kalendarische (`ovulationConfirmed:
+ * true`); künftige Zyklen bleiben Kalendermethode, da es für sie noch keine
+ * Messwerte geben kann.
  *
  * @param {Array<Object>} periods - Perioden-Historie (start_date/end_date).
  * @param {Object} settings       - cycle_settings-Zeile (kann leer sein).
  * @param {string} [todayKey]     - Referenz-„heute" (YYYY-MM-DD), Default: heute.
+ * @param {Array<Object>} [dayLogs] - Tages-Logs (fuer die BBT-Bestätigung; ohne sie bleibt es Kalendermethode).
  * @returns {Object} { hasData, ... }
  */
-export function predictCycle(periods, settings = {}, todayKey = householdToday()) {
+export function predictCycle(periods, settings = {}, todayKey = householdToday(), dayLogs = []) {
   const asc = sortPeriodsAsc(periods);
   const stats = cycleStats(asc, settings);
   const today = dayKey(todayKey);
@@ -393,7 +455,12 @@ export function predictCycle(periods, settings = {}, todayKey = householdToday()
   });
 
   const trackFertility = stats.trackFertility;
-  const ovulationDate = addLocalDays(nextStart, -lutealLength);
+  let ovulationDate = addLocalDays(nextStart, -lutealLength);
+  let ovulationConfirmed = false;
+  if (trackFertility) {
+    const confirmed = detectTemperatureShift(dayLogs, lastStart);
+    if (confirmed) { ovulationDate = confirmed; ovulationConfirmed = true; }
+  }
   const fertileStart = addLocalDays(ovulationDate, -(FERTILE_WINDOW_DAYS - 1));
   const fertileEnd = ovulationDate;
 
@@ -425,6 +492,7 @@ export function predictCycle(periods, settings = {}, todayKey = householdToday()
     nextStart,
     daysUntilNext,
     ovulationDate: trackFertility ? ovulationDate : null,
+    ovulationConfirmed: trackFertility ? ovulationConfirmed : false,
     fertileStart: trackFertility ? fertileStart : null,
     fertileEnd: trackFertility ? fertileEnd : null,
     daysUntilOvulation: trackFertility ? daysBetween(today, ovulationDate) : null,
@@ -571,7 +639,14 @@ export function cycleRing(prediction) {
 
   let ovulationFrac = null;
   if (prediction.trackFertility) {
-    const ovDay = total - prediction.lutealLength;            // Zyklustag des Eisprungs
+    // Kalendermethode: Zyklustag des Eisprungs = Zykluslänge − Lutealphase.
+    // Bei bestätigtem Anstieg (Phase 3) zählt stattdessen der TATSÄCHLICHE
+    // Zyklustag des bestätigten Datums - sonst zeigte der Ring weiter die
+    // kalendarische Position, obwohl ein Messwert etwas anderes belegt.
+    let ovDay = total - prediction.lutealLength;
+    if (prediction.ovulationConfirmed && prediction.lastStart && prediction.ovulationDate) {
+      ovDay = daysBetween(prediction.lastStart, prediction.ovulationDate) + 1;
+    }
     const fStart = ovDay - (FERTILE_WINDOW_DAYS - 1);
     const f = seg(fStart, ovDay);
     if (f.end > f.start) segments.push({ phase: PHASE.FERTILE, start: f.start, end: f.end });
@@ -583,5 +658,5 @@ export function cycleRing(prediction) {
   const clampedDay = Math.min(Math.max(prediction.cycleDay, 1), total);
   const currentFrac = (clampedDay - 0.5) / total;
 
-  return { total, segments, ovulationFrac, currentFrac };
+  return { total, segments, ovulationFrac, currentFrac, ovulationConfirmed: !!prediction.ovulationConfirmed };
 }

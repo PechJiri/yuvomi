@@ -4084,6 +4084,7 @@
                 "nextPeriod": "下次月经",
                 "fertileWindow": "易孕期",
                 "ovulation": "排卵",
+                "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "平均周期长度",
                 "avgPeriod": "平均经期长度",
                 "regularity": "规律性",
@@ -4174,6 +4175,14 @@
                 "mild": "Mild",
                 "moderate": "Moderate",
                 "severe": "Severe"
+            },
+            "bbt": {
+                "label": "Basal body temperature",
+                "placeholder": "e.g. 36.50",
+                "unitLabel": "Unit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optional. With regular measurements, a temperature rise can confirm ovulation for the current cycle."
             },
             "mood": {
                 "label": "心情",
