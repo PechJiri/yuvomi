@@ -1338,7 +1338,16 @@ button.budget-entry__title {
   width: 100%;
   background: none;
   border: 0;
-  padding: 0;
+  /* Trefffläche auf --target-base heben, ohne das Layout zu bewegen: das
+   * Padding vergrößert die Box, der negative Margin gibt den Platz zurück.
+   * NICHT der ::before-Musterfall aus tokens.css - der Titel trägt für die
+   * Ellipsis `overflow: hidden`, und das clippt ein eigenes, über die Box
+   * hinausragendes Pseudo-Element; die Sonde tastete dann zu Recht nur 24px.
+   * Die größere Box überlappt die Meta-Zeile darunter, und das darf sie: ein
+   * Klick dort öffnet über die Zeilen-Delegation dasselbe Edit-Modal, und
+   * die row-actions liegen rechts außerhalb der Button-Box. */
+  padding: calc((var(--target-base) - 1lh) / 2) 0;
+  margin-block: calc((var(--target-base) - 1lh) / -2);
   font: inherit;
   color: inherit;
   text-align: start;
