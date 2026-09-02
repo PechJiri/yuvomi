@@ -7,17 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **An `allowScripts` pin no longer points at a version that is not installed.** The field names
-  every package allowed to run install scripts, with an exact version, because the permission
-  applies to the reviewed build rather than to the name. Dependabot raises the dependency and the
-  lockfile but never touches that field - it does not know about it - so after every bump the pin
-  referred to a version that had been replaced. Nothing broke visibly, which is exactly why nobody
-  noticed: a permission pointing nowhere looks like one that holds. A guard now compares each pin
-  against the lockfile, so the next bump turns the suite red instead of leaving a dead pin behind.
+## [2.63.0] - 2026-09-02
 
 ### Added
+
+- **Third-party modules can declare capabilities in `module.json`** for dashboard widgets, household permissions (`ext:<module-id>`), and API token scopes - the same surfaces core modules use, without changing core application code.
+- **The dashboard dynamically loads third-party widget entry points** (`renderWidget`) from protected module assets, with per-widget error isolation and an optional generic options dialog driven by `optionsSchema`.
+- **Third-party modules can ship UI translations** in `locales/{locale}.json` with manifest `i18n.defaultLocale`, `labelKey` / `titleKey`, and the same 24 core languages as Yuvomi.
+- **OpenAPI now documents extension module capabilities** and module i18n metadata.
 
 - **Every page behind the app shell is now held to one page composition contract** (#929).
   Layout primitives (`.app-page--*`, `page-measure`, the bleed section), the `--layout-*` width
@@ -106,21 +103,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   promised field through the real normaliser, so dropping one turns the suite red rather than
   turning somebody's widget blank.
 
-
-### Added
-
-- **Third-party modules can declare capabilities in `module.json`** for dashboard widgets, household permissions (`ext:<module-id>`), and API token scopes - the same surfaces core modules use, without changing core application code.
-- **The dashboard dynamically loads third-party widget entry points** (`renderWidget`) from protected module assets, with per-widget error isolation and an optional generic options dialog driven by `optionsSchema`.
-- **Third-party modules can ship UI translations** in `locales/{locale}.json` with manifest `i18n.defaultLocale`, `labelKey` / `titleKey`, and the same 24 core languages as Yuvomi.
-- **OpenAPI now documents extension module capabilities** and module i18n metadata.
-
 ### Changed
 
 - **`GET /api/v1/modules` includes normalized `capabilities` and `i18n` metadata** (widgets, permission module metadata, API prefix, available locale files) for each installed extension module.
 - **Dashboard widgets, navigation, route guards, and admin permissions merge extension entries at runtime** from enabled modules, so third-party widget ids (`<module-id>:<widget-id>`) and `ext:<module-id>` permission keys behave like core modules.
 - **API token and MCP scope pickers include extension modules** from the live permissions catalog instead of a fixed core-only list.
-- **Extension `capabilities.api.prefix` must be exactly `/api/extensions/<module-id>`** — any other prefix, including a core path such as `/api/tasks`, is rejected so an installed module cannot take over a core token scope.
+- **Extension `capabilities.api.prefix` must be exactly `/api/extensions/<module-id>`** - any other prefix, including a core path such as `/api/tasks`, is rejected so an installed module cannot take over a core token scope.
 - **Extension UI labels resolve through a locale fallback chain** (UI language, module default, `en`, `de`, then static manifest labels) in navigation, Settings, permissions admin, and the dashboard widget chrome.
+- **`CONTRIBUTING.md` says who cleans up a stale PR: it follows from the cause, not from who has
+  time.** `main` moves faster than a review cycle. Mechanical fallout of that - rebases, `CHANGELOG`
+  collisions, the version line, `sw.js`, migration numbering - is the maintainer's; decisions inside
+  the feature stay with its author. Two promises follow: rebase once, after the review, and an open
+  architecture question never blocks a PR (#621 died waiting on one).
 
 ### Fixed
 
@@ -128,6 +122,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The extension permission catalog is scanned before the server accepts requests.** Starting the scan inside the `app.listen` callback left a window where stored `ext:<module-id> → none` rows were dropped and the deny-list treated a missing key as allow.
 - **Extension locale lookup no longer throws for module ids that collide with `Object.prototype`.** `constructor` (and `toString`) pass the module-id regex; looking them up on a plain `{}` store made `t()` throw instead of returning the key.
 - **The empty options dialog for a third-party widget no longer quotes the task-categories copy.** It has its own string.
+
+- **An `allowScripts` pin no longer points at a version that is not installed.** The field names
+  every package allowed to run install scripts, with an exact version, because the permission
+  applies to the reviewed build rather than to the name. Dependabot raises the dependency and the
+  lockfile but never touches that field - it does not know about it - so after every bump the pin
+  referred to a version that had been replaced. Nothing broke visibly, which is exactly why nobody
+  noticed: a permission pointing nowhere looks like one that holds. A guard now compares each pin
+  against the lockfile, so the next bump turns the suite red instead of leaving a dead pin behind.
 
 ## [2.62.0] - 2026-09-01
 

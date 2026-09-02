@@ -97,8 +97,8 @@ Schalte an, was dein Haushalt braucht; der Rest bleibt aus dem Weg.
 Zwei Dinge gibt es nur auf dem eigenen Server: der **Wandmodus** macht aus dem Küchen-Tablet eine
 Anzeige, die man quer durch den Raum liest, und ein **Immich-Bildschirmschoner** lässt die eigenen
 Fotos laufen, wenn der Bildschirm still steht. Jedes Modul im Detail steht in der
-[Spezifikation](docs/SPEC.md); wie du ein eigenes Modul einhängst, steht im
-[Modulhandbuch](MODULES.md).
+[Spezifikation](docs/SPEC.md); wie du ein eigenes Modul einhängst - mit eigenen
+Dashboard-Widgets, Rechten und Übersetzungen -, steht im [Modulhandbuch](MODULES.md).
 
 ---
 

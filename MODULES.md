@@ -223,7 +223,7 @@ Rules:
 - Permission module key: `ext:<module-id>` (appears in Settings -> Admin -> Roles & permissions).
 - Widget id in the dashboard: `<module-id>:<widget-id>` (namespace avoids collisions with core widgets).
 - `capabilities.permissions.module` is required when you declare widgets and/or `api.prefix`.
-- `capabilities.api.prefix`, when declared, must be exactly `/api/extensions/<module-id>` (trailing slash optional). Any other prefix — including a core path such as `/api/tasks` — is rejected and the module loads as errored.
+- `capabilities.api.prefix`, when declared, must be exactly `/api/extensions/<module-id>` (trailing slash optional). Any other prefix - including a core path such as `/api/tasks` - is rejected and the module loads as errored.
 - Widget `entry` must export `renderWidget(container, { size, options, user })`.
 - Widgets fetch their own data (typically from your sidecar API). They are not injected into `GET /api/v1/dashboard`.
 - `optionsSchema` supports up to 8 keys (`boolean`, `number`, `string`, or `enum` via `enum` array).

@@ -310,8 +310,8 @@ components:
 ## Page Composition
 
 Visual language (colour, typography, components, AA) lives in this document and
-`tokens.css`. **Spatial composition** — page width, header/body alignment,
-composition modes, and extension layout rules — lives in
+`tokens.css`. **Spatial composition** - page width, header/body alignment,
+composition modes, and extension layout rules - lives in
 [`docs/PAGE-COMPOSITION.md`](docs/PAGE-COMPOSITION.md) with primitives in `layout.css` and
 `public/utils/page-layout.js`.
 

@@ -97,7 +97,8 @@ Turn on what your household needs; the rest stays out of the way.
 Two more things you only get on your own server: **wall mode** turns the kitchen tablet into a
 readable-from-across-the-room display, and an **Immich screensaver** rotates your own photos when
 the screen goes idle. Every module in full detail is in the [spec](docs/SPEC.md); building your own
-drop-in module is covered in the [module guide](MODULES.md).
+drop-in module - with its own dashboard widgets, permissions and translations - is covered in the
+[module guide](MODULES.md).
 
 ---
 

@@ -3450,6 +3450,16 @@ modules/
 | `menu.show` | | Set `false` to hide from navigation. |
 | `menu.label` | | Navigation label (falls back to `name`). |
 | `menu.order` | | Integer sort order in the navigation list. |
+| `menu.labelKey` | | i18n key for the navigation label, resolved through the module's locale files (#919). |
+| `manifestVersion` | | Integer format number of the manifest itself, not of the module. Omitted means 1; a higher number than this Yuvomi reads is rejected outright, never read in part. |
+| `page.composition` | | Composition mode of the module page: `reading` \| `data` \| `dashboard` \| `form` \| `split` \| `full` (#929, [`PAGE-COMPOSITION.md`](PAGE-COMPOSITION.md)). The router mounts the module in the declared `.app-page--<mode>` root; `render()` receives that root as `container`. |
+| `page.width` | | `reading` \| `content` \| `wide`; refines the measure inside a measured mode, ignored by `split` and `full`. `page.navigation` / `page.responsive` accept `standard` only. |
+| `capabilities.permissions` | | Registers the module as `ext:<module-id>` in household permissions, with optional per-widget keys (#919). Required when widgets or an API prefix are declared. |
+| `capabilities.widgets[]` | | Dashboard widgets (`<module-id>:<widget-id>`): `entry` exporting `renderWidget(container, { size, options, user })`, `defaultSize`, `defaultVisible`, optional `optionsSchema` (up to 8 keys). |
+| `capabilities.api.prefix` | | Exactly `/api/extensions/<module-id>`; any other prefix, including a core path, is rejected and the module loads as errored, so it cannot take over a core token scope. |
+| `i18n.defaultLocale` | | Fallback language for `locales/{locale}.json` shipped with the module; lookup order is UI locale, this default, `en`, `de`, then the static manifest labels. |
+
+The full contract for every optional block lives in [`MODULES.md`](../MODULES.md); this table names the fields so the data model is complete.
 
 **Where a third-party module is controlled:**
 - **Settings → Modules → Active modules** (admin-only): enable/disable an individual third-party module without restarting the server.
