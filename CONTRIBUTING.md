@@ -398,6 +398,22 @@ Tuesday, because a household planner gets used most at the weekend: an interface
 
 This is a promise the project can keep because it is not a promise: it is a condition that has to pass. That distinction is the whole point. A cadence held by good intentions erodes without anyone noticing except the people who reported the problem.
 
+### The pre-release handrail
+
+`npm run test:document-guards` is the one suite that is deliberately not in `npm test` and not in CI. It drives a real browser against a seeded server and costs around 80 minutes (82 measured on 2 September 2026), which is not a price worth paying on every push for invariants that only change in bursts. It is a handrail run once before a release instead.
+
+**It is required for any release that carries the weekly train**, that is, any release whose diff touches `public/pages`, `public/styles`, `public/utils`, `public/components` or `public/settings`. A release on the other track does not need it: those probes measure the rendered document, and a change that never reaches the document cannot move them.
+
+Treat the path list as a heuristic rather than a boundary. What the probes see also depends on how full the test instance is, and that comes from `scripts/seed-demo.js` and from the shape of server responses: a fuller instance makes header filters wider, which is how one probe stayed green in isolation and failed in a full run. If you change the seed or a response shape substantially, run the handrail even when no interface path is in your diff.
+
+Read its exit code from a file, never from a pipe:
+
+```bash
+npm run test:document-guards > /tmp/dg.log 2>&1; echo $?
+```
+
+A `| tail` reports the status of `tail`, not of the run. That is not a hypothetical: v2.64.0 shipped on 2 September without this handrail because the step lived only in `docs/test-suites.md` and not in the release checklist anyone actually followed.
+
 ---
 
 ## AI Assistance
