@@ -368,7 +368,7 @@ export async function render(container, ctx = {}) {
 
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <div class="health-page page-measure--narrow">
+    <div class="health-page app-page app-page--dashboard" data-composition="dashboard">
       <!-- Kanonischer Modulkopf: die Sub-Tab-Leiste wechselt eine SICHT
            innerhalb der Gesundheit (alle Health-Routen tragen module: 'health'),
            also steht der Modulname als Large Title ueber ihr - dasselbe Muster

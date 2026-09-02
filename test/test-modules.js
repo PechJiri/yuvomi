@@ -500,3 +500,26 @@ test('listModules: fehlende widget entry datei → error status', async () => {
   assert.equal(bad.status, 'error');
   assert.match(bad.error, /does not exist/i);
 });
+
+// Die Seitenerklaerung (`page.composition`, `page.width`) ist seit #929 Teil
+// des Manifests. Sie zaehlt nur, wenn der Router sie auch anwendet - der Guard
+// dafuer steht in test-frontend-audit.js (PAGE-012); hier wird die Normalisierung
+// festgehalten, auf die er sich verlaesst.
+test('page.composition wird normalisiert und page.width folgt dem Modus', () => {
+  const norm = (page) => svc.normalizeManifest({ id: 'x-mod', entry: 'index.js', page }, 'x-mod').page;
+  assert.deepEqual(norm(undefined), { composition: 'reading', width: 'reading', navigation: 'standard', responsive: 'standard' },
+    'ohne page-Block: reading in Lesebreite');
+  assert.equal(norm({ composition: 'data' }).width, 'content', 'data liest --layout-content');
+  assert.equal(norm({ composition: 'dashboard' }).width, 'wide', 'dashboard liest --layout-wide');
+  assert.equal(norm({ composition: 'full' }).width, 'reading',
+    'full traegt den Rueckfall reading - layout.css wendet width auf full/split nicht an');
+  assert.equal(norm({ composition: 'data', width: 'wide' }).width, 'wide', 'eine erklaerte Breite gewinnt');
+  assert.equal(norm({ composition: 'tabelle' }).composition, 'reading', 'ein unbekannter Modus faellt auf reading');
+  assert.equal(norm({ composition: 'data', width: 'riesig' }).width, 'content', 'eine unbekannte Breite faellt auf die des Modus');
+  // navigation/responsive folgen derselben Regel: MODULES.md nennt nur
+  // `standard`, und ein Tippfehler darf nicht als eigener Zustand ankommen
+  // (Codex, dritte Runde an #995 - die erste Fassung reichte ihn roh durch).
+  assert.equal(norm({ navigation: 'tabs' }).navigation, 'standard', 'eine unbekannte navigation faellt auf standard');
+  assert.equal(norm({ responsive: 'collapse' }).responsive, 'standard', 'ein unbekanntes responsive faellt auf standard');
+  assert.equal(norm({ navigation: 'standard', responsive: 'standard' }).navigation, 'standard', 'standard bleibt standard');
+});

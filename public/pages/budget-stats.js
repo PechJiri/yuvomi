@@ -63,7 +63,13 @@ async function loadStats() {
 function renderShell() {
   view.root.replaceChildren();
   view.root.insertAdjacentHTML('beforeend', `
-    <div class="budget-stats">
+    <!-- reading, wie die Budget-Seite, in der dieses Panel steckt: dashboard
+         hier setzte --page-measure fuer den Unterbaum auf --layout-wide, und das
+         Kennzahlenband der Berichte lief auf 1200px, waehrend der Budget-Kopf
+         und jeder andere Reiter bei 720px enden (auf main war es 720). Ein
+         eigener Modus je Reiter hiesse, auch den Kopf je Reiter umzuschalten -
+         das ist Welle C in docs/PAGE-COMPOSITION.md, keine Nebenwirkung. -->
+    <div class="budget-stats app-page app-page--reading page-measure--narrow" data-composition="reading">
       <!-- Nur noch die Auflösung: der Zeitraum selbst wird über den geteilten
            Kopf-Stepper des Moduls gewählt. Optik aus dem geteilten
            .segmented-Baustein. -->

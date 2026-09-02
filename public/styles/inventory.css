@@ -49,7 +49,7 @@
  * (gemessen 1440 vs. 940px bei 1440px Viewport). Scoped statt am geteilten
  * Selektor, damit Budgets eigene volle Breite unangetastet bleibt. */
 .inventory-list .metric-grid {
-  max-width: var(--content-max-width-narrow);
+  max-width: var(--page-measure, var(--layout-reading));
 }
 
 /* --------------------------------------------------------

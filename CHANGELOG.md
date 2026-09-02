@@ -19,6 +19,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Every page behind the app shell is now held to one page composition contract** (#929).
+  Layout primitives (`.app-page--*`, `page-measure`, the bleed section), the `--layout-*` width
+  tokens and the `page-layout.js` helpers arrive together with an audit that enforces them. The
+  audit derives its scope from `router.js` rather than from a list: a route with
+  `requiresAuth: false` renders without navigation and is outside the contract, everything else
+  is inside it, and a page added tomorrow is covered the day it gets a route. Three pages that
+  predate the contract are named in the guard, and a second test fails if that list grows, so
+  migrating a page is a deletion rather than a table somebody has to keep honest. The first draft
+  marked one reference page in the production markup instead; that attribute shipped to every
+  visitor and said nothing about the other thirty pages, so the guarantee moved into the guard.
+  The spec lives at `docs/PAGE-COMPOSITION.md`. Two reviews on the way in found what the first
+  cut had left undone: an extension module's `page.composition` and `page.width` were checked
+  on the server and shown in the admin list but never applied to the page, so `data` looked
+  exactly like `reading`; now the router mounts the module in the declared root (the
+  `container` a module's `render()` receives is that root, and `context.page` says which). The
+  reference page had lost the gap between its header and its body, and its measured header
+  wrapped the title in a rail that hid the module seal and the docked title; notes was declared a
+  reading page while its masonry ran the full width beside a 720px header, and is now `full`.
+  Three of the new guards were green without seeing anything: the breakpoint check let the
+  spec's own forbidden example through, the negative-margin check did not know `calc(-1 * ...)`,
+  and the inline-width check read the whole `style` attribute instead of the value. Each of
+  them now has a counter-proof. A second round found the header formula for a tab bar still
+  subtracting the reading width by name, so the housekeeping header (a `data` page) stopped
+  240px before its cards; it now subtracts the measure of its own page, and pages without one
+  (`full`, `split`) set that measure to `100%` rather than `none`, because `none` inside a
+  `calc()` does not degrade, it invalidates. The split grid sat on the page root, where the
+  helper's header and body would have become its two cells; it sits on the body now, and
+  `full`/`split` roots built by the helper take the shell height so a body can scroll on its
+  own. Subscriptions was declared `reading` while its analytics grid and list never met the
+  measure - only the KPI band did, and the page acquired a width jump; it is `full` until its
+  sections follow one measure, and split-expenses, a header over a two-column layout, is
+  `split`. The reach proof of the audit could not catch the failure it was written for: with a
+  dead router expression the scope did not shrink to nothing but widened to every page, login
+  included, and every lower bound stayed green; the expression now has to have read the
+  standalone routes before the file walk is allowed to add anything. A third round found the
+  helpers escaping only attribute values: `id`, `className` and attribute keys went into the
+  markup raw, and these helpers are the API an extension is told to build its page with, so a
+  per-record id was the expected way to hit it; every attribute value now goes through the
+  shared `esc()`. A fourth round showed that `esc()` is the wrong tool for an attribute key: it
+  knows `& < > " '` and not the space or `=` that end a name outside the quotes, so a key with
+  either in it became three attributes, one of them live, while the new guard stayed green with
+  its quote-based payload. Keys are now validated against an attribute-name pattern and an
+  invalid one throws like an unknown mode does; the guard tokenizes the opening tag the way a
+  browser does instead of reading the string. A fifth round caught the split grid measuring
+  the viewport: beside the expanded sidebar a 1024px screen leaves the page about 804px, and a
+  master rail allowed 720px of that left the detail rail a few pixels wide on common laptops;
+  the split root is a container now, the grid switches on the page's own width like the
+  expenses split already did, and the master rail never takes more than half. A sixth round
+  found the header helper still building a rail box for `measured` without `narrow`, the one
+  combination the spec still offered: a real element, not a `display: contents` shim, and it
+  put the title one level below the toolbar where the large-title rules and the collapsing
+  header look for a direct child. No page used it. The option, the element and its rules are
+  gone, every option combination renders the slots as direct children, and a guard fails on
+  either class name anywhere under `public/`. A seventh round found the schedule page declared
+  `data` (960px) under a header that runs full width: nothing showed the measure except the
+  primitives that happen to consume it, so the KPI band of the statistics ended at 960 while
+  the filter card and the result cards beside it did not (on main nothing was capped).
+  Schedule and documents, the two pages with that shape, declare `full` and cap nothing,
+  which is what they looked like before; the page's own rows inside its full-width cards
+  follow suit and no longer stop at the reading width. A guard reads the measure consumers
+  from the stylesheets and fails on any measured page whose header does not narrow but whose
+  markup contains one of them. The budget
+  reports panel had declared itself a `dashboard` inside the `reading`
+  budget page, which set the measure of its subtree to 1200px while the shared header and
+  every other tab end at 720px; it declares the mode of the page it lives in, and a guard holds
+  the two budget panels to that. A split body now carries the page gutter like the measured
+  modes (its rails started at x=0, left of the title), the manifest fields `page.navigation`
+  and `page.responsive` fall back to `standard` like `composition` and `width` do instead of
+  passing a typo through, and the worked example in the spec no longer draws the rail element
+  that the helper had stopped emitting.
+
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from
   #919 - widgets, `ext:<module-id>` permissions, an API prefix, a locale chain - is a promise made

@@ -16,6 +16,7 @@ import { emptyHintEl, emptyStateEl } from '/utils/empty-state.js';
 import { wireScrollFade, wireCollapsingHeader, wireSwipeToDismiss } from '/utils/ux.js';
 import { TOAST_SURFACES, toastSurface } from '/utils/toast-surface.js';
 import { BULK_PILL_LAYER, clearBulkPill } from '/utils/bulk-pill.js';
+import { COMPOSITION_MODES } from '/utils/page-layout.js';
 import { init as initReminders, stop as stopReminders } from '/reminders.js';
 import { initPush, stopPush } from '/push.js';
 import { numberLocaleFor } from '/settings/region-presets.js';
@@ -1546,7 +1547,19 @@ async function renderPage(route, previousPath = null, scrollTarget = 0) {
     // der Wrapper war zuvor bis zur vollständigen Auflösung von render() opak-0,
     // wodurch jedes vor dem Daten-await geseedete Skeleton beim Erstladen nie
     // erschien). Der Rest von render() (Daten + Verdrahtung) wird danach abgewartet.
-    const renderPromise = module.render(pageWrapper, { user: currentUser });
+    //
+    // Ein Erweiterungsmodul rendert nicht in den nackten Wrapper, sondern in
+    // die Seitenwurzel seines im Manifest erklaerten Modus (`page.composition`,
+    // `page.width`; docs/PAGE-COMPOSITION.md). Angewandt wird die Erklaerung
+    // HIER, sonst waere sie ein Feld ohne Wirkung: der Server prueft sie, die
+    // Admin-Liste zeigt sie, und die Seite saehe trotzdem aus wie ohne.
+    const target = route.thirdPartyModule
+      ? mountExtensionPage(pageWrapper, route.thirdPartyModule)
+      : pageWrapper;
+    const context = route.thirdPartyModule
+      ? { user: currentUser, page: { ...route.thirdPartyModule.page } }
+      : { user: currentUser };
+    const renderPromise = module.render(target, context);
 
     // Schon jetzt umziehen, nicht erst nach den Daten: die meisten Seiten legen
     // ihren FAB im synchronen Teil an, und er soll gar nicht erst im Scrollport
@@ -3340,6 +3353,27 @@ function renderSearchResults(container, data, onClose) {
 // ausblenden (CSS) und einen erklärenden Banner oben in die Seite einfügen.
 // navModuleAccess liefert 'write' für nicht-gateable Module (Dashboard, Settings,
 // Third-Party), sodass diese nie fälschlich als read-only markiert werden.
+/**
+ * Die Seitenwurzel eines Erweiterungsmoduls: `.app-page` im erklaerten Modus,
+ * mit `--page-measure` gesetzt und `page.width` als Verfeinerung daran
+ * (layout.css). Das Modul bekommt DIESE Wurzel als `container` und baut darin
+ * Kopf und Koerper mit den Helfern aus /utils/page-layout.js - Geometrie
+ * gehoert dem Kern, nicht dem Modul.
+ *
+ * Der Modus ist serverseitig normalisiert (services/modules.js); der Rueckfall
+ * hier faengt nur einen manipulierten oder veralteten Listeneintrag ab.
+ */
+function mountExtensionPage(wrapper, thirdPartyModule) {
+  const page = thirdPartyModule?.page || {};
+  const mode = COMPOSITION_MODES.includes(page.composition) ? page.composition : 'reading';
+  const root = document.createElement('div');
+  root.className = `app-page app-page--${mode} extension-page`;
+  root.dataset.composition = mode;
+  if (page.width) root.dataset.pageWidth = String(page.width);
+  wrapper.appendChild(root);
+  return root;
+}
+
 function applyModuleReadonly(moduleName, pageWrapper) {
   const readOnly = navModuleAccess(moduleName) === 'read';
   document.documentElement.toggleAttribute('data-module-readonly', readOnly);
