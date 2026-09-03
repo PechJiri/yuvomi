@@ -5,7 +5,11 @@
  */
 
 export function categoryIdentityKey(value) {
-  return String(value ?? '').normalize('NFKC').toUpperCase().toLowerCase().normalize('NFKC');
+  return String(value ?? '')
+    .normalize('NFKC')
+    .toUpperCase().toLowerCase()
+    .toUpperCase().toLowerCase()
+    .normalize('NFKC');
 }
 
 function identityKey(value) {

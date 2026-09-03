@@ -87,6 +87,11 @@ test('picker identity follows the server Unicode case-folding contract', () => {
     [1],
   );
   assert.equal(picker.findExactCategory(categories, 'STRASSE', 'personal')?.id, 1);
+  assert.equal(picker.categoryIdentityKey('ẞ'), picker.categoryIdentityKey('SS'));
+  assert.equal(
+    picker.categoryIdentityKey(picker.categoryIdentityKey('ẞ')),
+    picker.categoryIdentityKey('ẞ'),
+  );
 });
 
 test('browser and server category identity agree for every Unicode scalar value', () => {
