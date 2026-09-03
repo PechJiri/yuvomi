@@ -278,11 +278,20 @@ test('replaceSubjectPermissions ersetzt Capabilities nur bei ausdrücklichem Fel
   assert.deepEqual(getSubjectPermissions(db, 'role', 'child').capabilities, {});
 });
 
-test('Leere Eingabe = „von Rolle erben" (alle Overrides entfernt)', () => {
+test('Leere Eingabe leert die alten Achsen und lässt ausgelassene Capabilities bestehen', () => {
   const db = freshDb();
   addUser(db, { id: 11, role: 'member', family_role: 'child' });
-  replaceSubjectPermissions(db, 'user', 11, { modules: { budget: 'none' } });
+  replaceSubjectPermissions(db, 'user', 11, {
+    modules: { budget: 'none' },
+    capabilities: { notes_manage_household_categories: 'allow' },
+  });
   replaceSubjectPermissions(db, 'user', 11, {}); // zurücksetzen
+  assert.deepEqual(getSubjectPermissions(db, 'user', 11), {
+    modules: {},
+    widgets: {},
+    capabilities: { notes_manage_household_categories: 'allow' },
+  });
+  replaceSubjectPermissions(db, 'user', 11, { capabilities: {} });
   assert.deepEqual(getSubjectPermissions(db, 'user', 11), { modules: {}, widgets: {}, capabilities: {} });
 });
 
