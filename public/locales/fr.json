@@ -3001,6 +3001,7 @@
             "progress": "{{current}} sur {{total}} · {{name}}",
             "completedWithErrors": "Import terminé avec des erreurs",
             "completed": "Dossier importé",
+            "cancelled": "Importation annulée",
             "resultCounts": "{{uploaded}} importés · {{skipped}} ignorés · {{rejected}} refusés · {{failed}} en échec",
             "failedTitle": "Éléments en échec",
             "noUploadableFiles": "Ce dossier ne contient aucun fichier pouvant être importé.",

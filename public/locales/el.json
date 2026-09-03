@@ -3001,6 +3001,7 @@
             "progress": "{{current}} από {{total}} · {{name}}",
             "completedWithErrors": "Η μεταφόρτωση ολοκληρώθηκε με σφάλματα",
             "completed": "Ο φάκελος μεταφορτώθηκε",
+            "cancelled": "Η μεταφόρτωση ακυρώθηκε",
             "resultCounts": "{{uploaded}} μεταφορτώθηκαν · {{skipped}} παραλείφθηκαν · {{rejected}} απορρίφθηκαν · {{failed}} απέτυχαν",
             "failedTitle": "Στοιχεία που απέτυχαν",
             "noUploadableFiles": "Αυτός ο φάκελος δεν περιέχει αρχεία που μπορούν να μεταφορτωθούν.",

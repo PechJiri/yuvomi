@@ -3058,6 +3058,7 @@
             "progress": "{{current}} of {{total}} · {{name}}",
             "completedWithErrors": "Upload completed with errors",
             "completed": "Folder uploaded",
+            "cancelled": "Upload cancelled",
             "resultCounts": "{{uploaded}} uploaded · {{skipped}} skipped · {{rejected}} rejected · {{failed}} failed",
             "failedTitle": "Items that failed",
             "noUploadableFiles": "This folder contains no files that can be uploaded.",

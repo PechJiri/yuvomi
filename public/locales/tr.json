@@ -3001,6 +3001,7 @@
             "progress": "{{current}} / {{total}} · {{name}}",
             "completedWithErrors": "Yükleme hatalarla tamamlandı",
             "completed": "Klasör yüklendi",
+            "cancelled": "Yükleme iptal edildi",
             "resultCounts": "{{uploaded}} yüklendi · {{skipped}} atlandı · {{rejected}} reddedildi · {{failed}} başarısız",
             "failedTitle": "Başarısız öğeler",
             "noUploadableFiles": "Bu klasörde yüklenebilecek dosya yok.",

@@ -3058,6 +3058,7 @@
             "progress": "{{current}} sa {{total}} · {{name}}",
             "completedWithErrors": "Natapos ang upload na may mga error",
             "completed": "Na-upload ang folder",
+            "cancelled": "Kinansela ang pag-upload",
             "resultCounts": "{{uploaded}} na-upload · {{skipped}} nilaktawan · {{rejected}} tinanggihan · {{failed}} nabigo",
             "failedTitle": "Mga nabigong item",
             "noUploadableFiles": "Walang file sa folder na ito na maaaring i-upload.",

@@ -3001,6 +3001,7 @@
             "progress": "{{current}} / {{total}} · {{name}}",
             "completedWithErrors": "エラーを伴ってアップロードが完了しました",
             "completed": "フォルダーをアップロードしました",
+            "cancelled": "アップロードをキャンセルしました",
             "resultCounts": "アップロード {{uploaded}} · スキップ {{skipped}} · 拒否 {{rejected}} · 失敗 {{failed}}",
             "failedTitle": "失敗した項目",
             "noUploadableFiles": "このフォルダーにはアップロード可能なファイルがありません。",

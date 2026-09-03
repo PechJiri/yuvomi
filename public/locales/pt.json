@@ -3001,6 +3001,7 @@
             "progress": "{{current}} de {{total}} · {{name}}",
             "completedWithErrors": "Carregamento concluído com erros",
             "completed": "Pasta carregada",
+            "cancelled": "Carregamento cancelado",
             "resultCounts": "{{uploaded}} carregados · {{skipped}} ignorados · {{rejected}} rejeitados · {{failed}} falharam",
             "failedTitle": "Itens com falha",
             "noUploadableFiles": "Esta pasta não contém ficheiros que possam ser carregados.",

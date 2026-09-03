@@ -3058,6 +3058,7 @@
             "progress": "{{current}} از {{total}} · {{name}}",
             "completedWithErrors": "بارگذاری با خطا پایان یافت",
             "completed": "پوشه بارگذاری شد",
+            "cancelled": "بارگذاری لغو شد",
             "resultCounts": "{{uploaded}} بارگذاری · {{skipped}} رد · {{rejected}} پذیرفته‌نشده · {{failed}} ناموفق",
             "failedTitle": "موارد ناموفق",
             "noUploadableFiles": "این پوشه فایل قابل بارگذاری ندارد.",

@@ -3058,6 +3058,7 @@
             "progress": "{{current}} / {{total}} · {{name}}",
             "completedWithErrors": "Tải lên hoàn tất nhưng có lỗi",
             "completed": "Đã tải thư mục lên",
+            "cancelled": "Đã hủy tải lên",
             "resultCounts": "{{uploaded}} đã tải · {{skipped}} bỏ qua · {{rejected}} từ chối · {{failed}} thất bại",
             "failedTitle": "Mục bị lỗi",
             "noUploadableFiles": "Thư mục này không có tệp nào có thể tải lên.",

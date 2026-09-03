@@ -3001,6 +3001,7 @@
             "progress": "{{current}} / {{total}} · {{name}}",
             "completedWithErrors": "上传完成，但有错误",
             "completed": "文件夹已上传",
+            "cancelled": "已取消上传",
             "resultCounts": "已上传 {{uploaded}} · 已跳过 {{skipped}} · 已拒绝 {{rejected}} · 失败 {{failed}}",
             "failedTitle": "失败的项目",
             "noUploadableFiles": "此文件夹不包含可上传的文件。",

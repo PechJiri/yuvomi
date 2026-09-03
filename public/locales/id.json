@@ -3058,6 +3058,7 @@
             "progress": "{{current}} dari {{total}} · {{name}}",
             "completedWithErrors": "Unggahan selesai dengan kesalahan",
             "completed": "Folder diunggah",
+            "cancelled": "Unggahan dibatalkan",
             "resultCounts": "{{uploaded}} diunggah · {{skipped}} dilewati · {{rejected}} ditolak · {{failed}} gagal",
             "failedTitle": "Item yang gagal",
             "noUploadableFiles": "Folder ini tidak berisi file yang dapat diunggah.",

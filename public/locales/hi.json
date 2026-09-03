@@ -3001,6 +3001,7 @@
             "progress": "{{current}} / {{total}} · {{name}}",
             "completedWithErrors": "अपलोड त्रुटियों के साथ पूरा हुआ",
             "completed": "फ़ोल्डर अपलोड हुआ",
+            "cancelled": "अपलोड रद्द किया गया",
             "resultCounts": "{{uploaded}} अपलोड · {{skipped}} छोड़ी · {{rejected}} अस्वीकृत · {{failed}} विफल",
             "failedTitle": "विफल आइटम",
             "noUploadableFiles": "इस फ़ोल्डर में अपलोड की जा सकने वाली फ़ाइलें नहीं हैं।",

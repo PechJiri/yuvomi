@@ -3001,6 +3001,7 @@
             "progress": "{{current}} de {{total}} · {{name}}",
             "completedWithErrors": "Carga completada con errores",
             "completed": "Carpeta subida",
+            "cancelled": "Carga cancelada",
             "resultCounts": "{{uploaded}} subidos · {{skipped}} omitidos · {{rejected}} rechazados · {{failed}} fallidos",
             "failedTitle": "Elementos con error",
             "noUploadableFiles": "Esta carpeta no contiene archivos que se puedan subir.",

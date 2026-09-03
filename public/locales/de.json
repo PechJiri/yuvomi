@@ -3058,6 +3058,7 @@
             "progress": "{{current}} von {{total}} · {{name}}",
             "completedWithErrors": "Upload mit Fehlern abgeschlossen",
             "completed": "Ordner hochgeladen",
+            "cancelled": "Upload abgebrochen",
             "resultCounts": "{{uploaded}} hochgeladen · {{skipped}} übersprungen · {{rejected}} abgelehnt · {{failed}} fehlgeschlagen",
             "failedTitle": "Fehlgeschlagene Einträge",
             "noUploadableFiles": "Dieser Ordner enthält keine Dateien, die hochgeladen werden können.",

@@ -13,6 +13,8 @@ import {
   buildFolderUploadPlan,
   executeFolderUploadPlan,
   formatFolderUploadTimestamp,
+  folderUploadOutcome,
+  supportsDirectoryUpload,
 } from '../public/utils/folder-upload.js';
 
 function file(path, {
@@ -124,6 +126,33 @@ test('uses the server-trimmed folder name and rejects whitespace-only branches',
   assert.equal(plan.files[0].targetRef, 'id:19');
   assert.equal(plan.files[1].reason, 'unsafe-path');
   assert.equal(plan.folders.some((folder) => folder.key.includes('   ')), false);
+});
+
+test('normalizes NFD folder names to the existing NFC sibling without changing case', () => {
+  const plan = buildFolderUploadPlan([
+    file('Cafe\u0301/permit.pdf'),
+    file('Café/second.pdf'),
+  ], {
+    ...baseOptions,
+    folders: [
+      ...baseOptions.folders,
+      { id: 19, name: 'Café', parent_id: 10 },
+    ],
+  });
+
+  assert.deepEqual(
+    plan.folders.map(({ key, name, action, targetId }) => ({ key, name, action, targetId })),
+    [{ key: 'Café', name: 'Café', action: 'reuse', targetId: 19 }],
+  );
+  assert.deepEqual(plan.files.map((entry) => entry.targetRef), ['id:19', 'id:19']);
+});
+
+test('requires a proven directory picker and excludes iPhone, iPad and iPadOS desktop mode', () => {
+  assert.equal(supportsDirectoryUpload({ hasWebkitDirectory: false }), false);
+  assert.equal(supportsDirectoryUpload({ hasWebkitDirectory: true, platform: 'MacIntel', maxTouchPoints: 0 }), true);
+  assert.equal(supportsDirectoryUpload({ hasWebkitDirectory: true, platform: 'iPhone', maxTouchPoints: 5 }), false);
+  assert.equal(supportsDirectoryUpload({ hasWebkitDirectory: true, platform: 'iPad', maxTouchPoints: 5 }), false);
+  assert.equal(supportsDirectoryUpload({ hasWebkitDirectory: true, platform: 'MacIntel', maxTouchPoints: 5 }), false);
 });
 
 test('rejects empty files but preserves their safe folder path', () => {
@@ -439,4 +468,22 @@ test('stops additional writes when the user cancels a long-running upload', asyn
   assert.deepEqual(uploaded, ['first.pdf']);
   assert.equal(result.cancelled, true);
   assert.equal(result.uploaded.length, 1);
+});
+
+test('reports cancelled and partial upload outcomes without success semantics', () => {
+  assert.deepEqual(folderUploadOutcome({ cancelled: true, failed: [], uploaded: [] }), {
+    heading: 'cancelled',
+    toast: 'cancelled',
+    tone: 'warning',
+  });
+  assert.deepEqual(folderUploadOutcome({ cancelled: false, failed: [{}], uploaded: [] }), {
+    heading: 'completedWithErrors',
+    toast: 'completedWithErrors',
+    tone: 'warning',
+  });
+  assert.deepEqual(folderUploadOutcome({ cancelled: false, failed: [], uploaded: [{}] }), {
+    heading: 'completed',
+    toast: 'uploadedToast',
+    tone: 'success',
+  });
 });

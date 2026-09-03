@@ -326,7 +326,8 @@ test('folder upload is a separate choice and does not change the regular multi-f
   assert.match(page, /from '\/utils\/folder-upload\.js'/);
   assert.match(page, /id="document-file" type="file" multiple/);
   assert.match(page, /id="document-folder-input" type="file" webkitdirectory/);
-  assert.match(page, /function supportsDirectoryUpload\(\)/);
+  assert.match(page, /supportsDirectoryUpload,/);
+  assert.match(page, /function canPickDirectory\(\)/);
   assert.match(page, /navigator\.maxTouchPoints/);
   assert.ok(page.includes("t('documents.folderUpload.unsupportedBrowser')"));
 });
@@ -358,6 +359,8 @@ test('dropping files emits the ordinary input change path that clears a selected
   const drop = page.slice(page.indexOf("dropzone.addEventListener('drop'"), page.indexOf('const FOLDER_UPLOAD_REASON_KEYS'));
   assert.match(drop, /input\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
   assert.doesNotMatch(drop, /syncSelectedFile\(\);/);
+  const normalFileChange = page.slice(page.indexOf("fileInput.addEventListener('change'"), page.indexOf("folderInput.addEventListener('change'"));
+  assert.match(normalFileChange, /submit\.textContent = t\('documents\.uploadAction'\)/);
 });
 
 test('folder conflict metadata reuses the already loaded status and fetches only its counterpart', () => {
@@ -377,6 +380,18 @@ test('folder upload keeps sequential writes, exposes cancellation and preserves 
   assert.ok(page.includes("t('documents.folderUpload.failedTitle')"));
   assert.match(page, /await loadUploadConflictDocuments\(\)/);
   assert.match(page, /plan\.counts\.upload < 1 && plan\.counts\.createFolders < 1/);
+});
+
+test('running folder uploads freeze plan controls, cancel on modal close, and surface non-success outcomes', () => {
+  const modal = page.slice(page.indexOf('function openDocumentModal'), page.indexOf('function bindDropzone'));
+  assert.match(modal, /onClose\(\)\s*\{[\s\S]*requestFolderUploadCancel/);
+  const binding = page.slice(page.indexOf('function bindFolderUpload'), page.indexOf('function updateFolderUploadProgress'));
+  assert.match(binding, /if \(panel\._folderUpload\.running\) return/);
+  const save = page.slice(page.indexOf('async function saveFolderUpload'), page.indexOf('async function saveDocument'));
+  assert.match(save, /setFolderUploadControlsDisabled\(panel, true\)/);
+  assert.match(save, /folderUploadOutcome\(result\)/);
+  assert.match(save, /outcome\.tone/);
+  assert.doesNotMatch(save, /uploadedToast', \{ count: result\.uploaded\.length \}\), 'success'/);
 });
 
 test('folder preview avoids horizontal overflow on mobile', () => {
@@ -418,6 +433,15 @@ test('folder-upload count labels have singular forms in every supported locale',
     for (const key of countKeys) {
       assert.equal(typeof strings[`${key}_one`], 'string', `${file}: ${key}_one is missing`);
       assert.notEqual(strings[`${key}_one`].trim(), '', `${file}: ${key}_one is empty`);
+    }
+  }
+});
+
+test('new folder-upload locale copy does not introduce em or en dashes', () => {
+  for (const file of ['ru.json', 'uk.json']) {
+    const strings = JSON.parse(read(`../public/locales/${file}`)).documents.folderUpload;
+    for (const value of Object.values(strings)) {
+      assert.doesNotMatch(value, /[—–]/, `${file}: folder-upload copy must use hyphens`);
     }
   }
 });

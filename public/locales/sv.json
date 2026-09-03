@@ -3001,6 +3001,7 @@
             "progress": "{{current}} av {{total}} · {{name}}",
             "completedWithErrors": "Uppladdningen slutfördes med fel",
             "completed": "Mappen har laddats upp",
+            "cancelled": "Uppladdningen avbröts",
             "resultCounts": "{{uploaded}} uppladdade · {{skipped}} överhoppade · {{rejected}} avvisade · {{failed}} misslyckade",
             "failedTitle": "Misslyckade objekt",
             "noUploadableFiles": "Mappen innehåller inga filer som kan laddas upp.",

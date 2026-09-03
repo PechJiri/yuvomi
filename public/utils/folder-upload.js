@@ -17,7 +17,38 @@ function comparableFileName(value) {
 }
 
 function serverFolderName(value) {
-  return String(value || '').trim();
+  return String(value || '').trim().normalize('NFC');
+}
+
+/**
+ * Return whether the browser exposes a directory picker we can safely offer.
+ *
+ * The DOM probe belongs to the Documents page. Keeping this decision pure
+ * makes the conservative iOS/iPadOS guard executable in Node as well.
+ */
+export function supportsDirectoryUpload({
+  hasWebkitDirectory = false,
+  platform = '',
+  userAgent = '',
+  maxTouchPoints = 0,
+} = {}) {
+  if (!hasWebkitDirectory) return false;
+  const device = `${platform} ${userAgent}`;
+  const isIOS = /iPad|iPhone|iPod|iOS/i.test(device)
+    || (platform === 'MacIntel' && Number(maxTouchPoints) > 1);
+  return !isIOS;
+}
+
+/**
+ * Classify a completed executor result without treating partial work as a
+ * successful upload. The page owns the localized copy for these keys.
+ */
+export function folderUploadOutcome(result = {}) {
+  if (result.cancelled) return { heading: 'cancelled', toast: 'cancelled', tone: 'warning' };
+  if ((result.failed || []).length) {
+    return { heading: 'completedWithErrors', toast: 'completedWithErrors', tone: 'warning' };
+  }
+  return { heading: 'completed', toast: 'uploadedToast', tone: 'success' };
 }
 
 function refForFolderId(value) {

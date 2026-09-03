@@ -3058,6 +3058,7 @@
             "progress": "{{current}} van {{total}} · {{name}}",
             "completedWithErrors": "Upload voltooid met fouten",
             "completed": "Map geüpload",
+            "cancelled": "Upload geannuleerd",
             "resultCounts": "{{uploaded}} geüpload · {{skipped}} overgeslagen · {{rejected}} geweigerd · {{failed}} mislukt",
             "failedTitle": "Mislukte items",
             "noUploadableFiles": "Deze map bevat geen bestanden die kunnen worden geüpload.",

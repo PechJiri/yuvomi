@@ -3058,6 +3058,7 @@
             "progress": "{{current}} / {{total}} · {{name}}",
             "completedWithErrors": "오류와 함께 업로드 완료",
             "completed": "폴더 업로드됨",
+            "cancelled": "업로드가 취소되었습니다",
             "resultCounts": "업로드 {{uploaded}} · 건너뜀 {{skipped}} · 거부 {{rejected}} · 실패 {{failed}}",
             "failedTitle": "실패한 항목",
             "noUploadableFiles": "이 폴더에는 업로드할 수 있는 파일이 없습니다.",
