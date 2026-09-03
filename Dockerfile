@@ -22,11 +22,6 @@ RUN npm ci --omit=dev
 # ---- Runtime stage ----
 FROM node:24-slim
 
-# Die Build-Revision kommt aus dem unveränderlichen Git-Commit des Build-Jobs.
-# Sie ist kein Installationswert und wird deshalb nicht über .env gesetzt.
-ARG APP_BUILD_REVISION
-ENV APP_BUILD_REVISION=${APP_BUILD_REVISION}
-
 RUN apt-get update && apt-get install -y \
     gosu \
     && rm -rf /var/lib/apt/lists/*
@@ -52,6 +47,12 @@ ENV BACKUP_DIR=/backups
 # Entrypoint: korrigiert Volume-Permissions und startet als node-User
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Die Build-Revision kommt aus dem unveränderlichen Git-Commit des Build-Jobs.
+# Sie ist kein Installationswert und wird deshalb nicht über .env gesetzt. Erst
+# nach den Dateisystem-Layern setzen, damit ein neuer Commit deren Cache behält.
+ARG APP_BUILD_REVISION
+ENV APP_BUILD_REVISION=${APP_BUILD_REVISION}
 
 EXPOSE 3000
 
