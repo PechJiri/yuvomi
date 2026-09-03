@@ -77,14 +77,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **The Inventory module speaks all 24 languages, and a guard now notices when a module does not.**
-  Inventory shipped on 15 August with its 128 texts copied from English into the other 22
-  locales - the navigation label, the item form, the deadline feed settings, everything - and the
-  locale test stayed green, because it checks that every key exists, not that any value was ever
-  translated. Every one of those texts is translated now, with one vocabulary per language for the
-  module and its feed. To keep it from happening to the next module, a new suite counts, per locale,
-  the texts that are still word-for-word English while German is not, and holds that number against
-  a baseline that may only fall; the same count for Schedule is the next thing it points at.
+- **Inventory and Schedule speak all 24 languages, and a guard now notices when a module does
+  not.** Inventory shipped on 15 August and Schedule on 27 August with their texts copied from
+  English into the other 22 locales - navigation labels, forms, presets, the deadline feed settings,
+  everything - and the locale test stayed green, because it checks that every key exists, not that
+  any value was ever translated. All 222 of those texts are translated now, with one vocabulary per
+  language for each module: the shift presets say early, late and night shift the way that language
+  says it, and the module has a name of its own in every navigation. To keep it from happening to the
+  next module, a new suite counts, per locale, the texts that are still word-for-word English while
+  German is not, and holds that number against a baseline that may only fall.
 
 - **The Tasks header holds one width across List, Board and History** (#1012). It used to jump on
   every view switch: List and History narrowed the head to the 720px reading measure, the Board let it
