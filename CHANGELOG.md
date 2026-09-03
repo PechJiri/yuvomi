@@ -39,6 +39,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the release rather than restating them. Linked from the README, the scope page and the
   contributing guide.
 
+- **An older Yuvomi on a newer database now says so, and a backup from a newer version is
+  refused.** Migrations only run forward, but nothing checked the other direction: after an image
+  rollback on Umbrel or Unraid the older version started silently on a database carrying
+  migrations it did not know, and a restore accepted any file that had a `schema_migrations`
+  table. Now the start log reports the unknown migration numbers and the version this build knows,
+  and a restore of a newer backup is refused before anything is copied, with the message to update
+  first. The three sentences operators asked for stand in the installation guide under Updates:
+  migrations are one-way, any older backup restores into any newer version, and the way back is
+  the backup from before the update, not an older image.
+
+### Changed
+
+- **Two promises that existed only in threads are written where people look.** The contributing
+  guide says what happens if the maintainer stops: nobody inherits repository rights, MIT allows
+  any fork at any time, and after a year without a release, a commit or a reply the fork may carry
+  the name. MODULES.md says how long `/api/v1` holds: an operation is named as deprecated in the
+  CHANGELOG at least one minor release before it changes, and a `/api/v2` would keep `/api/v1`
+  served for twelve months.
+
 ### Fixed
 
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched

@@ -284,6 +284,13 @@ own earlier comment and will not repeat itself on a later push - but it means a 
 on a PR that was already reviewed stays green. The assertion covers "this PR was never
 reviewed", not "every run reviewed it".
 
+**If the maintainer stops.** There is one maintainer and no succession arrangement: nobody
+acquires rights to this repository automatically, and none are needed, because the MIT
+licence already allows any fork at any time. What this paragraph adds is the name. If this
+repository goes a full year without a release, a commit or a reply from the maintainer,
+treat it as unmaintained, fork it, and carry the Yuvomi name with you. Your own installation
+is not affected either way; the README's "Before you commit" says why.
+
 ---
 
 ## Code Conventions

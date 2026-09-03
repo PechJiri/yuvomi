@@ -1121,6 +1121,16 @@ docker compose up -d --build
 
 > **Recommendation**: Read the CHANGELOG before every update. Back up your database beforehand (see next section).
 
+### Going back
+
+Migrations only run forward. The list is append-only and a CI test keeps it that way, so any
+backup from an older Yuvomi restores into any newer one, and a database that a newer version has
+opened carries migrations an older version does not know. The way back after a bad update is
+therefore the backup you took before it, or the `.pre-restore-*` copy a restore leaves next to the
+database, never an older image on the current database: an older version started on a newer
+database reports that at start, and a backup written by a newer version is refused with a message
+to update first.
+
 ---
 
 ## Backup & Restore
@@ -1173,7 +1183,7 @@ For a local CLI restore outside Docker, set the same environment variables used 
 DB_PATH=/path/to/yuvomi.db node --import dotenv/config scripts/restore-backup.js ./yuvomi-backup-20260401.db
 ```
 
-The restore helper validates that the file is an Yuvomi database before replacing the active database. It also keeps a pre-restore copy next to the database file for emergency rollback.
+The restore helper validates that the file is a Yuvomi database, and refuses one written by a newer Yuvomi than the one running (update first, then restore), before replacing the active database. It also keeps a pre-restore copy next to the database file for emergency rollback.
 
 ### Automated Backups
 
