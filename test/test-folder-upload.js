@@ -1,5 +1,8 @@
 /**
  * Folder-directory upload planning and execution.
+ * The planner is a client-side preflight only: route validation and storage
+ * remain covered by the document-route suites, so this file deliberately does
+ * not duplicate server-side upload tests.
  *
  * Run: node --test test/test-folder-upload.js
  */
@@ -82,6 +85,45 @@ test('rejects traversal and empty path segments before planning folders', () => 
 
   assert.deepEqual(plan.files.map((entry) => entry.reason), ['unsafe-path', 'unsafe-path']);
   assert.deepEqual(plan.folders, []);
+});
+
+test('rejects absolute, dot and Windows-style paths before creating folders', () => {
+  const plan = buildFolderUploadPlan([
+    file('/House/permit.pdf'),
+    file('./House/permit.pdf'),
+    file('House/./permit.pdf'),
+    file('C:\\House\\permit.pdf'),
+  ], baseOptions);
+
+  assert.deepEqual(plan.files.map((entry) => entry.reason), [
+    'unsafe-path',
+    'unsafe-path',
+    'unsafe-path',
+    'unsafe-path',
+  ]);
+  assert.deepEqual(plan.folders, []);
+});
+
+test('uses the server-trimmed folder name and rejects whitespace-only branches', () => {
+  const plan = buildFolderUploadPlan([
+    file('House /permit.pdf'),
+    file('House/   /never-uploaded.pdf'),
+  ], {
+    ...baseOptions,
+    folders: [
+      ...baseOptions.folders,
+      { id: 19, name: 'House', parent_id: 10 },
+    ],
+  });
+
+  assert.deepEqual(
+    plan.folders.map(({ key, name, action, targetId }) => ({ key, name, action, targetId })),
+    [{ key: 'House', name: 'House', action: 'reuse', targetId: 19 }],
+  );
+  assert.equal(plan.files[0].action, 'upload');
+  assert.equal(plan.files[0].targetRef, 'id:19');
+  assert.equal(plan.files[1].reason, 'unsafe-path');
+  assert.equal(plan.folders.some((folder) => folder.key.includes('   ')), false);
 });
 
 test('rejects empty files but preserves their safe folder path', () => {
@@ -175,9 +217,9 @@ test('counts the selected target depth against the five-level folder limit', () 
   assert.deepEqual(plan.folders.map((folder) => folder.key), ['House', 'House/A', 'House/A/B']);
 });
 
-test('merges case-insensitive sibling folder conflicts and follows reused descendants', () => {
+test('merges exact sibling folder conflicts and follows reused descendants', () => {
   const plan = buildFolderUploadPlan([
-    file('House/drawings/electrical/wiring.pdf'),
+    file('HOUSE/Drawings/Electrical/wiring.pdf'),
   ], {
     ...baseOptions,
     folders: [
@@ -194,13 +236,31 @@ test('merges case-insensitive sibling folder conflicts and follows reused descen
       key, action, targetId, conflict, resolution,
     })),
     [
-      { key: 'House', action: 'reuse', targetId: 19, conflict: true, resolution: 'merge' },
-      { key: 'House/drawings', action: 'reuse', targetId: 20, conflict: true, resolution: 'merge' },
-      { key: 'House/drawings/electrical', action: 'reuse', targetId: 21, conflict: true, resolution: 'merge' },
+      { key: 'HOUSE', action: 'reuse', targetId: 19, conflict: true, resolution: 'merge' },
+      { key: 'HOUSE/Drawings', action: 'reuse', targetId: 20, conflict: true, resolution: 'merge' },
+      { key: 'HOUSE/Drawings/Electrical', action: 'reuse', targetId: 21, conflict: true, resolution: 'merge' },
     ],
   );
   assert.equal(plan.files[0].targetRef, 'id:21');
   assert.equal(plan.folderConflicts.length, 3);
+});
+
+test('creates a differently cased sibling just like the folder dialog and database', () => {
+  const plan = buildFolderUploadPlan([
+    file('house/permit.pdf'),
+  ], {
+    ...baseOptions,
+    folders: [
+      ...baseOptions.folders,
+      { id: 19, name: 'HOUSE', parent_id: 10 },
+    ],
+  });
+
+  assert.deepEqual(
+    plan.folders.map(({ key, name, action, conflict }) => ({ key, name, action, conflict })),
+    [{ key: 'house', name: 'house', action: 'create', conflict: false }],
+  );
+  assert.equal(plan.files[0].targetRef, 'plan:house');
 });
 
 test('duplicates a conflicting folder with one fixed timestamp and numeric fallback', () => {
@@ -355,5 +415,28 @@ test('a failed folder blocks only its branch while a sibling still uploads', asy
       ['file', 'House/Broken/Child/no.pdf', 'parent-failed'],
     ],
   );
+  assert.equal(result.uploaded.length, 1);
+});
+
+test('stops additional writes when the user cancels a long-running upload', async () => {
+  const plan = buildFolderUploadPlan([
+    file('House/first.pdf'),
+    file('House/second.pdf'),
+  ], baseOptions);
+  const uploaded = [];
+  let cancelled = false;
+
+  const result = await executeFolderUploadPlan(plan, {
+    createFolder: async () => ({ id: 500 }),
+    uploadFile: async ({ originalName }) => {
+      uploaded.push(originalName);
+      cancelled = true;
+      return { id: 600 };
+    },
+    shouldCancel: () => cancelled,
+  });
+
+  assert.deepEqual(uploaded, ['first.pdf']);
+  assert.equal(result.cancelled, true);
   assert.equal(result.uploaded.length, 1);
 });

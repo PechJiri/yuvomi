@@ -1671,7 +1671,7 @@ function bindDropzone(panel) {
     const transfer = new DataTransfer();
     files.forEach((file) => transfer.items.add(file));
     input.files = transfer.files;
-    syncSelectedFile();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
 
@@ -1692,12 +1692,10 @@ function folderUploadReason(reason) {
 }
 
 async function loadUploadConflictDocuments() {
-  const [active, archived] = await Promise.all([
-    api.get('/documents?status=active'),
-    api.get('/documents?status=archived'),
-  ]);
+  const counterpartStatus = state.status === 'active' ? 'archived' : 'active';
+  const counterpart = await api.get(`/documents?status=${counterpartStatus}`);
   const byId = new Map();
-  for (const doc of [...(active.data || []), ...(archived.data || [])]) byId.set(doc.id, doc);
+  for (const doc of [...state.allDocuments, ...(counterpart.data || [])]) byId.set(doc.id, doc);
   return [...byId.values()];
 }
 
@@ -1736,10 +1734,10 @@ function folderUploadTreeHtml(plan) {
     })),
   ].sort((a, b) => a.path.localeCompare(b.path, getLocale()) || (a.kind === 'folder' ? -1 : 1));
 
-  return `<ul class="folder-upload-tree" role="tree" aria-label="${esc(t('documents.folderUpload.treeLabel'))}">
+  return `<ul class="folder-upload-tree" role="list" aria-label="${esc(t('documents.folderUpload.treeLabel'))}">
     ${rows.map((row) => `
-      <li class="folder-upload-tree__item folder-upload-tree__item--${row.kind}" role="treeitem"
-          aria-level="${row.depth}" style="--folder-upload-depth:${Math.min(row.depth - 1, 4)}"
+      <li class="folder-upload-tree__item folder-upload-tree__item--${row.kind}" role="listitem"
+          style="--folder-upload-depth:${Math.min(row.depth - 1, 4)}"
           data-upload-path="${esc(row.path)}">
         <i data-lucide="${row.icon}" aria-hidden="true"></i>
         <span class="folder-upload-tree__name">${esc(row.label)}</span>
@@ -1828,12 +1826,27 @@ function renderFolderUploadPreview(panel) {
       </details>` : ''}
     <p class="folder-upload-preview__limit">${esc(t('documents.folderUpload.adminLimitHint', { size: effectiveUploadMb() }))}</p>
     <div class="folder-upload-progress" id="folder-upload-progress" aria-live="polite"></div>
+    <button class="btn btn--secondary" type="button" data-folder-upload-cancel hidden>${t('common.cancel')}</button>
   `);
   if (window.lucide) lucide.createIcons({ el: host });
 
   const submit = panel.querySelector('#document-submit');
   if (submit) submit.textContent = t('documents.folderUpload.uploadAction', { count: plan.counts.upload });
   return plan;
+}
+
+function supportsDirectoryUpload() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  if (!('webkitdirectory' in input)) return false;
+  input.webkitdirectory = true;
+  const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod|iOS/.test(platform)
+    || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // A property probe cannot prove that iOS Safari presents a usable directory
+  // picker. Keep the affordance hidden there until a browser-level capability
+  // signal exists.
+  return input.webkitdirectory === true && !isIOS;
 }
 
 function bindFolderUpload(panel) {
@@ -1857,10 +1870,11 @@ function bindFolderUpload(panel) {
     plan: null,
     ready: false,
     running: false,
+    cancelled: false,
     completed: false,
   };
 
-  const directorySupported = 'webkitdirectory' in document.createElement('input');
+  const directorySupported = supportsDirectoryUpload();
   folderInput.disabled = !directorySupported;
   folderChoice?.classList.toggle('is-disabled', !directorySupported);
   folderChoice?.setAttribute('aria-disabled', String(!directorySupported));
@@ -1927,6 +1941,11 @@ function bindFolderUpload(panel) {
 
   preview.addEventListener('click', (event) => {
     if (event.target.closest('[data-folder-upload-close]')) closeModal({ force: true });
+    const cancel = event.target.closest('[data-folder-upload-cancel]');
+    if (cancel && panel._folderUpload.running) {
+      panel._folderUpload.cancelled = true;
+      cancel.disabled = true;
+    }
   });
 
   return directorySupported;
@@ -1979,6 +1998,12 @@ async function saveFolderUpload(panel, payload) {
     throw new Error(t('documents.folderUpload.noUploadableFiles'));
   }
   upload.running = true;
+  upload.cancelled = false;
+  const cancel = panel.querySelector('[data-folder-upload-cancel]');
+  if (cancel) {
+    cancel.hidden = false;
+    cancel.disabled = false;
+  }
   const total = plan.counts.createFolders + plan.counts.upload;
   let completed = 0;
 
@@ -1998,6 +2023,7 @@ async function saveFolderUpload(panel, payload) {
       if (event.status === 'succeeded' || event.status === 'failed') completed += 1;
       updateFolderUploadProgress(panel, event, completed, total);
     },
+    shouldCancel: () => upload.cancelled,
   });
 
   upload.running = false;

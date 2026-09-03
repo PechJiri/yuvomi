@@ -12,8 +12,12 @@ export function formatFolderUploadTimestamp(date = new Date()) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}-${pad2(date.getMinutes())}`;
 }
 
-function comparableName(value) {
+function comparableFileName(value) {
   return String(value || '').normalize('NFC').toLocaleLowerCase('en-US');
+}
+
+function serverFolderName(value) {
+  return String(value || '').trim();
 }
 
 function refForFolderId(value) {
@@ -25,13 +29,13 @@ function fitName(base, suffix, limit = 200) {
   return `${base.slice(0, Math.max(1, limit - suffix.length))}${suffix}`;
 }
 
-function uniqueTimestampedName(name, timestamp, occupiedNames) {
-  const occupied = new Set(Array.from(occupiedNames || [], comparableName));
+function uniqueTimestampedFolderName(name, timestamp, occupiedNames) {
+  const occupied = new Set(Array.from(occupiedNames || [], serverFolderName));
   const dated = fitName(String(name), ` - ${timestamp}`);
-  if (!occupied.has(comparableName(dated))) return dated;
+  if (!occupied.has(serverFolderName(dated))) return dated;
   for (let copy = 2; copy < 10_000; copy += 1) {
     const candidate = fitName(String(name), ` - ${timestamp} (${copy})`);
-    if (!occupied.has(comparableName(candidate))) return candidate;
+    if (!occupied.has(serverFolderName(candidate))) return candidate;
   }
   throw new Error('Unable to create a unique upload name.');
 }
@@ -45,12 +49,12 @@ function splitExtension(name) {
 
 function uniqueTimestampedFileName(name, timestamp, occupiedNames) {
   const { base, extension } = splitExtension(name);
-  const occupied = new Set(Array.from(occupiedNames || [], comparableName));
+  const occupied = new Set(Array.from(occupiedNames || [], comparableFileName));
   const dated = fitName(base, ` - ${timestamp}${extension}`);
-  if (!occupied.has(comparableName(dated))) return dated;
+  if (!occupied.has(comparableFileName(dated))) return dated;
   for (let copy = 2; copy < 10_000; copy += 1) {
     const candidate = fitName(base, ` - ${timestamp} (${copy})${extension}`);
-    if (!occupied.has(comparableName(candidate))) return candidate;
+    if (!occupied.has(comparableFileName(candidate))) return candidate;
   }
   throw new Error('Unable to create a unique upload filename.');
 }
@@ -79,7 +83,7 @@ export function buildFolderUploadPlan(inputFiles, options = {}) {
   const timestamp = options.timestamp || formatFolderUploadTimestamp();
   const firstRelativePath = files.find((file) => String(file?.webkitRelativePath || '').includes('/'))
     ?.webkitRelativePath;
-  const rootName = String(firstRelativePath || '').split('/')[0] || '';
+  const rootName = serverFolderName(String(firstRelativePath || '').split('/')[0]);
   const folderKeys = new Set();
   const allowedMimeTypes = new Set(
     Array.from(options.allowedMimeTypes || [], (mime) => String(mime).split(';')[0].trim().toLowerCase()),
@@ -101,16 +105,21 @@ export function buildFolderUploadPlan(inputFiles, options = {}) {
         reason,
       };
     };
-    if (!rawPath || parts.length < 2) return reject('missing-relative-path');
+    if (!rawPath) return reject('missing-relative-path');
+    if (rawPath.includes('\\') || rawPath.startsWith('/') || parts.length < 2) return reject('unsafe-path');
     if (parts.some((part) => part === '' || part === '.' || part === '..')) return reject('unsafe-path');
-    const relative = parts;
-    const folderParts = relative.slice(0, -1);
+    const rawFolderParts = parts.slice(0, -1);
+    const folderParts = rawFolderParts.map(serverFolderName);
+    if (folderParts.some((part) => !part)) return reject('unsafe-path');
+    const originalName = String(file?.name || '').trim();
+    const uploadName = originalName.replace(/\.[^.]+$/, '').trim();
+    if (!originalName || !uploadName || !serverFolderName(parts.at(-1))) return reject('unsafe-path');
     if (folderParts.some((part) => part.length > 200)) return reject('name-too-long');
     if (targetDepth + folderParts.length > MAX_FOLDER_DEPTH) return reject('too-deep');
     for (let depth = 1; depth <= folderParts.length; depth += 1) {
       folderKeys.add(folderParts.slice(0, depth).join('/'));
     }
-    if (relative.at(-1).length > 200) return reject('name-too-long');
+    if (originalName.length > 200) return reject('name-too-long');
     if (!Number.isFinite(Number(file?.size)) || Number(file.size) <= 0) return reject('empty-file');
     const mime = String(file?.type || '').split(';')[0].trim().toLowerCase();
     if (!mime || !allowedMimeTypes.has(mime)) return reject('unsupported-type');
@@ -120,13 +129,14 @@ export function buildFolderUploadPlan(inputFiles, options = {}) {
     }
     const directoryKey = folderParts.join('/');
     return {
-      id: relative.join('/'),
+      id: rawPath,
       file,
-      relativePath: relative.join('/'),
+      relativePath: [...folderParts, originalName].join('/'),
+      directoryKey,
       targetRef: directoryKey ? `plan:${directoryKey}` : baseRef,
-      originalName: file.name,
-      uploadOriginalName: file.name,
-      uploadName: String(file.name || '').replace(/\.[^.]+$/, ''),
+      originalName,
+      uploadOriginalName: originalName,
+      uploadName,
       action: 'upload',
       reason: null,
     };
@@ -154,13 +164,13 @@ export function buildFolderUploadPlan(inputFiles, options = {}) {
     const sourceName = parts.at(-1);
     const parentRef = parentKey ? resolvedFolderRefs.get(parentKey) : baseRef;
     const existing = (existingChildren.get(parentRef) || [])
-      .find((folder) => comparableName(folder.name) === comparableName(sourceName));
+      .find((folder) => serverFolderName(folder.name) === sourceName);
     const resolution = existing
       ? overrideChoice(options.folderOverrides, key, options.folderDefault || 'merge')
       : null;
     const occupied = occupiedFolderNames.get(parentRef) || new Set();
     const resolvedName = existing && resolution === 'duplicate'
-      ? uniqueTimestampedName(sourceName, timestamp, occupied)
+      ? uniqueTimestampedFolderName(sourceName, timestamp, occupied)
       : sourceName;
     const item = existing && resolution === 'merge'
       ? {
@@ -196,8 +206,7 @@ export function buildFolderUploadPlan(inputFiles, options = {}) {
 
   for (const item of plannedFiles) {
     if (item.action !== 'upload') continue;
-    const directoryKey = item.relativePath.split('/').slice(0, -1).join('/');
-    item.targetRef = directoryKey ? resolvedFolderRefs.get(directoryKey) : baseRef;
+    item.targetRef = item.directoryKey ? resolvedFolderRefs.get(item.directoryKey) : baseRef;
   }
 
   const occupiedFileNames = new Map();
@@ -214,7 +223,7 @@ export function buildFolderUploadPlan(inputFiles, options = {}) {
     if (item.action !== 'upload') continue;
     const occupied = occupiedFileNames.get(item.targetRef) || new Set();
     const conflicts = [...occupied].some(
-      (name) => comparableName(name) === comparableName(item.uploadOriginalName),
+      (name) => comparableFileName(name) === comparableFileName(item.uploadOriginalName),
     );
     if (conflicts) {
       item.conflict = true;
@@ -276,6 +285,7 @@ export async function executeFolderUploadPlan(plan, {
   createFolder,
   uploadFile,
   onProgress = () => {},
+  shouldCancel = () => false,
 } = {}) {
   const result = {
     createdFolders: [],
@@ -283,11 +293,16 @@ export async function executeFolderUploadPlan(plan, {
     skipped: (plan.files || []).filter((item) => item.action === 'skip'),
     rejected: (plan.files || []).filter((item) => item.action === 'reject'),
     failed: [],
+    cancelled: false,
   };
   const resolvedIds = new Map([['root', null]]);
   const failedRefs = new Set();
 
   for (const folder of plan.folders || []) {
+    if (shouldCancel()) {
+      result.cancelled = true;
+      return result;
+    }
     if (folder.action === 'reuse') {
       resolvedIds.set(folder.targetRef, folder.targetId);
       continue;
@@ -318,6 +333,10 @@ export async function executeFolderUploadPlan(plan, {
   }
 
   for (const item of plan.files || []) {
+    if (shouldCancel()) {
+      result.cancelled = true;
+      return result;
+    }
     if (item.action !== 'upload') continue;
     const folderId = resolvedIds.has(item.targetRef)
       ? resolvedIds.get(item.targetRef)

@@ -64,9 +64,9 @@
   color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary));
 }
 
-/* Adresářový upload je samostatná stránková akce, ne skrytá druhá možnost
- * uvnitř formuláře pro dokument. Na úzkém displeji zůstává jako 44px ikona
- * vedle přepínače zobrazení; přístupný název nese tlačítko dál přes aria-label. */
+/* Folder upload is a separate page action, not a hidden second choice in the
+ * document form. On narrow displays it remains a 44px icon next to the view
+ * toggle, while its aria-label preserves the accessible name. */
 .documents-upload-folder-btn {
   flex-shrink: 0;
 }
@@ -927,8 +927,8 @@
   font-size: var(--text-xs);
 }
 
-/* Adresářový upload zůstává jedním formulářem: volba souborů či složky je
- * nahoře, pod ní se ve stejné ploše rozvine kontrolovatelný plán. */
+/* Folder upload stays within one form: the file or folder choice sits above a
+ * controllable plan that expands in the same area. */
 .document-upload-choices {
   display: flex;
   flex-wrap: wrap;
