@@ -4747,22 +4747,19 @@ function cycleLengthTrendChartMarkup(trend) {
     <line class="health-chart__band-line" x1="${left}" y1="${yHigh.toFixed(1)}" x2="${right}" y2="${yHigh.toFixed(1)}" />
     <line class="health-chart__band-line" x1="${left}" y1="${yLow.toFixed(1)}" x2="${right}" y2="${yLow.toFixed(1)}" />`;
 
-  const step = n > 1 ? (right - left) / (n - 1) : (right - left);
-  const barW = Math.max(6, Math.min(28, step * 0.5));
-  // Eigene, nach innen gerueckte X-Positionen statt chartX(): das teilt sich
-  // eine Geometrie mit den Linien-Charts, deren Punkte am Rand (chartX(0,n)
-  // === left) genau auf die Plotgrenze fallen duerfen, weil ein Punkt kein
-  // Volumen hat. Ein balkenBREITER Balken an derselben Stelle ragt zur Haelfte
-  // seiner Breite in den Y-Achsen-Beschriftungsrand hinein und verdeckt dort
-  // eine Ziffer (Befund: "10" sah wie "1" aus, weil der erste Balken die
-  // rechte Haelfte der Ziffer uebermalte). Balkenmitten bekommen deshalb
-  // eigens `barW/2` Abstand zu beiden Plotgrenzen.
-  const xFor = (i) => {
-    if (n <= 1) return (left + right) / 2;
-    const usableLeft = left + barW / 2;
-    const usableRight = right - barW / 2;
-    return usableLeft + (i * (usableRight - usableLeft)) / (n - 1);
-  };
+  // Bandskala statt chartX(): das teilt sich eine Geometrie mit den Linien-
+  // Charts, deren Punkte am Rand (chartX(0,n) === left) genau auf die
+  // Plotgrenze fallen duerfen, weil ein Punkt kein Volumen hat. Ein Balken hat
+  // welches - an derselben Stelle zentriert ragt er zur Haelfte seiner Breite
+  // ueber die Plotgrenze hinaus (Befund: der erste Balken uebermalte die
+  // rechte Haelfte der "10"-Beschriftung, "10" sah wie "1" aus) und beruehrt
+  // ohne Abstand die Achse. Jeder Balken bekommt stattdessen eine eigene,
+  // gleich breite Bahn (bandWidth); der Balken selbst nimmt nur einen Teil
+  // davon ein, der Rest ist Polsterung zu beiden Seiten - auch zu den
+  // Plotgrenzen hin, nicht nur zwischen den Balken.
+  const bandWidth = (right - left) / n;
+  const barW = Math.max(6, Math.min(28, bandWidth * 0.5));
+  const xFor = (i) => left + bandWidth * (i + 0.5);
   const typicalLabel = (typical) => t(typical ? 'health.cycle.trends.typical' : 'health.cycle.trends.atypical');
 
   const bars = trend.map((e, i) => {
@@ -4775,7 +4772,27 @@ function cycleLengthTrendChartMarkup(trend) {
   }).join('');
 
   const grid = chartGridMarkup(min, max, (val) => String(Math.round(val)));
-  const xLabels = chartXLabelsMarkup(trend.map((e) => formatDate(e.date)));
+  // Eine eigene Beschriftung statt chartXLabelsMarkup() (dessen "erstes/
+  // mittleres/letztes"-Auswahl fuer eine LINIE gedacht ist, deren Punkte
+  // zwischen den drei Marken nur den Verlauf, keine eigene Kategorie tragen):
+  // ein Balken IST eine eigene Kategorie und will grundsaetzlich sein eigenes
+  // Datum darunter. Erst ab mehr Balken, als der 600 Einheiten breite Plot
+  // ueberlappungsfrei beschriften kann, duennt eine feste Schrittweite aus -
+  // Anfang und Ende bleiben dabei immer beschriftet.
+  const MAX_BAR_LABELS = 8;
+  const dense = n > MAX_BAR_LABELS;
+  const labelStride = dense ? Math.ceil(n / MAX_BAR_LABELS) : 1;
+  // Bei wenigen Balken (der Normalfall) darf jedes Label mittig unter seinem
+  // eigenen Balken stehen - die Bandpolsterung schuetzt schon vor einem
+  // Ueberlauf ueber die Plotgrenze. Erst wenn viele Balken die Baender schmal
+  // machen, brauchen die beiden aeussersten Labels wieder den alten
+  // Rand-Anker (start/end), sonst liefe der ausgeduennte erste/letzte Wert
+  // ueber den Rand hinaus.
+  const xLabels = trend.map((e, i) => {
+    if (i !== 0 && i !== n - 1 && i % labelStride !== 0) return '';
+    const anchor = i === 0 ? (dense ? 'start' : 'middle') : i === n - 1 ? (dense ? 'end' : 'middle') : 'middle';
+    return `<text x="${xFor(i).toFixed(1)}" y="${H - 7}" class="chart__axis" text-anchor="${anchor}">${esc(formatDate(e.date))}</text>`;
+  }).join('');
   const titleText = t('health.cycle.trends.cycleLength');
   const table = chartTableMarkup(titleText, [t('health.cycle.trends.date'), titleText],
     trend.map((e) => [formatDate(e.date), `${t('health.cycle.unit.days', { value: fmtNum(e.days) })} (${typicalLabel(isTypicalCycleLength(e.days))})`]));

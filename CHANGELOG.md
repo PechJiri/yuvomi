@@ -114,11 +114,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **The cycle-length trend chart's first bar could visually cover part of a y-axis label.** Bar
-  centers reused the same x-position formula as the line charts, which places the first/last points
-  exactly on the plot's left/right edge - fine for a zero-width point, but a bar half-width wide then
-  extends past the edge into the label gutter (a "10" tick could read as "1" behind the bar). Bar
-  centers are now inset by half the bar width from each edge.
+- **The cycle-length trend chart's bars sat flush against the plot edges, with no date under most of
+  them.** Both traced back to the same cause: bar centers reused the x-position formula the line
+  charts use for their point positions, which places the first/last points exactly on the plot edge
+  (correct for a zero-width point) and relies on "first/middle/last" axis labels (enough context for
+  a continuous line, not for discrete bars - a "10" y-axis tick could even read as "1" behind the
+  first bar). Bars now sit in their own equal-width band with padding to their neighbors and to both
+  plot edges, and every bar gets its own date underneath (thinned to a fixed stride only once there
+  are more bars than the chart can label without overlapping, always keeping the first and last).
 - **The cycle-day pattern sentence now says how many days before your period a symptom typically
   shows up**, when that's a real pattern (the same value recurring across at least two cycles),
   instead of only the coarser "occurs during your luteal phase."
