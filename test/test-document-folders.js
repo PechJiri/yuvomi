@@ -210,7 +210,86 @@ test('GET /folders/:id/delete-impact counts documents and subfolders across the 
   }
 });
 
-test('DELETE with documents rejects a member before deleting documents owned by somebody else', async () => {
+test('GET delete impact names every module whose document links will change', async () => {
+  const h = createHarness();
+  const otherUserId = get().prepare(`
+    INSERT INTO users (username, display_name, password_hash, role)
+    VALUES (?, ?, 'hash', 'member')
+  `).run(`impact-member-${randomUUID()}`, 'Impact Member').lastInsertRowid;
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Linked-impact-${randomUUID()}` });
+    const documentId = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
+      VALUES ('Linked document', 'linked.txt', 'text/plain', 1, ?, 'other', 'family', 'active', ?, ?)
+    `).run(Buffer.from('linked'), folder.body.data.id, ADMIN_ID).lastInsertRowid;
+
+    get().prepare(`
+      INSERT INTO calendar_events (title, start_datetime, created_by, attachment_document_id)
+      VALUES ('Linked event', '2026-09-03T10:00:00Z', ?, ?)
+    `).run(ADMIN_ID, documentId);
+    get().prepare(`
+      INSERT INTO housekeeping_work_sessions (check_in, created_by, receipt_document_id)
+      VALUES ('2026-09-03T10:00:00Z', ?, ?)
+    `).run(ADMIN_ID, documentId);
+    const expenseGroupId = get().prepare(`
+      INSERT INTO expense_groups (name, created_by, avatar_document_id)
+      VALUES ('Linked group', ?, ?)
+    `).run(ADMIN_ID, documentId).lastInsertRowid;
+    const expenseId = get().prepare(`
+      INSERT INTO expenses
+        (group_id, title, amount_minor, currency, converted_amount_minor, converted_currency, payer_id, created_by)
+      VALUES (?, 'Linked expense', 100, 'EUR', 100, 'EUR', ?, ?)
+    `).run(expenseGroupId, ADMIN_ID, ADMIN_ID).lastInsertRowid;
+    get().prepare(`
+      INSERT INTO expense_attachments (expense_id, document_id, created_by)
+      VALUES (?, ?, ?)
+    `).run(expenseId, documentId, ADMIN_ID);
+    get().prepare(`
+      INSERT INTO settlements
+        (group_id, payer_id, payee_id, amount_minor, currency, created_by, proof_document_id)
+      VALUES (?, ?, ?, 100, 'EUR', ?, ?)
+    `).run(expenseGroupId, ADMIN_ID, otherUserId, ADMIN_ID, documentId);
+    const taskId = get().prepare(`
+      INSERT INTO tasks (title, created_by) VALUES ('Linked task', ?)
+    `).run(ADMIN_ID).lastInsertRowid;
+    get().prepare(`
+      INSERT INTO task_documents (task_id, document_id, created_by) VALUES (?, ?, ?)
+    `).run(taskId, documentId, ADMIN_ID);
+    const budgetEntryId = get().prepare(`
+      INSERT INTO budget_entries (title, amount, date, created_by)
+      VALUES ('Linked budget entry', 1, '2026-09-03', ?)
+    `).run(ADMIN_ID).lastInsertRowid;
+    get().prepare(`
+      INSERT INTO budget_entry_attachments (entry_id, document_id, created_by) VALUES (?, ?, ?)
+    `).run(budgetEntryId, documentId, ADMIN_ID);
+    const inventoryItemId = get().prepare(`
+      INSERT INTO inventory_items (name, created_by) VALUES ('Linked item', ?)
+    `).run(ADMIN_ID).lastInsertRowid;
+    get().prepare(`
+      INSERT INTO inventory_item_documents (item_id, document_id, created_by) VALUES (?, ?, ?)
+    `).run(inventoryItemId, documentId, ADMIN_ID);
+
+    const impact = await h.call('GET', `/folders/${folder.body.data.id}/delete-impact`);
+
+    assert.equal(impact.status, 200);
+    assert.deepEqual(impact.body.data.linked_records, {
+      calendar: 1,
+      housekeeping: 1,
+      split_expenses: 3,
+      tasks: 1,
+      budget: 1,
+      inventory: 1,
+    });
+  } finally {
+    await h.close();
+  }
+});
+
+test('DELETE with documents rejects a member before deleting any owned document', async () => {
+  const storageRoot = mkdtempSync(join(tmpdir(), 'yuvomi-folder-delete-authorization-'));
+  const previousStoragePath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = storageRoot;
   const memberId = get().prepare(`
     INSERT INTO users (username, display_name, password_hash, role)
     VALUES (?, ?, 'hash', 'member')
@@ -219,11 +298,22 @@ test('DELETE with documents rejects a member before deleting documents owned by 
   const memberHarness = createHarness({ userId: memberId, role: 'member' });
   try {
     const folder = await adminHarness.call('POST', '/folders', { name: `Protected-${randomUUID()}` });
-    const documentId = get().prepare(`
+    const insert = get().prepare(`
       INSERT INTO family_documents
-        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
-      VALUES (?, 'protected.txt', 'text/plain', 9, ?, 'other', 'family', 'active', ?, ?)
-    `).run('Protected document', Buffer.from('protected'), folder.body.data.id, ADMIN_ID).lastInsertRowid;
+        (name, original_name, mime_type, file_size, content_data, storage_key,
+         category, visibility, status, folder_id, created_by)
+      VALUES (?, ?, 'text/plain', 9, ?, ?, 'other', 'family', 'active', ?, ?)
+    `);
+    const storedFiles = ['owned-1.txt', 'owned-2.txt', 'owned-3.txt', 'protected.txt'];
+    storedFiles.forEach((name) => writeFileSync(join(storageRoot, name), `stored ${name}`));
+    const ownedDocumentIds = storedFiles.slice(0, 3).map((storageKey, index) => insert.run(
+      `Owned document ${index + 1}`, storageKey, Buffer.alloc(0), storageKey,
+      folder.body.data.id, memberId,
+    ).lastInsertRowid);
+    const foreignDocumentId = insert.run(
+      'Protected document', 'protected.txt', Buffer.alloc(0), 'protected.txt',
+      folder.body.data.id, ADMIN_ID,
+    ).lastInsertRowid;
 
     const impact = await memberHarness.call('GET', `/folders/${folder.body.data.id}/delete-impact`);
     assert.equal(impact.body.data.can_delete_documents, false);
@@ -234,10 +324,79 @@ test('DELETE with documents rejects a member before deleting documents owned by 
     );
 
     assert.equal(del.status, 403);
-    assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(documentId));
+    const survivingDocuments = get().prepare(`
+      SELECT id, storage_key FROM family_documents
+      WHERE id IN (?, ?, ?, ?)
+      ORDER BY id
+    `).all(...ownedDocumentIds, foreignDocumentId);
+    assert.deepEqual(
+      survivingDocuments.map((document) => document.id),
+      [...ownedDocumentIds, foreignDocumentId].sort((a, b) => a - b),
+      'the authorization gate must run before any document row is removed',
+    );
+    for (const document of survivingDocuments) {
+      assert.equal(existsSync(join(storageRoot, document.storage_key)), true,
+        `document ${document.id} must keep its stored file`);
+    }
     assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
   } finally {
     await Promise.all([adminHarness.close(), memberHarness.close()]);
+    if (previousStoragePath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousStoragePath;
+    rmSync(storageRoot, { recursive: true, force: true });
+  }
+});
+
+test('delete impact does not count a hidden private document and admins cannot delete it through a folder', async () => {
+  const ownerId = get().prepare(`
+    INSERT INTO users (username, display_name, password_hash, role)
+    VALUES (?, ?, 'hash', 'member')
+  `).run(`private-owner-${randomUUID()}`, 'Private document owner').lastInsertRowid;
+  const h = createHarness();
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Private-impact-${randomUUID()}` });
+    const insert = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
+      VALUES (?, ?, 'text/plain', 1, ?, 'other', ?, 'active', ?, ?)
+    `);
+    const visibleId = insert.run(
+      'Visible document',
+      'visible.txt',
+      Buffer.from('visible'),
+      'family',
+      folder.body.data.id,
+      ADMIN_ID,
+    ).lastInsertRowid;
+    const hiddenId = insert.run(
+      'Private document',
+      'private.txt',
+      Buffer.from('private'),
+      'private',
+      folder.body.data.id,
+      ownerId,
+    ).lastInsertRowid;
+
+    const impact = await h.call('GET', `/folders/${folder.body.data.id}/delete-impact`);
+    assert.equal(impact.status, 200);
+    assert.equal(impact.body.data.documents, 1, 'the response must not reveal the hidden document count');
+    assert.equal(impact.body.data.can_delete_documents, false);
+
+    const del = await h.call(
+      'DELETE',
+      `/folders/${folder.body.data.id}?documents=delete`
+      + `&expected_documents=${impact.body.data.documents}`
+      + `&expected_folders=${impact.body.data.removed_folders}`
+      + `&expected_snapshot=${impact.body.data.snapshot}`,
+    );
+
+    assert.equal(del.status, 403);
+    assert.equal(del.body.error, 'Not authorized to delete every document in this folder.');
+    assert.equal(get().prepare('SELECT COUNT(*) AS count FROM family_documents WHERE id IN (?, ?)')
+      .get(visibleId, hiddenId).count, 2);
+    assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+  } finally {
+    await h.close();
   }
 });
 
@@ -275,6 +434,8 @@ test('DELETE with documents rejects a changed subtree before deleting anything',
     );
 
     assert.equal(del.status, 409);
+    assert.equal(del.body.error, 'Folder contents changed. Review the deletion impact and try again.');
+    assert.equal(del.body.reason, 'FOLDER_CONTENT_CHANGED');
     assert.equal(get().prepare('SELECT COUNT(*) AS n FROM family_documents WHERE id IN (?, ?)').get(firstId, secondId).n, 2);
     assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
   } finally {
@@ -303,6 +464,8 @@ test('DELETE with documents rejects an identity swap even when counts stay uncha
     );
 
     assert.equal(del.status, 409);
+    assert.equal(del.body.error, 'Folder contents changed. Review the deletion impact and try again.');
+    assert.equal(del.body.reason, 'FOLDER_CONTENT_CHANGED');
     assert.equal(get().prepare('SELECT COUNT(*) AS n FROM family_documents WHERE id IN (?, ?)')
       .get(previewedId, replacementId).n, 2);
     assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
@@ -325,6 +488,52 @@ test('DELETE with documents requires a delete-impact snapshot', async () => {
 
     assert.equal(del.status, 400);
     assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(documentId));
+    assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+  } finally {
+    await h.close();
+  }
+});
+
+test('DELETE with documents rejects a snapshot created for another folder', async () => {
+  const h = createHarness();
+  try {
+    const first = await h.call('POST', '/folders', { name: `Snapshot-first-${randomUUID()}` });
+    const second = await h.call('POST', '/folders', { name: `Snapshot-second-${randomUUID()}` });
+    const insert = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
+      VALUES (?, ?, 'text/plain', 1, ?, 'other', 'family', 'active', ?, ?)
+    `);
+    insert.run('First', 'first.txt', Buffer.from('first'), first.body.data.id, ADMIN_ID);
+    insert.run('Second', 'second.txt', Buffer.from('second'), second.body.data.id, ADMIN_ID);
+    const firstImpact = await h.call('GET', `/folders/${first.body.data.id}/delete-impact`);
+
+    const del = await h.call(
+      'DELETE',
+      `/folders/${second.body.data.id}?documents=delete&expected_snapshot=${firstImpact.body.data.snapshot}`,
+    );
+
+    assert.equal(del.status, 409);
+    assert.equal(del.body.error, 'Folder contents changed. Review the deletion impact and try again.');
+    assert.equal(del.body.reason, 'FOLDER_CONTENT_CHANGED');
+    assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(second.body.data.id));
+  } finally {
+    await h.close();
+  }
+});
+
+test('DELETE with documents rejects a malformed snapshot with an explicit validation error', async () => {
+  const h = createHarness();
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Malformed-snapshot-${randomUUID()}` });
+
+    const del = await h.call(
+      'DELETE',
+      `/folders/${folder.body.data.id}?documents=delete&expected_snapshot=not-a-sha256`,
+    );
+
+    assert.equal(del.status, 400);
+    assert.equal(del.body.error, 'Invalid expected folder snapshot.');
     assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
   } finally {
     await h.close();
@@ -364,11 +573,65 @@ test('DELETE with documents reports partial storage failures and retains the fol
     assert.equal(del.body.data.deleted_documents, 1);
     assert.equal(del.body.data.failed_documents.length, 1);
     assert.equal(del.body.data.failed_documents[0].id, failedId);
+    assert.equal(del.body.data.failed_documents[0].failure_stage, 'storage');
+    assert.ok(del.body.data.failed_documents[0].storage_code);
+    assert.equal('error_code' in del.body.data.failed_documents[0], false,
+      'a storage failure must not be reported as a database failure');
     assert.equal(del.body.data.folder_deleted, false);
     assert.equal(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(deletedId), undefined);
     assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(failedId));
     assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
   } finally {
+    await h.close();
+    if (previousStoragePath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousStoragePath;
+    rmSync(storageRoot, { recursive: true, force: true });
+  }
+});
+
+test('DELETE with documents distinguishes a database-row failure after storage was removed', async () => {
+  const storageRoot = mkdtempSync(join(tmpdir(), 'yuvomi-folder-delete-database-'));
+  const previousStoragePath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = storageRoot;
+  const storageKey = 'database-failure.txt';
+  writeFileSync(join(storageRoot, storageKey), 'stored bytes');
+  const h = createHarness();
+  let triggerName;
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Database-failure-${randomUUID()}` });
+    const documentId = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, storage_key, category, visibility, status, folder_id, created_by)
+      VALUES ('Database failure', 'database-failure.txt', 'text/plain', 12, ?, ?, 'other', 'family', 'active', ?, ?)
+    `).run(Buffer.alloc(0), storageKey, folder.body.data.id, ADMIN_ID).lastInsertRowid;
+    triggerName = `reject_document_delete_${documentId}`;
+    get().exec(`
+      CREATE TRIGGER ${triggerName}
+      BEFORE DELETE ON family_documents
+      WHEN OLD.id = ${Number(documentId)}
+      BEGIN
+        SELECT RAISE(ABORT, 'simulated row delete failure');
+      END
+    `);
+
+    const impact = await h.call('GET', `/folders/${folder.body.data.id}/delete-impact`);
+    const del = await h.call(
+      'DELETE',
+      `/folders/${folder.body.data.id}?documents=delete&expected_snapshot=${impact.body.data.snapshot}`,
+    );
+
+    assert.equal(del.status, 207);
+    assert.equal(del.body.data.failed_documents.length, 1);
+    assert.equal(del.body.data.failed_documents[0].id, documentId);
+    assert.equal(del.body.data.failed_documents[0].failure_stage, 'database');
+    assert.equal(del.body.data.failed_documents[0].error_code, 'DOCUMENT_DATABASE_DELETE_FAILED');
+    assert.equal('storage_code' in del.body.data.failed_documents[0], false,
+      'a database failure must not be reported as a storage failure');
+    assert.equal(existsSync(join(storageRoot, storageKey)), false, 'the storage object was already removed');
+    assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(documentId),
+      'the database row remains after the failed row deletion');
+  } finally {
+    if (triggerName) get().exec(`DROP TRIGGER IF EXISTS ${triggerName}`);
     await h.close();
     if (previousStoragePath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
     else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousStoragePath;
@@ -417,6 +680,11 @@ test('DELETE with documents retains the folder when its contents change during s
 
     assert.equal(del.status, 207);
     assert.equal(del.body.data.folder_deleted, false);
+    assert.equal(del.body.data.contents_changed, true);
+    const concurrentFailure = del.body.data.failed_documents.find((document) => document.id === addedId);
+    assert.equal(concurrentFailure.failure_stage, 'concurrency');
+    assert.equal(concurrentFailure.error_code, 'FOLDER_CONTENT_CHANGED');
+    assert.equal('storage_code' in concurrentFailure, false);
     assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ? AND folder_id = ?')
       .get(addedId, folder.body.data.id));
     assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
@@ -463,6 +731,14 @@ test('DELETE with documents locks previewed documents and folders against concur
     }
     get().prepare("UPDATE family_documents SET visibility = 'private' WHERE id = ?")
       .run(documents.at(-1).id);
+    const outsideDocumentId = insert.run(
+      'Outside document',
+      'outside.txt',
+      Buffer.from('outside'),
+      null,
+      outside.body.data.id,
+      ADMIN_ID,
+    ).lastInsertRowid;
     const impact = await h.call('GET', `/folders/${root.body.data.id}/delete-impact`);
     const deletion = h.call(
       'DELETE',
@@ -484,11 +760,25 @@ test('DELETE with documents locks previewed documents and folders against concur
     const moveFolder = await h.call('PUT', `/folders/${child.body.data.id}`, {
       parent_id: outside.body.data.id,
     });
+    const moveFolderIntoTree = await h.call('PUT', `/folders/${outside.body.data.id}`, {
+      parent_id: root.body.data.id,
+    });
+    const moveDocumentIntoTree = await h.call('PUT', `/${outsideDocumentId}`, {
+      folder_id: child.body.data.id,
+    });
 
     assert.equal(hiddenUpdate.status, 404);
     assert.equal(hiddenDelete.status, 404);
     assert.equal(moveDocument.status, 409);
     assert.equal(moveFolder.status, 409);
+    assert.equal(moveFolderIntoTree.status, 409);
+    assert.equal(moveFolderIntoTree.body.error,
+      'The document folder is currently being deleted. Try again when the operation finishes.');
+    assert.equal(moveFolderIntoTree.body.reason, 'FOLDER_DELETE_IN_PROGRESS');
+    assert.equal(moveDocumentIntoTree.status, 409);
+    assert.equal(moveDocumentIntoTree.body.error,
+      'The document folder is currently being deleted. Try again when the operation finishes.');
+    assert.equal(moveDocumentIntoTree.body.reason, 'FOLDER_DELETE_IN_PROGRESS');
     const del = await deletion;
     assert.equal(del.status, 200);
     assert.equal(del.body.data.folder_deleted, true);

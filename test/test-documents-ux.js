@@ -241,7 +241,13 @@ test('Ordnerlöschung bietet Behalten oder Mitlöschen mit exakten Server-Zahlen
   assert.match(block, /expected_documents=\$\{impact\.documents\}/);
   assert.match(block, /expected_folders=\$\{impact\.removed_folders\}/);
   assert.match(block, /expected_snapshot=\$\{encodeURIComponent\(impact\.snapshot\)\}/);
-  assert.match(block, /err\?\.status === 409[\s\S]*await deleteFolder\(folder\)/);
+  assert.match(block, /FOLDER_CONTENT_CHANGED[\s\S]*await deleteFolder\(folder\)/);
+  assert.match(block, /FOLDER_DELETE_IN_PROGRESS[\s\S]*folderDeleteInProgressToast/);
+  assert.match(block, /result\.contents_changed[\s\S]*folderDeleteContentsChangedToast/);
+  assert.match(block, /linked_records/);
+  for (const key of ['nav.calendar', 'nav.housekeeping', 'splitExpenses.title', 'nav.tasks', 'nav.budget', 'nav.inventory']) {
+    assert.ok(block.includes(`t('${key}')`), `linked-record module label ${key} is missing`);
+  }
   assert.ok(block.includes("t('documents.deleteFolderKeepDocuments'"));
   assert.ok(block.includes("t('documents.deleteFolderWithDocuments'"));
 });
@@ -342,23 +348,35 @@ test('das Speichern referenziert den Submit-Button am Panel, nicht am Formular (
   assert.match(page, /saveDocument\(event, doc, panel\)/);
 });
 
-test('všechny podporované jazyky obsahují volby pro smazání složky', () => {
+test('alle unterstützten Sprachen enthalten die Optionen für die Ordnerlöschung', () => {
   const localeDir = resolve(HERE, '../public/locales');
   const files = readdirSync(localeDir).filter((file) => file.endsWith('.json'));
   const keys = [
     'deleteFolderImpact',
     'deleteFolderKeepDocuments',
+    'deleteFolderKeepDocuments_one',
     'deleteFolderWithDocuments',
+    'deleteFolderWithDocuments_one',
     'deleteFolderDocumentsUnavailable',
+    'deleteFolderLinkedRecords',
     'folderDeletedWithDocumentsToast',
+    'folderDeletedWithDocumentsToast_one',
     'folderDeletePartialToast',
+    'folderDeleteContentsChangedToast',
+    'folderDeleteInProgressToast',
   ];
 
   for (const file of files) {
     const documents = JSON.parse(read(`../public/locales/${file}`)).documents;
     for (const key of keys) {
-      assert.equal(typeof documents?.[key], 'string', `${file}: ${key} chybí`);
-      assert.notEqual(documents[key].trim(), '', `${file}: ${key} je prázdný`);
+      assert.equal(typeof documents?.[key], 'string', `${file}: ${key} fehlt`);
+      assert.notEqual(documents[key].trim(), '', `${file}: ${key} ist leer`);
     }
+    assert.equal('deleteFolderConfirmDetail' in documents, false,
+      `${file}: deleteFolderConfirmDetail wird nicht mehr verwendet`);
+    assert.equal('deleteFolderSubtreeDetail' in documents, false,
+      `${file}: deleteFolderSubtreeDetail wird nicht mehr verwendet`);
+    assert.equal('deleteFolderSubtreeDetail_one' in documents, false,
+      `${file}: deleteFolderSubtreeDetail_one wird nicht mehr verwendet`);
   }
 });

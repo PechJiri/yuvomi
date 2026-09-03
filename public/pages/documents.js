@@ -1045,6 +1045,19 @@ async function renameFolder(folder) {
 function folderDeleteChoice(folder, impact) {
   const descendants = Math.max(0, Number(impact.removed_folders) - 1);
   const documents = Math.max(0, Number(impact.documents));
+  const linkedRecordLabels = [
+    ['calendar', t('nav.calendar')],
+    ['housekeeping', t('nav.housekeeping')],
+    ['split_expenses', t('splitExpenses.title')],
+    ['tasks', t('nav.tasks')],
+    ['budget', t('nav.budget')],
+    ['inventory', t('nav.inventory')],
+  ];
+  const linkedRecords = linkedRecordLabels
+    .map(([key, label]) => ({ label, count: Math.max(0, Number(impact.linked_records?.[key] || 0)) }))
+    .filter(({ count }) => count > 0)
+    .map(({ label, count }) => `${label}: ${count}`)
+    .join(' · ');
   return new Promise((resolve) => {
     let resolved = false;
     const finish = (value) => {
@@ -1062,6 +1075,10 @@ function folderDeleteChoice(folder, impact) {
           documents,
           folders: descendants,
         }))}</p>
+        ${linkedRecords ? `
+          <p class="modal-confirm__detail">
+            ${esc(t('documents.deleteFolderLinkedRecords'))}<br>${esc(linkedRecords)}
+          </p>` : ''}
         ${impact.can_delete_documents ? '' : `
           <p class="modal-confirm__detail" id="documents-folder-delete-unavailable">
             ${esc(t('documents.deleteFolderDocumentsUnavailable'))}
@@ -1121,7 +1138,11 @@ async function deleteFolder(folder) {
       + `&expected_snapshot=${encodeURIComponent(impact.snapshot)}`,
     );
     const result = response.data;
-    if (result.folder_deleted === false) {
+    if (result.folder_deleted === false && result.contents_changed) {
+      window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedToast', {
+        deleted: result.deleted_documents,
+      }), 'warning');
+    } else if (result.folder_deleted === false) {
       window.yuvomi?.showToast(t('documents.folderDeletePartialToast', {
         deleted: result.deleted_documents,
         failed: result.failed_documents?.length || 0,
@@ -1136,11 +1157,15 @@ async function deleteFolder(folder) {
     await loadDocuments();
     renderAll();
   } catch (err) {
-    // Der Inhalt hat sich zwischen Vorschau und Klick geaendert: nichts wurde
-    // geloescht. Den Dialog mit frischen Zahlen erneut zeigen, statt eine
-    // technische Konfliktmeldung in der Serversprache einzublenden.
-    if (err?.status === 409) {
+    // A stale preview is safe to refresh. An active destructive operation is a
+    // different conflict: reopening the same dialog would only loop until its
+    // lock is released, so explain that state instead.
+    if (err?.status === 409 && err.data?.reason === 'FOLDER_CONTENT_CHANGED') {
       await deleteFolder(folder);
+      return;
+    }
+    if (err?.status === 409 && err.data?.reason === 'FOLDER_DELETE_IN_PROGRESS') {
+      window.yuvomi?.showToast(t('documents.folderDeleteInProgressToast'), 'warning');
       return;
     }
     window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');

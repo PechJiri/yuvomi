@@ -171,7 +171,7 @@ export function documentsPaths() {
         summary: 'Delete a document folder subtree',
         tag: 'Documents',
         stateChanging: true,
-        description: 'Deletes the folder and all subfolders. `documents=unfile` keeps document rows and clears their folder links; `documents=delete` requires the identity-bound snapshot from the latest delete-impact response, then sequentially deletes document content and rows while locking the previewed identities against concurrent moves. The destructive mode is rejected before any deletion when the previewed identities changed or the caller is neither an admin nor the owner of every affected document. If a storage deletion fails, the remaining folder structure is retained and a 207 response reports per-document failures.',
+        description: 'Deletes the folder and all subfolders. `documents=unfile` keeps every document row and clears its folder link, including documents hidden from the caller. `documents=delete` requires the identity-bound snapshot from the latest delete-impact response, then sequentially deletes visible document content and rows while locking the previewed identities and subtree targets against concurrent moves. Destructive deletion is rejected before the first storage operation if any document is hidden from the caller, if a non-admin does not own every visible document, or if the previewed identities changed. A 207 response distinguishes storage, database-row and concurrent-content failures while retaining the folder subtree.',
         params: [
           idParam(),
           {
@@ -184,7 +184,7 @@ export function documentsPaths() {
             name: 'expected_documents',
             in: 'query',
             required: false,
-            description: 'Document count from the latest delete-impact response. A mismatch rejects the request before deletion.',
+            description: 'Visible document count from the latest delete-impact response. A mismatch rejects the request before deletion.',
             schema: { type: 'integer', minimum: 0 },
           },
           {
@@ -218,7 +218,7 @@ export function documentsPaths() {
       get: op({
         summary: 'Preview the impact of deleting a document folder subtree',
         tag: 'Documents',
-        description: 'Returns exact document and folder counts across the subtree, an identity-bound snapshot for destructive confirmation, and whether the caller may delete every affected document.',
+        description: 'Returns the visible document count, exact folder count, affected-record counts grouped by module, an identity-bound subtree snapshot, and whether the caller may delete every affected document. Hidden-document totals are never returned; their presence only makes destructive deletion unavailable.',
         params: [idParam()],
         responses: {
           200: { description: 'Folder deletion impact' },

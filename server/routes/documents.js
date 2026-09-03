@@ -61,6 +61,7 @@ function deletionInProgress(res) {
   return res.status(409).json({
     error: 'The document folder is currently being deleted. Try again when the operation finishes.',
     code: 409,
+    reason: 'FOLDER_DELETE_IN_PROGRESS',
   });
 }
 
@@ -522,6 +523,34 @@ function folderDeleteSnapshot(folderIds, documentIds) {
   return createHash('sha256').update(payload).digest('hex');
 }
 
+/** Counts visible records in other modules whose document links deletion changes. */
+function folderDeleteLinkedRecords(documentIds) {
+  if (!documentIds.length) {
+    return { calendar: 0, housekeeping: 0, split_expenses: 0, tasks: 0, budget: 0, inventory: 0 };
+  }
+  const params = Object.fromEntries(documentIds.map((value, index) => [`d${index}`, value]));
+  const placeholders = documentIds.map((_value, index) => `@d${index}`).join(',');
+  return db.get().prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM calendar_events
+       WHERE attachment_document_id IN (${placeholders})) AS calendar,
+      (SELECT COUNT(*) FROM housekeeping_work_sessions
+       WHERE receipt_document_id IN (${placeholders})) AS housekeeping,
+      ((SELECT COUNT(*) FROM expense_groups
+        WHERE avatar_document_id IN (${placeholders}))
+       + (SELECT COUNT(*) FROM settlements
+          WHERE proof_document_id IN (${placeholders}))
+       + (SELECT COUNT(*) FROM expense_attachments
+          WHERE document_id IN (${placeholders}))) AS split_expenses,
+      (SELECT COUNT(*) FROM task_documents
+       WHERE document_id IN (${placeholders})) AS tasks,
+      (SELECT COUNT(*) FROM budget_entry_attachments
+       WHERE document_id IN (${placeholders})) AS budget,
+      (SELECT COUNT(*) FROM inventory_item_documents
+       WHERE document_id IN (${placeholders})) AS inventory
+  `).get(params);
+}
+
 /** Die Absage der Baumpruefung als Satz, den jemand lesen kann. */
 const MOVE_ISSUE_MESSAGES = {
   'self':           'A folder cannot be inside itself.',
@@ -587,12 +616,23 @@ router.get('/folders/:id/delete-impact', (req, res) => {
     const documents = db.get()
       .prepare(`SELECT id, created_by FROM family_documents WHERE folder_id IN (${folderPlaceholders})`)
       .all(folderParams);
+    const visibleDocuments = db.get()
+      .prepare(`
+        SELECT d.id, d.created_by
+        FROM family_documents d
+        WHERE d.folder_id IN (${folderPlaceholders})
+          AND ${documentVisibleSql('d')}
+      `)
+      .all({ ...folderParams, userId: userId(req) });
+    const canDeleteDocuments = visibleDocuments.length === documents.length
+      && (isAdmin(req) || visibleDocuments.every((document) => document.created_by === userId(req)));
 
     res.json({ data: {
       id,
       removed_folders: subtree.length,
-      documents: documents.length,
-      can_delete_documents: isAdmin(req) || documents.every((document) => document.created_by === userId(req)),
+      documents: visibleDocuments.length,
+      can_delete_documents: canDeleteDocuments,
+      linked_records: folderDeleteLinkedRecords(visibleDocuments.map((document) => document.id)),
       snapshot: folderDeleteSnapshot(subtree, documents.map((document) => document.id)),
     } });
   } catch (err) {
@@ -658,6 +698,9 @@ router.put('/folders/:id', (req, res) => {
     if (req.body.parent_id !== undefined) {
       const vParent = parentId(req.body.parent_id);
       if (vParent.error) return res.status(400).json({ error: vParent.error, code: 400 });
+      if (vParent.value !== null && activeFolderTreeDeletes.has(vParent.value)) {
+        return deletionInProgress(res);
+      }
       const moveError = folderMoveError(id, vParent.value);
       if (moveError) return res.status(400).json({ error: moveError, code: 400 });
       parent = vParent.value;
@@ -730,6 +773,15 @@ router.delete('/folders/:id', async (req, res) => {
         ORDER BY id ASC
       `)
       .all(folderParams);
+    const visibleDocumentIds = new Set(db.get()
+      .prepare(`
+        SELECT d.id
+        FROM family_documents d
+        WHERE d.folder_id IN (${folderPlaceholders})
+          AND ${documentVisibleSql('d')}
+      `)
+      .all({ ...folderParams, userId: userId(req) })
+      .map((document) => document.id));
     const deleteDocuments = documentAction === 'delete';
 
     if (deleteDocuments && expectedSnapshot === null) {
@@ -745,20 +797,21 @@ router.delete('/folders/:id', async (req, res) => {
     // neu und verlangt den Snapshot; der sichere Unfile-Default bleibt fuer
     // alte Clients ohne Erwartungswerte kompatibel.
     const currentSnapshot = folderDeleteSnapshot(subtree, documents.map((document) => document.id));
-    if ((expectedDocuments !== null && expectedDocuments !== documents.length)
+    if ((expectedDocuments !== null && expectedDocuments !== visibleDocumentIds.size)
         || (expectedFolders !== null && expectedFolders !== subtree.length)
         || (expectedSnapshot !== null && expectedSnapshot !== currentSnapshot)) {
       return res.status(409).json({
         error: 'Folder contents changed. Review the deletion impact and try again.',
         code: 409,
+        reason: 'FOLDER_CONTENT_CHANGED',
       });
     }
 
     // Die Besitzprüfung läuft über den GANZEN Zweig, bevor ein externer
     // Speicher angefasst wird. Sonst könnte ein Mitglied erst eigene Dateien
     // löschen und beim ersten fremden Dokument in einem halben Baum stranden.
-    if (deleteDocuments && !isAdmin(req)
-        && documents.some((document) => document.created_by !== userId(req))) {
+    if (deleteDocuments && (visibleDocumentIds.size !== documents.length
+        || (!isAdmin(req) && documents.some((document) => document.created_by !== userId(req))))) {
       return res.status(403).json({ error: 'Not authorized to delete every document in this folder.', code: 403 });
     }
 
@@ -781,14 +834,26 @@ router.delete('/folders/:id', async (req, res) => {
       for (const document of documents) {
         try {
           await deleteDocumentContent(document);
-          db.get().prepare('DELETE FROM family_documents WHERE id = ?').run(document.id);
-          deletedDocuments += 1;
         } catch (err) {
-          log.error(`DELETE /folders/:id document ${document.id} error:`, err);
+          log.error(`DELETE /folders/:id document ${document.id} storage error:`, err);
           failedDocuments.push({
             id: document.id,
             name: document.name,
+            failure_stage: 'storage',
             storage_code: err instanceof StorageError ? err.storageCode : 'DOCUMENT_DELETE_FAILED',
+          });
+          continue;
+        }
+        try {
+          db.get().prepare('DELETE FROM family_documents WHERE id = ?').run(document.id);
+          deletedDocuments += 1;
+        } catch (err) {
+          log.error(`DELETE /folders/:id document ${document.id} database error:`, err);
+          failedDocuments.push({
+            id: document.id,
+            name: document.name,
+            failure_stage: 'database',
+            error_code: 'DOCUMENT_DATABASE_DELETE_FAILED',
           });
         }
       }
@@ -820,7 +885,8 @@ router.delete('/folders/:id', async (req, res) => {
           failedDocuments.push({
             id: document.id,
             name: document.name,
-            storage_code: 'FOLDER_CONTENT_CHANGED',
+            failure_stage: 'concurrency',
+            error_code: 'FOLDER_CONTENT_CHANGED',
           });
         }
       }
@@ -932,6 +998,10 @@ router.post('/', async (req, res) => {
       ? validateId(req.body.folder_id, 'folder_id')
       : { value: null, error: null };
     if (vFolderId.error) return res.status(400).json({ error: vFolderId.error, code: 400 });
+    if (req.body.folder_id !== undefined && vFolderId.value !== null
+        && activeFolderTreeDeletes.has(vFolderId.value)) {
+      return deletionInProgress(res);
+    }
     const parsed = parseDataUrl(req.body.content_data);
     if (parsed.error) return res.status(400).json({ error: parsed.error, code: 400 });
 
@@ -1016,6 +1086,10 @@ router.put('/:id', (req, res) => {
       ? validateId(req.body.folder_id, 'folder_id')
       : { value: null, error: null };
     if (vFolderId.error) return res.status(400).json({ error: vFolderId.error, code: 400 });
+    if (req.body.folder_id !== undefined && vFolderId.value !== null
+        && activeFolderTreeDeletes.has(vFolderId.value)) {
+      return deletionInProgress(res);
+    }
     db.get().prepare(`
       UPDATE family_documents
       SET name = COALESCE(?, name),
