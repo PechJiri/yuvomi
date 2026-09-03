@@ -66,6 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   migrations are one-way, any older backup restores into any newer version, and the way back is
   the backup from before the update, not an older image.
 
+- **Tasks can be filtered by category, on the Board as well as in the List** (D#1017, asked by
+  @radicchiodev). The filter panel offered status, priority, person and tags, and the List could
+  group by category, but nothing filtered by it - and the Board cannot group at all, because its
+  columns are already the status. The server had accepted `?category=` since #825; the panel simply
+  never got the group. It has it now, in both views, with the same label the task form uses, and a
+  chosen category shows in the chip row and in the remembered filter sets like every other axis.
+
 ### Changed
 
 - **Two promises that existed only in threads are written where people look.** The contributing
@@ -86,6 +93,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   says it, and the module has a name of its own in every navigation. To keep it from happening to the
   next module, a new suite counts, per locale, the texts that are still word-for-word English while
   German is not, and holds that number against a baseline that may only fall.
+
+- **The add-subtask button stays on the task card after the first subtask** (D#1017). It used to
+  disappear as soon as a task had one, and the only other entry sat at the bottom of the subtask
+  list, which is collapsed until the progress bar is clicked - so the module read as "one subtask
+  per task" to someone who had just added one. There was never a limit; the way in was hidden. The
+  button on the card now stays, and the one at the end of the open list remains as well.
 
 - **The Tasks header holds one width across List, Board and History** (#1012). It used to jump on
   every view switch: List and History narrowed the head to the 720px reading measure, the Board let it
