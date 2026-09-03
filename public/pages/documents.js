@@ -31,6 +31,7 @@ import {
   runRateLimitedOperation,
   supportsDirectoryUpload,
 } from '/utils/folder-upload.js';
+import { optimisticallyHideFolderSubtree } from '/utils/document-folder-delete.js';
 
 const CATEGORIES = ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'];
 
@@ -1146,53 +1147,99 @@ async function deleteFolder(folder) {
   }
   if (!choice) return;
 
-  try {
-    const selectedSubtree = folderSubtree(folder.id);
-    const expectedSnapshot = choice === 'delete'
-      ? `&expected_snapshot=${encodeURIComponent(impact.snapshot)}`
-      : '';
-    const response = await api.delete(
-      `/documents/folders/${folder.id}?documents=${choice}`
-      + `&expected_documents=${impact.documents}&expected_folders=${impact.removed_folders}`
-      + expectedSnapshot,
-    );
-    const result = response.data;
-    const hasNonConcurrencyFailure = result.failed_documents
-      ?.some((failure) => failure.failure_stage !== 'concurrency');
-    if (result.folder_deleted === false && result.contents_changed && hasNonConcurrencyFailure) {
-      window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedWithFailuresToast'), 'warning');
-    } else if (result.folder_deleted === false && result.contents_changed) {
-      window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedToast', {
-        deleted: result.deleted_documents,
-      }), 'warning');
-    } else if (result.folder_deleted === false) {
-      window.yuvomi?.showToast(t('documents.folderDeletePartialToast', {
-        deleted: result.deleted_documents,
-        failed: result.failed_documents?.length || 0,
-      }), 'warning');
-    } else if (choice === 'delete') {
-      window.yuvomi?.showToast(t('documents.folderDeletedWithDocumentsToast', { count: result.deleted_documents }), 'default');
-    } else {
-      window.yuvomi?.showToast(t('documents.folderDeletedToast'), 'default');
-    }
-    if (result.folder_deleted !== false && selectedSubtree.has(Number(state.folderId))) state.folderId = '';
-    await loadFolders();
-    await loadDocuments();
+  const selectedSubtree = folderSubtree(folder.id);
+  if (choice === 'delete') {
+    const owner = _container;
+    const restoreState = optimisticallyHideFolderSubtree(state, selectedSubtree);
+    persistExpandedFolders();
+    applyFilters();
     renderAll();
-  } catch (err) {
-    // A stale preview is safe to refresh. An active destructive operation is a
-    // different conflict: reopening the same dialog would only loop until its
-    // lock is released, so explain that state instead.
-    if (err?.status === 409 && err.data?.reason === 'FOLDER_CONTENT_CHANGED') {
-      await deleteFolder(folder);
-      return;
-    }
-    if (err?.status === 409 && err.data?.reason === 'FOLDER_DELETE_IN_PROGRESS') {
-      window.yuvomi?.showToast(t('documents.folderDeleteInProgressToast'), 'warning');
-      return;
-    }
-    window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
+
+    scheduleUndoableDelete({
+      message: t('documents.folderDeletedWithDocumentsToast', { count: impact.documents }),
+      commit: async ({ keepalive }) => {
+        const result = await commitFolderDeletion(folder, impact, choice, { keepalive });
+        if (keepalive || _container !== owner) return;
+        // A completed server delete must never be undone merely because the
+        // subsequent refresh failed. Keep the optimistic state and surface the
+        // refresh error separately.
+        try {
+          await applyFolderDeleteResult(result, choice, selectedSubtree, { showSuccess: false });
+        } catch (err) {
+          window.yuvomi?.showToast(friendlyError(err), 'danger');
+        }
+      },
+      restore: (err) => {
+        if (_container !== owner) return;
+        restoreState();
+        persistExpandedFolders();
+        applyFilters();
+        renderAll();
+        if (err) void handleFolderDeleteError(err, folder);
+      },
+    });
+    return;
   }
+
+  try {
+    const result = await commitFolderDeletion(folder, impact, choice);
+    await applyFolderDeleteResult(result, choice, selectedSubtree);
+  } catch (err) {
+    await handleFolderDeleteError(err, folder);
+  }
+}
+
+async function commitFolderDeletion(folder, impact, choice, { keepalive = false } = {}) {
+  const expectedSnapshot = choice === 'delete'
+    ? `&expected_snapshot=${encodeURIComponent(impact.snapshot)}`
+    : '';
+  const response = await api.delete(
+    `/documents/folders/${folder.id}?documents=${choice}`
+    + `&expected_documents=${impact.documents}&expected_folders=${impact.removed_folders}`
+    + expectedSnapshot,
+    { keepalive },
+  );
+  return response.data;
+}
+
+async function applyFolderDeleteResult(result, choice, selectedSubtree, { showSuccess = true } = {}) {
+  const hasNonConcurrencyFailure = result.failed_documents
+    ?.some((failure) => failure.failure_stage !== 'concurrency');
+  if (result.folder_deleted === false && result.contents_changed && hasNonConcurrencyFailure) {
+    window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedWithFailuresToast'), 'warning');
+  } else if (result.folder_deleted === false && result.contents_changed) {
+    window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedToast', {
+      deleted: result.deleted_documents,
+    }), 'warning');
+  } else if (result.folder_deleted === false) {
+    window.yuvomi?.showToast(t('documents.folderDeletePartialToast', {
+      deleted: result.deleted_documents,
+      failed: result.failed_documents?.length || 0,
+    }), 'warning');
+  } else if (showSuccess && choice === 'delete') {
+    window.yuvomi?.showToast(t('documents.folderDeletedWithDocumentsToast', { count: result.deleted_documents }), 'default');
+  } else if (showSuccess) {
+    window.yuvomi?.showToast(t('documents.folderDeletedToast'), 'default');
+  }
+  if (result.folder_deleted !== false && selectedSubtree.has(Number(state.folderId))) state.folderId = '';
+  await loadFolders();
+  await loadDocuments();
+  renderAll();
+}
+
+async function handleFolderDeleteError(err, folder) {
+  // A stale preview is safe to refresh. An active destructive operation is a
+  // different conflict: reopening the same dialog would only loop until its
+  // lock is released, so explain that state instead.
+  if (err?.status === 409 && err.data?.reason === 'FOLDER_CONTENT_CHANGED') {
+    await deleteFolder(folder);
+    return;
+  }
+  if (err?.status === 409 && err.data?.reason === 'FOLDER_DELETE_IN_PROGRESS') {
+    window.yuvomi?.showToast(t('documents.folderDeleteInProgressToast'), 'warning');
+    return;
+  }
+  window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
 }
 
 // `showSize` aus, wenn die Ansicht die Größe bereits in einer eigenen Spalte

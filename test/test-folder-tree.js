@@ -13,10 +13,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+const folderTree = await import('../public/utils/folder-tree.js');
+const { optimisticallyHideFolderSubtree } = await import('../public/utils/document-folder-delete.js');
 const {
   MAX_FOLDER_DEPTH, subtreeIds, folderPath, subtreeHeight,
   folderMoveIssue, buildFolderTree, flattenFolderTree,
-} = await import('../public/utils/folder-tree.js');
+} = folderTree;
 
 /** Kurzschreibweise: `f(1, 'Wohnung')`, `f(2, 'Miete', 1)`. */
 const f = (id, name, parent_id = null) => ({ id, name, parent_id });
@@ -61,6 +63,41 @@ test('subtreeIds haelt an, wenn die Daten einen Ring enthalten', () => {
   const ring = [f(1, 'A', 2), f(2, 'B', 1)];
   const ids = subtreeIds(ring, 1);
   assert.deepEqual([...ids].sort(), [1, 2]);
+});
+
+test('optimistisches Teilbaum-Ausblenden lässt sich ohne Verlust paralleler UI-Änderungen zurücknehmen', () => {
+  const state = {
+    folders: [...BAUM],
+    allDocuments: [
+      { id: 10, folder_id: 2 },
+      { id: 11, folder_id: 5 },
+    ],
+    selected: new Set([10, 11]),
+    expanded: new Set([1, 2, 5]),
+    folderId: '2',
+  };
+  const restore = optimisticallyHideFolderSubtree(state, subtreeIds(state.folders, 1));
+
+  assert.deepEqual(state.folders.map(({ id }) => id), [5]);
+  assert.deepEqual(state.allDocuments.map(({ id }) => id), [11]);
+  assert.deepEqual([...state.selected], [11]);
+  assert.deepEqual([...state.expanded], [5]);
+  assert.equal(state.folderId, '');
+
+  // Änderungen während des Undo-Fensters dürfen beim Zurückholen nicht durch
+  // ein altes Komplett-Snapshot überschrieben werden.
+  state.folders.push(f(6, 'Neu'));
+  state.allDocuments.push({ id: 12, folder_id: 6 });
+  state.selected.add(12);
+  state.expanded.add(6);
+  state.folderId = '6';
+  restore();
+
+  assert.deepEqual(state.folders.map(({ id }) => id).sort((a, b) => a - b), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(state.allDocuments.map(({ id }) => id).sort((a, b) => a - b), [10, 11, 12]);
+  assert.deepEqual([...state.selected].sort((a, b) => a - b), [10, 11, 12]);
+  assert.deepEqual([...state.expanded].sort((a, b) => a - b), [1, 2, 5, 6]);
+  assert.equal(state.folderId, '6', 'paralelní navigace uživatele se nesmí vrátit zpět');
 });
 
 // --------------------------------------------------------
