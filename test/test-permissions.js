@@ -262,6 +262,22 @@ test('replaceSubjectPermissions erhält Capability-Zeilen beim Speichern von Mod
   );
 });
 
+test('replaceSubjectPermissions ersetzt Capabilities nur bei ausdrücklichem Feld', () => {
+  const db = freshDb();
+  db.prepare(`
+    INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
+    VALUES ('role', 'child', 'capability', 'notes_manage_household_categories', 'allow')
+  `).run();
+
+  replaceSubjectPermissions(db, 'role', 'child', { modules: {} });
+  assert.deepEqual(getSubjectPermissions(db, 'role', 'child').capabilities, {
+    notes_manage_household_categories: 'allow',
+  });
+
+  replaceSubjectPermissions(db, 'role', 'child', { capabilities: {} });
+  assert.deepEqual(getSubjectPermissions(db, 'role', 'child').capabilities, {});
+});
+
 test('Leere Eingabe = „von Rolle erben" (alle Overrides entfernt)', () => {
   const db = freshDb();
   addUser(db, { id: 11, role: 'member', family_role: 'child' });

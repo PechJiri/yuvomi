@@ -442,9 +442,10 @@ export function normalizePermissionInput(
 
 /**
  * Ersetzt die gespeicherten Modul- und Widget-Rechte eines Subjekts atomar
- * (delete + insert der abweichenden Einträge). Andere Ressourcen, etwa
- * Capabilities, bleiben unverändert. Transaktion vom Aufrufer bereitgestellt
- * oder hier gekapselt.
+ * (delete + insert der abweichenden Einträge). Capabilities bleiben
+ * unverändert, wenn das Feld fehlt; ein ausdrücklich mitgegebenes
+ * `capabilities` ersetzt dagegen auch diese Achse. Transaktion vom Aufrufer
+ * bereitgestellt oder hier gekapselt.
  * @param {import('better-sqlite3-multiple-ciphers').Database} database
  */
 export function replaceSubjectPermissions(database, subjectType, subjectId, input) {
@@ -464,8 +465,8 @@ export function replaceSubjectPermissions(database, subjectType, subjectId, inpu
 
 /**
  * Wie `replaceSubjectPermissions()`, aber OHNE eigene Transaktionsklammer -
- * fuer Aufrufer, die schon in einer stecken. Ersetzt nur Modul- und
- * Widget-Zeilen; andere Ressourcen bleiben erhalten.
+ * fuer Aufrufer, die schon in einer stecken. Ersetzt Modul- und Widget-Zeilen;
+ * Capability-Zeilen nur dann, wenn `input.capabilities` ausdrücklich vorliegt.
  *
  * Es gibt sie, weil das Annehmen einer Einladung Nutzer, Kontakt-Artefakte und
  * Startrechte in EINER Transaktion schreibt (#869). Ein `BEGIN` darin waere
@@ -475,16 +476,23 @@ export function replaceSubjectPermissions(database, subjectType, subjectId, inpu
  */
 export function writeSubjectPermissions(database, subjectType, subjectId, input) {
   const rows = normalizePermissionInput(input, { subjectType });
-  const del = database.prepare(`
+  const deleteModulesAndWidgets = database.prepare(`
     DELETE FROM access_permissions
     WHERE subject_type = ? AND subject_id = ?
       AND resource_type IN ('module', 'widget')
+  `);
+  const deleteCapabilities = database.prepare(`
+    DELETE FROM access_permissions
+    WHERE subject_type = ? AND subject_id = ? AND resource_type = 'capability'
   `);
   const ins = database.prepare(`
     INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
     VALUES (?, ?, ?, ?, ?)
   `);
-  del.run(subjectType, String(subjectId));
+  deleteModulesAndWidgets.run(subjectType, String(subjectId));
+  if (Object.prototype.hasOwnProperty.call(input || {}, 'capabilities')) {
+    deleteCapabilities.run(subjectType, String(subjectId));
+  }
   for (const r of rows) ins.run(subjectType, String(subjectId), r.resource_type, r.resource_key, r.access);
   return rows.length;
 }
