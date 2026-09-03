@@ -131,7 +131,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The cycle ring's phase colors (period/fertile/ovulation) also had no legend**, same problem as
   the bar chart above. Added a compact legend below the ring with just the colors it actually
   renders - lighter than the calendar's full legend, which also covers "predicted" and "today" states
-  that don't have a distinct color on the ring.
+  that don't have a distinct color on the ring. The swatches themselves match the ring's own solid
+  arcs and filled ovulation dot, not the calendar's paler washes/hatching/hollow-ring styling that the
+  shared legend component uses elsewhere - the ring never renders those cues, so borrowing them made
+  the legend describe a different picture than the one above it.
 
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
   the native colour input to fill its grid cell; on the mobile layout, where the two-column form
