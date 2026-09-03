@@ -2988,7 +2988,12 @@
         "folderExpand": "「{{name}}」を展開",
         "folderCollapse": "「{{name}}」を折りたたむ",
         "deleteFolderSubtreeDetail": "中にある{{count}}個のサブフォルダーも削除されます。文書は残り、フォルダーなしの文書のフィルターから見つけられます。",
-        "deleteFolderSubtreeDetail_one": "中にあるサブフォルダーも削除されます。文書は残り、フォルダーなしの文書のフィルターから見つけられます。"
+        "deleteFolderSubtreeDetail_one": "中にあるサブフォルダーも削除されます。文書は残り、フォルダーなしの文書のフィルターから見つけられます。",
+        "shareAction": "共有",
+        "sharePreparing": "準備中 …",
+        "shareUnsupportedType": "このファイル形式はデバイスの共有メニューから共有できません。代わりにファイルをダウンロードしてください。",
+        "shareUnavailable": "デバイスの共有メニューはこのブラウザでは利用できないか、安全な接続（HTTPS）が必要です。代わりにファイルをダウンロードしてください。",
+        "shareFailed": "共有できませんでした。代わりにファイルをダウンロードしてください。"
     },
     "shortcuts": {
         "goKitchen": "キッチン",

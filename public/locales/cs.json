@@ -3177,7 +3177,12 @@
         "folderExpand": "Rozbalit „{{name}}\"",
         "folderCollapse": "Sbalit „{{name}}\"",
         "deleteFolderSubtreeDetail": "Smaže se také {{count}} podsložek uvnitř. Dokumenty zůstanou a budou dostupné přes filtr pro dokumenty bez složky.",
-        "deleteFolderSubtreeDetail_one": "Smaže se také podsložka uvnitř. Dokumenty zůstanou a budou dostupné přes filtr pro dokumenty bez složky."
+        "deleteFolderSubtreeDetail_one": "Smaže se také podsložka uvnitř. Dokumenty zůstanou a budou dostupné přes filtr pro dokumenty bez složky.",
+        "shareAction": "Sdílet",
+        "sharePreparing": "Připravuje se …",
+        "shareUnsupportedType": "Tento typ souboru nelze sdílet přes nabídku sdílení zařízení. Místo toho soubor stáhněte.",
+        "shareUnavailable": "Nabídka sdílení zařízení není v tomto prohlížeči k dispozici nebo vyžaduje zabezpečené připojení (HTTPS). Místo toho soubor stáhněte.",
+        "shareFailed": "Sdílení se nezdařilo. Místo toho soubor stáhněte."
     },
     "reminders": {
         "sectionTitle": "Připomínka",

@@ -2988,7 +2988,12 @@
         "folderExpand": "Desplegar «{{name}}»",
         "folderCollapse": "Plegar «{{name}}»",
         "deleteFolderSubtreeDetail": "También se eliminarán las {{count}} subcarpetas que contiene. Los documentos se conservan y siguen siendo accesibles con el filtro de documentos sin carpeta.",
-        "deleteFolderSubtreeDetail_one": "También se eliminará la subcarpeta que contiene. Los documentos se conservan y siguen siendo accesibles con el filtro de documentos sin carpeta."
+        "deleteFolderSubtreeDetail_one": "También se eliminará la subcarpeta que contiene. Los documentos se conservan y siguen siendo accesibles con el filtro de documentos sin carpeta.",
+        "shareAction": "Compartir",
+        "sharePreparing": "Preparando …",
+        "shareUnsupportedType": "Este tipo de archivo no se puede compartir a través del menú de compartir del dispositivo. Descarga el archivo en su lugar.",
+        "shareUnavailable": "El menú de compartir del dispositivo no está disponible en este navegador o necesita una conexión segura (HTTPS). Descarga el archivo en su lugar.",
+        "shareFailed": "No se pudo compartir. Descarga el archivo en su lugar."
     },
     "shortcuts": {
         "goKitchen": "Cocina",

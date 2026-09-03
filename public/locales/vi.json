@@ -3045,7 +3045,12 @@
         "folderExpand": "Mở \"{{name}}\"",
         "folderCollapse": "Thu gọn \"{{name}}\"",
         "deleteFolderSubtreeDetail": "{{count}} thư mục con bên trong cũng sẽ bị xóa. Tài liệu vẫn còn và vẫn tìm được qua bộ lọc tài liệu không có thư mục.",
-        "deleteFolderSubtreeDetail_one": "Thư mục con bên trong cũng sẽ bị xóa. Tài liệu vẫn còn và vẫn tìm được qua bộ lọc tài liệu không có thư mục."
+        "deleteFolderSubtreeDetail_one": "Thư mục con bên trong cũng sẽ bị xóa. Tài liệu vẫn còn và vẫn tìm được qua bộ lọc tài liệu không có thư mục.",
+        "shareAction": "Chia sẻ",
+        "sharePreparing": "Đang chuẩn bị …",
+        "shareUnsupportedType": "Không thể chia sẻ loại tệp này qua menu chia sẻ của thiết bị. Hãy tải tệp xuống thay thế.",
+        "shareUnavailable": "Menu chia sẻ của thiết bị không khả dụng trong trình duyệt này hoặc cần kết nối an toàn (HTTPS). Hãy tải tệp xuống thay thế.",
+        "shareFailed": "Chia sẻ không thành công. Hãy tải tệp xuống thay thế."
     },
     "housekeeping": {
         "title": "Dọn dẹp",

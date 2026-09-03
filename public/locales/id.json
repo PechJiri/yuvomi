@@ -3045,7 +3045,12 @@
         "folderExpand": "Buka \"{{name}}\"",
         "folderCollapse": "Tutup \"{{name}}\"",
         "deleteFolderSubtreeDetail": "{{count}} subfolder di dalamnya juga akan dihapus. Dokumen tetap ada dan bisa dijangkau lewat filter untuk dokumen tanpa folder.",
-        "deleteFolderSubtreeDetail_one": "Subfolder di dalamnya juga akan dihapus. Dokumen tetap ada dan bisa dijangkau lewat filter untuk dokumen tanpa folder."
+        "deleteFolderSubtreeDetail_one": "Subfolder di dalamnya juga akan dihapus. Dokumen tetap ada dan bisa dijangkau lewat filter untuk dokumen tanpa folder.",
+        "shareAction": "Bagikan",
+        "sharePreparing": "Menyiapkan …",
+        "shareUnsupportedType": "Jenis file ini tidak dapat dibagikan melalui menu berbagi perangkat. Unduh file sebagai gantinya.",
+        "shareUnavailable": "Menu berbagi perangkat tidak tersedia di browser ini, atau memerlukan koneksi aman (HTTPS). Unduh file sebagai gantinya.",
+        "shareFailed": "Berbagi tidak berhasil. Unduh file sebagai gantinya."
     },
     "userMultiSelect": {
         "nobody": "- Tidak ada -",

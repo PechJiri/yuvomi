@@ -3045,7 +3045,12 @@
         "folderExpand": "„{{name}}\" kibontása",
         "folderCollapse": "„{{name}}\" összecsukása",
         "deleteFolderSubtreeDetail": "A benne lévő {{count}} almappa is törlődik. A dokumentumok megmaradnak, és elérhetők a mappa nélküli dokumentumok szűrőjével.",
-        "deleteFolderSubtreeDetail_one": "A benne lévő almappa is törlődik. A dokumentumok megmaradnak, és elérhetők a mappa nélküli dokumentumok szűrőjével."
+        "deleteFolderSubtreeDetail_one": "A benne lévő almappa is törlődik. A dokumentumok megmaradnak, és elérhetők a mappa nélküli dokumentumok szűrőjével.",
+        "shareAction": "Megosztás",
+        "sharePreparing": "Előkészítés …",
+        "shareUnsupportedType": "Ez a fájltípus nem osztható meg az eszköz megosztási menüjén keresztül. Töltse le helyette a fájlt.",
+        "shareUnavailable": "Az eszköz megosztási menüje ebben a böngészőben nem érhető el, vagy biztonságos kapcsolatot (HTTPS) igényel. Töltse le helyette a fájlt.",
+        "shareFailed": "A megosztás nem sikerült. Töltse le helyette a fájlt."
     },
     "housekeeping": {
         "title": "Háztartás",

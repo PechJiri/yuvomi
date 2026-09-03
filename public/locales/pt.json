@@ -2988,7 +2988,12 @@
         "folderExpand": "Expandir «{{name}}»",
         "folderCollapse": "Recolher «{{name}}»",
         "deleteFolderSubtreeDetail": "As {{count}} subpastas lá dentro também serão eliminadas. Os documentos permanecem e continuam acessíveis pelo filtro de documentos sem pasta.",
-        "deleteFolderSubtreeDetail_one": "A subpasta lá dentro também será eliminada. Os documentos permanecem e continuam acessíveis pelo filtro de documentos sem pasta."
+        "deleteFolderSubtreeDetail_one": "A subpasta lá dentro também será eliminada. Os documentos permanecem e continuam acessíveis pelo filtro de documentos sem pasta.",
+        "shareAction": "Partilhar",
+        "sharePreparing": "A preparar …",
+        "shareUnsupportedType": "Este tipo de ficheiro não pode ser partilhado através do menu de partilha do dispositivo. Em vez disso, descarregue o ficheiro.",
+        "shareUnavailable": "O menu de partilha do dispositivo não está disponível neste navegador ou precisa de uma ligação segura (HTTPS). Em vez disso, descarregue o ficheiro.",
+        "shareFailed": "A partilha não funcionou. Em vez disso, descarregue o ficheiro."
     },
     "shortcuts": {
         "goKitchen": "Cozinha",

@@ -3045,7 +3045,12 @@
         "folderExpand": "Rozwiń „{{name}}\"",
         "folderCollapse": "Zwiń „{{name}}\"",
         "deleteFolderSubtreeDetail": "Zostanie usuniętych także {{count}} podfolderów w środku. Dokumenty pozostaną i będą dostępne przez filtr dokumentów bez folderu.",
-        "deleteFolderSubtreeDetail_one": "Zostanie usunięty także podfolder w środku. Dokumenty pozostaną i będą dostępne przez filtr dokumentów bez folderu."
+        "deleteFolderSubtreeDetail_one": "Zostanie usunięty także podfolder w środku. Dokumenty pozostaną i będą dostępne przez filtr dokumentów bez folderu.",
+        "shareAction": "Udostępnij",
+        "sharePreparing": "Przygotowywanie …",
+        "shareUnsupportedType": "Tego typu pliku nie można udostępnić przez menu udostępniania urządzenia. Zamiast tego pobierz plik.",
+        "shareUnavailable": "Menu udostępniania urządzenia nie jest dostępne w tej przeglądarce lub wymaga bezpiecznego połączenia (HTTPS). Zamiast tego pobierz plik.",
+        "shareFailed": "Udostępnianie się nie powiodło. Zamiast tego pobierz plik."
     },
     "userMultiSelect": {
         "nobody": "– Nikt –",

@@ -3045,7 +3045,12 @@
         "folderExpand": "„{{name}}\" uitklappen",
         "folderCollapse": "„{{name}}\" inklappen",
         "deleteFolderSubtreeDetail": "De {{count}} submappen erin worden ook verwijderd. De documenten blijven bestaan en zijn bereikbaar via het filter voor documenten zonder map.",
-        "deleteFolderSubtreeDetail_one": "De submap erin wordt ook verwijderd. De documenten blijven bestaan en zijn bereikbaar via het filter voor documenten zonder map."
+        "deleteFolderSubtreeDetail_one": "De submap erin wordt ook verwijderd. De documenten blijven bestaan en zijn bereikbaar via het filter voor documenten zonder map.",
+        "shareAction": "Delen",
+        "sharePreparing": "Voorbereiden …",
+        "shareUnsupportedType": "Dit bestandstype kan niet via het deelmenu van het apparaat worden gedeeld. Download het bestand in plaats daarvan.",
+        "shareUnavailable": "Het deelmenu van het apparaat is in deze browser niet beschikbaar of heeft een beveiligde verbinding (HTTPS) nodig. Download het bestand in plaats daarvan.",
+        "shareFailed": "Delen is niet gelukt. Download het bestand in plaats daarvan."
     },
     "housekeeping": {
         "title": "Huishouden",

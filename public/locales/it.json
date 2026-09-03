@@ -2988,7 +2988,12 @@
         "folderExpand": "Espandi «{{name}}»",
         "folderCollapse": "Comprimi «{{name}}»",
         "deleteFolderSubtreeDetail": "Verranno eliminate anche le {{count}} sottocartelle al suo interno. I documenti restano e sono raggiungibili tramite il filtro per i documenti senza cartella.",
-        "deleteFolderSubtreeDetail_one": "Verrà eliminata anche la sottocartella al suo interno. I documenti restano e sono raggiungibili tramite il filtro per i documenti senza cartella."
+        "deleteFolderSubtreeDetail_one": "Verrà eliminata anche la sottocartella al suo interno. I documenti restano e sono raggiungibili tramite il filtro per i documenti senza cartella.",
+        "shareAction": "Condividi",
+        "sharePreparing": "Preparazione …",
+        "shareUnsupportedType": "Questo tipo di file non può essere condiviso tramite il menu di condivisione del dispositivo. Scarica invece il file.",
+        "shareUnavailable": "Il menu di condivisione del dispositivo non è disponibile in questo browser oppure richiede una connessione sicura (HTTPS). Scarica invece il file.",
+        "shareFailed": "La condivisione non è riuscita. Scarica invece il file."
     },
     "shortcuts": {
         "goKitchen": "Cucina",

@@ -2988,7 +2988,12 @@
         "folderExpand": "Expandera ”{{name}}”",
         "folderCollapse": "Fäll ihop ”{{name}}”",
         "deleteFolderSubtreeDetail": "De {{count}} undermapparna i den tas också bort. Dokumenten finns kvar och nås via filtret för dokument utan mapp.",
-        "deleteFolderSubtreeDetail_one": "Undermappen i den tas också bort. Dokumenten finns kvar och nås via filtret för dokument utan mapp."
+        "deleteFolderSubtreeDetail_one": "Undermappen i den tas också bort. Dokumenten finns kvar och nås via filtret för dokument utan mapp.",
+        "shareAction": "Dela",
+        "sharePreparing": "Förbereder …",
+        "shareUnsupportedType": "Den här filtypen kan inte delas via enhetens delningsmeny. Ladda ned filen i stället.",
+        "shareUnavailable": "Enhetens delningsmeny är inte tillgänglig i den här webbläsaren, eller så kräver den en säker anslutning (HTTPS). Ladda ned filen i stället.",
+        "shareFailed": "Delningen fungerade inte. Ladda ned filen i stället."
     },
     "shortcuts": {
         "goKitchen": "Kök",

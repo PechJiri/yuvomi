@@ -2988,7 +2988,12 @@
         "folderExpand": "Déplier « {{name}} »",
         "folderCollapse": "Replier « {{name}} »",
         "deleteFolderSubtreeDetail": "Les {{count}} sous-dossiers qu’il contient seront également supprimés. Les documents restent et sont accessibles via le filtre des documents sans dossier.",
-        "deleteFolderSubtreeDetail_one": "Le sous-dossier qu’il contient sera également supprimé. Les documents restent et sont accessibles via le filtre des documents sans dossier."
+        "deleteFolderSubtreeDetail_one": "Le sous-dossier qu’il contient sera également supprimé. Les documents restent et sont accessibles via le filtre des documents sans dossier.",
+        "shareAction": "Partager",
+        "sharePreparing": "Préparation …",
+        "shareUnsupportedType": "Ce type de fichier ne peut pas être partagé via le menu de partage de l'appareil. Téléchargez le fichier à la place.",
+        "shareUnavailable": "Le menu de partage de l'appareil n'est pas disponible dans ce navigateur, ou il nécessite une connexion sécurisée (HTTPS). Téléchargez le fichier à la place.",
+        "shareFailed": "Le partage n'a pas fonctionné. Téléchargez le fichier à la place."
     },
     "shortcuts": {
         "goKitchen": "Cuisine",

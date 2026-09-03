@@ -29,6 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains one row per person. Name-day labels, validation and calendar text are included in all 24
   supported interface languages.
 
+- **Documents can be shared through the device's share sheet, straight from the viewer** (D#1014,
+  requested by @gdanthy). A passport scan used to take three steps to send: download, find the file,
+  share it. The viewer now carries a Share button that opens the operating system's share sheet with
+  the file - WhatsApp, Mail, AirDrop, Files, whatever is installed. It is built the way the reporter
+  proposed: the file is fetched in the background when the viewer opens, the button stays busy until
+  it is there, and the tap then goes straight into the share sheet, because a fetch between tap and
+  share is exactly where iOS drops the gesture. Whether sharing is possible is decided once, before
+  anything is loaded: the type has to be one the Web Share API accepts as a file (PDF, images, text,
+  CSV - not Word or Excel), the connection has to be secure, and the browser has to say yes to a probe.
+  Where the answer is no, there is no dead button; a line under the metadata says why, and Download
+  remains the path that works everywhere. Rows are unchanged on purpose.
+
 - **Decisions made once now have a page of their own.** [`docs/DECISIONS.md`](docs/DECISIONS.md)
   is the counterpart to the scope page: not what Yuvomi will not become, but how something it
   does build was decided, so that the next thread reaching the same point gets the answer instead

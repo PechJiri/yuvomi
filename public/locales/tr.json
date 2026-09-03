@@ -2988,7 +2988,12 @@
         "folderExpand": "\"{{name}}\" genişlet",
         "folderCollapse": "\"{{name}}\" daralt",
         "deleteFolderSubtreeDetail": "İçindeki {{count}} alt klasör de silinir. Belgeler kalır ve klasörsüz belgeler filtresinden erişilebilir.",
-        "deleteFolderSubtreeDetail_one": "İçindeki alt klasör de silinir. Belgeler kalır ve klasörsüz belgeler filtresinden erişilebilir."
+        "deleteFolderSubtreeDetail_one": "İçindeki alt klasör de silinir. Belgeler kalır ve klasörsüz belgeler filtresinden erişilebilir.",
+        "shareAction": "Paylaş",
+        "sharePreparing": "Hazırlanıyor …",
+        "shareUnsupportedType": "Bu dosya türü cihazın paylaşım menüsü üzerinden paylaşılamaz. Bunun yerine dosyayı indirin.",
+        "shareUnavailable": "Cihazın paylaşım menüsü bu tarayıcıda kullanılamıyor veya güvenli bir bağlantı (HTTPS) gerektiriyor. Bunun yerine dosyayı indirin.",
+        "shareFailed": "Paylaşım gerçekleşmedi. Bunun yerine dosyayı indirin."
     },
     "shortcuts": {
         "goKitchen": "Mutfak",

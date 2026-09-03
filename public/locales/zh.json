@@ -2988,7 +2988,12 @@
         "folderExpand": "展开“{{name}}”",
         "folderCollapse": "折叠“{{name}}”",
         "deleteFolderSubtreeDetail": "其中的 {{count}} 个子文件夹也会一并删除。文档仍会保留，可通过“无文件夹的文档”筛选找到。",
-        "deleteFolderSubtreeDetail_one": "其中的子文件夹也会一并删除。文档仍会保留，可通过“无文件夹的文档”筛选找到。"
+        "deleteFolderSubtreeDetail_one": "其中的子文件夹也会一并删除。文档仍会保留，可通过“无文件夹的文档”筛选找到。",
+        "shareAction": "分享",
+        "sharePreparing": "正在准备 …",
+        "shareUnsupportedType": "此文件类型无法通过设备的分享菜单分享。请改为下载文件。",
+        "shareUnavailable": "设备的分享菜单在此浏览器中不可用，或需要安全连接（HTTPS）。请改为下载文件。",
+        "shareFailed": "分享未成功。请改为下载文件。"
     },
     "shortcuts": {
         "goKitchen": "厨房",

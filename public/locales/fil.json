@@ -3045,7 +3045,12 @@
         "folderExpand": "Palawakin ang \"{{name}}\"",
         "folderCollapse": "Itiklop ang \"{{name}}\"",
         "deleteFolderSubtreeDetail": "Buburahin din ang {{count}} na subfolder sa loob. Mananatili ang mga dokumento at maaabot pa rin sa filter para sa mga dokumentong walang folder.",
-        "deleteFolderSubtreeDetail_one": "Buburahin din ang subfolder sa loob. Mananatili ang mga dokumento at maaabot pa rin sa filter para sa mga dokumentong walang folder."
+        "deleteFolderSubtreeDetail_one": "Buburahin din ang subfolder sa loob. Mananatili ang mga dokumento at maaabot pa rin sa filter para sa mga dokumentong walang folder.",
+        "shareAction": "Ibahagi",
+        "sharePreparing": "Inihahanda …",
+        "shareUnsupportedType": "Hindi maibabahagi ang uri ng file na ito sa pamamagitan ng share sheet ng device. I-download na lang ang file.",
+        "shareUnavailable": "Hindi available ang share sheet ng device sa browser na ito, o kailangan nito ng secure na koneksyon (HTTPS). I-download na lang ang file.",
+        "shareFailed": "Hindi gumana ang pagbabahagi. I-download na lang ang file."
     },
     "userMultiSelect": {
         "nobody": "- Wala -",
