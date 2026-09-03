@@ -6948,8 +6948,7 @@ const MIGRATIONS = [
     // No concrete capability is registered here; features can add one without
     // having to change this core table again.
     up: `
-      ALTER TABLE access_permissions RENAME TO access_permissions_v170;
-      CREATE TABLE access_permissions (
+      CREATE TABLE access_permissions_new (
         subject_type  TEXT NOT NULL CHECK(subject_type IN ('role', 'user')),
         subject_id    TEXT NOT NULL,
         resource_type TEXT NOT NULL CHECK(resource_type IN ('module', 'widget', 'capability')),
@@ -6958,12 +6957,13 @@ const MIGRATIONS = [
         updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
         PRIMARY KEY (subject_type, subject_id, resource_type, resource_key)
       );
-      INSERT INTO access_permissions
+      INSERT INTO access_permissions_new
         (subject_type, subject_id, resource_type, resource_key, access, updated_at)
       SELECT subject_type, subject_id, resource_type, resource_key, access, updated_at
-      FROM access_permissions_v170;
-      DROP TABLE access_permissions_v170;
-      CREATE INDEX idx_access_permissions_subject
+      FROM access_permissions;
+      DROP TABLE access_permissions;
+      ALTER TABLE access_permissions_new RENAME TO access_permissions;
+      CREATE INDEX IF NOT EXISTS idx_access_permissions_subject
         ON access_permissions(subject_type, subject_id);
     `,
   },
