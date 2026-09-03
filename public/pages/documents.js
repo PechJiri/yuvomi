@@ -31,7 +31,10 @@ import {
   runRateLimitedOperation,
   supportsDirectoryUpload,
 } from '/utils/folder-upload.js';
-import { optimisticallyHideFolderSubtree } from '/utils/document-folder-delete.js';
+import {
+  applyPendingFolderDeleteOverlay,
+  scheduleFolderDeleteWithUndo,
+} from '/utils/document-folder-delete.js';
 
 const CATEGORIES = ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'];
 
@@ -293,12 +296,14 @@ async function loadMembers() {
 async function loadDocuments() {
   const res = await api.get(`/documents?status=${encodeURIComponent(state.status)}`);
   state.allDocuments = res.data || [];
+  applyPendingFolderDeleteOverlay(state, { freshDocuments: true });
   applyFilters();
 }
 
 async function loadFolders() {
   const res = await api.get('/documents/folders');
   state.folders = res.data || [];
+  applyPendingFolderDeleteOverlay(state, { freshFolders: true });
 }
 
 async function loadMetaOptions() {
@@ -1149,33 +1154,28 @@ async function deleteFolder(folder) {
 
   const selectedSubtree = folderSubtree(folder.id);
   if (choice === 'delete') {
-    const owner = _container;
-    const restoreState = optimisticallyHideFolderSubtree(state, selectedSubtree);
-    persistExpandedFolders();
-    applyFilters();
-    renderAll();
-
-    scheduleUndoableDelete({
+    scheduleFolderDeleteWithUndo({
+      state,
+      folderIds: selectedSubtree,
       message: t('documents.folderDeletedWithDocumentsToast', { count: impact.documents }),
-      commit: async ({ keepalive }) => {
-        const result = await commitFolderDeletion(folder, impact, choice, { keepalive });
-        if (keepalive || _container !== owner) return;
-        // A completed server delete must never be undone merely because the
-        // subsequent refresh failed. Keep the optimistic state and surface the
-        // refresh error separately.
-        try {
-          await applyFolderDeleteResult(result, choice, selectedSubtree, { showSuccess: false });
-        } catch (err) {
-          window.yuvomi?.showToast(friendlyError(err), 'danger');
-        }
+      schedule: scheduleUndoableDelete,
+      requestDelete: ({ keepalive }) => (
+        commitFolderDeletion(folder, impact, choice, { keepalive })
+      ),
+      isViewActive: () => Boolean(_container?.isConnected),
+      applyResult: (result) => (
+        applyFolderDeleteResult(result, choice, selectedSubtree, { showSuccess: false })
+      ),
+      handleError: (err) => handleFolderDeleteError(err, folder),
+      // The server deletion has already succeeded at this point. A failed
+      // refresh must not restore records that no longer exist server-side.
+      handleApplyError: (err) => {
+        window.yuvomi?.showToast(friendlyError(err), 'danger');
       },
-      restore: (err) => {
-        if (_container !== owner) return;
-        restoreState();
+      render: () => {
         persistExpandedFolders();
         applyFilters();
         renderAll();
-        if (err) void handleFolderDeleteError(err, folder);
       },
     });
     return;

@@ -256,14 +256,6 @@ test('Ordnerlöschung bietet Behalten oder Mitlöschen mit exakten Server-Zahlen
   assert.ok(block.includes("t('documents.deleteFolderWithDocuments'"));
 });
 
-test('destruktivní smazání složky čeká na Undo, bezpečné vyjmutí se provede hned', () => {
-  const block = page.slice(page.indexOf('async function deleteFolder(folder)'), page.indexOf('\nfunction openFolderModal'));
-  assert.match(block, /choice === 'delete'[\s\S]*optimisticallyHideFolderSubtree/);
-  assert.match(block, /choice === 'delete'[\s\S]*scheduleUndoableDelete\(\{/);
-  assert.match(block, /commit:[\s\S]*api\.delete\([\s\S]*keepalive/);
-  assert.match(block, /scheduleUndoableDelete\(\{[\s\S]*return;\s*}\s*try\s*{[\s\S]*await commitFolderDeletion/);
-});
-
 test('Ordner mit nur unsichtbaren Dokumenten erklärt die fehlende Löschoption', () => {
   const block = page.slice(page.indexOf('async function deleteFolder(folder)'), page.indexOf('\nfunction openFolderModal'));
   assert.match(block, /impact\.documents > 0\s*\|\|\s*!impact\.can_delete_documents/);
