@@ -171,7 +171,7 @@ export function documentsPaths() {
         summary: 'Delete a document folder subtree',
         tag: 'Documents',
         stateChanging: true,
-        description: 'Deletes the folder and all subfolders. `documents=unfile` keeps every document row and clears its folder link, including documents hidden from the caller. `documents=delete` requires the identity-bound snapshot from the latest delete-impact response, then sequentially deletes visible document content and rows while locking the previewed identities and subtree targets against concurrent moves. Destructive deletion is rejected before the first storage operation if any document is hidden from the caller, if a non-admin does not own every visible document, or if the previewed identities changed. A 207 response distinguishes storage, database-row and concurrent-content failures while retaining the folder subtree.',
+        description: 'Deletes the folder and all subfolders. `documents=unfile` keeps every document row and clears its folder link, including documents hidden from the caller, while reporting only the visible unfile count. `documents=delete` requires the opaque HMAC snapshot from the latest delete-impact response; the token binds exact folder, document and collateral-link identities. The route then sequentially deletes visible document content and rows while locking the previewed identities, subtree targets and new document links. Destructive deletion is rejected before the first storage operation if any document is hidden from the caller, if a non-admin does not own every visible document, or if the previewed identities changed. A 207 response distinguishes storage, database-row and concurrent-content failures while retaining the folder subtree.',
         params: [
           idParam(),
           {
@@ -218,7 +218,7 @@ export function documentsPaths() {
       get: op({
         summary: 'Preview the impact of deleting a document folder subtree',
         tag: 'Documents',
-        description: 'Returns the visible document count, exact folder count, affected-record counts grouped by module, an identity-bound subtree snapshot, and whether the caller may delete every affected document. Hidden-document totals are never returned; their presence only makes destructive deletion unavailable.',
+        description: 'Returns the visible document count, exact folder count, affected-record counts grouped by module, an opaque HMAC snapshot bound to folder, document and collateral-link identities, and whether the caller may delete every affected document. Hidden-document totals are never returned; their presence only makes destructive deletion unavailable.',
         params: [idParam()],
         responses: {
           200: { description: 'Folder deletion impact' },

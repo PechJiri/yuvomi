@@ -5,7 +5,7 @@
  * Ausführen: npm run test:document-folders
  */
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
@@ -19,6 +19,7 @@ process.env.SESSION_SECRET = 'document-folders-test-secret';
 
 const { MIGRATIONS, get, _setTestDatabase } = await import('../server/db.js');
 const { default: documentsRouter } = await import('../server/routes/documents.js');
+const { default: tasksRouter } = await import('../server/routes/tasks.js');
 
 const moduleDatabase = get();
 const suiteDatabase = buildMigratedDatabase(MIGRATIONS);
@@ -62,6 +63,7 @@ function createHarness({ userId = ADMIN_ID, role = 'admin' } = {}) {
     next();
   });
   app.use('/api/v1/documents', documentsRouter);
+  app.use('/api/v1/tasks', tasksRouter);
   const server = http.createServer(app);
   return {
     async call(method, pathname, body) {
@@ -69,6 +71,19 @@ function createHarness({ userId = ADMIN_ID, role = 'admin' } = {}) {
         await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
       }
       const base = `http://127.0.0.1:${server.address().port}/api/v1/documents`;
+      const res = await fetch(`${base}${pathname}`, {
+        method,
+        headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const text = await res.text();
+      return { status: res.status, body: text ? JSON.parse(text) : null };
+    },
+    async callTask(method, pathname, body) {
+      if (!server.listening) {
+        await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      }
+      const base = `http://127.0.0.1:${server.address().port}/api/v1/tasks`;
       const res = await fetch(`${base}${pathname}`, {
         method,
         headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -205,6 +220,13 @@ test('GET /folders/:id/delete-impact counts documents and subfolders across the 
     assert.equal(impact.body.data.documents, 2);
     assert.equal(impact.body.data.can_delete_documents, true);
     assert.match(impact.body.data.snapshot, /^[a-f0-9]{64}$/);
+    const enumerableDigest = createHash('sha256').update(JSON.stringify({
+      folders: [root.body.data.id, child.body.data.id].sort((a, b) => a - b),
+      documents: get().prepare('SELECT id FROM family_documents WHERE folder_id IN (?, ?) ORDER BY id')
+        .all(root.body.data.id, child.body.data.id).map((row) => row.id),
+    })).digest('hex');
+    assert.notEqual(impact.body.data.snapshot, enumerableDigest,
+      'the public snapshot must be keyed, not a brute-forceable digest of sequential ids');
   } finally {
     await h.close();
   }
@@ -286,6 +308,34 @@ test('GET delete impact names every module whose document links will change', as
   }
 });
 
+test('DELETE rejects a collateral-link change made after the impact preview', async () => {
+  const h = createHarness();
+  try {
+    const folder = await h.call('POST', '/folders', { name: `Linked-race-${randomUUID()}` });
+    const documentId = get().prepare(`
+      INSERT INTO family_documents
+        (name, original_name, mime_type, file_size, content_data, category, visibility, status, folder_id, created_by)
+      VALUES ('Late link', 'late.txt', 'text/plain', 1, ?, 'other', 'family', 'active', ?, ?)
+    `).run(Buffer.from('late'), folder.body.data.id, ADMIN_ID).lastInsertRowid;
+    const impact = await h.call('GET', `/folders/${folder.body.data.id}/delete-impact`);
+    const taskId = get().prepare("INSERT INTO tasks (title, created_by) VALUES ('Late task', ?)")
+      .run(ADMIN_ID).lastInsertRowid;
+    get().prepare('INSERT INTO task_documents (task_id, document_id, created_by) VALUES (?, ?, ?)')
+      .run(taskId, documentId, ADMIN_ID);
+
+    const del = await h.call(
+      'DELETE',
+      `/folders/${folder.body.data.id}?documents=delete&expected_snapshot=${impact.body.data.snapshot}`,
+    );
+
+    assert.equal(del.status, 409);
+    assert.equal(del.body.reason, 'FOLDER_CONTENT_CHANGED');
+    assert.ok(get().prepare('SELECT id FROM family_documents WHERE id = ?').get(documentId));
+  } finally {
+    await h.close();
+  }
+});
+
 test('DELETE with documents rejects a member before deleting any owned document', async () => {
   const storageRoot = mkdtempSync(join(tmpdir(), 'yuvomi-folder-delete-authorization-'));
   const previousStoragePath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
@@ -339,6 +389,7 @@ test('DELETE with documents rejects a member before deleting any owned document'
         `document ${document.id} must keep its stored file`);
     }
     assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+
   } finally {
     await Promise.all([adminHarness.close(), memberHarness.close()]);
     if (previousStoragePath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
@@ -395,6 +446,11 @@ test('delete impact does not count a hidden private document and admins cannot d
     assert.equal(get().prepare('SELECT COUNT(*) AS count FROM family_documents WHERE id IN (?, ?)')
       .get(visibleId, hiddenId).count, 2);
     assert.ok(get().prepare('SELECT id FROM family_document_folders WHERE id = ?').get(folder.body.data.id));
+
+    const unfile = await h.call('DELETE', `/folders/${folder.body.data.id}?documents=unfile`);
+    assert.equal(unfile.status, 200);
+    assert.equal(unfile.body.data.unfiled_documents, 1,
+      'the response must count only documents visible to the caller');
   } finally {
     await h.close();
   }
@@ -750,6 +806,14 @@ test('DELETE with documents locks previewed documents and folders against concur
     }
     assert.equal(existsSync(join(storageRoot, documents[0].storageKey)), false, 'deletion must have started');
 
+    const taskId = get().prepare("INSERT INTO tasks (title, created_by) VALUES ('Concurrent link', ?)")
+      .run(ADMIN_ID).lastInsertRowid;
+    const linkDocumentDuringDelete = await h.callTask('PUT', `/${taskId}/documents`, {
+      // Pick a file near the end of the queue: the first files may already have
+      // completed both storage and row deletion by the time this request runs.
+      document_ids: [documents.at(-2).id],
+    });
+
     const hiddenUpdate = await memberHarness.call('PUT', `/${documents.at(-1).id}`, {
       folder_id: outside.body.data.id,
     });
@@ -779,6 +843,10 @@ test('DELETE with documents locks previewed documents and folders against concur
     assert.equal(moveDocumentIntoTree.body.error,
       'The document folder is currently being deleted. Try again when the operation finishes.');
     assert.equal(moveDocumentIntoTree.body.reason, 'FOLDER_DELETE_IN_PROGRESS');
+    assert.equal(linkDocumentDuringDelete.status, 409);
+    assert.equal(linkDocumentDuringDelete.body.reason, 'DOCUMENT_DELETE_IN_PROGRESS');
+    assert.equal(get().prepare('SELECT COUNT(*) AS count FROM task_documents WHERE task_id = ?')
+      .get(taskId).count, 0);
     const del = await deletion;
     assert.equal(del.status, 200);
     assert.equal(del.body.data.folder_deleted, true);

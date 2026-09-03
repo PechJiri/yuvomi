@@ -13,7 +13,10 @@ import { createLogger } from '../../logger.js';
 import {
   str, oneOf, num, date, id as idParam, collectErrors, MAX_TITLE, MAX_TEXT, MAX_SHORT,
 } from '../../middleware/validate.js';
-import { documentLinksFor, loadDocumentLinks, replaceDocumentLinks } from '../../services/document-links.js';
+import {
+  assertDocumentLinkTargetsAvailable, documentLinksFor, loadDocumentLinks, replaceDocumentLinks,
+} from '../../services/document-links.js';
+import { sendDocumentDeletionConflict } from '../../services/document-deletion-lock.js';
 import {
   ROLES, visibleEntry, linkabilityError, entryHasLinks, linkEntry, unlinkEntry,
   loadLinkedEntriesForItems, loadLinkedEntries, computeTotal,
@@ -332,6 +335,7 @@ router.post('/', (req, res) => {
     // DELETE /:id): wirft syncReminder - etwa an einem Kaufdatum, das die
     // Datumsrechnung nicht parsen kann -, darf der Gegenstand nicht trotzdem
     // geschrieben bleiben, waehrend die Anfrage mit 500 endet.
+    assertDocumentLinkTargetsAvailable(db.get(), req.body.attachment_document_ids, userId);
     const result = db.get().transaction(() => {
       const inserted = db.get().prepare(`
         INSERT INTO inventory_items
@@ -370,6 +374,7 @@ router.post('/', (req, res) => {
 
     res.status(201).json({ data: loadItem(result.lastInsertRowid, userId) });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     log.error('POST / error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   }
@@ -428,6 +433,7 @@ router.put('/:id', (req, res) => {
     // Wert korrigiert, darf angehaengte Belege nicht stillschweigend abraeumen
     // (gleiches Muster wie server/routes/budget/entries.js#PUT /:id).
     if (req.body.attachment_document_ids !== undefined) {
+      assertDocumentLinkTargetsAvailable(db.get(), req.body.attachment_document_ids, userId);
       replaceDocumentLinks(db.get(), {
         ...DOCS, ownerId: item.id, documentIds: req.body.attachment_document_ids, userId,
       });
@@ -435,6 +441,7 @@ router.put('/:id', (req, res) => {
 
     res.json({ data: loadItem(item.id, userId) });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     log.error('PUT /:id error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   }

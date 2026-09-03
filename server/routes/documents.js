@@ -5,11 +5,16 @@
  */
 
 import express from 'express';
-import { createHash } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import * as db from '../db.js';
 import { createLogger } from '../logger.js';
 import { str, collectErrors, id as validateId, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
 import { documentVisibleSql } from '../services/document-access.js';
+import {
+  documentDeleteIsActive,
+  lockDocumentDeletes,
+  unlockDocumentDeletes,
+} from '../services/document-deletion-lock.js';
 import { ensureModuleFolder, isModuleFolderKey } from '../services/document-folders.js';
 import { subtreeIds, folderMoveIssue, MAX_FOLDER_DEPTH } from '../../public/utils/folder-tree.js';
 import { getAdapter as defaultGetDmsAdapter } from '../services/dms/index.js';
@@ -54,8 +59,8 @@ const router = express.Router();
 // cannot move a confirmed document or child folder out from under the batch.
 // Yuvomi runs one Node process per instance; the database remains the durable
 // source of truth, while these sets serialize in-flight route mutations.
-const activeDocumentDeletes = new Set();
 const activeFolderTreeDeletes = new Set();
+const folderDeleteSnapshotKey = process.env.SESSION_SECRET || randomBytes(32);
 
 function deletionInProgress(res) {
   return res.status(409).json({
@@ -514,41 +519,57 @@ function allFolders() {
 }
 
 /** Bind a destructive confirmation to exact folder and document identities. */
-function folderDeleteSnapshot(folderIds, documentIds) {
+function folderDeleteSnapshot(folderIds, documentIds, linkedState) {
   const numericSort = (a, b) => a - b;
   const payload = JSON.stringify({
     folders: Array.from(folderIds || [], Number).sort(numericSort),
     documents: Array.from(documentIds || [], Number).sort(numericSort),
+    links: linkedState,
   });
-  return createHash('sha256').update(payload).digest('hex');
+  return createHmac('sha256', folderDeleteSnapshotKey)
+    .update('yuvomi:folder-delete:v1\0')
+    .update(payload)
+    .digest('hex');
 }
 
-/** Counts visible records in other modules whose document links deletion changes. */
-function folderDeleteLinkedRecords(documentIds) {
+/** Exact link identities affected by deleting the selected documents. */
+function folderDeleteLinkedState(documentIds) {
   if (!documentIds.length) {
-    return { calendar: 0, housekeeping: 0, split_expenses: 0, tasks: 0, budget: 0, inventory: 0 };
+    return {
+      calendar_events: [], housekeeping_work_sessions: [], expense_groups: [],
+      settlements: [], expense_attachments: [], task_documents: [],
+      budget_entry_attachments: [], inventory_item_documents: [],
+    };
   }
   const params = Object.fromEntries(documentIds.map((value, index) => [`d${index}`, value]));
   const placeholders = documentIds.map((_value, index) => `@d${index}`).join(',');
-  return db.get().prepare(`
-    SELECT
-      (SELECT COUNT(*) FROM calendar_events
-       WHERE attachment_document_id IN (${placeholders})) AS calendar,
-      (SELECT COUNT(*) FROM housekeeping_work_sessions
-       WHERE receipt_document_id IN (${placeholders})) AS housekeeping,
-      ((SELECT COUNT(*) FROM expense_groups
-        WHERE avatar_document_id IN (${placeholders}))
-       + (SELECT COUNT(*) FROM settlements
-          WHERE proof_document_id IN (${placeholders}))
-       + (SELECT COUNT(*) FROM expense_attachments
-          WHERE document_id IN (${placeholders}))) AS split_expenses,
-      (SELECT COUNT(*) FROM task_documents
-       WHERE document_id IN (${placeholders})) AS tasks,
-      (SELECT COUNT(*) FROM budget_entry_attachments
-       WHERE document_id IN (${placeholders})) AS budget,
-      (SELECT COUNT(*) FROM inventory_item_documents
-       WHERE document_id IN (${placeholders})) AS inventory
-  `).get(params);
+  const ids = (table, column, identity = 'id') => db.get().prepare(`
+    SELECT ${identity} AS identity
+      FROM ${table}
+     WHERE ${column} IN (${placeholders})
+     ORDER BY ${identity}
+  `).all(params).map((row) => row.identity);
+  return {
+    calendar_events: ids('calendar_events', 'attachment_document_id'),
+    housekeeping_work_sessions: ids('housekeeping_work_sessions', 'receipt_document_id'),
+    expense_groups: ids('expense_groups', 'avatar_document_id'),
+    settlements: ids('settlements', 'proof_document_id'),
+    expense_attachments: ids('expense_attachments', 'document_id'),
+    task_documents: ids('task_documents', 'document_id', "printf('%d:%d', task_id, document_id)"),
+    budget_entry_attachments: ids('budget_entry_attachments', 'document_id'),
+    inventory_item_documents: ids('inventory_item_documents', 'document_id'),
+  };
+}
+
+function folderDeleteLinkedRecords(state) {
+  return {
+    calendar: state.calendar_events.length,
+    housekeeping: state.housekeeping_work_sessions.length,
+    split_expenses: state.expense_groups.length + state.settlements.length + state.expense_attachments.length,
+    tasks: state.task_documents.length,
+    budget: state.budget_entry_attachments.length,
+    inventory: state.inventory_item_documents.length,
+  };
 }
 
 /** Die Absage der Baumpruefung als Satz, den jemand lesen kann. */
@@ -627,13 +648,15 @@ router.get('/folders/:id/delete-impact', (req, res) => {
     const canDeleteDocuments = visibleDocuments.length === documents.length
       && (isAdmin(req) || visibleDocuments.every((document) => document.created_by === userId(req)));
 
+    const linkedState = folderDeleteLinkedState(documents.map((document) => document.id));
+    const visibleLinkedState = folderDeleteLinkedState(visibleDocuments.map((document) => document.id));
     res.json({ data: {
       id,
       removed_folders: subtree.length,
       documents: visibleDocuments.length,
       can_delete_documents: canDeleteDocuments,
-      linked_records: folderDeleteLinkedRecords(visibleDocuments.map((document) => document.id)),
-      snapshot: folderDeleteSnapshot(subtree, documents.map((document) => document.id)),
+      linked_records: folderDeleteLinkedRecords(visibleLinkedState),
+      snapshot: folderDeleteSnapshot(subtree, documents.map((document) => document.id), linkedState),
     } });
   } catch (err) {
     log.error('GET /folders/:id/delete-impact error:', err);
@@ -796,7 +819,12 @@ router.delete('/folders/:id', async (req, res) => {
     // still andere Inhalte loeschen als angezeigt. Der destruktive Modus ist
     // neu und verlangt den Snapshot; der sichere Unfile-Default bleibt fuer
     // alte Clients ohne Erwartungswerte kompatibel.
-    const currentSnapshot = folderDeleteSnapshot(subtree, documents.map((document) => document.id));
+    const currentLinkedState = folderDeleteLinkedState(documents.map((document) => document.id));
+    const currentSnapshot = folderDeleteSnapshot(
+      subtree,
+      documents.map((document) => document.id),
+      currentLinkedState,
+    );
     if ((expectedDocuments !== null && expectedDocuments !== visibleDocumentIds.size)
         || (expectedFolders !== null && expectedFolders !== subtree.length)
         || (expectedSnapshot !== null && expectedSnapshot !== currentSnapshot)) {
@@ -816,7 +844,7 @@ router.delete('/folders/:id', async (req, res) => {
     }
 
     const overlapsActiveDeletion = subtree.some((folderId) => activeFolderTreeDeletes.has(folderId))
-      || documents.some((document) => activeDocumentDeletes.has(document.id));
+      || documents.some((document) => documentDeleteIsActive(document.id));
     if (overlapsActiveDeletion) return deletionInProgress(res);
 
     if (deleteDocuments) {
@@ -825,7 +853,7 @@ router.delete('/folders/:id', async (req, res) => {
         documentIds: documents.map((document) => document.id),
       };
       deletionLock.folderIds.forEach((folderId) => activeFolderTreeDeletes.add(folderId));
-      deletionLock.documentIds.forEach((documentId) => activeDocumentDeletes.add(documentId));
+      lockDocumentDeletes(deletionLock.documentIds);
     }
 
     if (deleteDocuments) {
@@ -911,7 +939,7 @@ router.delete('/folders/:id', async (req, res) => {
     res.json({ data: {
       id,
       removed_folders: subtree.length,
-      unfiled_documents: deleteDocuments ? 0 : documents.length,
+      unfiled_documents: deleteDocuments ? 0 : visibleDocumentIds.size,
       deleted_documents: deleteDocuments ? documents.length : 0,
       failed_documents: [],
       folder_deleted: true,
@@ -921,7 +949,7 @@ router.delete('/folders/:id', async (req, res) => {
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   } finally {
     deletionLock?.folderIds.forEach((folderId) => activeFolderTreeDeletes.delete(folderId));
-    deletionLock?.documentIds.forEach((documentId) => activeDocumentDeletes.delete(documentId));
+    unlockDocumentDeletes(deletionLock?.documentIds);
   }
 });
 
@@ -1072,7 +1100,7 @@ router.put('/:id', (req, res) => {
     const existing = getVisibleDocument(id, req);
     if (!existing) return res.status(404).json({ error: 'Document not found.', code: 404 });
     if (existing.created_by !== userId(req) && !isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
-    if (activeDocumentDeletes.has(id)) return deletionInProgress(res);
+    if (documentDeleteIsActive(id)) return deletionInProgress(res);
 
     const vName = req.body.name !== undefined ? str(req.body.name, 'Name', { max: MAX_TITLE }) : { value: null };
     const vDescription = req.body.description !== undefined ? str(req.body.description, 'Description', { max: MAX_TEXT, required: false }) : { value: null };
@@ -1227,8 +1255,8 @@ router.delete('/:id', async (req, res) => {
     const existing = getVisibleDocument(id, req, true);
     if (!existing) return res.status(404).json({ error: 'Document not found.', code: 404 });
     if (existing.created_by !== userId(req) && !isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
-    if (activeDocumentDeletes.has(id)) return deletionInProgress(res);
-    activeDocumentDeletes.add(id);
+    if (documentDeleteIsActive(id)) return deletionInProgress(res);
+    lockDocumentDeletes([id]);
     lockedId = id;
     await deleteDocumentContent(existing);
     db.get().prepare('DELETE FROM family_documents WHERE id = ?').run(id);
@@ -1238,7 +1266,7 @@ router.delete('/:id', async (req, res) => {
     if (sendStorageError(res, err, 'Document storage delete failed.')) return;
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   } finally {
-    if (lockedId !== null) activeDocumentDeletes.delete(lockedId);
+    if (lockedId !== null) unlockDocumentDeletes([lockedId]);
   }
 });
 

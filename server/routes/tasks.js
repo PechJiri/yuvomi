@@ -8,6 +8,7 @@ import { createLogger } from '../logger.js';
 import express from 'express';
 import * as db from '../db.js';
 import { documentVisibleSql } from '../services/document-access.js';
+import { assertDocumentsNotDeleting, sendDocumentDeletionConflict } from '../services/document-deletion-lock.js';
 import { nextDueAfterCompletion } from '../services/recurrence.js';
 import { syncTaskRewards } from '../services/rewards.js';
 import { completionFeed, seriesHistory, syncTaskCompletion } from '../services/task-completions.js';
@@ -1786,6 +1787,7 @@ router.put('/:id/documents', (req, res) => {
 
     const canSee = db.get().prepare(`SELECT 1 FROM family_documents d WHERE d.id = @id AND ${DOC_VISIBLE_SQL}`);
     const visibleIds = requested.filter((id) => canSee.get({ id, me }));
+    assertDocumentsNotDeleting(visibleIds);
 
     db.get().transaction(() => {
       // Nur die für diese Person sichtbaren Alt-Verknüpfungen entfernen.
@@ -1803,6 +1805,7 @@ router.put('/:id/documents', (req, res) => {
 
     res.json({ data: loadTaskDocuments(task.id, me) });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     log.error('PUT /:id/documents error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   }

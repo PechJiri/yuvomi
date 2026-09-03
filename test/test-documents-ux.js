@@ -244,6 +244,8 @@ test('Ordnerlöschung bietet Behalten oder Mitlöschen mit exakten Server-Zahlen
   assert.match(block, /FOLDER_CONTENT_CHANGED[\s\S]*await deleteFolder\(folder\)/);
   assert.match(block, /FOLDER_DELETE_IN_PROGRESS[\s\S]*folderDeleteInProgressToast/);
   assert.match(block, /result\.contents_changed[\s\S]*folderDeleteContentsChangedToast/);
+  assert.match(block, /failed_documents[\s\S]*failure_stage !== 'concurrency'/);
+  assert.match(block, /result\.folder_deleted === false && result\.contents_changed && hasNonConcurrencyFailure[\s\S]*folderDeleteContentsChangedWithFailuresToast/);
   assert.match(block, /linked_records/);
   for (const key of ['nav.calendar', 'nav.housekeeping', 'splitExpenses.title', 'nav.tasks', 'nav.budget', 'nav.inventory']) {
     assert.ok(block.includes(`t('${key}')`), `linked-record module label ${key} is missing`);
@@ -252,8 +254,13 @@ test('Ordnerlöschung bietet Behalten oder Mitlöschen mit exakten Server-Zahlen
   assert.ok(block.includes("t('documents.deleteFolderWithDocuments'"));
 });
 
+test('Ordner mit nur unsichtbaren Dokumenten erklärt die fehlende Löschoption', () => {
+  const block = page.slice(page.indexOf('async function deleteFolder(folder)'), page.indexOf('\nfunction openFolderModal'));
+  assert.match(block, /impact\.documents > 0\s*\|\|\s*!impact\.can_delete_documents/);
+});
+
 test('ein leerer Ordner bestätigt den exakten Null-Dokumente-Impact', () => {
-  const start = page.indexOf('if (impact.documents > 0)');
+  const start = page.indexOf('if (impact.documents > 0 || !impact.can_delete_documents)');
   const branch = page.slice(start, page.indexOf('if (!choice)', start));
   assert.match(branch, /deleteFolderImpact/);
   assert.match(branch, /documents:\s*0/);
@@ -363,6 +370,7 @@ test('alle unterstützten Sprachen enthalten die Optionen für die Ordnerlöschu
     'folderDeletedWithDocumentsToast_one',
     'folderDeletePartialToast',
     'folderDeleteContentsChangedToast',
+    'folderDeleteContentsChangedWithFailuresToast',
     'folderDeleteInProgressToast',
   ];
 
@@ -379,4 +387,7 @@ test('alle unterstützten Sprachen enthalten die Optionen für die Ordnerlöschu
     assert.equal('deleteFolderSubtreeDetail_one' in documents, false,
       `${file}: deleteFolderSubtreeDetail_one wird nicht mehr verwendet`);
   }
+
+  const english = JSON.parse(read('../public/locales/en.json')).documents;
+  assert.match(english.deleteFolderLinkedRecords, /^If you also delete the documents,/);
 });

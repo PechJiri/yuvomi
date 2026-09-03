@@ -8,6 +8,8 @@ import { createLogger } from '../../logger.js';
 import * as db from '../../db.js';
 import { str, oneOf, date as validateDate, num, rrule, collectErrors, MAX_TITLE, MONTH_RE } from '../../middleware/validate.js';
 import { normalizeBudgetVisibility } from '../../services/budget-visibility.js';
+import { sendDocumentDeletionConflict } from '../../services/document-deletion-lock.js';
+import { assertDocumentLinkTargetsAvailable } from '../../services/document-links.js';
 import { attachmentsFor, replaceAttachments, withAttachments } from './attachments.js';
 import {
   budgetFilter, budgetCategoryExpr, maskEntries, getBudgetMode, mayEdit, bookedOnly,
@@ -302,6 +304,7 @@ router.post('/', (req, res) => {
       req.body.visibility,
       getBudgetMode() === 'personal' ? 'private' : 'shared'
     );
+    assertDocumentLinkTargetsAvailable(db.get(), req.body.attachment_document_ids, me);
 
     const result = db.get().prepare(`
       INSERT INTO budget_entries
@@ -324,6 +327,7 @@ router.post('/', (req, res) => {
 
     res.status(201).json({ data: { ...entry, attachments: attachmentsFor(entry.id, me) } });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     log.error('', err);
     res.status(500).json({ error: 'Internal error', code: 500 });
   }
@@ -631,6 +635,7 @@ router.put('/:id', (req, res) => {
     // abraeumen.
     const me = req.authUserId || req.session.userId;
     if (req.body.attachment_document_ids !== undefined) {
+      assertDocumentLinkTargetsAvailable(db.get(), req.body.attachment_document_ids, me);
       replaceAttachments(id, req.body.attachment_document_ids, me);
     }
 
@@ -638,6 +643,7 @@ router.put('/:id', (req, res) => {
 
     res.json({ data: { ...updated, attachments: attachmentsFor(id, me) } });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     log.error('', err);
     res.status(500).json({ error: 'Internal error', code: 500 });
   }
