@@ -8,6 +8,19 @@ const workflow = readFileSync(
 );
 const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
 
+function namedWorkflowStep(source, name) {
+  const lines = source.split('\n');
+  const start = lines.findIndex((line) => line === `      - name: ${name}`);
+  assert.notEqual(start, -1, `The ${name} workflow step must exist`);
+  let end = start + 1;
+  while (end < lines.length) {
+    const line = lines[end];
+    if (line.trim() && /^ {0,6}\S/.test(line)) break;
+    end += 1;
+  }
+  return lines.slice(start, end).join('\n');
+}
+
 test('Docker publish treats the remote build cache as an optional optimization', () => {
   assert.match(
     workflow,
@@ -18,18 +31,17 @@ test('Docker publish treats the remote build cache as an optional optimization',
 
 test('Docker publishing injects the immutable Git revision into the image', () => {
   const runtimeStage = dockerfile.slice(dockerfile.lastIndexOf('\nFROM ') + 1);
-  assert.match(runtimeStage, /^ARG APP_BUILD_REVISION$/m);
-  assert.match(runtimeStage, /^ENV APP_BUILD_REVISION=\$\{APP_BUILD_REVISION\}$/m);
+  const revisionArg = runtimeStage.indexOf('\nARG APP_BUILD_REVISION\n');
+  const revisionEnv = runtimeStage.indexOf('\nENV APP_BUILD_REVISION=${APP_BUILD_REVISION}\n');
+  assert.notEqual(revisionArg, -1, 'The runtime stage must declare APP_BUILD_REVISION');
+  assert.ok(revisionEnv > revisionArg, 'ARG APP_BUILD_REVISION must precede the ENV that expands it');
   assert.ok(
-    runtimeStage.indexOf('ARG APP_BUILD_REVISION') > runtimeStage.lastIndexOf('\nRUN ')
-      && runtimeStage.indexOf('ARG APP_BUILD_REVISION') > runtimeStage.lastIndexOf('\nCOPY '),
+    revisionArg > runtimeStage.lastIndexOf('\nRUN ')
+      && revisionArg > runtimeStage.lastIndexOf('\nCOPY '),
     'The per-commit revision must not invalidate stable runtime filesystem layers',
   );
 
-  const buildStepStart = workflow.indexOf('      - name: Build and push');
-  assert.notEqual(buildStepStart, -1, 'The Docker build-and-push step must exist');
-  const nextStep = workflow.indexOf('\n      - name:', buildStepStart + 1);
-  const buildStep = workflow.slice(buildStepStart, nextStep === -1 ? undefined : nextStep);
+  const buildStep = namedWorkflowStep(workflow, 'Build and push');
   assert.match(buildStep, /uses: docker\/build-push-action@v7/);
   assert.match(
     buildStep,
