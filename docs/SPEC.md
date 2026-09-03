@@ -2570,6 +2570,21 @@ editor. A symptom with at least two graded readings gets an expandable "Severity
 y-axis instead of days/°C) so a rarely-but-severely logged symptom is distinguishable from an
 often-but-mildly logged one — something a plain occurrence count can't show.
 
+**A per-symptom cycle-day pattern view** (`symptomCyclePattern()`) answers a third question neither
+of the above can: not "how often" or "how severe," but "which cycle day does this symptom
+reliably land on." It reuses `symptomFrequencyByPhase()`'s cycle-boundary reconstruction, factored
+out into a shared internal `reconstructCycles()` helper (and a shared `classifyDayPhase()` for the
+three-bucket classification) rather than a third copy of the same math. For up to the six most
+recent cycles it returns each cycle's actual length, which cycle-day(s) the symptom occurred on
+(1-indexed from that cycle's own start, so cycles of different lengths line up), and a per-day
+phase classification for the whole cycle. `occurredCount`/`totalCount` count *cycles* ("in 2 of 3
+cycles"), not raw occurrences - a symptom that recurs several times within one cycle still only
+counts once for that cycle. The UI renders this as a plain-language sentence plus a compact grid
+(one bar per cycle, phase-colored day cells, an inset ring rather than a second color marking a
+hit day - the ring stays visible without relying on color perception, and each cell's `title`
+carries the cycle-day number as text too), as a second expandable panel alongside the severity
+trend on the same symptom-frequency row.
+
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and
 fans out via Web Push and the household channels (Gotify, ntfy, webhook, email). Medications (`name`, `dosage_text`) and activities

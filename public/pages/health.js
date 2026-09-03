@@ -44,6 +44,7 @@ import {
   predictCycle, cycleStats, buildCycleCalendar, cycleRing, MIN_HISTORY_GAPS,
   normalizeSymptomEntries, symptomIntensityLabelKey,
   cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
+  symptomCyclePattern,
 } from '/utils/health-cycle.js';
 import { HEALTH_ROUTES, renderHealthTabsBar } from '/utils/health-tabs.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -4715,7 +4716,41 @@ function symptomIntensityTrendChartMarkup(trend, symptomLabel) {
   });
 }
 
-function symptomFrequencyChartMarkup(freq, dayLogs) {
+/**
+ * Zyklustag-Muster eines Symptoms (Phase 4c) - Satz + kompaktes Raster (ein
+ * Balken je Zyklus, Tageszellen phasengefaerbt, Ring um die Zelle markiert
+ * ein tatsaechliches Vorkommen). Kein eigener Farbcode fuer "Treffer" - eine
+ * Umrandung bleibt auch fuer Farbfehlsichtige von der Fuellfarbe unterscheidbar,
+ * ausserdem traegt title="" denselben Zyklustag als Text.
+ */
+function symptomCyclePatternMarkup(pattern, symptomLabel) {
+  if (pattern.totalCount < 2) return '';
+  const phaseLabel = pattern.mostCommonPhase ? t(SYMPTOM_PHASE_LABEL_KEYS[pattern.mostCommonPhase]) : null;
+  const sentence = phaseLabel
+    ? t('health.cycle.trends.cyclePatternSentence', { symptom: symptomLabel, phase: phaseLabel, occurred: pattern.occurredCount, total: pattern.totalCount })
+    : t('health.cycle.trends.cyclePatternNone', { symptom: symptomLabel, total: pattern.totalCount });
+
+  const rows = pattern.cycles.map((c) => {
+    const cells = c.phaseByDay.map((phase, i) => {
+      const day = i + 1;
+      const hit = c.occurredOnDays.includes(day);
+      return `<span class="cycle-pattern-grid__cell${hit ? ' cycle-pattern-grid__cell--hit' : ''}" style="background:${SYMPTOM_PHASE_COLOR[phase]}" title="${esc(t('health.cycle.ring.cycleDay', { day }))}"></span>`;
+    }).join('');
+    return `
+      <div class="cycle-pattern-grid__row">
+        <span class="cycle-pattern-grid__label">${esc(formatDate(c.cycleStart))}</span>
+        <div class="cycle-pattern-grid__days">${cells}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="cycle-pattern">
+      <p class="cycle-pattern__sentence">${esc(sentence)}</p>
+      <div class="cycle-pattern-grid">${rows}</div>
+    </div>`;
+}
+
+function symptomFrequencyChartMarkup(freq, dayLogs, periods, settings) {
   const top = freq.slice(0, 8);
   const legend = Object.keys(SYMPTOM_PHASE_COLOR).map((key) => `
     <span class="cycle-legend__item"><span class="cycle-legend__swatch" style="background:${SYMPTOM_PHASE_COLOR[key]}"></span>${esc(t(SYMPTOM_PHASE_LABEL_KEYS[key]))}</span>`).join('');
@@ -4735,6 +4770,14 @@ function symptomFrequencyChartMarkup(freq, dayLogs) {
     const trendChart = trend.length >= 2
       ? advancedSection(symptomIntensityTrendChartMarkup(trend, label), { label: t('health.cycle.trends.severityTrend') })
       : '';
+    // Zyklustag-Muster (Phase 4c): eigener, zweiter Aufklapper neben dem
+    // Schweregrad-Verlauf - beide beantworten verschiedene Fragen und schliessen
+    // sich nicht gegenseitig aus.
+    const pattern = symptomCyclePattern(dayLogs, periods, settings, row.key);
+    const patternMarkup = symptomCyclePatternMarkup(pattern, label);
+    const patternSection = patternMarkup
+      ? advancedSection(patternMarkup, { label: t('health.cycle.trends.cyclePattern') })
+      : '';
     return `
       <div class="cycle-symptom-row">
         <div class="cycle-symptom-row__head">
@@ -4743,6 +4786,7 @@ function symptomFrequencyChartMarkup(freq, dayLogs) {
         </div>
         <div class="cycle-symptom-row__track">${segs}</div>
         ${trendChart}
+        ${patternSection}
       </div>`;
   }).join('');
 
@@ -4756,12 +4800,13 @@ function symptomFrequencyChartMarkup(freq, dayLogs) {
 
 function cycleTrendsMarkup() {
   const lengthTrend = cycleLengthTrend(cycle.periods);
-  const symptomFreq = symptomFrequencyByPhase(cycle.logs, cycle.periods, cycleSettings());
+  const settings = cycleSettings();
+  const symptomFreq = symptomFrequencyByPhase(cycle.logs, cycle.periods, settings);
   const bbt = bbtSeries(cycle.logs);
 
   const sections = [
     lengthTrend.length >= 2 ? cycleLengthTrendChartMarkup(lengthTrend) : '',
-    symptomFreq.length ? symptomFrequencyChartMarkup(symptomFreq, cycle.logs) : '',
+    symptomFreq.length ? symptomFrequencyChartMarkup(symptomFreq, cycle.logs, cycle.periods, settings) : '',
     bbt.length >= 2 ? bbtTrendChartMarkup(bbt) : '',
   ].filter(Boolean);
 

@@ -20,6 +20,7 @@ const {
   cycleStats, predictCycle, buildCycleCalendar, cycleRing, pregnancyInfo,
   detectTemperatureShift,
   cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
+  symptomCyclePattern,
 } = await import('../public/utils/health-cycle.js');
 
 const de = JSON.parse(readFileSync(new URL('../public/locales/de.json', import.meta.url), 'utf8'));
@@ -525,6 +526,111 @@ test('symptomIntensityTrend: nur gradierte Vorkommen DIESES Symptoms, chronologi
 test('symptomIntensityTrend: leer ohne Logs oder ohne Treffer für das Symptom', () => {
   assert.deepEqual(symptomIntensityTrend([], 'cramps'), []);
   assert.deepEqual(symptomIntensityTrend([{ log_date: '2026-05-01', symptoms: [{ key: 'headache', intensity: 2 }] }], 'cramps'), []);
+});
+
+// --------------------------------------------------------
+// symptomCyclePattern (Phase 4c)
+// --------------------------------------------------------
+
+test('symptomCyclePattern: Zyklustag-Nummerierung, juengster Zyklus zuerst, mostCommonPhase', () => {
+  const hist = periods(['2026-05-01', '2026-05-29', '2026-06-26'], 5);
+  const logs = [
+    { log_date: '2026-05-02', symptoms: [{ key: 'cramps' }] }, // Zyklus 1, Tag 2, Menstruation
+    { log_date: '2026-05-31', symptoms: [{ key: 'cramps' }] }, // Zyklus 2, Tag 3, Menstruation
+  ];
+  const pattern = symptomCyclePattern(logs, hist, {}, 'cramps');
+  assert.equal(pattern.totalCount, 3);
+  assert.equal(pattern.occurredCount, 2);
+  assert.equal(pattern.mostCommonPhase, PHASE.MENSTRUATION);
+  // Juengster Zyklus (2026-06-26, keine Periode danach geloggt) zuerst.
+  assert.deepEqual(pattern.cycles.map((c) => c.cycleStart), ['2026-06-26', '2026-05-29', '2026-05-01']);
+  assert.deepEqual(pattern.cycles[0].occurredOnDays, []);
+  assert.deepEqual(pattern.cycles[1].occurredOnDays, [3]);
+  assert.deepEqual(pattern.cycles[2].occurredOnDays, [2]);
+});
+
+test('symptomCyclePattern: mehrere Vorkommen im selben Zyklus zaehlen den Zyklus trotzdem nur einmal', () => {
+  const hist = periods(['2026-05-01', '2026-05-29'], 5);
+  const logs = [
+    { log_date: '2026-05-04', symptoms: [{ key: 'cramps' }] },
+    { log_date: '2026-05-02', symptoms: [{ key: 'cramps' }] },
+  ];
+  const pattern = symptomCyclePattern(logs, hist, {}, 'cramps');
+  assert.equal(pattern.occurredCount, 1);
+  assert.equal(pattern.totalCount, 2);
+  assert.deepEqual(pattern.cycles[1].occurredOnDays, [2, 4]); // sortiert, nicht Log-Reihenfolge
+});
+
+test('symptomCyclePattern: Gleichstand zwischen Phasen loest sich per fester Prioritaet Menstruation > Luteal > Sonstige', () => {
+  const hist = periods(['2026-05-01', '2026-05-29'], 5);
+  const logs = [
+    { log_date: '2026-05-02', symptoms: [{ key: 'cramps' }] }, // Menstruation
+    { log_date: '2026-05-20', symptoms: [{ key: 'cramps' }] }, // Luteal (ab 2026-05-15)
+  ];
+  const pattern = symptomCyclePattern(logs, hist, {}, 'cramps');
+  assert.equal(pattern.mostCommonPhase, PHASE.MENSTRUATION);
+});
+
+test('symptomCyclePattern: maxCycles deckelt die Anzahl zurueckgegebener Zyklen', () => {
+  const hist = periods(['2026-03-01', '2026-03-29', '2026-04-26', '2026-05-24'], 5);
+  const pattern = symptomCyclePattern([], hist, {}, 'cramps', 2);
+  assert.equal(pattern.cycles.length, 2);
+  assert.equal(pattern.totalCount, 2);
+  assert.deepEqual(pattern.cycles.map((c) => c.cycleStart), ['2026-05-24', '2026-04-26']);
+});
+
+test('symptomCyclePattern: nie geloggtes Symptom - occurredCount 0, Zyklen bleiben konsistent geformt (kein undefined)', () => {
+  const hist = periods(['2026-05-01', '2026-05-29'], 5);
+  const pattern = symptomCyclePattern([{ log_date: '2026-05-02', symptoms: [{ key: 'headache' }] }], hist, {}, 'cramps');
+  assert.equal(pattern.occurredCount, 0);
+  assert.equal(pattern.mostCommonPhase, null);
+  pattern.cycles.forEach((c) => assert.deepEqual(c.occurredOnDays, []));
+});
+
+test('symptomCyclePattern: phaseByDay klassifiziert jeden Zyklustag - Menstruation, Luteal, Sonstige', () => {
+  // Zyklus 2026-05-01..05-05 Periode (Tag 1-5 Menstruation), naechste Periode
+  // 2026-05-29 -> Luteal (14 Tage Standard) ab Tag 15 (2026-05-15).
+  const hist = periods(['2026-05-01', '2026-05-29'], 5);
+  const pattern = symptomCyclePattern([], hist, {}, 'cramps');
+  const cyc = pattern.cycles.find((c) => c.cycleStart === '2026-05-01');
+  assert.equal(cyc.cycleLength, 28);
+  assert.equal(cyc.phaseByDay.length, 28);
+  assert.deepEqual(cyc.phaseByDay.slice(0, 5), Array(5).fill(PHASE.MENSTRUATION));
+  assert.equal(cyc.phaseByDay[5], 'other');  // Tag 6, follikulär
+  assert.equal(cyc.phaseByDay[13], 'other'); // Tag 14, letzter Tag vor Luteal
+  assert.equal(cyc.phaseByDay[14], PHASE.LUTEAL); // Tag 15
+  assert.equal(cyc.phaseByDay[27], PHASE.LUTEAL); // Tag 28, letzter Tag des Zyklus
+});
+
+test('symptomCyclePattern: zwei Perioden mit identischem Startdatum teilen sich NICHT dieselbe occurredOnDays-Liste (Regression)', () => {
+  // Entartete, aber vom Schema nicht ausgeschlossene Eingabe: zwei Perioden
+  // mit demselben start_date wuerden bei einem String-Schluessel (cycleStart)
+  // dieselbe Map-Zelle treffen und ihre Vorkommen teilen.
+  const hist = [
+    { id: 1, start_date: '2026-05-27', end_date: '2026-06-01' },
+    { id: 2, start_date: '2026-08-13', end_date: '2026-08-18' },
+    { id: 3, start_date: '2026-08-13', end_date: '2026-08-18' }, // identisches Startdatum wie id 2
+  ];
+  const logs = [{ log_date: '2026-08-30', symptoms: [{ key: 'headache' }] }]; // faellt in den Zyklus von id 3 (der letzte, echte Folgezyklus)
+  const pattern = symptomCyclePattern(logs, hist, {}, 'headache');
+  assert.equal(pattern.occurredCount, 1);
+  const [mostRecent, degenerate] = pattern.cycles;
+  assert.equal(mostRecent.cycleStart, '2026-08-13');
+  assert.equal(degenerate.cycleStart, '2026-08-13');
+  assert.deepEqual(mostRecent.occurredOnDays, [18]);
+  assert.deepEqual(degenerate.occurredOnDays, []); // die entartete (0 Tage lange) Periode bleibt unberuehrt
+});
+
+test('symptomCyclePattern: ohne jede Periode gibt es nichts zu rekonstruieren', () => {
+  assert.deepEqual(symptomCyclePattern([], [], {}, 'cramps'), { cycles: [], occurredCount: 0, totalCount: 0, mostCommonPhase: null });
+});
+
+test('symptomCyclePattern/symptomFrequencyByPhase: reconstructCycles()-Refactor liefert unveraendertes Ergebnis (Regression)', () => {
+  const hist = periods(['2026-05-01', '2026-05-29'], 5);
+  const logs = [{ log_date: '2026-05-02', symptoms: [{ key: 'cramps', intensity: 2 }] }];
+  assert.deepEqual(symptomFrequencyByPhase(logs, hist, {}), [
+    { key: 'cramps', menstruation: 1, luteal: 0, other: 0, total: 1, avgIntensity: 2 },
+  ]);
 });
 
 // --------------------------------------------------------

@@ -86,6 +86,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   indicator used in the day-log editor - a symptom logged rarely but always severely no longer
   looks identical to one logged often but mildly. A symptom with at least two graded readings also
   gets an expandable severity-trend chart, reusing the Trends section's line-chart geometry.
+- **The symptom-frequency list gains a second expandable view: which cycle day a symptom typically
+  lands on.** For up to the six most recent cycles, a plain-language sentence ("You logged Cramps
+  during Menstruation in 3 of 4 recent cycles") plus a compact per-cycle grid, day cells colored by
+  phase with an inset ring marking a day the symptom actually occurred - a ring rather than a second
+  color, so a hit day stays distinguishable without relying on color perception.
 
 ### Fixed
 

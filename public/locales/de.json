@@ -4148,6 +4148,9 @@
                 "symptomFrequency": "Symptom-Häufigkeit",
                 "severity": "Schweregrad",
                 "severityTrend": "Schweregrad-Verlauf",
+                "cyclePattern": "Zyklustag-Muster",
+                "cyclePatternSentence": "Du hast {{symptom}} in {{occurred}} von {{total}} letzten Zyklen während {{phase}} eingetragen.",
+                "cyclePatternNone": "{{symptom}} kam in deinen letzten {{total}} Zyklen nicht wieder vor.",
                 "phaseOther": "Sonstige"
             },
             "flow": {

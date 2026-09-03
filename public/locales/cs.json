@@ -4148,6 +4148,9 @@
                 "symptomFrequency": "Symptom frequency",
                 "severity": "Severity",
                 "severityTrend": "Severity trend",
+                "cyclePattern": "Cycle-day pattern",
+                "cyclePatternSentence": "You logged {{symptom}} during {{phase}} in {{occurred}} of {{total}} recent cycles.",
+                "cyclePatternNone": "{{symptom}} hasn't recurred in your last {{total}} cycles.",
                 "phaseOther": "Other"
             },
             "flow": {

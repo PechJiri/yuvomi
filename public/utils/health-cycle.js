@@ -407,9 +407,34 @@ export function bbtSeries(dayLogs) {
 }
 
 /**
- * Symptom-Häufigkeit je Zyklus-Phase, für die Trend-Ansicht (Phase 4) -
- * beantwortet "häufen sich meine Symptome vor der Periode" statt nur "wie oft
- * kam Symptom X überhaupt vor".
+ * Zyklus-Grenzen je geloggter Periode - die gemeinsame Basis von
+ * symptomFrequencyByPhase() (Phase 4) und symptomCyclePattern() (Phase 4c),
+ * herausgezogen statt zweimal dieselbe Rekonstruktion zu pflegen. Aufsteigend
+ * sortiert (ältester Zyklus zuerst), wie sortPeriodsAsc() es liefert.
+ *
+ * Der letzte (ggf. noch laufende) Zyklus hat keinen "nächsten" Periodenstart -
+ * er fällt auf Ø-Zykluslänge (cycleStats()) zurück, dieselbe Regel wie
+ * predictCycle().
+ *
+ * @param {Array<Object>} periods
+ * @param {Object} [settings] - cycle_settings-Zeile (für luteal_length).
+ * @returns {Array<{cycleStart: string, nextStart: string, mensEnd: string, lutealStart: string}>}
+ */
+function reconstructCycles(periods, settings = {}) {
+  const asc = sortPeriodsAsc(periods);
+  if (!asc.length) return [];
+  const stats = cycleStats(asc, settings);
+  return asc.map((p, i) => {
+    const cycleStart = dayKey(p.start_date);
+    const nextStart = i + 1 < asc.length ? dayKey(asc[i + 1].start_date) : addLocalDays(cycleStart, stats.avgCycle);
+    const mensEnd = p.end_date ? dayKey(p.end_date) : addLocalDays(cycleStart, stats.avgPeriod - 1);
+    const lutealStart = addLocalDays(nextStart, -stats.lutealLength);
+    return { cycleStart, nextStart, mensEnd, lutealStart };
+  });
+}
+
+/**
+ * Ordnet EINEN Tag innerhalb EINES bekannten Zyklus einer von drei Phasen zu.
  *
  * DREI EIMER STATT FÜNF, UND DAS IST ABSICHT: predictCycle()/buildCycleCalendar()
  * kennen fünf Phasen, aber immer nur für EINEN (den aktuellen) Zyklus relativ zu
@@ -420,14 +445,24 @@ export function bbtSeries(dayLogs) {
  * und Luteal (Eisprung-Tag bis zum nächsten Periodenbeginn, aus dem TATSÄCHLICHEN
  * Abstand der jeweiligen Perioden - nicht aus einem Haushalts-Durchschnitt)
  * beantworten die eigentlich gefragten Muster ("PMS-Symptome", "Periodenschmerz");
- * alles andere fällt in PHASE.MENSTRUATION/PHASE.LUTEAL bzw. eine dritte
- * "other"-Sammelkategorie - kein eigener PHASE-Wert, weil sie bewusst KEIN
- * fruchtbares Fenster behauptet.
+ * alles andere fällt in eine dritte "other"-Sammelkategorie - kein eigener
+ * PHASE-Wert, weil sie bewusst KEIN fruchtbares Fenster behauptet.
  *
- * Der letzte (ggf. noch laufende) Zyklus hat keinen "nächsten" Periodenstart -
- * er fällt auf Ø-Zykluslänge (cycleStats()) zurück, dieselbe Regel wie
- * predictCycle(). Tage vor der ersten geloggten Periode gehören zu keinem
- * bekannten Zyklus und werden übersprungen, nicht geraten.
+ * @param {{cycleStart: string, mensEnd: string, lutealStart: string}} cyc - ein Eintrag aus reconstructCycles().
+ * @param {string} dateKey
+ * @returns {string} PHASE.MENSTRUATION | PHASE.LUTEAL | 'other'
+ */
+function classifyDayPhase(cyc, dateKey) {
+  if (daysBetween(cyc.cycleStart, dateKey) >= 0 && daysBetween(dateKey, cyc.mensEnd) >= 0) return PHASE.MENSTRUATION;
+  if (daysBetween(cyc.lutealStart, dateKey) >= 0) return PHASE.LUTEAL;
+  return 'other';
+}
+
+/**
+ * Symptom-Häufigkeit je Zyklus-Phase, für die Trend-Ansicht (Phase 4) -
+ * beantwortet "häufen sich meine Symptome vor der Periode" statt nur "wie oft
+ * kam Symptom X überhaupt vor". Tage vor der ersten geloggten Periode gehören
+ * zu keinem bekannten Zyklus und werden übersprungen, nicht geraten.
  *
  * @param {Array<Object>} dayLogs
  * @param {Array<Object>} periods
@@ -436,24 +471,12 @@ export function bbtSeries(dayLogs) {
  *          absteigend nach total sortiert.
  */
 export function symptomFrequencyByPhase(dayLogs, periods, settings = {}) {
-  const asc = sortPeriodsAsc(periods);
-  if (!asc.length) return [];
-  const stats = cycleStats(asc, settings);
-
-  const cycles = asc.map((p, i) => {
-    const cycleStart = dayKey(p.start_date);
-    const nextStart = i + 1 < asc.length ? dayKey(asc[i + 1].start_date) : addLocalDays(cycleStart, stats.avgCycle);
-    const mensEnd = p.end_date ? dayKey(p.end_date) : addLocalDays(cycleStart, stats.avgPeriod - 1);
-    const lutealStart = addLocalDays(nextStart, -stats.lutealLength);
-    return { cycleStart, nextStart, mensEnd, lutealStart };
-  });
+  const cycles = reconstructCycles(periods, settings);
+  if (!cycles.length) return [];
 
   function phaseFor(dateKey) {
     const cyc = cycles.find((c) => daysBetween(c.cycleStart, dateKey) >= 0 && daysBetween(dateKey, c.nextStart) > 0);
-    if (!cyc) return null;
-    if (daysBetween(cyc.cycleStart, dateKey) >= 0 && daysBetween(dateKey, cyc.mensEnd) >= 0) return PHASE.MENSTRUATION;
-    if (daysBetween(cyc.lutealStart, dateKey) >= 0) return PHASE.LUTEAL;
-    return 'other';
+    return cyc ? classifyDayPhase(cyc, dateKey) : null;
   }
 
   const counts = new Map();
@@ -497,6 +520,81 @@ export function symptomIntensityTrend(dayLogs, symptomKey) {
     }
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : 0)));
+}
+
+/**
+ * Zyklustag-Muster EINES Symptoms über die letzten `maxCycles` Zyklen
+ * (Phase 4c) - beantwortet "an welchem Zyklustag taucht das typischerweise
+ * auf", eine dritte Frage neben "wie oft" (symptomFrequencyByPhase) und "wie
+ * stark" (symptomIntensityTrend). Zyklustage sind 1-indiziert ab dem
+ * jeweiligen cycleStart, nicht Kalendertage - erst dadurch lassen sich Zyklen
+ * unterschiedlicher Länge im selben Raster vergleichen.
+ *
+ * `occurredCount`/`totalCount` zählen ZYKLEN (nicht Einzel-Vorkommen): "in 2
+ * von 3 Zyklen" - ein Symptom, das innerhalb eines Zyklus mehrfach auftaucht,
+ * zählt für diesen einen Zyklus trotzdem nur einmal. `mostCommonPhase` zählt
+ * dagegen jedes Einzel-Vorkommen; bei Gleichstand gewinnt Menstruation vor
+ * Luteal vor Sonstige (die Sammelkategorie gewinnt einen Gleichstand nie) -
+ * eine feste, dokumentierte Regel statt eines unklaren "irgendeine".
+ *
+ * Jeder Zyklus traegt zusaetzlich `phaseByDay` (ein Eintrag je Zyklustag,
+ * 'menstruation' | 'luteal' | 'other') - eine Erweiterung ueber die im Plan
+ * skizzierte `{cycleStart, cycleLength, occurredOnDays}`-Form hinaus: die
+ * geplante UI (ein Raster mit phasengefaerbten Tageszellen) braucht genau
+ * diese Klassifikation, und sie hier einmal mitzuliefern ist die einzige
+ * Alternative zu einer dritten, im UI-Code laufenden Kopie derselben
+ * Grenzen-Rekonstruktion (siehe classifyDayPhase()-Dokblock).
+ *
+ * @param {Array<Object>} dayLogs
+ * @param {Array<Object>} periods
+ * @param {Object} settings - cycle_settings-Zeile (für luteal_length).
+ * @param {string} symptomKey
+ * @param {number} [maxCycles=6]
+ * @returns {{cycles: Array<{cycleStart: string, cycleLength: number, occurredOnDays: number[], phaseByDay: string[]}>,
+ *            occurredCount: number, totalCount: number, mostCommonPhase: string|null}}
+ */
+export function symptomCyclePattern(dayLogs, periods, settings = {}, symptomKey, maxCycles = 6) {
+  const allCycles = reconstructCycles(periods, settings);
+  if (!allCycles.length) return { cycles: [], occurredCount: 0, totalCount: 0, mostCommonPhase: null };
+
+  // Juengster Zyklus zuerst, auf maxCycles gedeckelt.
+  const recent = [...allCycles].reverse().slice(0, maxCycles);
+  // Nach dem CYKLUS-OBJEKT selbst indiziert, nicht nach cycleStart: zwei
+  // Perioden mit identischem Startdatum (entartete, aber vom Schema nicht
+  // ausgeschlossene Eingabe) haetten sonst denselben String-Schluessel und
+  // teilten sich dieselbe occurredOnDays-Liste.
+  const occByCycle = new Map(recent.map((c) => [c, []]));
+  const phaseCounts = { [PHASE.MENSTRUATION]: 0, [PHASE.LUTEAL]: 0, other: 0 };
+
+  for (const log of (dayLogs || [])) {
+    if (!log?.log_date) continue;
+    const dateKey = dayKey(log.log_date);
+    const cyc = recent.find((c) => daysBetween(c.cycleStart, dateKey) >= 0 && daysBetween(dateKey, c.nextStart) > 0);
+    if (!cyc) continue;
+    const hasSymptom = normalizeSymptomEntries(log.symptoms).some((e) => e.key === symptomKey);
+    if (!hasSymptom) continue;
+    occByCycle.get(cyc).push(daysBetween(cyc.cycleStart, dateKey) + 1);
+    phaseCounts[classifyDayPhase(cyc, dateKey)] += 1;
+  }
+
+  const cycles = recent.map((c) => {
+    const cycleLength = daysBetween(c.cycleStart, c.nextStart);
+    const phaseByDay = Array.from({ length: cycleLength }, (_, i) => classifyDayPhase(c, addLocalDays(c.cycleStart, i)));
+    return {
+      cycleStart: c.cycleStart,
+      cycleLength,
+      occurredOnDays: occByCycle.get(c).sort((a, b) => a - b),
+      phaseByDay,
+    };
+  });
+
+  const occurredCount = cycles.filter((c) => c.occurredOnDays.length > 0).length;
+  const maxPhaseCount = Math.max(...Object.values(phaseCounts));
+  const mostCommonPhase = maxPhaseCount > 0
+    ? [PHASE.MENSTRUATION, PHASE.LUTEAL, 'other'].find((k) => phaseCounts[k] === maxPhaseCount)
+    : null;
+
+  return { cycles, occurredCount, totalCount: cycles.length, mostCommonPhase };
 }
 
 /**
