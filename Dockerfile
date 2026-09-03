@@ -22,6 +22,11 @@ RUN npm ci --omit=dev
 # ---- Runtime stage ----
 FROM node:24-slim
 
+# Die Build-Revision kommt aus dem unveränderlichen Git-Commit des Build-Jobs.
+# Sie ist kein Installationswert und wird deshalb nicht über .env gesetzt.
+ARG APP_BUILD_REVISION
+ENV APP_BUILD_REVISION=${APP_BUILD_REVISION}
+
 RUN apt-get update && apt-get install -y \
     gosu \
     && rm -rf /var/lib/apt/lists/*

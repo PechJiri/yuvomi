@@ -1,13 +1,13 @@
 /**
- * Module: Service worker build revision
- * Purpose: Keep same-version acceptance images from reusing an older PWA shell.
+ * Modul: Service-Worker-Build-Revision
+ * Zweck: Gleichversionige Images dürfen keine ältere PWA-Shell wiederverwenden.
  * Run: node --test test/test-service-worker-build-revision.js
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const serviceWorkerModule = await import('../server/utils/service-worker.js').catch(() => ({}));
+const serviceWorkerModule = await import('../server/utils/service-worker.js');
 
 test('renders a distinct service worker response for each same-version build revision', () => {
   assert.equal(typeof serviceWorkerModule.renderServiceWorkerSource, 'function');
@@ -47,4 +47,29 @@ test('builds a non-cacheable service worker response and falls back to the app v
     cdnCacheControl: 'no-store',
     cloudflareCdnCacheControl: 'no-store',
   });
+});
+
+test('rejects unsafe APP_BUILD_REVISION values with the variable name and allowed format', () => {
+  for (const value of [
+    "a'; fetch('//evil')//",
+    'a\\',
+    'a\nb',
+    '</script>',
+    'a'.repeat(81),
+    '',
+  ]) {
+    assert.throws(
+      () => serviceWorkerModule.renderServiceWorkerSource('revision: __YUVOMI_BUILD_REVISION__', value),
+      /\[SW\] APP_BUILD_REVISION must match \/\^\[A-Za-z0-9\._-\]\{1,80\}\$\//,
+    );
+  }
+});
+
+test('falls back to the app version when APP_BUILD_REVISION is blank after trimming', () => {
+  const response = serviceWorkerModule.buildServiceWorkerResponse(
+    "globalThis.cacheRevision = '__YUVOMI_BUILD_REVISION__';",
+    { appVersion: '2.59.0', buildRevision: '   ' },
+  );
+
+  assert.equal(response.body, "globalThis.cacheRevision = '2.59.0';");
 });

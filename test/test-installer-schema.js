@@ -940,3 +940,73 @@ test('der Dokument-Mount zielt auf DOCUMENT_STORAGE_LOCAL_PATH, nie auf einen fe
     'Der Host-Ordner wird auf ein festes Ziel gemountet, während die App den konfigurierten '
     + `Pfad benutzt:\n${offenders.join('\n')}`);
 });
+
+// ── Regel-Guard: gelesene Env-Variable ⇄ .env.example ───────────────────────
+//
+// Die dritte Prüfrichtung liest von außen nach innen: eine Variable, die sowohl
+// in .env.example als auch im ENV_SCHEMA fehlt, wäre für die Guards darüber
+// unsichtbar. Jede literal gelesene Laufzeitvariable muss deshalb dokumentiert
+// sein oder hier mit Grund bewusst ausgenommen werden.
+
+const INTENTIONALLY_UNDOCUMENTED = {
+  APP_BUILD_REVISION:
+    'Internal build revision injected by deployment infrastructure; not an installer or household setting.',
+  OIKOS_INSTALLER_ROOT:
+    'Interner Pfad des Installer-Prozesses (tools/installer/install-server.js), kein '
+    + 'Deployment-Wert. Er beschreibt, wo der Installer selbst liegt, waehrend .env.example '
+    + 'die Variablen der fertigen Installation dokumentiert - dort waere er eine Zeile, die '
+    + 'niemand setzen darf.',
+};
+
+/** Alle literal gelesenen Env-Namen aus Laufzeitcode, als Map Name → erste Fundstelle. */
+function literalEnvReads() {
+  const roots = ['server', 'tools'];
+  const found = new Map();
+  const walk = (dir) => {
+    for (const entry of readdirSync(new URL(`../${dir}`, import.meta.url), { withFileTypes: true })) {
+      if (entry.name === 'node_modules') continue;
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) { walk(rel); continue; }
+      if (!entry.name.endsWith('.js')) continue;
+      const src = readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+      const hits = [
+        ...src.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g),
+        ...src.matchAll(/process\.env\[\s*['"]([A-Z][A-Z0-9_]*)['"]\s*\]/g),
+      ];
+      for (const m of hits) if (!found.has(m[1])) found.set(m[1], rel);
+    }
+  };
+  for (const root of roots) walk(root);
+  return found;
+}
+
+test('jede zur Laufzeit gelesene Env-Variable ist in .env.example dokumentiert', () => {
+  const documented = new Set(documentedKeys());
+  const undocumented = [...literalEnvReads()]
+    .filter(([key]) => !documented.has(key) && !(key in INTENTIONALLY_UNDOCUMENTED))
+    .map(([key, file]) => `${key} (${file})`)
+    .sort();
+  assert.deepEqual(undocumented, [],
+    'Diese Variablen werden gelesen, stehen aber nicht in .env.example. Damit sind sie auch '
+    + 'für die beiden Guards darüber unsichtbar. Dokumentiere sie in .env.example (und '
+    + 'entscheide dort, ob sie zusätzlich ins ENV_SCHEMA gehören) oder nimm sie mit '
+    + `Begründung in INTENTIONALLY_UNDOCUMENTED auf. Offen:\n${undocumented.join('\n')}`);
+});
+
+test('die Karte der undokumentierten Variablen enthält keine Karteileichen', () => {
+  const read = literalEnvReads();
+  const documented = new Set(documentedKeys());
+  for (const [key, reason] of Object.entries(INTENTIONALLY_UNDOCUMENTED)) {
+    assert.ok(read.has(key), `${key} ist ausgenommen, wird aber nirgends (mehr) gelesen`);
+    assert.ok(!documented.has(key),
+      `${key} ist als undokumentiert ausgenommen, steht aber in .env.example`);
+    assert.ok(typeof reason === 'string' && reason.length > 15, `${key} braucht eine echte Begründung`);
+  }
+});
+
+test('der Scanner findet überhaupt etwas', () => {
+  const read = literalEnvReads();
+  assert.ok(read.size > 40,
+    `Nur ${read.size} Env-Lesestellen gefunden - der Verzeichnis-Walk ist vermutlich kaputt`);
+  assert.ok(read.has('SESSION_SECRET'), 'SESSION_SECRET muss unter den Fundstellen sein');
+});

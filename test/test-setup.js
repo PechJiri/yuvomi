@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -85,6 +85,21 @@ test('GET /sw.js injects the build revision and forbids intermediary caching', a
   assert.equal(res.headers.get('cache-control'), 'no-store, max-age=0');
   assert.match(body, /const APP_BUILD_REVISION\s*=\s*'acceptance-route-test'/);
   assert.doesNotMatch(body, /__YUVOMI_BUILD_REVISION__/);
+});
+
+test('GET /sw.js reflects service-worker edits without restarting the development server', async () => {
+  const file = new URL('../public/sw.js', import.meta.url);
+  const source = readFileSync(file, 'utf8');
+  const marker = '// test: service-worker reload';
+
+  try {
+    writeFileSync(file, `${source}\n${marker}\n`);
+    const res = await fetch(`${BASE}/sw.js`);
+
+    assert.match(await res.text(), new RegExp(marker));
+  } finally {
+    writeFileSync(file, source);
+  }
 });
 
 test('GET /openapi.json: 401 without authentication', async () => {

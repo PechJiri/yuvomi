@@ -9,7 +9,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { createLogger } from './logger.js';
 import * as db from './db.js';
 import { router as authRouter, sessionMiddleware, requireAuth, requireAdmin, isPasswordLoginEnabled } from './auth.js';
@@ -86,13 +86,29 @@ const logYuvomi = createLogger('Yuvomi');
 const { version: APP_VERSION } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
 );
-const SERVICE_WORKER_RESPONSE = buildServiceWorkerResponse(
-  readFileSync(new URL('../public/sw.js', import.meta.url), 'utf-8'),
-  {
-    appVersion: APP_VERSION,
-    buildRevision: process.env.APP_BUILD_REVISION,
-  },
-);
+const SERVICE_WORKER_PATH = new URL('../public/sw.js', import.meta.url);
+const SERVICE_WORKER_OPTIONS = {
+  appVersion: APP_VERSION,
+  buildRevision: process.env.APP_BUILD_REVISION,
+};
+let serviceWorkerMtimeMs;
+let serviceWorkerResponse;
+
+function getServiceWorkerResponse() {
+  const mtimeMs = statSync(SERVICE_WORKER_PATH).mtimeMs;
+  if (serviceWorkerMtimeMs !== mtimeMs) {
+    serviceWorkerResponse = buildServiceWorkerResponse(
+      readFileSync(SERVICE_WORKER_PATH, 'utf-8'),
+      SERVICE_WORKER_OPTIONS,
+    );
+    serviceWorkerMtimeMs = mtimeMs;
+  }
+  return serviceWorkerResponse;
+}
+
+// Das prüft die Build-Revision schon beim Start und liefert in der Entwicklung
+// nach einer sw.js-Änderung dennoch die neue Quelle ohne manuellen Neustart.
+getServiceWorkerResponse();
 const DEFAULT_APP_NAME = 'Yuvomi';
 
 const app  = express();
@@ -204,14 +220,16 @@ if (process.env.NODE_ENV === 'production' && process.env.ENABLE_API_DOCS !== 'tr
 // HTML + JS + CSS: no-cache (Browser revalidiert via ETag/304, kein stale Content
 //   nach Deployment). Bei unverändertem File → 304 Not Modified ohne Übertragung.
 // Bilder + Icons + Fonts: 30 Tage immutable (ändern sich praktisch nie).
-// manifest.json + sw.js: no-cache (PWA-Updates sollen sofort greifen).
+// manifest.json: no-cache (PWA-Updates sollen sofort greifen).
+// /sw.js wird direkt darunter als no-store-Antwort gerendert.
 // --------------------------------------------------------
 app.get('/sw.js', (_req, res) => {
-  res.type(SERVICE_WORKER_RESPONSE.contentType);
-  res.setHeader('Cache-Control', SERVICE_WORKER_RESPONSE.cacheControl);
-  res.setHeader('CDN-Cache-Control', SERVICE_WORKER_RESPONSE.cdnCacheControl);
-  res.setHeader('Cloudflare-CDN-Cache-Control', SERVICE_WORKER_RESPONSE.cloudflareCdnCacheControl);
-  res.send(SERVICE_WORKER_RESPONSE.body);
+  const response = getServiceWorkerResponse();
+  res.type(response.contentType);
+  res.setHeader('Cache-Control', response.cacheControl);
+  res.setHeader('CDN-Cache-Control', response.cdnCacheControl);
+  res.setHeader('Cloudflare-CDN-Cache-Control', response.cloudflareCdnCacheControl);
+  res.send(response.body);
 });
 
 app.use(express.static(path.join(import.meta.dirname, '..', 'public'), {
@@ -230,7 +248,7 @@ app.use(express.static(path.join(import.meta.dirname, '..', 'public'), {
     } else if (['.png', '.jpg', '.jpeg', '.ico', '.svg', '.webp', '.woff2', '.woff'].includes(ext)) {
       res.setHeader('Cache-Control', 'public, max-age=2592000, immutable'); // 30 Tage
     } else {
-      // HTML, JS, CSS, JSON, manifest, sw - immer revalidieren
+      // HTML, JS, CSS, JSON und manifest immer revalidieren.
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
     // manifest.json: korrekter MIME-Type für PWA-Erkennung durch Chrome/Android
