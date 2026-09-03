@@ -80,3 +80,64 @@ goes into `document-access.js` - one rule, all paths, one test - and never into 
 check at a single call site. Until then, an admin who cannot see a document still has the
 non-destructive path, and a pull request that adds an admin exception to any of the four
 places above is undoing this decision rather than extending it.
+
+---
+
+## 2. A rule lives in one place, not at a call site
+
+**Whatever decides who may see, write or store something exists once, as a function every
+path calls, and never as a second copy at the place that happens to need it.** A copy is not
+a shortcut. It is a second answer, waiting to diverge from the first.
+
+Every copy is a place a future change can miss, and a missed copy fails silently: nothing
+errors, one path simply answers differently from the other. Each time that happened here it
+was found from outside, after it had shipped, by somebody comparing two paths to the same
+data.
+
+The rule was reached three times within the same two days of September 2026, from three
+different shapes of copy:
+
+- **An inlined check, review of PR #989.** The destructive folder delete selected its subtree
+  without the document visibility rule and put an `isAdmin` check of its own in its place. Two
+  paths to the same document gave two answers: the single-document path told an admin that a
+  member's private document did not exist, the folder path deleted it. Decided in review: the
+  subtree goes through the one visibility rule, and if admins are ever to see past it, that
+  change goes into `document-access.js` - one rule, all paths, one test.
+- **A second regex, #1013.** The storage check for dashboard widget ids was written without
+  ever seeing how `fullWidgetId()` composes them, so it knew nothing of the colon in
+  `<module-id>:<widget-id>`, and every layout containing a third-party widget was refused
+  whole. Fixed in #1015 by moving the notation to where the composition is, with the storage
+  check built from the same parts instead of imitating them.
+- **A condition on a future build, #1007.** Member visibility, if it is built, comes with two
+  conditions: every list of people goes through a single predicate, the way documents go
+  through `documentVisibleSql()`, and all screens change at once, because a person hidden in a
+  picker but visible in a mention is not hidden, only inconsistently visible.
+
+An older instance shows the third shape of copy, a rule living inside a middleware. In
+v2.25.1 (#823) the MCP tools ran in-process past Express, and so past the only place the
+module permission had been written; a member with a module set to none got its data through
+that door while the REST path refused. The fix moved the verdict into a function both
+surfaces call - a call, not a rebuild. Earlier still, #583 folded three verbatim copies of the
+document visibility SQL into one file, and that file's header records why.
+
+### Where the rule lives
+
+- **Documents:** `documentVisibleSql()` and `filterVisibleDocumentIds()` in
+  `server/services/document-access.js`, called from documents, dms, tasks and the document
+  links every other module uses.
+- **Tasks and events:** `visibilityWhere()` in `server/services/visibility.js`. **Budget:**
+  `server/services/budget-visibility.js`, owner-based and without an admin bypass.
+- **Module permission:** `moduleAccessVerdict()` and `deniedModules()` in
+  `server/permissions.js`. The path middleware and the MCP tool layer call the same verdict,
+  and a route that carries several modules sorts with `deniedModules()`, because a middleware
+  that reads the path cannot know what such a route returns.
+- **Widget and module id notation:** `server/services/module-capabilities.js`, where
+  `fullWidgetId()` composes them and `isWidgetId()` is built from the same parts.
+
+### What counts as undoing it
+
+An `isAdmin` or ownership check inlined at a call site instead of the shared predicate. A
+regex for a format that already has an owner. A permission rule written inside a middleware
+or a guard, which binds it to that guard's construction and leaves the next surface without
+it. The test that protects such a rule kills it at its home and expects every path to go red;
+a test that only reads the source for the right name stays green over dead code.
