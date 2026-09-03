@@ -859,9 +859,11 @@ router.delete('/folders/:id', async (req, res) => {
     if (deleteDocuments) {
       let deletedDocuments = 0;
       const failedDocuments = [];
+      const storageDeletedDocuments = [];
       for (const document of documents) {
         try {
           await deleteDocumentContent(document);
+          storageDeletedDocuments.push(document);
         } catch (err) {
           log.error(`DELETE /folders/:id document ${document.id} storage error:`, err);
           failedDocuments.push({
@@ -870,8 +872,15 @@ router.delete('/folders/:id', async (req, res) => {
             failure_stage: 'storage',
             storage_code: err instanceof StorageError ? err.storageCode : 'DOCUMENT_DELETE_FAILED',
           });
-          continue;
         }
+      }
+
+      // Keep every row visible for the whole asynchronous storage phase. Link
+      // writers can then distinguish an in-flight target from a missing one
+      // and return the stable 409 without exposing hidden document IDs. SQLite
+      // row deletion is synchronous, so no writer can interleave once this
+      // second phase starts.
+      for (const document of storageDeletedDocuments) {
         try {
           db.get().prepare('DELETE FROM family_documents WHERE id = ?').run(document.id);
           deletedDocuments += 1;

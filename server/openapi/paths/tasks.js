@@ -107,7 +107,7 @@ export function tasksPaths() {
     },
     '/api/v1/tasks/{id}/documents': {
       get: op({ summary: 'List documents linked to a task', tag: 'Tasks', params: [idParam()], description: 'Returns family documents linked to the task that are visible to the current user.' }),
-      put: op({ summary: 'Set documents linked to a task', tag: 'Tasks', params: [idParam()], stateChanging: true, requestBody: jsonBody(null), description: 'Replace-set of document_ids; only documents visible to the user are linked. Attachments are part of the task definition, so a locked task answers 403 for anyone but its creator and administrators.' }),
+      put: op({ summary: 'Set documents linked to a task', tag: 'Tasks', params: [idParam()], stateChanging: true, documentDeleteConflict: true, requestBody: jsonBody(null), description: 'Replace-set of document_ids; only documents visible to the user are linked. Attachments are part of the task definition, so a locked task answers 403 for anyone but its creator and administrators.' }),
     },
     '/api/v1/tasks/{id}/completions': {
       get: op({

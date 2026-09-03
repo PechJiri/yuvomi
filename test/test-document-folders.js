@@ -808,28 +808,27 @@ test('DELETE with documents locks previewed documents and folders against concur
 
     const taskId = get().prepare("INSERT INTO tasks (title, created_by) VALUES ('Concurrent link', ?)")
       .run(ADMIN_ID).lastInsertRowid;
-    const linkDocumentDuringDelete = await h.callTask('PUT', `/${taskId}/documents`, {
-      // Pick a file near the end of the queue: the first files may already have
-      // completed both storage and row deletion by the time this request runs.
-      document_ids: [documents.at(-2).id],
-    });
-
-    const hiddenUpdate = await memberHarness.call('PUT', `/${documents.at(-1).id}`, {
-      folder_id: outside.body.data.id,
-    });
-    const hiddenDelete = await memberHarness.call('DELETE', `/${documents.at(-1).id}`);
-    const moveDocument = await h.call('PUT', `/${documents.at(-1).id}`, {
-      folder_id: outside.body.data.id,
-    });
-    const moveFolder = await h.call('PUT', `/folders/${child.body.data.id}`, {
-      parent_id: outside.body.data.id,
-    });
-    const moveFolderIntoTree = await h.call('PUT', `/folders/${outside.body.data.id}`, {
-      parent_id: root.body.data.id,
-    });
-    const moveDocumentIntoTree = await h.call('PUT', `/${outsideDocumentId}`, {
-      folder_id: child.body.data.id,
-    });
+    const [
+      linkDocumentDuringDelete,
+      hiddenUpdate,
+      hiddenDelete,
+      moveDocument,
+      moveFolder,
+      moveFolderIntoTree,
+      moveDocumentIntoTree,
+    ] = await Promise.all([
+      h.callTask('PUT', `/${taskId}/documents`, {
+        // The first storage item is already gone, but its row must remain visible
+        // and locked until every asynchronous storage operation has finished.
+        document_ids: [documents[0].id],
+      }),
+      memberHarness.call('PUT', `/${documents.at(-1).id}`, { folder_id: outside.body.data.id }),
+      memberHarness.call('DELETE', `/${documents.at(-1).id}`),
+      h.call('PUT', `/${documents.at(-1).id}`, { folder_id: outside.body.data.id }),
+      h.call('PUT', `/folders/${child.body.data.id}`, { parent_id: outside.body.data.id }),
+      h.call('PUT', `/folders/${outside.body.data.id}`, { parent_id: root.body.data.id }),
+      h.call('PUT', `/${outsideDocumentId}`, { folder_id: child.body.data.id }),
+    ]);
 
     assert.equal(hiddenUpdate.status, 404);
     assert.equal(hiddenDelete.status, 404);

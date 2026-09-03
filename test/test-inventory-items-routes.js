@@ -18,6 +18,7 @@ import express from 'express';
 
 const dbmod = await import('../server/db.js');
 const { default: itemsRouter } = await import('../server/routes/inventory/items.js');
+const { lockDocumentDeletes, unlockDocumentDeletes } = await import('../server/services/document-deletion-lock.js');
 const db = dbmod.get();
 
 const USER = db.prepare(`
@@ -119,6 +120,32 @@ test('PUT /items/:id: volles Replace - weggelassene Felder werden NICHT beibehal
   assert.equal(r.status, 200);
   assert.equal(r.body.data.category, 'other'); // nicht mehr 'household'
   assert.equal(r.body.data.vendor, null);
+});
+
+test('PUT /items/:id: laufende Dokumentlöschung lässt Gegenstand und Termine unverändert', async () => {
+  const created = await call('POST', '/items', { name: 'Vorher' });
+  const itemId = created.body.data.id;
+  const documentId = db.prepare(`
+    INSERT INTO family_documents
+      (name, original_name, mime_type, file_size, content_data, category, visibility, status, created_by)
+    VALUES ('Beleg', 'beleg.txt', 'text/plain', 1, ?, 'other', 'family', 'active', ?)
+  `).run(Buffer.from('x'), USER).lastInsertRowid;
+
+  lockDocumentDeletes([documentId]);
+  try {
+    const r = await call('PUT', `/items/${itemId}`, {
+      name: 'Nachher',
+      tracked_dates: [{ label: 'Service', date: '2035-06-01', reminder_offset_days: 14 }],
+      attachment_document_ids: [documentId],
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.body.reason, 'DOCUMENT_DELETE_IN_PROGRESS');
+    assert.equal(db.prepare('SELECT name FROM inventory_items WHERE id = ?').get(itemId).name, 'Vorher');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM inventory_item_dates WHERE item_id = ?').get(itemId).n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM reminders WHERE entity_type IN ('inventory_item', 'inventory_tracked_date') AND entity_id = ?").get(itemId).n, 0);
+  } finally {
+    unlockDocumentDeletes([documentId]);
+  }
 });
 
 test('DELETE /items/:id: 204, danach 404', async () => {

@@ -51,6 +51,7 @@ function op({
   requestBody = null,
   responses = null,
   stateChanging = false,
+  documentDeleteConflict = false,
 }) {
   const operation = {
     tags: [tag],
@@ -67,6 +68,11 @@ function op({
   if (admin) {
     operation.description = `${operation.description ? `${operation.description}\n\n` : ''}Admin-only endpoint.`;
     operation.responses[403] = { $ref: '#/components/responses/Forbidden' };
+  }
+  if (documentDeleteConflict) {
+    operation.responses[409] = {
+      description: 'A requested document is being deleted. Retry after the operation finishes. The response body reason is `DOCUMENT_DELETE_IN_PROGRESS`.',
+    };
   }
   if (params.length || stateChanging) {
     operation.parameters = [...params];

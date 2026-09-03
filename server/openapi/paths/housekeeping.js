@@ -32,7 +32,7 @@ export function housekeepingPaths() {
     },
     '/api/v1/housekeeping/visits/{id}': {
       get: op({ summary: 'Get housekeeping visit', tag: 'Housekeeping', params: [idParam()] }),
-      put: op({ summary: 'Update housekeeping visit', tag: 'Housekeeping', params: [idParam()], stateChanging: true, requestBody: jsonBody(null) }),
+      put: op({ summary: 'Update housekeeping visit', tag: 'Housekeeping', params: [idParam()], stateChanging: true, documentDeleteConflict: true, requestBody: jsonBody(null) }),
       delete: op({ summary: 'Delete housekeeping visit', tag: 'Housekeeping', params: [idParam()], stateChanging: true }),
     },
     '/api/v1/housekeeping/visits/{id}/pay': {

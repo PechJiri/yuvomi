@@ -577,6 +577,13 @@ router.put('/:id', (req, res) => {
       ? normalizeBudgetVisibility(req.body.visibility)
       : null;
 
+    // Guard attachment targets before the main entry/loan transaction: a 409
+    // must leave every requested field unchanged, not only the link table.
+    const me = req.authUserId || req.session.userId;
+    if (req.body.attachment_document_ids !== undefined) {
+      assertDocumentLinkTargetsAvailable(db.get(), req.body.attachment_document_ids, me);
+    }
+
     const tx = db.get().transaction(() => {
       db.get().prepare(`
         UPDATE budget_entries
@@ -633,9 +640,7 @@ router.put('/:id', (req, res) => {
     // Belege (#583): nur anfassen, wenn das Feld mitkommt. Ein PUT, das nur den
     // Betrag korrigiert, darf die angehaengten Belege nicht stillschweigend
     // abraeumen.
-    const me = req.authUserId || req.session.userId;
     if (req.body.attachment_document_ids !== undefined) {
-      assertDocumentLinkTargetsAvailable(db.get(), req.body.attachment_document_ids, me);
       replaceAttachments(id, req.body.attachment_document_ids, me);
     }
 
