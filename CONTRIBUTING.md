@@ -463,7 +463,7 @@ What is expected of the contribution itself does not change: you understand what
 
 Describe the **use case** before proposing a solution. There might be a simpler approach that fits the existing architecture.
 
-Features that conflict with the project's [hard constraints](#hard-constraints) or significantly expand scope will likely be declined. Some of those boundaries come up often enough to be written down rather than re-argued - read [what Yuvomi will not become](docs/SCOPE.md) before proposing an integration with an external service. When in doubt, ask first.
+Features that conflict with the project's [hard constraints](#hard-constraints) or significantly expand scope will likely be declined. Some of those boundaries come up often enough to be written down rather than re-argued - read [what Yuvomi will not become](docs/SCOPE.md) before proposing an integration with an external service, and [the decisions made once](docs/DECISIONS.md) before proposing a change to how privacy or permissions work. When in doubt, ask first.
 
 ### Security vulnerabilities
 

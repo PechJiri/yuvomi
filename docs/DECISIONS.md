@@ -1,0 +1,82 @@
+# Decisions made once
+
+[SCOPE.md](SCOPE.md) says what Yuvomi will not become. This page is for the other kind of
+answer: something Yuvomi does build, where the *shape* was argued out once in a thread and
+would otherwise be argued again in the next one. Each entry states the rule in a sentence or
+two, the reason, where the rule lives in the code, and what would reopen it. The full
+reasoning stays where it was made - in the thread and in the CHANGELOG entry of the release
+that shipped it - and this page points there rather than restating it a third time.
+
+An entry earns its place when a decision reached in one thread has been reached again,
+independently, in another. That is the sign it will be argued a third time. How a single
+feature works belongs in [SPEC.md](SPEC.md); anything not built yet belongs in the
+[backlog](../BACKLOG.md).
+
+---
+
+## 1. Privacy beats admin convenience
+
+**Access to a member's private data is never implied by a role, and never widened by an
+update.** It is granted per person, by an explicit and visible act, and the default is
+closed.
+
+Yuvomi is a household planner, not a company tool. The admin is usually a parent, and the
+other members are partners, teenagers and grandparents with a privacy of their own. Somebody
+who marked an entry private did so trusting that private means private. A right that reaches
+into existing private data cannot be inferred from a field people filled in for another
+purpose, and cannot be narrowed silently on update: permissions can be opened later, but what
+somebody has already seen cannot be unseen.
+
+The same rule was reached three times, each time from a different module:
+
+- **Health, v1.83.0 (#584).** Asked for as a property of the family role - dad, mum,
+  guardian. Built as a per-person grant an admin sets under Settings → Family, because the
+  role version would have given two people read access to the private health data of
+  everyone carrying the role "child" the moment they updated, including the seventeen-year-
+  old who has that role only because it fit best. Until somebody sets a grant, nothing
+  changes for anybody. A grant covers reading as well as writing, since a caregiver who could
+  write but not read would lose sight of the reading they just took; the cycle diary is
+  excluded, because giving medicine is care and reading someone's cycle diary is not.
+- **Invitations, v2.62.0 (#869).** A new member used to start with every module. That was
+  never decided for invitations: it was inherited from migration v74, where storing
+  permissions sparsely was the right call so that existing households behaved exactly as
+  before. The invite path got its own answer - a *starting permissions* field, preselected to
+  *Without personal areas*, which locks Health, Budget and Documents, with the resolved set
+  stored on the invitation. The stored default was left alone, so no household changed on
+  update. There is deliberately no "full access" template: a member override cannot widen a
+  role profile, and a template that quietly does nothing would be a promise that does not
+  hold.
+- **Documents, review of PR #989 (September 2026).** The destructive folder delete skipped
+  the ownership check for admins, so an admin could permanently delete a member's private
+  document that the single-document path would not even show them. Decided in review: the
+  visibility rule stands and admins do not override it. The subtree is selected through the
+  one visibility rule and refused as soon as one row in it is invisible to the caller;
+  sharing a single document deliberately is the owner's act, and that path already exists.
+
+The task lock in v2.30.0 rests on the same reasoning from the other side: a family role says
+who somebody is, not what they may do, and Yuvomi had already replaced that inference with
+explicit grants once.
+
+### Where the rule lives
+
+One rule, one place, so a future change cannot be forgotten in a copy:
+
+- **Documents:** `documentVisibleSql()` in `server/services/document-access.js` has exactly
+  three branches - creator, family visibility, explicit share - and no admin branch. Every
+  path that hands out documents goes through it, including the modules that only link them.
+- **Tasks and events:** `visibilityWhere()` in `server/services/visibility.js`, enforced on
+  the server and without an admin bypass (#474).
+- **Health:** `server/routes/health/caregivers.js`. Grants are per person, managed by admins,
+  and every member can read their own.
+- **Invitations:** `INVITE_PRESETS` in `server/permissions.js`, default `restricted`, and the
+  invite handler in `server/auth.js`, where a *missing* field means the narrow template so
+  that an older client cannot invite with full access by accident.
+
+### What would reopen it
+
+Whether an admin should ever see past the visibility rule is a real question, and it has an
+address: #1007, member visibility as its own axis. If the answer there is ever yes, the change
+goes into `document-access.js` - one rule, all paths, one test - and never into an `isAdmin`
+check at a single call site. Until then, an admin who cannot see a document still has the
+non-destructive path, and a pull request that adds an admin exception to any of the four
+places above is undoing this decision rather than extending it.

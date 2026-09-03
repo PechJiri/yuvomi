@@ -29,6 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains one row per person. Name-day labels, validation and calendar text are included in all 24
   supported interface languages.
 
+- **Decisions made once now have a page of their own.** [`docs/DECISIONS.md`](docs/DECISIONS.md)
+  is the counterpart to the scope page: not what Yuvomi will not become, but how something it
+  does build was decided, so that the next thread reaching the same point gets the answer instead
+  of the argument. The first entry is the one that was reached three times from three modules -
+  privacy beats admin convenience: a member's private data is never opened by a role or by an
+  update, only per person and on purpose (#584, #869, #989). Each entry names the rule, the
+  reason, the code path that enforces it and what would reopen it, and points to the thread and
+  the release rather than restating them. Linked from the README, the scope page and the
+  contributing guide.
+
 ### Fixed
 
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
