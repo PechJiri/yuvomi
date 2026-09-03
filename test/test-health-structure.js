@@ -33,6 +33,7 @@ import labsRouter from '../server/routes/health/labs.js';
 import activitiesRouter from '../server/routes/health/activities.js';
 import exportRouter from '../server/routes/health/export.js';
 import cycleRouter from '../server/routes/health/cycle.js';
+import cycleFeedRouter from '../server/routes/health/cycle-feed.js';
 import caregiversRouter from '../server/routes/health/caregivers.js';
 import visibilityDefaultsRouter from '../server/routes/health/visibility-defaults.js';
 
@@ -110,6 +111,10 @@ const EXPECTED = [
   'PUT /cycle/settings',
   'PATCH /cycle/visibility',
   'GET /export/cycle',
+  // Zyklus-ICS-Feed-Token (Migration 178)
+  'GET /cycle/feed',
+  'POST /cycle/feed/regenerate',
+  'DELETE /cycle/feed',
   // Betreuung (#584): wer darf fuer wen eintragen
   'GET /caregivers/me',
   'GET /caregivers',
@@ -120,16 +125,16 @@ const EXPECTED = [
   'PATCH /visibility-defaults/apply',
 ];
 
-test('Orchestrator ergibt exakt die erwartete Routentabelle (50 Routen)', () => {
+test('Orchestrator ergibt exakt die erwartete Routentabelle (53 Routen)', () => {
   const actual = collectRoutes(healthRouter).sort();
   assert.deepEqual(actual, [...EXPECTED].sort());
-  assert.equal(actual.length, 50);
+  assert.equal(actual.length, 53);
 });
 
 test('die Cluster-Router zusammen ergeben genau die Orchestrator-Routen (keine verlorene/doppelte Route)', () => {
   const perModule = [
     vitalsRouter, medicationsRouter, labsRouter, activitiesRouter, exportRouter, cycleRouter,
-    caregiversRouter, visibilityDefaultsRouter,
+    cycleFeedRouter, caregiversRouter, visibilityDefaultsRouter,
   ].flatMap(collectRoutes);
   // keine Route kommt in mehr als einem Cluster-Router vor
   const seen = new Set();
