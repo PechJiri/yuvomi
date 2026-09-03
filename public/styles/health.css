@@ -190,6 +190,12 @@
   color: var(--color-text-primary);
 }
 
+.health-chart-section__caption {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
 .health-vitals__stepper {
   display: inline-flex;
   align-items: center;
@@ -1714,6 +1720,27 @@ button.health-med-card:hover {
 .cycle-stat__head svg { width: 14px; height: 14px; }
 .cycle-stat__value { font-weight: 700; font-size: var(--text-sm); color: var(--color-text-primary); }
 .cycle-stat__sub { font-size: var(--text-2xs); color: var(--color-text-secondary); }
+
+/* Typisch/untypisch-Badge (Phase 4d) - Statusfarben, nicht die kategorialen
+ * Zyklusphasen-Farben: das ist ein Zustand (gut/Warnung), keine Identität. */
+.cycle-stat__badge {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: var(--space-1);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  vertical-align: middle;
+}
+.cycle-stat__badge--typical {
+  background: var(--color-success-light);
+  color: var(--color-success-ink);
+}
+.cycle-stat__badge--atypical {
+  background: var(--color-warning-light);
+  color: var(--color-warning-ink);
+}
 
 /* Ø-Kachel: volle Breite, zwei Werte nebeneinander mit dünnem Trenner. Bricht die
    gleichförmige 2×2-Kartenwiederholung und spart einen doppelten Rahmen. */

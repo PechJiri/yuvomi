@@ -91,6 +91,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   during Menstruation in 3 of 4 recent cycles") plus a compact per-cycle grid, day cells colored by
   phase with an inset ring marking a day the symptom actually occurred - a ring rather than a second
   color, so a hit day stays distinguishable without relying on color perception.
+- **The cycle-length trend is now a bar chart, colored by whether each cycle falls in the typical
+  24-38 day range**, against a shaded band for that range - the same visual language the lab-value
+  chart already uses for a normal range. The average-cycle-length stat card gets a matching
+  typical/atypical badge (shown only once there's a real basis, not on a bare default). Also fixes a
+  real gap: the cycle-variation stat card previously only appeared when fertility tracking was off -
+  with it on, the default, cycle variation was never shown anywhere. It's unconditional now.
 
 ### Fixed
 

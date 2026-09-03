@@ -20,7 +20,7 @@ const {
   cycleStats, predictCycle, buildCycleCalendar, cycleRing, pregnancyInfo,
   detectTemperatureShift,
   cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
-  symptomCyclePattern,
+  symptomCyclePattern, TYPICAL_CYCLE_RANGE, isTypicalCycleLength,
 } = await import('../public/utils/health-cycle.js');
 
 const de = JSON.parse(readFileSync(new URL('../public/locales/de.json', import.meta.url), 'utf8'));
@@ -437,6 +437,25 @@ test('cycleLengthTrend: eine Lücke je Folgeperiode, mit deren Datum, über die 
 test('cycleLengthTrend: unter 2 Perioden gibt es keine Lücke', () => {
   assert.deepEqual(cycleLengthTrend([]), []);
   assert.deepEqual(cycleLengthTrend(periods(['2026-01-01'])), []);
+});
+
+// --------------------------------------------------------
+// isTypicalCycleLength (Phase 4d)
+// --------------------------------------------------------
+
+test('isTypicalCycleLength: Grenzfälle bei 24 und 38 Tagen (jeweils inklusive)', () => {
+  assert.equal(TYPICAL_CYCLE_RANGE.min, 24);
+  assert.equal(TYPICAL_CYCLE_RANGE.max, 38);
+  assert.equal(isTypicalCycleLength(23), false);
+  assert.equal(isTypicalCycleLength(24), true);
+  assert.equal(isTypicalCycleLength(38), true);
+  assert.equal(isTypicalCycleLength(39), false);
+});
+
+test('isTypicalCycleLength: nicht-endliche Werte sind nie typisch', () => {
+  assert.equal(isTypicalCycleLength(NaN), false);
+  assert.equal(isTypicalCycleLength(undefined), false);
+  assert.equal(isTypicalCycleLength(null), false);
 });
 
 test('bbtSeries: alle Messungen chronologisch, unabhängig vom Zyklus (anders als detectTemperatureShift)', () => {

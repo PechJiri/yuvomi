@@ -2585,6 +2585,22 @@ hit day - the ring stays visible without relying on color perception, and each c
 carries the cycle-day number as text too), as a second expandable panel alongside the severity
 trend on the same symptom-frequency row.
 
+**The cycle-length trend is a bar chart, not a line chart** (`TYPICAL_CYCLE_RANGE = {min: 24, max:
+38}`, `isTypicalCycleLength()`), each bar colored typical (module accent) or atypical (the existing
+warning token) against a shaded reference band for the range itself - the same
+`.health-chart__band`/`.health-chart__band-line` pattern the lab-value chart already uses for a
+normal range, reused rather than invented twice. The range is a population-level reference figure,
+deliberately separate from `cycleStats()`'s own `regular`/`variation` (deviation from *the user's
+own* recent average) - the two answer different questions ("is this within the usual range" vs. "is
+your cycle consistent for you") and neither replaces the other. Scoping this also surfaced a real
+gap: the cycle stat-card row only ever showed a regularity tile when `trackFertility` was *off*
+(`prediction.trackFertility ? fertileWindowCard : regularityCard`, an either/or) - with fertility
+tracking on, the default, cycle variation was invisible. The regularity tile (now labeled by what it
+shows, cycle variation in days, with the regular/irregular judgment as its caption) is unconditional;
+the average-cycle-length tile separately gets a typical/atypical badge, using the population range,
+shown only once there's a real basis (derived from history or a manual setting) rather than on a
+bare default value.
+
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and
 fans out via Web Push and the household channels (Gotify, ntfy, webhook, email). Medications (`name`, `dosage_text`) and activities

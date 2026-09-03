@@ -4088,7 +4088,7 @@
                 "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "평균 주기 길이",
                 "avgPeriod": "평균 생리 기간",
-                "regularity": "규칙성",
+                "cycleVariation": "Cycle variation",
                 "regular": "규칙적",
                 "irregular": "불규칙",
                 "notEnoughData": "데이터 부족",
@@ -4151,6 +4151,9 @@
                 "cyclePattern": "Cycle-day pattern",
                 "cyclePatternSentence": "You logged {{symptom}} during {{phase}} in {{occurred}} of {{total}} recent cycles.",
                 "cyclePatternNone": "{{symptom}} hasn't recurred in your last {{total}} cycles.",
+                "typical": "Typical",
+                "atypical": "Atypical",
+                "typicalRangeLabel": "Typical range: {{min}}–{{max}} days",
                 "phaseOther": "Other"
             },
             "flow": {

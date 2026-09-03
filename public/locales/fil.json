@@ -4088,7 +4088,7 @@
                 "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "Karaniwang haba ng siklo",
                 "avgPeriod": "Karaniwang haba ng regla",
-                "regularity": "Pagiging regular",
+                "cycleVariation": "Cycle variation",
                 "regular": "Regular",
                 "irregular": "Iregular",
                 "notEnoughData": "Kulang ang datos",
@@ -4151,6 +4151,9 @@
                 "cyclePattern": "Cycle-day pattern",
                 "cyclePatternSentence": "You logged {{symptom}} during {{phase}} in {{occurred}} of {{total}} recent cycles.",
                 "cyclePatternNone": "{{symptom}} hasn't recurred in your last {{total}} cycles.",
+                "typical": "Typical",
+                "atypical": "Atypical",
+                "typicalRangeLabel": "Typical range: {{min}}–{{max}} days",
                 "phaseOther": "Other"
             },
             "flow": {

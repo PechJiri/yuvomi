@@ -4088,7 +4088,7 @@
                 "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "平均周期长度",
                 "avgPeriod": "平均经期长度",
-                "regularity": "规律性",
+                "cycleVariation": "Cycle variation",
                 "regular": "规律",
                 "irregular": "不规律",
                 "notEnoughData": "数据不足",
@@ -4151,6 +4151,9 @@
                 "cyclePattern": "Cycle-day pattern",
                 "cyclePatternSentence": "You logged {{symptom}} during {{phase}} in {{occurred}} of {{total}} recent cycles.",
                 "cyclePatternNone": "{{symptom}} hasn't recurred in your last {{total}} cycles.",
+                "typical": "Typical",
+                "atypical": "Atypical",
+                "typicalRangeLabel": "Typical range: {{min}}–{{max}} days",
                 "phaseOther": "Other"
             },
             "flow": {

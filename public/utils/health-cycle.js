@@ -170,6 +170,18 @@ const MAX_HISTORY = 6;         // gleitender Mittelwert über bis zu 6 Zyklen
 export const MIN_HISTORY_GAPS = 3;
 const GESTATION_DAYS = 280;    // Naegele-Regel: 40 Wochen von der letzten Periode
 
+// Allgemein ueblicher Zykluslaenge-Bereich (Phase 4d), Standardliteratur (z.B.
+// ACOG-nahe Quellen) - bewusst ZUSAETZLICH zum SELBSTBEZUEGLICHEN `regular`/
+// `variation` in cycleStats() (Abweichung vom eigenen Mittel), nicht dessen
+// Ersatz: die beiden beantworten verschiedene Fragen ("liegt das im
+// allgemein ueblichen Bereich" vs. "ist DEIN Zyklus fuer DICH konsistent").
+export const TYPICAL_CYCLE_RANGE = Object.freeze({ min: 24, max: 38 });
+
+/** Liegt eine Zykluslaenge (Tage) im allgemein ueblichen Bereich? */
+export function isTypicalCycleLength(days) {
+  return Number.isFinite(days) && days >= TYPICAL_CYCLE_RANGE.min && days <= TYPICAL_CYCLE_RANGE.max;
+}
+
 // --------------------------------------------------------
 // Datums-Helfer (YYYY-MM-DD, ohne UTC-Shift-Fallen)
 // --------------------------------------------------------

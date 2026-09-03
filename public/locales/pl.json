@@ -4088,7 +4088,7 @@
                 "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "Śr. długość cyklu",
                 "avgPeriod": "Śr. długość miesiączki",
-                "regularity": "Regularność",
+                "cycleVariation": "Cycle variation",
                 "regular": "Regularny",
                 "irregular": "Nieregularny",
                 "notEnoughData": "Za mało danych",
@@ -4151,6 +4151,9 @@
                 "cyclePattern": "Cycle-day pattern",
                 "cyclePatternSentence": "You logged {{symptom}} during {{phase}} in {{occurred}} of {{total}} recent cycles.",
                 "cyclePatternNone": "{{symptom}} hasn't recurred in your last {{total}} cycles.",
+                "typical": "Typical",
+                "atypical": "Atypical",
+                "typicalRangeLabel": "Typical range: {{min}}–{{max}} days",
                 "phaseOther": "Other"
             },
             "flow": {

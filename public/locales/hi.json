@@ -4088,7 +4088,7 @@
                 "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "औसत चक्र अवधि",
                 "avgPeriod": "औसत माहवारी अवधि",
-                "regularity": "नियमितता",
+                "cycleVariation": "Cycle variation",
                 "regular": "नियमित",
                 "irregular": "अनियमित",
                 "notEnoughData": "पर्याप्त डेटा नहीं",
@@ -4151,6 +4151,9 @@
                 "cyclePattern": "Cycle-day pattern",
                 "cyclePatternSentence": "You logged {{symptom}} during {{phase}} in {{occurred}} of {{total}} recent cycles.",
                 "cyclePatternNone": "{{symptom}} hasn't recurred in your last {{total}} cycles.",
+                "typical": "Typical",
+                "atypical": "Atypical",
+                "typicalRangeLabel": "Typical range: {{min}}–{{max}} days",
                 "phaseOther": "Other"
             },
             "flow": {

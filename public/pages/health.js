@@ -44,7 +44,7 @@ import {
   predictCycle, cycleStats, buildCycleCalendar, cycleRing, MIN_HISTORY_GAPS,
   normalizeSymptomEntries, symptomIntensityLabelKey,
   cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
-  symptomCyclePattern,
+  symptomCyclePattern, TYPICAL_CYCLE_RANGE, isTypicalCycleLength,
 } from '/utils/health-cycle.js';
 import { HEALTH_ROUTES, renderHealthTabsBar } from '/utils/health-tabs.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -4429,22 +4429,37 @@ function cycleStatsMarkup(prediction) {
       value: `${formatDate(prediction.fertileStart)} – ${formatDate(prediction.fertileEnd)}`,
       sub: `${ovulationLabel}: ${formatDate(prediction.ovulationDate)}`,
     }));
-  } else {
-    const reg = stats.regular === null
-      ? t('health.cycle.status.notEnoughData')
-      : t(stats.regular ? 'health.cycle.status.regular' : 'health.cycle.status.irregular');
-    tiles.push(cycleStatCardMarkup({ icon: 'activity', labelKey: 'health.cycle.status.regularity', value: reg, sub: '' }));
   }
+
+  // Regelmäßigkeit (Phase 4d): vorher nur sichtbar, wenn Fruchtbarkeit NICHT
+  // verfolgt wird (prediction.trackFertility ? fertileWindow : regularity) -
+  // mit Fruchtbarkeitsverfolgung an, dem Standard, war diese Kachel bisher
+  // nirgends zu sehen. Jetzt immer da, unabhängig von trackFertility.
+  const variationValue = stats.variation != null
+    ? t('health.cycle.unit.days', { value: fmtNum(stats.variation) })
+    : t('health.cycle.status.notEnoughData');
+  const regularitySub = stats.regular === null ? '' : t(stats.regular ? 'health.cycle.status.regular' : 'health.cycle.status.irregular');
+  tiles.push(cycleStatCardMarkup({ icon: 'activity', labelKey: 'health.cycle.status.cycleVariation', value: variationValue, sub: regularitySub }));
 
   // Ø Zyklus + Ø Periode teilen sich EINE volle-Breite-Kachel statt zweier fast
   // identischer Tiles — bricht die „identical card grid"-Wiederholung auf.
+  // Der Typisch/Untypisch-Badge (Phase 4d, allgemein üblicher Bereich statt
+  // des SELBSTBEZÜGLICHEN Regelmäßigkeits-Werts oben) erscheint nur bei einer
+  // echten Basis (Historie oder manuelle Einstellung) - bei einem reinen
+  // Default-Wert (source: 'default'/'insufficient_history') wäre "Typisch"
+  // eine unbelegte Aussage über einen Platzhalter, keine echte Einschätzung.
+  const hasRealCycleBasis = stats.source === 'history' || stats.source === 'settings';
+  const typical = isTypicalCycleLength(stats.avgCycle);
+  const typicalBadge = hasRealCycleBasis
+    ? `<span class="cycle-stat__badge ${typical ? 'cycle-stat__badge--typical' : 'cycle-stat__badge--atypical'}">${esc(t(typical ? 'health.cycle.trends.typical' : 'health.cycle.trends.atypical'))}</span>`
+    : '';
   const sourceText = cycleStatsSourceText(stats);
   tiles.push(`
     <div class="cycle-stat cycle-stat--dual">
       <div class="cycle-stat__pair-row">
         <div class="cycle-stat__pair-item">
           <span class="cycle-stat__head"><i data-lucide="repeat" aria-hidden="true"></i>${esc(t('health.cycle.status.avgCycle'))}</span>
-          <span class="cycle-stat__value">${esc(t('health.cycle.unit.days', { value: fmtNum(stats.avgCycle) }))}</span>
+          <span class="cycle-stat__value">${esc(t('health.cycle.unit.days', { value: fmtNum(stats.avgCycle) }))}${typicalBadge}</span>
         </div>
         <div class="cycle-stat__pair-item">
           <span class="cycle-stat__head"><i data-lucide="droplet" aria-hidden="true"></i>${esc(t('health.cycle.status.avgPeriod'))}</span>
@@ -4672,14 +4687,65 @@ function simpleLineChartMarkup({ points, titleText, formatPointTooltip, formatTa
     </div>`;
 }
 
+/**
+ * Zykluslänge als Balkendiagramm mit typisch/untypisch-Färbung (Phase 4d,
+ * ersetzt das vorherige Linien-/Flächendiagramm) - ein Balken pro Wert macht
+ * "wie weicht DIESER Zyklus ab" direkter lesbar als eine Linie, deren Sinn
+ * (Anstieg/Abfall) hier ohnehin nicht die eigentliche Aussage ist. Nullbasiert
+ * (min=0), nicht um die Daten herum gepolstert wie simpleLineChartMarkup() -
+ * ein Balkendiagramm mit verkürzter Achse würde Unterschiede verzerren, eine
+ * Linie nicht (siehe dataviz-Anti-Pattern "truncated bar baseline").
+ * Dieselbe geteilte Geometrie (chart.js), nur <rect> statt <polyline>+<circle>.
+ */
 function cycleLengthTrendChartMarkup(trend) {
-  return simpleLineChartMarkup({
-    points: trend.map((e) => ({ date: e.date, value: e.days })),
-    titleText: t('health.cycle.trends.cycleLength'),
-    formatPointTooltip: (p) => `${formatDate(p.date)}: ${t('health.cycle.unit.days', { value: fmtNum(p.value) })}`,
-    formatTableValue: (v) => t('health.cycle.unit.days', { value: fmtNum(v) }),
-    tableHeader: t('health.cycle.trends.cycleLength'),
-  });
+  const { W, H } = CHART;
+  const { left, right, bottom } = chartScales();
+  const n = trend.length;
+
+  const min = 0;
+  const max = Math.max(...trend.map((e) => e.days), TYPICAL_CYCLE_RANGE.max) * 1.08;
+  const y = (v) => chartY(v, min, max);
+
+  // Referenzband für den allgemein üblichen Bereich - dieselbe Klasse/Optik
+  // wie das Laborwert-Normband (analyteTrendChartMarkup), keine neue Farbe.
+  const yHigh = y(TYPICAL_CYCLE_RANGE.max);
+  const yLow = y(TYPICAL_CYCLE_RANGE.min);
+  const band = `
+    <rect class="health-chart__band" x="${left}" y="${yHigh.toFixed(1)}" width="${(right - left).toFixed(1)}" height="${(yLow - yHigh).toFixed(1)}" />
+    <line class="health-chart__band-line" x1="${left}" y1="${yHigh.toFixed(1)}" x2="${right}" y2="${yHigh.toFixed(1)}" />
+    <line class="health-chart__band-line" x1="${left}" y1="${yLow.toFixed(1)}" x2="${right}" y2="${yLow.toFixed(1)}" />`;
+
+  const step = n > 1 ? (right - left) / (n - 1) : (right - left);
+  const barW = Math.max(6, Math.min(28, step * 0.5));
+  const typicalLabel = (typical) => t(typical ? 'health.cycle.trends.typical' : 'health.cycle.trends.atypical');
+
+  const bars = trend.map((e, i) => {
+    const cx = chartX(i, n);
+    const by = y(e.days);
+    const typical = isTypicalCycleLength(e.days);
+    const color = typical ? 'var(--module-health)' : 'var(--color-warning)';
+    const label = `${formatDate(e.date)}: ${t('health.cycle.unit.days', { value: fmtNum(e.days) })} (${typicalLabel(typical)})`;
+    return `<rect x="${(cx - barW / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${(bottom - by).toFixed(1)}" rx="2" fill="${color}"><title>${esc(label)}</title></rect>`;
+  }).join('');
+
+  const grid = chartGridMarkup(min, max, (val) => String(Math.round(val)));
+  const xLabels = chartXLabelsMarkup(trend.map((e) => formatDate(e.date)));
+  const titleText = t('health.cycle.trends.cycleLength');
+  const table = chartTableMarkup(titleText, [t('health.cycle.trends.date'), titleText],
+    trend.map((e) => [formatDate(e.date), `${t('health.cycle.unit.days', { value: fmtNum(e.days) })} (${typicalLabel(isTypicalCycleLength(e.days))})`]));
+
+  return `
+    <div class="health-chart-section">
+      <div class="health-chart-section__head"><div class="health-chart-section__title">${esc(titleText)}</div></div>
+      <p class="health-chart-section__caption">${esc(t('health.cycle.trends.typicalRangeLabel', { min: TYPICAL_CYCLE_RANGE.min, max: TYPICAL_CYCLE_RANGE.max }))}</p>
+      <svg class="health-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(titleText)}">
+        ${grid}
+        ${band}
+        ${bars}
+        ${xLabels}
+      </svg>
+      ${table}
+    </div>`;
 }
 
 function bbtTrendChartMarkup(series) {
