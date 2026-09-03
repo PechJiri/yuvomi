@@ -36,7 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   privacy beats admin convenience: a member's private data is never opened by a role or by an
   update, only per person and on purpose (#584, #869, #989). The second is the pattern behind
   three findings of the same two days: a rule lives in one place, not at a call site (#989,
-  #1013, #1007). Each entry names the rule, the reason, the code path that enforces it and
+  #1013, #1007). The third is the head rule the calendar settled on 27 August and Tasks reached
+  again in #1012: one head, one width. Each entry names the rule, the reason, the code path that enforces it and
   what would reopen or undo it, and points to the thread and the release rather than restating
   them. Linked from the README, the scope page and the
   contributing guide.

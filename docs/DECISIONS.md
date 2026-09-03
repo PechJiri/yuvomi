@@ -141,3 +141,46 @@ regex for a format that already has an owner. A permission rule written inside a
 or a guard, which binds it to that guard's construction and leaves the next surface without
 it. The test that protects such a rule kills it at its home and expects every path to go red;
 a test that only reads the source for the right name stays green over dead code.
+
+---
+
+## 3. One head, one width
+
+**A page head holds the edge of its widest body and does not move when the view changes.**
+Where the bodies of a page differ in width, the narrow ones keep their own lane underneath;
+the head is not narrowed along with them.
+
+A head that follows its body is right in exactly one view and jumps in every other. The
+calendar settled this on 27 August 2026 (v2.50.3): its head stood over four bodies, three of
+them full width, and once the view switcher had moved into the toolbar row the full title
+line no longer fit on one line inside the 720px reading cap. The answer was not a wider cap
+but a rule: the head keeps the edge of its widest body, and the agenda list keeps its reading
+lane underneath.
+
+Tasks reached the same point in #1012, reported by @Kyrodan: three views, two head widths,
+and the actions on the right moved 354px on every switch at 1358px. It was the same coupling,
+and Tasks had not followed when the calendar changed course. The one-line fix did not exist:
+PAGE-016 requires that a measure which caps anything on a page is visible in its head, so a
+reading page cannot simply release its head. The page had to be built the calendar's way
+first - no measure on the root, the reading lane taken back per view on the page root, the
+head untouched - and only then did the jump stop, with the task rows still ending at 720px.
+
+### Where the rule lives
+
+- **The construction:** `app-page--full` on the page root, and `is-reading-measure` toggled
+  on that root per view (`public/pages/calendar.js`, `public/pages/tasks.js`).
+  `.app-page.is-reading-measure` in `public/styles/layout.css` sets the measure, and rows and
+  filter rows cap themselves at it; the head reads nothing from it.
+- **The guards** in `test/test-frontend-audit.js`. "EIN Kopf, EINE Breite" recognises the
+  shape by how it is written - a measure toggle on the body with no toggle on the head - and
+  requires a narrowed head on the list pages it scans. PAGE-016 closes the other door: a page
+  with a measured mode and a full-width head may cap nothing.
+- **The mechanism** of a narrowed head, the `::after` slot that pulls the row end to the
+  measure, is described in [PAGE-COMPOSITION.md](PAGE-COMPOSITION.md).
+
+### What counts as undoing it
+
+Toggling a head's width modifier with the view. Releasing the head of a reading page without
+changing the page's mode, which PAGE-016 reports. A new page with mixed body widths that
+narrows its head to the narrow body: it will be right in one view and jump in the others,
+and it will be reported by whoever switches views first.
