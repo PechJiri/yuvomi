@@ -810,6 +810,7 @@ test('DELETE with documents locks previewed documents and folders against concur
       .run(ADMIN_ID).lastInsertRowid;
     const [
       linkDocumentDuringDelete,
+      archiveDocumentDuringDelete,
       hiddenUpdate,
       hiddenDelete,
       moveDocument,
@@ -822,6 +823,7 @@ test('DELETE with documents locks previewed documents and folders against concur
         // and locked until every asynchronous storage operation has finished.
         document_ids: [documents[0].id],
       }),
+      h.call('PATCH', `/${documents[1].id}/archive`, { archived: true }),
       memberHarness.call('PUT', `/${documents.at(-1).id}`, { folder_id: outside.body.data.id }),
       memberHarness.call('DELETE', `/${documents.at(-1).id}`),
       h.call('PUT', `/${documents.at(-1).id}`, { folder_id: outside.body.data.id }),
@@ -844,6 +846,8 @@ test('DELETE with documents locks previewed documents and folders against concur
     assert.equal(moveDocumentIntoTree.body.reason, 'FOLDER_DELETE_IN_PROGRESS');
     assert.equal(linkDocumentDuringDelete.status, 409);
     assert.equal(linkDocumentDuringDelete.body.reason, 'DOCUMENT_DELETE_IN_PROGRESS');
+    assert.equal(archiveDocumentDuringDelete.status, 409);
+    assert.equal(archiveDocumentDuringDelete.body.reason, 'FOLDER_DELETE_IN_PROGRESS');
     assert.equal(get().prepare('SELECT COUNT(*) AS count FROM task_documents WHERE task_id = ?')
       .get(taskId).count, 0);
     const del = await deletion;

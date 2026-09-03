@@ -321,6 +321,7 @@ export function documentsPaths() {
         tag: 'Documents',
         params: [idParam()],
         stateChanging: true,
+        documentDeleteConflict: true,
         description: 'Archives the document by default. Send `{ "archived": false }` to restore it to active status.',
         requestBody: jsonBody(null),
       }),

@@ -255,6 +255,7 @@ test('OpenAPI dokumentiert stabile Storage-Fehlercodes', () => {
 
 test('OpenAPI dokumentiert Konflikte bei Verknüpfungen zu laufend gelöschten Dokumenten', () => {
   const operations = [
+    openApi.paths['/api/v1/documents/{id}/archive'].patch,
     openApi.paths['/api/v1/tasks/{id}/documents'].put,
     openApi.paths['/api/v1/housekeeping/visits/{id}'].put,
     openApi.paths['/api/v1/budget'].post,

@@ -1162,6 +1162,7 @@ router.patch('/:id/archive', (req, res) => {
     const existing = getVisibleDocument(id, req);
     if (!existing) return res.status(404).json({ error: 'Document not found.', code: 404 });
     if (existing.created_by !== userId(req) && !isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
+    if (documentDeleteIsActive(id)) return deletionInProgress(res);
     const status = req.body.archived === false ? 'active' : 'archived';
     db.get().prepare('UPDATE family_documents SET status = ? WHERE id = ?').run(status, id);
     res.json({ data: { id, status } });
