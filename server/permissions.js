@@ -105,8 +105,20 @@ export const PERMISSION_WIDGETS = Object.freeze([
 
 export const MODULE_ACCESS_LEVELS = Object.freeze(['none', 'read', 'write']);
 export const WIDGET_ACCESS_LEVELS = Object.freeze(['none', 'allow']);
+// Feinere Schreibrechte, die kein ganzes Modul sperren sollen. Persoenliche
+// Notiz-Kategorien bleiben immer Sache ihres Besitzers; dieser Schalter
+// betrifft ausschliesslich den gemeinsamen Haushaltskatalog.
+export const PERMISSION_CAPABILITIES = Object.freeze([
+  {
+    key: 'notes_manage_household_categories',
+    module: 'notes',
+    labelKey: 'noteCategories.permissionLabel',
+  },
+]);
+export const CAPABILITY_ACCESS_LEVELS = Object.freeze(['none', 'allow']);
 const MODULE_DEFAULT = 'write';
 const WIDGET_DEFAULT = 'allow';
+const CAPABILITY_DEFAULT = 'none';
 
 // Startrechte einer Einladung (#869). Drei Vorlagen, keine Rechteverwaltung im
 // Einladungsformular: wer feiner steuern will, tut das nach der Annahme im
@@ -175,6 +187,8 @@ function widgetIdSet() {
 }
 const MODULE_ACCESS_SET = new Set(MODULE_ACCESS_LEVELS);
 const WIDGET_ACCESS_SET = new Set(WIDGET_ACCESS_LEVELS);
+const CAPABILITY_KEY_SET = new Set(PERMISSION_CAPABILITIES.map((item) => item.key));
+const CAPABILITY_ACCESS_SET = new Set(CAPABILITY_ACCESS_LEVELS);
 const FAMILY_ROLE_SET = new Set(FAMILY_ROLES);
 
 // Sicherheitsnetz: jeder Permissions-Modulschlüssel muss ein echtes Scope-Modul
@@ -196,15 +210,17 @@ function loadSubjectRows(database, subjectType, subjectId) {
  * Löst die effektiven Rechte eines konkreten Nutzers auf.
  * @param {import('better-sqlite3-multiple-ciphers').Database} database
  * @param {{ id: number, role: string, family_role?: string }} user
- * @returns {{ admin: boolean, modules: Record<string,'none'|'read'|'write'>, widgets: Record<string,'none'|'allow'> }}
+ * @returns {{ admin: boolean, modules: Record<string,'none'|'read'|'write'>, widgets: Record<string,'none'|'allow'>, capabilities: Record<string,'none'|'allow'> }}
  */
 export function resolvePermissions(database, user) {
   const isAdmin = user?.role === 'admin';
   const modules = {};
   const widgets = {};
+  const capabilities = {};
   for (const m of allPermissionModules()) modules[m.key] = isAdmin ? 'write' : MODULE_DEFAULT;
   for (const w of allPermissionWidgets()) widgets[w.id] = isAdmin ? 'allow' : WIDGET_DEFAULT;
-  if (isAdmin) return { admin: true, modules, widgets };
+  for (const item of PERMISSION_CAPABILITIES) capabilities[item.key] = isAdmin ? 'allow' : CAPABILITY_DEFAULT;
+  if (isAdmin) return { admin: true, modules, widgets, capabilities };
 
   const MODULE_KEY_SET = moduleKeySet();
   const WIDGET_ID_SET = widgetIdSet();
@@ -215,6 +231,8 @@ export function resolvePermissions(database, user) {
         modules[r.resource_key] = r.access;
       } else if (r.resource_type === 'widget' && WIDGET_ID_SET.has(r.resource_key) && WIDGET_ACCESS_SET.has(r.access)) {
         widgets[r.resource_key] = r.access;
+      } else if (r.resource_type === 'capability' && CAPABILITY_KEY_SET.has(r.resource_key) && CAPABILITY_ACCESS_SET.has(r.access)) {
+        capabilities[r.resource_key] = r.access;
       }
     }
   };
@@ -231,7 +249,7 @@ export function resolvePermissions(database, user) {
   for (const w of allPermissionWidgets()) {
     if (w.module && modules[w.module] === 'none') widgets[w.id] = 'none';
   }
-  return { admin: false, modules, widgets };
+  return { admin: false, modules, widgets, capabilities };
 }
 
 /**
@@ -323,8 +341,8 @@ export function moduleAccessVerdict(sessionModuleAccess, moduleKey, access) {
  * Dashboard-Widgets aus — die verbindliche Durchsetzung bleibt serverseitig.
  */
 export function clientPermissions(database, user) {
-  const { admin, modules, widgets } = resolvePermissions(database, user);
-  return { admin, modules, widgets };
+  const { admin, modules, widgets, capabilities } = resolvePermissions(database, user);
+  return { admin, modules, widgets, capabilities };
 }
 
 /** Voller Katalog für die Admin-UI (Module, Widgets, Rollen). */
@@ -343,10 +361,12 @@ export function permissionCatalog() {
       label: w.label || null,
       labelKey: w.labelKey || null,
     })),
+    capabilities: PERMISSION_CAPABILITIES.map((item) => ({ ...item })),
     roles: [...FAMILY_ROLES],
     moduleAccessLevels: [...MODULE_ACCESS_LEVELS],
     widgetAccessLevels: [...WIDGET_ACCESS_LEVELS],
-    defaults: { module: MODULE_DEFAULT, widget: WIDGET_DEFAULT },
+    capabilityAccessLevels: [...CAPABILITY_ACCESS_LEVELS],
+    defaults: { module: MODULE_DEFAULT, widget: WIDGET_DEFAULT, capability: CAPABILITY_DEFAULT },
     // Startrechte-Vorlagen fuer das Einladungsformular (#869). Der Server
     // sagt, WELCHE Module die enge Vorlage sperrt - das Formular soll sie
     // benennen koennen, ohne die Liste ein zweites Mal zu fuehren.
@@ -370,13 +390,15 @@ export function getSubjectPermissions(database, subjectType, subjectId) {
   const rows = loadSubjectRows(database, subjectType, subjectId);
   const modules = {};
   const widgets = {};
+  const capabilities = {};
   const MODULE_KEY_SET = moduleKeySet();
   const WIDGET_ID_SET = widgetIdSet();
   for (const r of rows) {
     if (r.resource_type === 'module' && MODULE_KEY_SET.has(r.resource_key)) modules[r.resource_key] = r.access;
     else if (r.resource_type === 'widget' && WIDGET_ID_SET.has(r.resource_key)) widgets[r.resource_key] = r.access;
+    else if (r.resource_type === 'capability' && CAPABILITY_KEY_SET.has(r.resource_key)) capabilities[r.resource_key] = r.access;
   }
-  return { modules, widgets };
+  return { modules, widgets, capabilities };
 }
 
 /**
@@ -386,7 +408,10 @@ export function getSubjectPermissions(database, subjectType, subjectId) {
  * ungültigen Werten.
  * @returns {{ resource_type: string, resource_key: string, access: string }[]}
  */
-export function normalizePermissionInput({ modules = {}, widgets = {} } = {}) {
+export function normalizePermissionInput(
+  { modules = {}, widgets = {}, capabilities = {} } = {},
+  { subjectType = 'role' } = {},
+) {
   const rows = [];
   const MODULE_KEY_SET = moduleKeySet();
   const WIDGET_ID_SET = widgetIdSet();
@@ -402,14 +427,21 @@ export function normalizePermissionInput({ modules = {}, widgets = {} } = {}) {
     if (access === WIDGET_DEFAULT) continue;
     rows.push({ resource_type: 'widget', resource_key: id, access });
   }
+  for (const [key, access] of Object.entries(capabilities || {})) {
+    if (!CAPABILITY_KEY_SET.has(key)) throw new Error(`Unknown capability: ${key}`);
+    if (!CAPABILITY_ACCESS_SET.has(access)) throw new Error(`Invalid capability access: ${access}`);
+    if (access === CAPABILITY_DEFAULT && subjectType !== 'user') continue;
+    rows.push({ resource_type: 'capability', resource_key: key, access });
+  }
   return rows;
 }
 
 /**
  * Ersetzt die gespeicherten Modul- und Widget-Rechte eines Subjekts atomar
- * (delete + insert der abweichenden Einträge). Andere Ressourcen, etwa
- * Capabilities, bleiben unverändert. Transaktion vom Aufrufer bereitgestellt
- * oder hier gekapselt.
+ * (delete + insert der abweichenden Einträge). Capabilities bleiben
+ * unverändert, wenn das Feld fehlt; ein ausdrücklich mitgegebenes
+ * `capabilities` ersetzt dagegen auch diese Achse. Transaktion vom Aufrufer
+ * bereitgestellt oder hier gekapselt.
  * @param {import('better-sqlite3-multiple-ciphers').Database} database
  */
 export function replaceSubjectPermissions(database, subjectType, subjectId, input) {
@@ -429,8 +461,8 @@ export function replaceSubjectPermissions(database, subjectType, subjectId, inpu
 
 /**
  * Wie `replaceSubjectPermissions()`, aber OHNE eigene Transaktionsklammer -
- * fuer Aufrufer, die schon in einer stecken. Ersetzt nur Modul- und
- * Widget-Zeilen; andere Ressourcen bleiben erhalten.
+ * fuer Aufrufer, die schon in einer stecken. Ersetzt Modul- und Widget-Zeilen;
+ * Capability-Zeilen nur dann, wenn `input.capabilities` ausdrücklich vorliegt.
  *
  * Es gibt sie, weil das Annehmen einer Einladung Nutzer, Kontakt-Artefakte und
  * Startrechte in EINER Transaktion schreibt (#869). Ein `BEGIN` darin waere
@@ -439,17 +471,24 @@ export function replaceSubjectPermissions(database, subjectType, subjectId, inpu
  * waere verbraucht.
  */
 export function writeSubjectPermissions(database, subjectType, subjectId, input) {
-  const rows = normalizePermissionInput(input);
-  const del = database.prepare(`
+  const rows = normalizePermissionInput(input, { subjectType });
+  const deleteModulesAndWidgets = database.prepare(`
     DELETE FROM access_permissions
     WHERE subject_type = ? AND subject_id = ?
       AND resource_type IN ('module', 'widget')
+  `);
+  const deleteCapabilities = database.prepare(`
+    DELETE FROM access_permissions
+    WHERE subject_type = ? AND subject_id = ? AND resource_type = 'capability'
   `);
   const ins = database.prepare(`
     INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
     VALUES (?, ?, ?, ?, ?)
   `);
-  del.run(subjectType, String(subjectId));
+  deleteModulesAndWidgets.run(subjectType, String(subjectId));
+  if (Object.prototype.hasOwnProperty.call(input || {}, 'capabilities')) {
+    deleteCapabilities.run(subjectType, String(subjectId));
+  }
   for (const r of rows) ins.run(subjectType, String(subjectId), r.resource_type, r.resource_key, r.access);
   return rows.length;
 }
