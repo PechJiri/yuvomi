@@ -1977,6 +1977,21 @@
         "inventoryFeedDisableConfirm": "Feed deaktivieren? Bestehende Abonnements erhalten keine Aktualisierungen mehr.",
         "inventoryFeedDisableConfirmDetail": "Der Link liefert sofort nichts mehr. Wird der Feed später wieder aktiviert, entsteht eine neue Adresse, die jeder Abonnent von Hand neu eintragen muss.",
         "inventoryFeedHint": "Wer diesen Link kennt, sieht, welche Fristen deiner Gegenstände bald anstehen. Nur mit eigenen Geräten teilen.",
+        "cycleFeedTitle": "Zyklus exportieren",
+        "cycleFeedDescription": "Deine eingetragenen und vorhergesagten Perioden (samt Eisprung und fruchtbarem Fenster, falls verfolgt) schreibgeschützt in Apple Kalender, Google Kalender oder Thunderbird abonnieren.",
+        "cycleFeedInactive": "Der Export-Feed ist deaktiviert.",
+        "cycleFeedActivate": "Feed aktivieren",
+        "cycleFeedUrlLabel": "Feed-Adresse",
+        "cycleFeedCopy": "Adresse kopieren",
+        "cycleFeedCopied": "Adresse kopiert",
+        "cycleFeedSubscribe": "In Kalender-App abonnieren",
+        "cycleFeedRegenerate": "Neuen Link erzeugen",
+        "cycleFeedDisable": "Feed deaktivieren",
+        "cycleFeedRegenerateConfirm": "Neuen Link erzeugen? Der alte Link funktioniert danach nicht mehr.",
+        "cycleFeedRegenerateConfirmDetail": "Geräte und Dienste, die den alten Link nutzen, erhalten keine Aktualisierungen mehr und zeigen je nach App entweder den letzten Stand oder nichts mehr an, bis dort die neue Adresse eingetragen wird.",
+        "cycleFeedDisableConfirm": "Feed deaktivieren? Bestehende Abonnements erhalten keine Aktualisierungen mehr.",
+        "cycleFeedDisableConfirmDetail": "Der Link liefert sofort nichts mehr. Wird der Feed später wieder aktiviert, entsteht eine neue Adresse, die jeder Abonnent von Hand neu eintragen muss.",
+        "cycleFeedHint": "Wer diesen Link kennt, sieht deine Zyklusdaten. Nur mit eigenen Geräten teilen.",
         "caldavDescription": "Verbinde mehrere CalDAV-Konten (iCloud, Nextcloud, Radicale, Baikal, etc.) und wähle, welche Kalender synchronisiert werden.",
         "caldavAddAccount": "CalDAV-Konto hinzufügen",
         "caldavEmptyState": "Noch keine CalDAV-Konten verbunden. Füge dein erstes Konto hinzu, um zu starten.",
@@ -4236,6 +4251,13 @@
             },
             "export": {
                 "csv": "Als CSV exportieren"
+            },
+            "ics": {
+                "calendarName": "Yuvomi Zyklus",
+                "periodSummary": "Periode",
+                "predictedPeriodSummary": "Vorhergesagte Periode",
+                "fertileWindowSummary": "Fruchtbares Fenster (vorhergesagt)",
+                "ovulationSummary": "Eisprung (vorhergesagt)"
             },
             "settings": {
                 "open": "Einstellungen",

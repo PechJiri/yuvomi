@@ -21,7 +21,7 @@ const {
   detectTemperatureShift,
   cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
   symptomCyclePattern, TYPICAL_CYCLE_RANGE, isTypicalCycleLength,
-  predictSymptomLikelihood,
+  predictSymptomLikelihood, projectFutureCycles,
 } = await import('../public/utils/health-cycle.js');
 
 const de = JSON.parse(readFileSync(new URL('../public/locales/de.json', import.meta.url), 'utf8'));
@@ -710,6 +710,33 @@ test('predictSymptomLikelihood: ein einzelner eligibler Zyklus ist kein Muster, 
 
 test('predictSymptomLikelihood: ohne jede Periode gibt es nichts vorherzusagen', () => {
   assert.deepEqual(predictSymptomLikelihood([], [], {}, 'cramps', '2026-01-01'), { likelyDates: [], todayCycleDay: 0, isLikelyToday: false });
+});
+
+// --------------------------------------------------------
+// projectFutureCycles (aus buildCycleCalendar() herausgezogen, Phase 5 -
+// derselbe Horizont, den der neue ICS-Feed braucht)
+// --------------------------------------------------------
+
+test('projectFutureCycles: drei Folgezyklen ab dem letzten Periodenstart', () => {
+  const hist = periods(['2026-01-01', '2026-01-29', '2026-02-26'], 5); // 28/28 -> avgCycle 28
+  const projected = projectFutureCycles(hist, {});
+  assert.equal(projected.length, 3);
+  assert.equal(projected[0].start, '2026-03-26');
+  assert.equal(projected[1].start, '2026-04-23');
+  assert.equal(projected[2].start, '2026-05-21');
+  assert.equal(projected[0].end, '2026-03-30'); // avgPeriod (Default 5) - 1 Tag
+  // Eisprung = Start - Lutealphase (Default 14).
+  assert.equal(projected[0].ovulation, '2026-03-12');
+});
+
+test('projectFutureCycles: leer ohne jede Periode', () => {
+  assert.deepEqual(projectFutureCycles([], {}), []);
+});
+
+test('projectFutureCycles: leer im Schwangerschafts-Modus (keine Prognose ohne Basis)', () => {
+  const hist = periods(['2026-01-01', '2026-01-29'], 5);
+  const settings = { pregnancy_mode: 1, pregnancy_due_date: '2026-09-01' };
+  assert.deepEqual(projectFutureCycles(hist, settings, '2026-03-01'), []);
 });
 
 // --------------------------------------------------------

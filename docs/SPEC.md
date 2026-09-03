@@ -2619,6 +2619,29 @@ gains extra per-day markers (solid = symptom actually logged, ring = predicted-l
 second calendar existing side by side - the picker just changes what the existing grid highlights, in
 its own corner of each cell so it never collides with the calendar's own has-a-log marker.
 
+**A per-user, read-only predicted-cycle ICS feed** (migration 177, `users.cycle_feed_token`) gives
+Lock-Screen/Calendar-app visibility without a native app - the same trick already used for the
+household calendar and inventory-warranty feeds (`server/services/ics-export.js`,
+`server/services/inventory-deadlines-ics.js`), whose `escapeICSText`/`foldLine` helpers and
+token-column-on-`users` pattern `server/services/cycle-ics.js` reuses directly.
+**Unlike the inventory feed, the feed *content* here is personal, not just the token**: cycle data
+is already owned per-user (`cycle_periods.user_id`), so `buildCycleFeed(conn, userId, now)` filters
+to exactly that user, with no household aggregation - keeping cycle data out of the caregiver-grant
+system exactly as the rest of this module already does (#584; a share stays `visibility: 'family'`,
+never a feed subscription to someone else's data). The feed carries a VEVENT per logged period
+(stable UID from the DB row) plus, unless pregnancy mode is active, up to three predicted future
+periods and (when fertility tracking is on) their fertile windows/ovulation - the same three-cycle
+horizon `buildCycleCalendar()` already projects. That projection formula moved into a new exported
+`projectFutureCycles()`, extracted out of `buildCycleCalendar()`'s own inline loop (which now calls
+it) rather than duplicating the calendar-method math a third time for the feed. Management (get
+status / regenerate / disable) lives at `/api/v1/health/cycle/feed`
+(`server/routes/health/cycle-feed.js`), the unauthenticated feed itself at
+`GET /feed/cycle/:token.ics` (`server/index.js`) - same split as every other ICS feed in this app.
+The subscribe UI is a third section on the existing personal-feeds settings page
+(`public/settings/pages/personal-feeds.js`, alongside the calendar and inventory feeds it already
+manages), not a new page and not inside the cycle tab's own settings modal - keeping every "export my
+own data as a link" control in the one place a person already goes to manage the other two.
+
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and
 fans out via Web Push and the household channels (Gotify, ntfy, webhook, email). Medications (`name`, `dosage_text`) and activities

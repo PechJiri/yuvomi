@@ -1974,6 +1974,21 @@
         "inventoryFeedDisableConfirm": "Disable the feed? Existing subscriptions will no longer receive updates.",
         "inventoryFeedDisableConfirmDetail": "The link stops delivering anything immediately. Turning it back on later creates a new address that every subscriber has to enter by hand.",
         "inventoryFeedHint": "Anyone who knows this link can see which of your items' deadlines are coming up. Only share it with your own devices.",
+        "cycleFeedTitle": "Export cycle",
+        "cycleFeedDescription": "Subscribe to your logged and predicted periods (plus ovulation and fertile window, if tracked) read-only in Apple Calendar, Google Calendar, or Thunderbird.",
+        "cycleFeedInactive": "The export feed is disabled.",
+        "cycleFeedActivate": "Activate feed",
+        "cycleFeedUrlLabel": "Feed address",
+        "cycleFeedCopy": "Copy address",
+        "cycleFeedCopied": "Address copied",
+        "cycleFeedSubscribe": "Subscribe in calendar app",
+        "cycleFeedRegenerate": "Generate new link",
+        "cycleFeedDisable": "Disable feed",
+        "cycleFeedRegenerateConfirm": "Generate a new link? The old link will stop working.",
+        "cycleFeedRegenerateConfirmDetail": "Devices and services using the old link stop receiving updates and, depending on the app, either keep showing their last state or show nothing until the new address is entered there.",
+        "cycleFeedDisableConfirm": "Disable the feed? Existing subscriptions will no longer receive updates.",
+        "cycleFeedDisableConfirmDetail": "The link stops delivering anything immediately. Turning it back on later creates a new address that every subscriber has to enter by hand.",
+        "cycleFeedHint": "Anyone who knows this link can see your cycle data. Only share it with your own devices.",
         "caldavUrlHint": "Basadressen till din CalDAV-server",
         "caldavUsernameLabel": "Användarnamn",
         "calendarDisabled": "Kalender inaktiverad",
@@ -4236,6 +4251,13 @@
             },
             "export": {
                 "csv": "Exportera som CSV"
+            },
+            "ics": {
+                "calendarName": "Yuvomi Cycle",
+                "periodSummary": "Period",
+                "predictedPeriodSummary": "Predicted period",
+                "fertileWindowSummary": "Fertile window (predicted)",
+                "ovulationSummary": "Ovulation (predicted)"
             },
             "settings": {
                 "open": "Inställningar",

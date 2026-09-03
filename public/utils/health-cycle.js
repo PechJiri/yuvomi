@@ -824,6 +824,43 @@ function loggedPeriodPhase(dateKey, periodsAsc, avgPeriod) {
 }
 
 /**
+ * Projiziert die nächsten drei Zyklen (Periode, Eisprung, fruchtbares Fenster)
+ * rein nach der Kalendermethode - die Formel stand bisher inline in
+ * buildCycleCalendar() (die sie jetzt von hier aufruft) und braucht der
+ * ICS-Feed (Phase 5, server/services/cycle-ics.js) für denselben Horizont.
+ * Eine dritte Kopie derselben Rechnung wäre die Alternative gewesen.
+ *
+ * Leer im Schwangerschafts-Modus oder ganz ohne Historie - keine Projektion
+ * ohne Basis, dieselbe Regel wie predictCycle()/buildCycleCalendar() schon
+ * immer befolgt haben.
+ *
+ * @param {Array<Object>} periods
+ * @param {Object} [settings]
+ * @param {string} [todayKey]
+ * @returns {Array<{start: string, end: string, ovulation: string, fertileStart: string, fertileEnd: string}>}
+ */
+export function projectFutureCycles(periods, settings = {}, todayKey = householdToday()) {
+  const asc = sortPeriodsAsc(periods);
+  if (!asc.length || pregnancyInfo(settings, todayKey).active) return [];
+
+  const stats = cycleStats(asc, settings);
+  const lastStart = dayKey(asc[asc.length - 1].start_date);
+  const projected = [];
+  for (let k = 1; k <= 3; k += 1) {
+    const start = addLocalDays(lastStart, stats.avgCycle * k);
+    const ovulation = addLocalDays(start, -stats.lutealLength);
+    projected.push({
+      start,
+      end: addLocalDays(start, stats.avgPeriod - 1),
+      ovulation,
+      fertileStart: addLocalDays(ovulation, -(FERTILE_WINDOW_DAYS - 1)),
+      fertileEnd: ovulation,
+    });
+  }
+  return projected;
+}
+
+/**
  * Baut das Monatsraster (6 Wochen) für den Monat um `anchorKey`. Jede Zelle trägt
  * ihre Phase (farbcodiert) und – sofern vorhanden – den Tages-Log (Flow).
  * Vorhergesagte Perioden/Eisprünge werden über bis zu drei Folgezyklen projiziert,
@@ -841,7 +878,7 @@ function loggedPeriodPhase(dateKey, periodsAsc, avgPeriod) {
 export function buildCycleCalendar(anchorKey, { periods = [], logs = [], settings = {}, todayKey = householdToday(), weekStartsOn = 1 } = {}) {
   const asc = sortPeriodsAsc(periods);
   const stats = cycleStats(asc, settings);
-  const { avgCycle, avgPeriod, lutealLength, trackFertility } = stats;
+  const { avgPeriod, trackFertility } = stats;
   const today = dayKey(todayKey);
 
   const logByDate = new Map();
@@ -849,25 +886,10 @@ export function buildCycleCalendar(anchorKey, { periods = [], logs = [], setting
     if (l && l.log_date) logByDate.set(dayKey(l.log_date), l);
   }
 
-  // Projizierte Zyklen (nur zukünftige, ab dem letzten geloggten Start).
-  // Im Schwangerschafts-Modus entfällt jede Projektion — geloggte Perioden
-  // bleiben sichtbar, aber es werden keine künftigen Phasen vorhergesagt.
-  const pregnant = pregnancyInfo(settings, today).active;
-  const projected = [];
-  if (asc.length && !pregnant) {
-    const lastStart = dayKey(asc[asc.length - 1].start_date);
-    for (let k = 1; k <= 3; k += 1) {
-      const start = addLocalDays(lastStart, avgCycle * k);
-      const ovul = addLocalDays(start, -lutealLength);
-      projected.push({
-        start,
-        end: addLocalDays(start, avgPeriod - 1),
-        ovulation: ovul,
-        fertileStart: addLocalDays(ovul, -(FERTILE_WINDOW_DAYS - 1)),
-        fertileEnd: ovul,
-      });
-    }
-  }
+  // Projizierte Zyklen (nur zukünftige, ab dem letzten geloggten Start) -
+  // dieselbe Projektion wie projectFutureCycles() (Phase 5 braucht denselben
+  // Horizont fuer den ICS-Feed), hier nur aufgerufen statt inline wiederholt.
+  const projected = projectFutureCycles(asc, settings, today);
 
   const anchor = dayKey(anchorKey);
   const monthStr = anchor.slice(0, 7); // YYYY-MM

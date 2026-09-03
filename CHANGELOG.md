@@ -104,6 +104,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself - a filled dot for a day it was actually logged, a ring for a day it's predicted but not yet
   logged. No new calendar view; the same one the tab already shows just gains markers when a symptom
   is selected.
+- **Cycle predictions can now be subscribed to as a read-only calendar feed**, the same Lock-Screen/
+  Calendar-app trick already used for the household calendar and inventory warranty dates. Unlike
+  the inventory feed, this one's *content* - not just the access token - is personal: it reflects
+  only the subscriber's own logged and predicted periods (plus ovulation and fertile window, if
+  tracked), never a household-wide view, keeping cycle data out of the caregiver-sharing system the
+  same way the rest of this module already does. Manage it from Settings → Personal → Feeds,
+  alongside the other two feeds already there.
 
 ### Fixed
 
