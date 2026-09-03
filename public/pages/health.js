@@ -4796,6 +4796,15 @@ function cycleLengthTrendChartMarkup(trend) {
   const titleText = t('health.cycle.trends.cycleLength');
   const table = chartTableMarkup(titleText, [t('health.cycle.trends.date'), titleText],
     trend.map((e) => [formatDate(e.date), `${t('health.cycle.unit.days', { value: fmtNum(e.days) })} (${typicalLabel(isTypicalCycleLength(e.days))})`]));
+  // Ohne Legende war die Bar-Farbe die einzige Auskunft "typisch/untypisch" -
+  // sichtbar nur im Hover-Tooltip, auf einem Touch-Geraet also gar nicht.
+  // Dieselbe .cycle-legend-Komponente wie Kalender und Symptom-Haeufigkeit,
+  // keine neue Legenden-Optik erfunden.
+  const legend = `
+    <div class="cycle-legend">
+      <span class="cycle-legend__item"><span class="cycle-legend__swatch" style="background:var(--module-health)"></span>${esc(typicalLabel(true))}</span>
+      <span class="cycle-legend__item"><span class="cycle-legend__swatch" style="background:var(--color-warning)"></span>${esc(typicalLabel(false))}</span>
+    </div>`;
 
   return `
     <div class="health-chart-section">
@@ -4807,6 +4816,7 @@ function cycleLengthTrendChartMarkup(trend) {
         ${bars}
         ${xLabels}
       </svg>
+      ${legend}
       ${table}
     </div>`;
 }

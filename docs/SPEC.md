@@ -2597,7 +2597,10 @@ coincidence.
 38}`, `isTypicalCycleLength()`), each bar colored typical (module accent) or atypical (the existing
 warning token) against a shaded reference band for the range itself - the same
 `.health-chart__band`/`.health-chart__band-line` pattern the lab-value chart already uses for a
-normal range, reused rather than invented twice. The range is a population-level reference figure,
+normal range, reused rather than invented twice, plus a `.cycle-legend` (the same component the
+calendar and symptom-frequency chart already use) spelling out what the two bar colors mean - without
+it, that distinction only lived in a hover tooltip, invisible on a touch device. The range is a
+population-level reference figure,
 deliberately separate from `cycleStats()`'s own `regular`/`variation` (deviation from *the user's
 own* recent average) - the two answer different questions ("is this within the usual range" vs. "is
 your cycle consistent for you") and neither replaces the other. Scoping this also surfaced a real

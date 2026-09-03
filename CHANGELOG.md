@@ -125,6 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The cycle-day pattern sentence now says how many days before your period a symptom typically
   shows up**, when that's a real pattern (the same value recurring across at least two cycles),
   instead of only the coarser "occurs during your luteal phase."
+- **The cycle-length trend chart's typical/atypical bar colors had no legend** - the only place that
+  distinction was spelled out was a hover tooltip, invisible on a touch device. Added the same
+  legend component the calendar and symptom-frequency chart already use.
 
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
   the native colour input to fill its grid cell; on the mobile layout, where the two-column form
