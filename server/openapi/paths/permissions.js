@@ -19,7 +19,9 @@ const userIdParam = {
 
 const BODY = 'Body: { modules, widgets, capabilities } - `modules` maps a module key to `none`, `read` or `write`, '
   + '`widgets` maps a widget id to `none` or `allow`, and `capabilities` maps '
-  + '`notes_manage_household_categories` to `none` or `allow`. The set is replaced as a whole. Role values '
+  + '`notes_manage_household_categories` to `none` or `allow`. Module and widget rows are replaced on every '
+  + 'request. Capability rows are replaced only when `capabilities` is explicitly present, so older clients '
+  + 'cannot silently remove them. Role values '
   + 'that match the default are not stored; a member-level `none` capability may be stored to override an '
   + 'inherited `allow`.';
 
@@ -70,7 +72,7 @@ export function permissionsPaths() {
         stateChanging: true,
         params: [userIdParam],
         requestBody: jsonBody(null),
-        description: `${BODY} Empty maps mean "inherit from the role" - they remove every override.`,
+        description: `${BODY} Each empty map means "inherit from the role" for that axis. To remove every override, send { modules: {}, widgets: {}, capabilities: {} }.`,
       }),
     },
   };

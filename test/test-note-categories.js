@@ -44,6 +44,9 @@ test('category name keys normalize canonical composition and ordinary Unicode ca
   assert.equal(categoryNameKey('Café'), categoryNameKey('Cafe\u0301'));
   assert.equal(categoryNameKey('Μάϊος'), categoryNameKey('ΜΆΪΟΣ'));
   assert.equal(categoryNameKey('Straße'), categoryNameKey('STRASSE'));
+  assert.equal(categoryNameKey('ẞ'), categoryNameKey('ß'));
+  assert.equal(categoryNameKey('ß'), categoryNameKey('SS'));
+  assert.equal(categoryNameKey(categoryNameKey('ẞ')), categoryNameKey('ẞ'));
 });
 
 test('category names are unique case-insensitively inside their scope', () => {
@@ -62,6 +65,8 @@ test('category names are unique case-insensitively inside their scope', () => {
   assert.throws(() => add.run('česká', categoryNameKey('česká'), 'personal', userA, userA), /UNIQUE/);
   add.run('Straße', categoryNameKey('Straße'), 'personal', userA, userA);
   assert.throws(() => add.run('STRASSE', categoryNameKey('STRASSE'), 'personal', userA, userA), /UNIQUE/);
+  add.run('ẞ', categoryNameKey('ẞ'), 'personal', userB, userB);
+  assert.throws(() => add.run('SS', categoryNameKey('SS'), 'personal', userB, userB), /UNIQUE/);
   assert.doesNotThrow(() => add.run('Česká', categoryNameKey('Česká'), 'personal', userB, userB));
   db.close();
 });

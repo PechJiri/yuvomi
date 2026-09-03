@@ -233,11 +233,60 @@ test('replaceSubjectPermissions ersetzt atomar (kein Merge)', () => {
   assert.deepEqual(stored.modules, { health: 'read' }); // budget-Sperre ist weg
 });
 
-test('Leere Eingabe = „von Rolle erben" (alle Overrides entfernt)', () => {
+test('replaceSubjectPermissions erhält Capability-Zeilen beim Speichern von Modulen', () => {
+  const db = freshDb();
+  db.exec(MIGRATIONS_SQL[174]);
+  db.prepare(`
+    INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
+    VALUES ('role', 'child', 'capability', 'notes.categories', 'allow')
+  `).run();
+
+  replaceSubjectPermissions(db, 'role', 'child', { modules: { budget: 'none' } });
+
+  assert.deepEqual(
+    db.prepare(`
+      SELECT resource_type, resource_key, access
+      FROM access_permissions
+      WHERE subject_type = 'role' AND subject_id = 'child'
+      ORDER BY resource_type, resource_key
+    `).all().map((row) => ({ ...row })),
+    [
+      { resource_type: 'capability', resource_key: 'notes.categories', access: 'allow' },
+      { resource_type: 'module', resource_key: 'budget', access: 'none' },
+    ],
+  );
+});
+
+test('replaceSubjectPermissions ersetzt Capabilities nur bei ausdrücklichem Feld', () => {
+  const db = freshDb();
+  db.prepare(`
+    INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
+    VALUES ('role', 'child', 'capability', 'notes_manage_household_categories', 'allow')
+  `).run();
+
+  replaceSubjectPermissions(db, 'role', 'child', { modules: {} });
+  assert.deepEqual(getSubjectPermissions(db, 'role', 'child').capabilities, {
+    notes_manage_household_categories: 'allow',
+  });
+
+  replaceSubjectPermissions(db, 'role', 'child', { capabilities: {} });
+  assert.deepEqual(getSubjectPermissions(db, 'role', 'child').capabilities, {});
+});
+
+test('Leere Eingabe leert die alten Achsen und lässt ausgelassene Capabilities bestehen', () => {
   const db = freshDb();
   addUser(db, { id: 11, role: 'member', family_role: 'child' });
-  replaceSubjectPermissions(db, 'user', 11, { modules: { budget: 'none' } });
+  replaceSubjectPermissions(db, 'user', 11, {
+    modules: { budget: 'none' },
+    capabilities: { notes_manage_household_categories: 'allow' },
+  });
   replaceSubjectPermissions(db, 'user', 11, {}); // zurücksetzen
+  assert.deepEqual(getSubjectPermissions(db, 'user', 11), {
+    modules: {},
+    widgets: {},
+    capabilities: { notes_manage_household_categories: 'allow' },
+  });
+  replaceSubjectPermissions(db, 'user', 11, { capabilities: {} });
   assert.deepEqual(getSubjectPermissions(db, 'user', 11), { modules: {}, widgets: {}, capabilities: {} });
 });
 

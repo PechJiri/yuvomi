@@ -22,7 +22,11 @@ function normalizedIds(value) {
  * vendorte Browser-Kopie.
  */
 export function categoryNameKey(name) {
-  return String(name).normalize('NFKC').toUpperCase().toLowerCase().normalize('NFKC');
+  return String(name)
+    .normalize('NFKC')
+    .toUpperCase().toLowerCase()
+    .toUpperCase().toLowerCase()
+    .normalize('NFKC');
 }
 
 export function listVisibleCategories(database, userId) {
