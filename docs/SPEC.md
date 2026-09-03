@@ -2560,7 +2560,13 @@ classified and are excluded, not guessed.
 line, instead of packing the day number into the ring's small center area alongside the phase label
 and status line. The center now only holds those two; the day number moved out to the badge, which
 follows the marker's angle around the ring (`cyclePolar()`) so it stays visually attached wherever
-"today" falls in the cycle.
+"today" falls in the cycle. It also carries a compact `.cycle-legend` right below it - the ring's
+phase colors (period/fertile/ovulation) were previously explained only by a hover tooltip, invisible
+on touch. It's a deliberately smaller selection than the calendar's legend below it on the same
+page: only the colors the ring actually renders (`cycleRing()`'s segments) - the calendar also
+distinguishes "predicted" and "today," which don't have a distinct color on the ring, so those items
+are left out here rather than shown unexplained. Fertile/ovulation drop out of the legend entirely
+when `trackFertility` is off, matching that the ring itself renders no such segments then.
 
 **Symptom frequency entries carry an `avgIntensity`** (`symptomFrequencyByPhase()`), the mean of
 that symptom's graded (1–3) occurrences, `null` if none were graded — additive to the existing

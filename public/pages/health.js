@@ -4272,6 +4272,7 @@ function renderCycleShell() {
         ${prediction.trackFertility ? `<p class="health-disclaimer">${esc(t('health.cycle.fertilityDisclaimer'))}</p>` : ''}
       </div>
     </div>
+    ${cycleRingLegendMarkup(prediction)}
     ${own ? cycleTodayActionsMarkup() : ''}
     ${cycleCalendarMarkup(own)}
     ${cycleTrendsMarkup()}
@@ -4388,6 +4389,28 @@ function cycleRingMarkup(prediction) {
         <span class="cycle-ring__status">${esc(`${t('health.cycle.status.nextPeriod')}: ${cycleCountdownText(prediction)}`)}</span>
       </div>
     </div>`;
+}
+
+/**
+ * Kompakte Legende zum Ring - nur die drei Farben, die der Ring tatsaechlich
+ * zeigt (Periode immer, fruchtbares Fenster/Eisprung nur bei aktivierter
+ * Fruchtbarkeitsverfolgung, siehe cycleRing()). Bewusst NICHT die volle
+ * Kalender-Legende (die auch "vorhergesagt"/"heute" fuehrt, was auf dem Ring
+ * keine eigene Farbe hat) - dieselbe .cycle-legend-Komponente, aber eine
+ * eigene, kleinere Auswahl. Der Ring-Mittelpunkt nennt die AKTUELLE Phase
+ * schon als Text; diese Legende erklaert die uebrigen Bogenfarben, die sonst
+ * nur ueber die Farbe selbst zu unterscheiden waeren.
+ */
+function cycleRingLegendMarkup(prediction) {
+  const items = [{ cls: 'is-menstruation', key: 'health.cycle.legend.period' }];
+  if (prediction.trackFertility) {
+    items.push(
+      { cls: 'is-fertile', key: 'health.cycle.legend.fertile' },
+      { cls: 'is-ovulation', key: 'health.cycle.legend.ovulation' },
+    );
+  }
+  return `<div class="cycle-legend cycle-ring__legend">${items.map((i) => `
+    <span class="cycle-legend__item"><span class="cycle-legend__swatch ${i.cls}"></span>${esc(t(i.key))}</span>`).join('')}</div>`;
 }
 
 function cycleCountdownText(prediction) {

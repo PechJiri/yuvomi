@@ -128,6 +128,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The cycle-length trend chart's typical/atypical bar colors had no legend** - the only place that
   distinction was spelled out was a hover tooltip, invisible on a touch device. Added the same
   legend component the calendar and symptom-frequency chart already use.
+- **The cycle ring's phase colors (period/fertile/ovulation) also had no legend**, same problem as
+  the bar chart above. Added a compact legend below the ring with just the colors it actually
+  renders - lighter than the calendar's full legend, which also covers "predicted" and "today" states
+  that don't have a distinct color on the ring.
 
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
   the native colour input to fill its grid cell; on the mobile layout, where the two-column form
