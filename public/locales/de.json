@@ -4068,6 +4068,7 @@
             "ring": {
                 "label": "Zyklus-Ring",
                 "cycleDay": "Zyklustag {{day}}",
+                "dayBadge": "Tag {{day}}",
                 "of": "von {{total}}"
             },
             "phase": {
@@ -4145,6 +4146,8 @@
                 "date": "Datum",
                 "cycleLength": "Zykluslänge",
                 "symptomFrequency": "Symptom-Häufigkeit",
+                "severity": "Schweregrad",
+                "severityTrend": "Schweregrad-Verlauf",
                 "phaseOther": "Sonstige"
             },
             "flow": {

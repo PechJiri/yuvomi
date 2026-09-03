@@ -4068,6 +4068,7 @@
             "ring": {
                 "label": "Prstenec cyklu",
                 "cycleDay": "Den cyklu {{day}}",
+                "dayBadge": "Den {{day}}",
                 "of": "z {{total}}"
             },
             "phase": {
@@ -4145,6 +4146,8 @@
                 "date": "Date",
                 "cycleLength": "Cycle length",
                 "symptomFrequency": "Symptom frequency",
+                "severity": "Severity",
+                "severityTrend": "Severity trend",
                 "phaseOther": "Other"
             },
             "flow": {

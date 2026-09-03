@@ -2556,6 +2556,20 @@ instead of "today," for a distinction the two most commonly asked questions ("is
 symptom" / "is this a PMS symptom") don't need. Days before the first logged period aren't
 classified and are excluded, not guessed.
 
+**The cycle ring** carries a "Day N" badge next to its current-day marker, connected by a short
+line, instead of packing the day number into the ring's small center area alongside the phase label
+and status line. The center now only holds those two; the day number moved out to the badge, which
+follows the marker's angle around the ring (`cyclePolar()`) so it stays visually attached wherever
+"today" falls in the cycle.
+
+**Symptom frequency entries carry an `avgIntensity`** (`symptomFrequencyByPhase()`), the mean of
+that symptom's graded (1–3) occurrences, `null` if none were graded — additive to the existing
+per-phase counts. The frequency list shows it as the same three-dot indicator used in the day-log
+editor. A symptom with at least two graded readings gets an expandable "Severity trend" panel
+(`symptomIntensityTrend()`, reusing the Trends section's line-chart geometry with an intensity
+y-axis instead of days/°C) so a rarely-but-severely logged symptom is distinguishable from an
+often-but-mildly logged one — something a plain occurrence count can't show.
+
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and
 fans out via Web Push and the household channels (Gotify, ntfy, webhook, email). Medications (`name`, `dosage_text`) and activities

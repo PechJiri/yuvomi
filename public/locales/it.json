@@ -4068,6 +4068,7 @@
             "ring": {
                 "label": "Anello del ciclo",
                 "cycleDay": "Giorno del ciclo {{day}}",
+                "dayBadge": "Giorno {{day}}",
                 "of": "di {{total}}"
             },
             "phase": {
@@ -4145,6 +4146,8 @@
                 "date": "Date",
                 "cycleLength": "Cycle length",
                 "symptomFrequency": "Symptom frequency",
+                "severity": "Severity",
+                "severityTrend": "Severity trend",
                 "phaseOther": "Other"
             },
             "flow": {

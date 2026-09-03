@@ -78,6 +78,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   since accurately reconstructing follicular/fertile/ovulation boundaries for every past cycle
   would need a second copy of the prediction logic running over history, for a distinction the
   questions this view answers ("period symptom" or "PMS symptom") don't need.
+- **The cycle ring shows the current cycle day as its own badge**, connected to the "today" marker
+  by a short line, instead of packing the day number into the ring's small center alongside the
+  phase label and status line. The center now holds just those two.
+- **Symptom frequency in the Trends section now surfaces severity, not just count.** Each entry
+  gets an `avgIntensity` (the mean of its graded occurrences), shown as the same three-dot
+  indicator used in the day-log editor - a symptom logged rarely but always severely no longer
+  looks identical to one logged often but mildly. A symptom with at least two graded readings also
+  gets an expandable severity-trend chart, reusing the Trends section's line-chart geometry.
 
 ### Fixed
 

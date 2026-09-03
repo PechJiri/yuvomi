@@ -462,13 +462,41 @@ export function symptomFrequencyByPhase(dayLogs, periods, settings = {}) {
     const phase = phaseFor(dayKey(log.log_date));
     if (!phase) continue;
     for (const entry of normalizeSymptomEntries(log.symptoms)) {
-      const c = counts.get(entry.key) || { key: entry.key, [PHASE.MENSTRUATION]: 0, [PHASE.LUTEAL]: 0, other: 0, total: 0 };
+      const c = counts.get(entry.key) || { key: entry.key, [PHASE.MENSTRUATION]: 0, [PHASE.LUTEAL]: 0, other: 0, total: 0, _intensities: [] };
       c[phase] += 1;
       c.total += 1;
+      if (entry.intensity != null) c._intensities.push(entry.intensity);
       counts.set(entry.key, c);
     }
   }
-  return [...counts.values()].sort((a, b) => b.total - a.total);
+  // avgIntensity (Phase 4b): Mittel der gradierten Vorkommen dieses Symptoms,
+  // oder null, wenn keine einzige Auswahl gradiert wurde - "nicht gradiert"
+  // bleibt von "mild" unterscheidbar.
+  return [...counts.values()]
+    .map(({ _intensities, ...c }) => ({ ...c, avgIntensity: mean(_intensities) }))
+    .sort((a, b) => b.total - a.total);
+}
+
+/**
+ * Schweregrad-Verlauf EINES Symptoms über die Zeit (Phase 4b) - anders als
+ * symptomFrequencyByPhase() (wie oft/wo im Zyklus) beantwortet das "wird es
+ * schlimmer oder besser". Nur gradierte Vorkommen dieses einen Symptoms,
+ * chronologisch; ungradierte Auswahl hat keinen Schweregrad zu plotten.
+ * @param {Array<Object>} dayLogs
+ * @param {string} symptomKey
+ * @returns {Array<{date: string, intensity: number}>}
+ */
+export function symptomIntensityTrend(dayLogs, symptomKey) {
+  const out = [];
+  for (const log of (dayLogs || [])) {
+    if (!log?.log_date) continue;
+    for (const entry of normalizeSymptomEntries(log.symptoms)) {
+      if (entry.key === symptomKey && entry.intensity != null) {
+        out.push({ date: dayKey(log.log_date), intensity: entry.intensity });
+      }
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : 0)));
 }
 
 /**

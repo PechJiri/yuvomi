@@ -4068,6 +4068,7 @@
             "ring": {
                 "label": "Vòng chu kỳ",
                 "cycleDay": "Ngày chu kỳ {{day}}",
+                "dayBadge": "Ngày {{day}}",
                 "of": "trong số {{total}}"
             },
             "phase": {
@@ -4145,6 +4146,8 @@
                 "date": "Date",
                 "cycleLength": "Cycle length",
                 "symptomFrequency": "Symptom frequency",
+                "severity": "Severity",
+                "severityTrend": "Severity trend",
                 "phaseOther": "Other"
             },
             "flow": {

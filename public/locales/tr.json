@@ -4068,6 +4068,7 @@
             "ring": {
                 "label": "Döngü halkası",
                 "cycleDay": "Döngü günü {{day}}",
+                "dayBadge": "Gün {{day}}",
                 "of": "{{total}} içinden"
             },
             "phase": {
@@ -4145,6 +4146,8 @@
                 "date": "Date",
                 "cycleLength": "Cycle length",
                 "symptomFrequency": "Symptom frequency",
+                "severity": "Severity",
+                "severityTrend": "Severity trend",
                 "phaseOther": "Other"
             },
             "flow": {

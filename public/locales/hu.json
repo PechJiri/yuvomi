@@ -4068,6 +4068,7 @@
             "ring": {
                 "label": "Ciklusgyűrű",
                 "cycleDay": "{{day}}. ciklusnap",
+                "dayBadge": "{{day}}. nap",
                 "of": "{{total}}-ból"
             },
             "phase": {
@@ -4145,6 +4146,8 @@
                 "date": "Date",
                 "cycleLength": "Cycle length",
                 "symptomFrequency": "Symptom frequency",
+                "severity": "Severity",
+                "severityTrend": "Severity trend",
                 "phaseOther": "Other"
             },
             "flow": {

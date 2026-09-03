@@ -1547,8 +1547,37 @@ button.health-med-card:hover {
 .cycle-ring[data-phase="fertile"] .cycle-ring__phase     { color: var(--cycle-fertile); }
 .cycle-ring[data-phase="ovulation"] .cycle-ring__phase   { color: var(--cycle-ovulation); }
 
-.cycle-ring__day { font-size: var(--text-sm); color: var(--color-text-secondary); }
 .cycle-ring__status { font-size: var(--text-xs); font-weight: 600; color: var(--module-accent); margin-top: var(--space-0h); }
+
+.cycle-ring__connector { opacity: 0.8; }
+
+/* "Day N"-Sprechblase am „jetzt"-Marker (Flo-Vorbild) - liegt bewusst leicht
+ * ausserhalb des Rings (siehe cycleRingMarkup: left/top-Prozentwerte reichen
+ * über den 220er-viewBox-Rand hinaus), daher braucht der Container kein
+ * eigenes overflow:hidden und keine Eltern-Karte eines. */
+.cycle-ring__daybadge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.cycle-ring__daybadge-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
 
 .cycle-ring__now {
   transform-box: fill-box;

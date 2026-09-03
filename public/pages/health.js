@@ -20,7 +20,7 @@ import { toLocalDateKey, parseLocalDateKey, addLocalDays, todayKey} from '/utils
 import { zonedDateKey } from '/utils/timezone.js';
 import { nowFields } from '/utils/timezone.js';
 import { trendMarkup } from '/utils/metric-card.js';
-import { openModal, closeModal, confirmModal, confirmOverModal, reportFieldError } from '/components/modal.js';
+import { openModal, closeModal, confirmModal, confirmOverModal, reportFieldError, advancedSection } from '/components/modal.js';
 import { createPageFab, setPageFabAction } from '/utils/fab.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
 import {
@@ -43,7 +43,7 @@ import {
   FLOW_LEVELS, flowLevel, SYMPTOM_TYPES, symptomType, MOOD_TYPES, PHASE,
   predictCycle, cycleStats, buildCycleCalendar, cycleRing, MIN_HISTORY_GAPS,
   normalizeSymptomEntries, symptomIntensityLabelKey,
-  cycleLengthTrend, symptomFrequencyByPhase, bbtSeries,
+  cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
 } from '/utils/health-cycle.js';
 import { HEALTH_ROUTES, renderHealthTabsBar } from '/utils/health-tabs.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -4352,8 +4352,18 @@ function cycleRingMarkup(prediction) {
   const [tx, ty] = cyclePolar(CX, CY, R, ring.currentFrac);
   markers += `<circle class="cycle-ring__now" cx="${tx.toFixed(1)}" cy="${ty.toFixed(1)}" r="7.5" fill="var(--module-health)" stroke="var(--color-surface)" stroke-width="3" />`;
 
+  // "Day N"-Sprechblase (Flo-Vorbild): sitzt am „jetzt"-Marker, aber ausserhalb
+  // des Rings, statt die Tageszahl in der ohnehin engen Ringmitte unterzubringen.
+  // Eine kurze Konnektorlinie verbindet Marker und Sprechblase, exakt am selben
+  // Winkel (cyclePolar mit grösserem Radius) - keine zweite, unabhängige Position.
+  const [lx, ly] = cyclePolar(CX, CY, R + SW / 2 + 3, ring.currentFrac);
+  const [bx, by] = cyclePolar(CX, CY, R + SW / 2 + 19, ring.currentFrac);
+  markers += `<line class="cycle-ring__connector" x1="${lx.toFixed(1)}" y1="${ly.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" stroke="var(--color-border)" stroke-width="1.5" />`;
+  const badgeLeftPct = (bx / 220 * 100).toFixed(2);
+  const badgeTopPct = (by / 220 * 100).toFixed(2);
+
   const phaseLabel = t(CYCLE_PHASE_LABEL_KEYS[prediction.phase] || CYCLE_PHASE_LABEL_KEYS[PHASE.FOLLICULAR]);
-  const ringAria = `${phaseLabel} · ${t('health.cycle.ring.cycleDay', { day: prediction.cycleDay })}`;
+  const ringAria = `${phaseLabel} · ${t('health.cycle.ring.cycleDay', { day: prediction.cycleDay })} ${t('health.cycle.ring.of', { total: ring.total })}`;
 
   return `
     <div class="cycle-ring" data-phase="${esc(prediction.phase)}">
@@ -4362,9 +4372,11 @@ function cycleRingMarkup(prediction) {
         ${arcs}
         ${markers}
       </svg>
+      <div class="cycle-ring__daybadge" style="left:${badgeLeftPct}%; top:${badgeTopPct}%" aria-hidden="true">
+        <span class="cycle-ring__daybadge-label">${esc(t('health.cycle.ring.dayBadge', { day: prediction.cycleDay }))}</span>
+      </div>
       <div class="cycle-ring__center">
         <span class="cycle-ring__phase">${esc(phaseLabel)}</span>
-        <span class="cycle-ring__day">${esc(t('health.cycle.ring.cycleDay', { day: prediction.cycleDay }))}</span>
         <span class="cycle-ring__status">${esc(`${t('health.cycle.status.nextPeriod')}: ${cycleCountdownText(prediction)}`)}</span>
       </div>
     </div>`;
@@ -4688,7 +4700,22 @@ function bbtTrendChartMarkup(series) {
  * die Fuellung) - Top 8 nach Gesamthäufigkeit, damit die Liste nicht alle
  * 20 Presets zeigt, auch wenn sie irgendwann alle mal vorkamen.
  */
-function symptomFrequencyChartMarkup(freq) {
+/**
+ * Schweregrad-Verlauf eines Symptoms (Phase 4b) - dieselbe simpleLineChartMarkup()-
+ * Geometrie wie Zykluslänge/BBT, nur mit 1-3 statt Tagen/Grad als Werteachse.
+ */
+function symptomIntensityTrendChartMarkup(trend, symptomLabel) {
+  return simpleLineChartMarkup({
+    points: trend.map((e) => ({ date: e.date, value: e.intensity })),
+    titleText: symptomLabel,
+    formatPointTooltip: (p) => `${formatDate(p.date)}: ${t(symptomIntensityLabelKey(p.value))}`,
+    formatTableValue: (v) => t(symptomIntensityLabelKey(v)),
+    tableHeader: t('health.cycle.trends.severity'),
+    formatTick: (val) => (Number.isInteger(val) && val >= 1 && val <= 3 ? String(val) : ''),
+  });
+}
+
+function symptomFrequencyChartMarkup(freq, dayLogs) {
   const top = freq.slice(0, 8);
   const legend = Object.keys(SYMPTOM_PHASE_COLOR).map((key) => `
     <span class="cycle-legend__item"><span class="cycle-legend__swatch" style="background:${SYMPTOM_PHASE_COLOR[key]}"></span>${esc(t(SYMPTOM_PHASE_LABEL_KEYS[key]))}</span>`).join('');
@@ -4700,13 +4727,22 @@ function symptomFrequencyChartMarkup(freq) {
       .filter((s) => s.count > 0)
       .map((s) => `<span class="cycle-symptom-row__seg" style="--seg-share:${s.count};background:${SYMPTOM_PHASE_COLOR[s.key]}" title="${esc(`${t(SYMPTOM_PHASE_LABEL_KEYS[s.key])}: ${fmtNum(s.count)}`)}"></span>`)
       .join('');
+    // Schweregrad-Punkte (Phase 4b): dieselbe Punkt-Komponente wie im Tages-Log-
+    // Editor, gerundet auf die naechste Stufe - "nicht gradiert" zeigt bewusst
+    // keine Punkte statt einer erfundenen Nullstufe.
+    const dots = row.avgIntensity != null ? symptomIntensityDotsHTML(Math.round(row.avgIntensity)) : '';
+    const trend = symptomIntensityTrend(dayLogs, row.key);
+    const trendChart = trend.length >= 2
+      ? advancedSection(symptomIntensityTrendChartMarkup(trend, label), { label: t('health.cycle.trends.severityTrend') })
+      : '';
     return `
       <div class="cycle-symptom-row">
         <div class="cycle-symptom-row__head">
-          <span class="cycle-symptom-row__name">${esc(label)}</span>
+          <span class="cycle-symptom-row__name">${esc(label)}${dots}</span>
           <strong>${esc(fmtNum(row.total))}</strong>
         </div>
         <div class="cycle-symptom-row__track">${segs}</div>
+        ${trendChart}
       </div>`;
   }).join('');
 
@@ -4725,7 +4761,7 @@ function cycleTrendsMarkup() {
 
   const sections = [
     lengthTrend.length >= 2 ? cycleLengthTrendChartMarkup(lengthTrend) : '',
-    symptomFreq.length ? symptomFrequencyChartMarkup(symptomFreq) : '',
+    symptomFreq.length ? symptomFrequencyChartMarkup(symptomFreq, cycle.logs) : '',
     bbt.length >= 2 ? bbtTrendChartMarkup(bbt) : '',
   ].filter(Boolean);
 

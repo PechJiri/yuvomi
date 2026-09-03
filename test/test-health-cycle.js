@@ -19,7 +19,7 @@ const {
   daysBetween, sortPeriodsAsc, cycleGaps, periodLengths,
   cycleStats, predictCycle, buildCycleCalendar, cycleRing, pregnancyInfo,
   detectTemperatureShift,
-  cycleLengthTrend, symptomFrequencyByPhase, bbtSeries,
+  cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
 } = await import('../public/utils/health-cycle.js');
 
 const de = JSON.parse(readFileSync(new URL('../public/locales/de.json', import.meta.url), 'utf8'));
@@ -465,9 +465,9 @@ test('symptomFrequencyByPhase: klassifiziert Menstruation/Luteal/Sonstige je nac
   ];
   const freq = symptomFrequencyByPhase(logs, hist, {});
   assert.deepEqual(freq, [
-    { key: 'cramps', menstruation: 1, luteal: 0, other: 1, total: 2 },
-    { key: 'headache', menstruation: 0, luteal: 1, other: 0, total: 1 },
-    { key: 'fatigue', menstruation: 0, luteal: 0, other: 1, total: 1 },
+    { key: 'cramps', menstruation: 1, luteal: 0, other: 1, total: 2, avgIntensity: 2 },
+    { key: 'headache', menstruation: 0, luteal: 1, other: 0, total: 1, avgIntensity: null },
+    { key: 'fatigue', menstruation: 0, luteal: 0, other: 1, total: 1, avgIntensity: null },
   ]);
 });
 
@@ -477,12 +477,54 @@ test('symptomFrequencyByPhase: der letzte (offene) Zyklus fällt auf die Ø-Zykl
   const hist = periods(['2026-06-01'], 5);
   const logs = [{ log_date: '2026-06-20', symptoms: [{ key: 'fatigue' }] }]; // Luteal: ab 06-01+28-14=06-15
   assert.deepEqual(symptomFrequencyByPhase(logs, hist, {}), [
-    { key: 'fatigue', menstruation: 0, luteal: 1, other: 0, total: 1 },
+    { key: 'fatigue', menstruation: 0, luteal: 1, other: 0, total: 1, avgIntensity: null },
   ]);
 });
 
 test('symptomFrequencyByPhase: ohne jede Periode gibt es keine Klassifikation', () => {
   assert.deepEqual(symptomFrequencyByPhase([{ log_date: '2026-06-01', symptoms: [{ key: 'cramps' }] }], [], {}), []);
+});
+
+test('symptomFrequencyByPhase: avgIntensity mittelt nur gradierte Vorkommen, ignoriert ungradierte', () => {
+  const hist = periods(['2026-05-01', '2026-05-29'], 5);
+  const logs = [
+    { log_date: '2026-05-02', symptoms: [{ key: 'cramps', intensity: 1 }] },
+    { log_date: '2026-05-10', symptoms: [{ key: 'cramps' }] }, // ungradiert - zählt nicht ins Mittel
+    { log_date: '2026-05-20', symptoms: [{ key: 'cramps', intensity: 3 }] },
+  ];
+  const freq = symptomFrequencyByPhase(logs, hist, {});
+  assert.equal(freq[0].key, 'cramps');
+  assert.equal(freq[0].total, 3);
+  assert.equal(freq[0].avgIntensity, 2); // Mittel aus [1, 3], die ungradierte Auswahl bleibt aussen vor.
+});
+
+test('symptomFrequencyByPhase: avgIntensity ist null, wenn KEINE Auswahl gradiert wurde', () => {
+  const hist = periods(['2026-05-01'], 5);
+  const logs = [{ log_date: '2026-05-02', symptoms: [{ key: 'bloating' }] }];
+  const freq = symptomFrequencyByPhase(logs, hist, {});
+  assert.equal(freq[0].avgIntensity, null);
+});
+
+// --------------------------------------------------------
+// symptomIntensityTrend (Phase 4b)
+// --------------------------------------------------------
+
+test('symptomIntensityTrend: nur gradierte Vorkommen DIESES Symptoms, chronologisch', () => {
+  const logs = [
+    { log_date: '2026-05-10', symptoms: [{ key: 'cramps', intensity: 3 }] },
+    { log_date: '2026-05-02', symptoms: [{ key: 'cramps', intensity: 1 }] },
+    { log_date: '2026-05-05', symptoms: [{ key: 'cramps' }] },              // ungradiert -> ausgeschlossen
+    { log_date: '2026-05-06', symptoms: [{ key: 'headache', intensity: 2 }] }, // anderes Symptom -> ausgeschlossen
+  ];
+  assert.deepEqual(symptomIntensityTrend(logs, 'cramps'), [
+    { date: '2026-05-02', intensity: 1 },
+    { date: '2026-05-10', intensity: 3 },
+  ]);
+});
+
+test('symptomIntensityTrend: leer ohne Logs oder ohne Treffer für das Symptom', () => {
+  assert.deepEqual(symptomIntensityTrend([], 'cramps'), []);
+  assert.deepEqual(symptomIntensityTrend([{ log_date: '2026-05-01', symptoms: [{ key: 'headache', intensity: 2 }] }], 'cramps'), []);
 });
 
 // --------------------------------------------------------
