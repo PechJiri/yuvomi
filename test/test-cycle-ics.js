@@ -5,7 +5,7 @@
  *        Perioden/Eisprung/fruchtbares Fenster (nur ohne Schwangerschafts-
  *        Modus, nur bei aktivierter Fruchtbarkeitsverfolgung), Personenbindung
  *        des FEED-INHALTS (nicht nur des Tokens, anders als der Inventar-Feed).
- *        (2) Token-Lebenszyklus gegen users.cycle_feed_token (Migration 177).
+ *        (2) Token-Lebenszyklus gegen users.cycle_feed_token (Migration 178).
  *        (3) Der Verwaltungs-Router (/health/cycle/feed) end-to-end.
  * Ausführen: node --experimental-sqlite --test test/test-cycle-ics.js
  */
@@ -161,10 +161,10 @@ test('buildCycleFeed: Text folgt der Haushaltssprache statt fest deutsch zu sein
 });
 
 // --------------------------------------------------------
-// Migration 177: Token-Spalte auf users
+// Migration 178: Token-Spalte auf users
 // --------------------------------------------------------
 
-test('Migration 177 legt die Token-Spalte samt partiellem UNIQUE-Index an', () => {
+test('Migration 178 legt die Token-Spalte samt partiellem UNIQUE-Index an', () => {
   const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   assert.ok(cols.includes('cycle_feed_token'));
 

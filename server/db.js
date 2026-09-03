@@ -7011,7 +7011,7 @@ const MIGRATIONS = [
     `,
   },
   {
-    version: 175,
+    version: 176,
     description: 'Health: graded symptom logging - normalized cycle_day_log_symptoms table, backfilled from the legacy CSV column',
     // Die alte Komma-Spalte (cycle_day_logs.symptoms) bleibt UNVERAENDERT
     // stehen - kein DROP COLUMN, kein Rebuild. Sie ist ab hier nur noch
@@ -7047,7 +7047,7 @@ const MIGRATIONS = [
     },
   },
   {
-    version: 176,
+    version: 177,
     description: 'Health: optional basal body temperature per day log, for temperature-shift ovulation confirmation',
     // Ein Skalarwert je Tag wie flow/mood - keine eigene Tabelle noetig, die
     // Zeile existiert schon. Kein CHECK auf basal_temp_unit: dieselbe
@@ -7061,7 +7061,7 @@ const MIGRATIONS = [
     `,
   },
   {
-    version: 177,
+    version: 178,
     description: 'Health: per-user read-only predicted-cycle ICS feed token',
     // Gleiches Muster wie Migration 61 (calendar_feed_token) und 144
     // (inventory_deadlines_feed_token): das Token haengt an der users-Zeile.

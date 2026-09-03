@@ -37,7 +37,7 @@ import {
 const router = express.Router();
 
 // Deckel auf die ANZAHL Symptome je Tag, nicht mehr auf die Zeichenlaenge der
-// (seit Migration 175 nur noch historischen) Komma-Spalte - die Symptom-Liste
+// (seit Migration 176 nur noch historischen) Komma-Spalte - die Symptom-Liste
 // waechst mit SYMPTOM_TYPES (aktuell 20), 40 laesst reichlich Raum, auch fuer
 // spaeter erweiterte Presets, ohne eine Endlos-Liste durchzulassen.
 const MAX_SYMPTOMS_COUNT = 40;
@@ -192,7 +192,7 @@ router.get('/cycle/logs', (req, res) => {
     sql += ' ORDER BY l.log_date DESC, l.id DESC';
     const database = db.get();
     const rows = database.prepare(sql).all(...params);
-    // `symptoms` kommt seit Migration 175 aus der eigenen Tabelle, nicht mehr
+    // `symptoms` kommt seit Migration 176 aus der eigenen Tabelle, nicht mehr
     // aus der (nur noch historischen) Komma-Spalte - `SELECT l.*` liefert die
     // alte Spalte zwar mit, der Überschreib unten ersetzt sie in der Antwort.
     res.json({ data: rows.map((row) => ({ ...row, symptoms: symptomsForLog(database, row.id) })) });

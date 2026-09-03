@@ -1,5 +1,5 @@
 /**
- * Test: cycle_day_log_symptoms-Backfill (Migration v175)
+ * Test: cycle_day_log_symptoms-Backfill (Migration v176)
  * Zweck: Die alte Komma-Spalte (cycle_day_logs.symptoms) wird beim Aufbau der
  *        neuen, normalisierten Tabelle rückwirkend zerlegt - eine Zeile je
  *        Symptom, ohne Intensität (die gab es vorher nicht), dedupliziert,
@@ -18,9 +18,9 @@ process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), 'yuvomi-cyclesymptomsmig-')), 'unused.db');
 const { MIGRATIONS } = await import('../server/db.js');
 
-const V175 = MIGRATIONS.find((m) => m.version === 175);
+const V176 = MIGRATIONS.find((m) => m.version === 176);
 
-function seedPreV175() {
+function seedPreV176() {
   const db = new Database(join(mkdtempSync(join(tmpdir(), 'yuvomi-cyclesymptomsmig-')), 'db.sqlite'));
   db.exec(`
     CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL);
@@ -47,19 +47,19 @@ function seedPreV175() {
 }
 
 function applied() {
-  const db = seedPreV175();
-  V175.up(db);
+  const db = seedPreV176();
+  V176.up(db);
   return db;
 }
 
-test('v175 legt cycle_day_log_symptoms mit den erwarteten Spalten an', () => {
+test('v176 legt cycle_day_log_symptoms mit den erwarteten Spalten an', () => {
   const db = applied();
   const cols = db.prepare('PRAGMA table_info(cycle_day_log_symptoms)').all().map((c) => c.name);
   assert.deepEqual(cols.sort(), ['day_log_id', 'id', 'intensity', 'symptom_key'].sort());
   db.close();
 });
 
-test('v175 zerlegt die Komma-Liste in einzelne Zeilen, ohne Intensitaet', () => {
+test('v176 zerlegt die Komma-Liste in einzelne Zeilen, ohne Intensitaet', () => {
   const db = applied();
   const rows = db.prepare(
     "SELECT symptom_key, intensity FROM cycle_day_log_symptoms WHERE day_log_id = 1 ORDER BY symptom_key"
@@ -71,7 +71,7 @@ test('v175 zerlegt die Komma-Liste in einzelne Zeilen, ohne Intensitaet', () => 
   db.close();
 });
 
-test('v175 dedupliziert ein Symptom, das in der alten Liste doppelt stand', () => {
+test('v176 dedupliziert ein Symptom, das in der alten Liste doppelt stand', () => {
   const db = applied();
   const rows = db.prepare(
     "SELECT symptom_key FROM cycle_day_log_symptoms WHERE day_log_id = 2 ORDER BY symptom_key"
@@ -80,7 +80,7 @@ test('v175 dedupliziert ein Symptom, das in der alten Liste doppelt stand', () =
   db.close();
 });
 
-test('v175 erzeugt keine Zeile fuer NULL oder leere Symptom-Spalten', () => {
+test('v176 erzeugt keine Zeile fuer NULL oder leere Symptom-Spalten', () => {
   const db = applied();
   const countFor = (id) => db.prepare('SELECT COUNT(*) AS c FROM cycle_day_log_symptoms WHERE day_log_id = ?').get(id).c;
   assert.equal(countFor(3), 0);
@@ -88,7 +88,7 @@ test('v175 erzeugt keine Zeile fuer NULL oder leere Symptom-Spalten', () => {
   db.close();
 });
 
-test('v175 laesst die alte Komma-Spalte unveraendert stehen (kein Rebuild, keine Loeschung)', () => {
+test('v176 laesst die alte Komma-Spalte unveraendert stehen (kein Rebuild, keine Loeschung)', () => {
   const db = applied();
   const rows = db.prepare('SELECT log_date, symptoms FROM cycle_day_logs ORDER BY log_date').all();
   assert.deepEqual(rows, [
@@ -100,7 +100,7 @@ test('v175 laesst die alte Komma-Spalte unveraendert stehen (kein Rebuild, keine
   db.close();
 });
 
-test('v175 legt einen Index auf day_log_id an', () => {
+test('v176 legt einen Index auf day_log_id an', () => {
   const db = applied();
   const names = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'cycle_day_log_symptoms'").all().map((r) => r.name);
   assert.ok(names.includes('idx_cycle_day_log_symptoms_day_log'));

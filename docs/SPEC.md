@@ -2470,15 +2470,15 @@ is writable by anyone for themselves.
 | user_id | INTEGER | FK → Users (CASCADE delete), NOT NULL |
 | log_date | TEXT | NOT NULL — YYYY-MM-DD |
 | flow | TEXT | `spotting` \| `light` \| `medium` \| `heavy` (nullable) |
-| symptoms | TEXT | **Legacy, frozen as of migration 175.** Comma-separated symptom keys; no longer written or read by the API — see `cycle_day_log_symptoms` below. Kept only so a raw DB backup from before that migration stays readable. |
+| symptoms | TEXT | **Legacy, frozen as of migration 176.** Comma-separated symptom keys; no longer written or read by the API — see `cycle_day_log_symptoms` below. Kept only so a raw DB backup from before that migration stays readable. |
 | mood | TEXT | |
 | note | TEXT | |
 | visibility | TEXT | `private` \| `family`, default `private` |
-| basal_temp | REAL | nullable (migration 176) — optional daily basal body temperature |
+| basal_temp | REAL | nullable (migration 177) — optional daily basal body temperature |
 | basal_temp_unit | TEXT | nullable, `c` \| `f` — required together with `basal_temp`; free-text-per-entry like `health_vitals.unit` (no household-wide C/F setting exists), but constrained to these two at the route since the shift-detection algorithm must convert reliably |
 | created_at / updated_at | TEXT | ISO 8601, default now |
 
-**`cycle_day_log_symptoms`** (migration 175) — graded symptom selections for a day log, normalized
+**`cycle_day_log_symptoms`** (migration 176) — graded symptom selections for a day log, normalized
 out of the legacy `symptoms` column so each selection can carry its own severity.
 
 | Column | Type | Constraint |
@@ -2491,7 +2491,7 @@ out of the legacy `symptoms` column so each selection can carry its own severity
 `{key, intensity}[]`, not the legacy column; `POST /health/cycle/logs` fully replaces a log's
 symptom rows on every save (delete + re-insert), same "no diffing" approach as the day log itself.
 `normalizeSymptomEntries()` (`public/utils/health-cycle.js`) is the single normalizer for both the
-current array format and, for backward compatibility with pre-migration-175 clients, a comma
+current array format and, for backward compatibility with pre-migration-176 clients, a comma
 string or plain string array (both yield `intensity: null`).
 
 **`cycle_settings`** — per-member prediction parameters (`user_id` primary key).
@@ -2505,11 +2505,11 @@ string or plain string array (both yield `intensity: null`).
 | pregnancy_mode | INTEGER | 0/1, default 0 — when 1, all cycle predictions pause (migration 82) |
 | pregnancy_due_date | TEXT | nullable YYYY-MM-DD estimated due date; cleared when pregnancy_mode is off |
 | default_visibility | TEXT | `private` \| `family`, default `private` (migration 96) — pre-selects the visibility for newly logged periods and day logs; per-entry override always available |
-| remind_period_days_before | INTEGER | nullable, 0–14 (migration 174) — NULL = off; days of lead time before the predicted next period for a `cycle_period` reminder |
-| remind_log_daily | INTEGER | 0/1, default 0 (migration 174) — daily nudge to log today, suppressed once a `cycle_day_logs` row exists for the day |
+| remind_period_days_before | INTEGER | nullable, 0–14 (migration 175) — NULL = off; days of lead time before the predicted next period for a `cycle_period` reminder |
+| remind_log_daily | INTEGER | 0/1, default 0 (migration 175) — daily nudge to log today, suppressed once a `cycle_day_logs` row exists for the day |
 | created_at / updated_at | TEXT | ISO 8601, default now |
 
-**Cycle reminders** (migration 174) widen `reminders.entity_type` with `cycle_period` and
+**Cycle reminders** (migration 175) widen `reminders.entity_type` with `cycle_period` and
 `cycle_log_nudge`, following the same pipeline as every other reminder source (Web Push +
 household notification channels via `server/services/notifications.js`). Neither a predicted
 period date nor "not yet logged today" is a stored row, so both anchor to
@@ -2521,7 +2521,7 @@ test loader) rather than a second copy of the prediction math. Both reminder typ
 server-sync-owned entity types (`DERIVED_ENTITY_TYPES` in `server/routes/reminders.js`) — a caller
 cannot hand-set one via the generic reminders API, matching `pantry_item`'s existing precedent.
 
-**Optional basal body temperature (BBT) tracking** (migration 176) lets a day log carry a daily
+**Optional basal body temperature (BBT) tracking** (migration 177) lets a day log carry a daily
 temperature reading. `detectTemperatureShift()` (`public/utils/health-cycle.js`) implements a
 coverline method: the first reading at least 0.2°C above the mean of the 6 preceding (lower)
 readings, sustained for 3 consecutive readings, confirms ovulation — the same "3-over-6" rule
@@ -2636,7 +2636,7 @@ gains extra per-day markers (solid = symptom actually logged, ring = predicted-l
 second calendar existing side by side - the picker just changes what the existing grid highlights, in
 its own corner of each cell so it never collides with the calendar's own has-a-log marker.
 
-**A per-user, read-only predicted-cycle ICS feed** (migration 177, `users.cycle_feed_token`) gives
+**A per-user, read-only predicted-cycle ICS feed** (migration 178, `users.cycle_feed_token`) gives
 Lock-Screen/Calendar-app visibility without a native app - the same trick already used for the
 household calendar and inventory-warranty feeds (`server/services/ics-export.js`,
 `server/services/inventory-deadlines-ics.js`), whose `escapeICSText`/`foldLine` helpers and

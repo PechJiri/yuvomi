@@ -12,7 +12,7 @@
  * WARUM EIN ANKER NÖTIG IST: weder der vorhergesagte nächste Periodenbeginn
  * (predictCycle(), rein berechnet) noch "heute noch nicht geloggt" (die
  * Abwesenheit einer cycle_day_logs-Zeile) ist eine gespeicherte Zeile mit
- * eigener Id. `cycle_reminder_anchors` (Migration 174) gibt beiden einen
+ * eigener Id. `cycle_reminder_anchors` (Migration 175) gibt beiden einen
  * stabilen Ankerpunkt je (Nutzer, Datum, Art), an den reminders.entity_id
  * zeigen kann - gleicher Grund wie schedule_reminder_entries für
  * Musterzyklus-Tage (Schedule v3).

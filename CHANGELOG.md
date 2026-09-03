@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   picker grew from 10 to 20 presets, and each one accepts an optional mild/moderate/severe rating -
   one tap on a symptom chip cycles through off, mild, moderate, severe, and back to off, with a
   small dot indicator showing the current grade. Storage moved from a comma-separated column to a
-  normalized `cycle_day_log_symptoms` table (migration 175, backfilled from the old column, which
+  normalized `cycle_day_log_symptoms` table (migration 176, backfilled from the old column, which
   is now frozen and no longer read or written); `normalizeSymptomEntries()` in
   `public/utils/health-cycle.js` is the single normalizer for both the new `{key, intensity}[]`
   shape and, for backward compatibility, the old comma-string/string-array shape. Also fixed a
@@ -58,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list would have been misreported as logged.
 - **Day logs can optionally track basal body temperature, and a sustained rise now confirms
   ovulation for the current cycle instead of only estimating it from the calendar.** A day log
-  accepts a temperature reading and unit (migration 176); `detectTemperatureShift()` in
+  accepts a temperature reading and unit (migration 177); `detectTemperatureShift()` in
   `public/utils/health-cycle.js` implements the standard "3-over-6" coverline method - the first
   reading at least 0.2°C above the mean of the 6 preceding readings, sustained for 3 readings in a
   row, confirms ovulation. It works over the sequence of logged readings rather than calendar days
