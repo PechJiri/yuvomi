@@ -6,6 +6,28 @@
 
 const pendingByState = new WeakMap();
 
+/**
+ * Build an async loader that applies only its newest response. A request that
+ * started before a later reconciliation may still resolve last; accepting it
+ * would resurrect the older server snapshot in the UI.
+ */
+export function createLatestResponseApplier() {
+  let generation = 0;
+  return async (request, apply) => {
+    const current = ++generation;
+    let result;
+    try {
+      result = await request();
+    } catch (err) {
+      if (current !== generation) return false;
+      throw err;
+    }
+    if (current !== generation) return false;
+    await apply(result);
+    return true;
+  };
+}
+
 function pendingState(state) {
   let pending = pendingByState.get(state);
   if (!pending) {

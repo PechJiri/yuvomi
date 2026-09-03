@@ -12,6 +12,7 @@ const undoModule = await import('../public/utils/document-folder-delete.js');
 const {
   applyPendingFolderDeleteOverlay,
   beginOptimisticFolderDelete,
+  createLatestResponseApplier,
   scheduleFolderDeleteWithUndo,
 } = undoModule;
 
@@ -57,16 +58,74 @@ test('Undo restores only removed data and preserves explicit navigation and sele
   assert.equal(state.folderId, '', 'Undo must not navigate away from an explicit All view');
 });
 
-test('two pending deletes restore in canonical order regardless of Undo order', () => {
-  const state = makeState();
-  const first = beginOptimisticFolderDelete(state, new Set([1]));
-  const second = beginOptimisticFolderDelete(state, new Set([2]));
+test('two pending deletes restore in canonical order in both Undo permutations', () => {
+  for (const undoOrder of [[0, 1], [1, 0]]) {
+    const state = makeState();
+    const transitions = [
+      beginOptimisticFolderDelete(state, new Set([1])),
+      beginOptimisticFolderDelete(state, new Set([2])),
+    ];
 
-  first.restore();
-  second.restore();
+    for (const index of undoOrder) transitions[index].restore();
 
-  assert.deepEqual(state.folders.map(({ id }) => id), [1, 2, 3]);
-  assert.deepEqual(state.allDocuments.map(({ id }) => id), [10, 20, 30]);
+    assert.deepEqual(state.folders.map(({ id }) => id), [1, 2, 3]);
+    assert.deepEqual(state.allDocuments.map(({ id }) => id), [10, 20, 30]);
+  }
+});
+
+test('latest response applier rejects a stale pre-delete GET that resolves last', async () => {
+  assert.equal(typeof createLatestResponseApplier, 'function');
+  const applyLatestFolders = createLatestResponseApplier();
+  const applyLatestDocuments = createLatestResponseApplier();
+  const state = { folders: [], documents: [] };
+  let resolveStaleFolders;
+  let resolveFreshFolders;
+  let resolveStaleDocuments;
+  let resolveFreshDocuments;
+  const staleFolders = applyLatestFolders(
+    () => new Promise((resolve) => { resolveStaleFolders = resolve; }),
+    (folders) => { state.folders = folders; },
+  );
+  const staleDocuments = applyLatestDocuments(
+    () => new Promise((resolve) => { resolveStaleDocuments = resolve; }),
+    (documents) => { state.documents = documents; },
+  );
+  const freshFolders = applyLatestFolders(
+    () => new Promise((resolve) => { resolveFreshFolders = resolve; }),
+    (folders) => { state.folders = folders; },
+  );
+  const freshDocuments = applyLatestDocuments(
+    () => new Promise((resolve) => { resolveFreshDocuments = resolve; }),
+    (documents) => { state.documents = documents; },
+  );
+
+  resolveFreshFolders([{ id: 2 }]);
+  resolveFreshDocuments([]);
+  assert.equal(await freshFolders, true);
+  assert.equal(await freshDocuments, true);
+  resolveStaleFolders([{ id: 1 }, { id: 2 }]);
+  resolveStaleDocuments([{ id: 10, folder_id: 1 }]);
+  assert.equal(await staleFolders, false);
+  assert.equal(await staleDocuments, false);
+  assert.deepEqual(state.folders.map(({ id }) => id), [2]);
+  assert.deepEqual(state.documents, []);
+});
+
+test('latest response applier ignores a stale request failure after a newer success', async () => {
+  const applyLatest = createLatestResponseApplier();
+  let rejectStale;
+  const stale = applyLatest(
+    () => new Promise((resolve, reject) => { rejectStale = reject; }),
+    () => { throw new Error('stale response must not apply'); },
+  );
+  const fresh = applyLatest(
+    async () => [{ id: 2 }],
+    () => {},
+  );
+
+  assert.equal(await fresh, true);
+  rejectStale(new Error('old request failed'));
+  assert.equal(await stale, false);
 });
 
 test('pending overlays keep a re-entered view hidden and retain its fresh canonical data for Undo', () => {

@@ -33,10 +33,14 @@ import {
 } from '/utils/folder-upload.js';
 import {
   applyPendingFolderDeleteOverlay,
+  createLatestResponseApplier,
   scheduleFolderDeleteWithUndo,
 } from '/utils/document-folder-delete.js';
 
 const CATEGORIES = ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'];
+
+const applyLatestDocumentsResponse = createLatestResponseApplier();
+const applyLatestFoldersResponse = createLatestResponseApplier();
 
 
 const CATEGORY_ICONS = {
@@ -294,16 +298,24 @@ async function loadMembers() {
 // Facetten über demselben Datensatz und brauchen dessen Gesamtheit, um ehrliche
 // Trefferzahlen zeigen zu können. Nebeneffekt: Kategorie-Klicks sind sofort.
 async function loadDocuments() {
-  const res = await api.get(`/documents?status=${encodeURIComponent(state.status)}`);
-  state.allDocuments = res.data || [];
-  applyPendingFolderDeleteOverlay(state, { freshDocuments: true });
-  applyFilters();
+  return applyLatestDocumentsResponse(
+    () => api.get(`/documents?status=${encodeURIComponent(state.status)}`),
+    (res) => {
+      state.allDocuments = res.data || [];
+      applyPendingFolderDeleteOverlay(state, { freshDocuments: true });
+      applyFilters();
+    },
+  );
 }
 
 async function loadFolders() {
-  const res = await api.get('/documents/folders');
-  state.folders = res.data || [];
-  applyPendingFolderDeleteOverlay(state, { freshFolders: true });
+  return applyLatestFoldersResponse(
+    () => api.get('/documents/folders'),
+    (res) => {
+      state.folders = res.data || [];
+      applyPendingFolderDeleteOverlay(state, { freshFolders: true });
+    },
+  );
 }
 
 async function loadMetaOptions() {
@@ -1222,8 +1234,7 @@ async function applyFolderDeleteResult(result, choice, selectedSubtree, { showSu
     window.yuvomi?.showToast(t('documents.folderDeletedToast'), 'default');
   }
   if (result.folder_deleted !== false && selectedSubtree.has(Number(state.folderId))) state.folderId = '';
-  await loadFolders();
-  await loadDocuments();
+  await Promise.all([loadFolders(), loadDocuments()]);
   renderAll();
 }
 
