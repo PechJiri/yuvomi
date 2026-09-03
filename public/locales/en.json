@@ -4165,6 +4165,7 @@
                 "severityTrend": "Severity trend",
                 "cyclePattern": "Cycle-day pattern",
                 "cyclePatternSentence": "You logged {{symptom}} during {{phase}} in {{occurred}} of {{total}} recent cycles.",
+                "cyclePatternDaysBefore": "{{symptom}} often occurs {{days}} days before your period.",
                 "cyclePatternNone": "{{symptom}} hasn't recurred in your last {{total}} cycles.",
                 "typical": "Typical",
                 "atypical": "Atypical",

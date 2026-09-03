@@ -557,17 +557,27 @@ export function symptomIntensityTrend(dayLogs, symptomKey) {
  * Alternative zu einer dritten, im UI-Code laufenden Kopie derselben
  * Grenzen-Rekonstruktion (siehe classifyDayPhase()-Dokblock).
  *
+ * `typicalDaysBeforePeriod`: die haeufigste "N Tage vor der naechsten Periode"-
+ * Zahl unter den LUTEALEN Vorkommen (nutzerseitig angefragt, statt nur der
+ * groben Phase - "tritt 2 Tage vorher auf" ist konkreter als "tritt in der
+ * Lutealphase auf"). Nur dort ist "davor" eine natuerliche Bezugsgroesse;
+ * waehrend der Menstruation oder in "Sonstige" bleibt sie unbeantwortet
+ * (`null`). +1, weil der letzte Zyklustag selbst schon 1 Tag davor liegt,
+ * nicht 0 Tage. Erst ab zwei Zyklen mit demselben Wert gilt es als Muster,
+ * sonst `null` - ein einzelner Treffer waere Zufall, kein Befund.
+ *
  * @param {Array<Object>} dayLogs
  * @param {Array<Object>} periods
  * @param {Object} settings - cycle_settings-Zeile (für luteal_length).
  * @param {string} symptomKey
  * @param {number} [maxCycles=6]
  * @returns {{cycles: Array<{cycleStart: string, cycleLength: number, occurredOnDays: number[], phaseByDay: string[]}>,
- *            occurredCount: number, totalCount: number, mostCommonPhase: string|null}}
+ *            occurredCount: number, totalCount: number, mostCommonPhase: string|null,
+ *            typicalDaysBeforePeriod: number|null}}
  */
 export function symptomCyclePattern(dayLogs, periods, settings = {}, symptomKey, maxCycles = 6) {
   const allCycles = reconstructCycles(periods, settings);
-  if (!allCycles.length) return { cycles: [], occurredCount: 0, totalCount: 0, mostCommonPhase: null };
+  if (!allCycles.length) return { cycles: [], occurredCount: 0, totalCount: 0, mostCommonPhase: null, typicalDaysBeforePeriod: null };
 
   // Juengster Zyklus zuerst, auf maxCycles gedeckelt.
   const recent = [...allCycles].reverse().slice(0, maxCycles);
@@ -606,7 +616,28 @@ export function symptomCyclePattern(dayLogs, periods, settings = {}, symptomKey,
     ? [PHASE.MENSTRUATION, PHASE.LUTEAL, 'other'].find((k) => phaseCounts[k] === maxPhaseCount)
     : null;
 
-  return { cycles, occurredCount, totalCount: cycles.length, mostCommonPhase };
+  // Haeufigste "N Tage vor der Periode" unter den LUTEALEN Vorkommen - "vor
+  // der Periode" ist nur dort eine natuerliche Bezugsgroesse (waehrend der
+  // Menstruation oder in der Sammelkategorie "Sonstige" ergibt "davor" keinen
+  // intuitiven Sinn). +1, weil der letzte Zyklustag selbst schon 1 Tag vor dem
+  // naechsten Periodenbeginn liegt, nicht 0. Erst ab zwei Zyklen mit demselben
+  // Wert gilt das als Muster statt Zufall; bei Gleichstand gewinnt der Wert
+  // aus dem juengeren Zyklus (cycles ist bereits juengster-zuerst sortiert).
+  const lutealDaysBeforeCounts = new Map();
+  for (const c of cycles) {
+    for (const day of c.occurredOnDays) {
+      if (c.phaseByDay[day - 1] !== PHASE.LUTEAL) continue;
+      const daysBefore = c.cycleLength - day + 1;
+      lutealDaysBeforeCounts.set(daysBefore, (lutealDaysBeforeCounts.get(daysBefore) || 0) + 1);
+    }
+  }
+  let typicalDaysBeforePeriod = null;
+  let bestCount = 1;
+  for (const [daysBefore, count] of lutealDaysBeforeCounts) {
+    if (count > bestCount) { bestCount = count; typicalDaysBeforePeriod = daysBefore; }
+  }
+
+  return { cycles, occurredCount, totalCount: cycles.length, mostCommonPhase, typicalDaysBeforePeriod };
 }
 
 // Mindestanteil der ELIGIBLEN Zyklen (die diesen Zyklustag ueberhaupt hatten),

@@ -622,6 +622,46 @@ test('symptomCyclePattern: phaseByDay klassifiziert jeden Zyklustag - Menstruati
   assert.equal(cyc.phaseByDay[27], PHASE.LUTEAL); // Tag 28, letzter Tag des Zyklus
 });
 
+test('symptomCyclePattern: typicalDaysBeforePeriod - haeufigster Wert unter den lutealen Vorkommen, ab zwei Zyklen', () => {
+  const hist = periods(['2026-01-01', '2026-01-29', '2026-02-26', '2026-03-26'], 5);
+  const logs = [
+    { log_date: '2026-01-26', symptoms: [{ key: 'bloating' }] }, // Zyklus 1, Tag 26, Luteal -> 3 Tage vorher
+    { log_date: '2026-02-23', symptoms: [{ key: 'bloating' }] }, // Zyklus 2, Tag 26, Luteal -> 3 Tage vorher
+  ];
+  const pattern = symptomCyclePattern(logs, hist, {}, 'bloating');
+  assert.equal(pattern.typicalDaysBeforePeriod, 3);
+});
+
+test('symptomCyclePattern: typicalDaysBeforePeriod bleibt null bei nur einem lutealen Treffer (kein Zufall als Muster)', () => {
+  const hist = periods(['2026-01-01', '2026-01-29'], 5);
+  const logs = [{ log_date: '2026-01-26', symptoms: [{ key: 'bloating' }] }]; // Tag 26, Luteal, nur 1x
+  const pattern = symptomCyclePattern(logs, hist, {}, 'bloating');
+  assert.equal(pattern.typicalDaysBeforePeriod, null);
+});
+
+test('symptomCyclePattern: typicalDaysBeforePeriod ignoriert Vorkommen ausserhalb der Lutealphase', () => {
+  const hist = periods(['2026-01-01', '2026-01-29', '2026-02-26'], 5);
+  const logs = [
+    { log_date: '2026-01-02', symptoms: [{ key: 'cramps' }] }, // Tag 2, Menstruation
+    { log_date: '2026-01-30', symptoms: [{ key: 'cramps' }] }, // Tag 2, Menstruation
+  ];
+  const pattern = symptomCyclePattern(logs, hist, {}, 'cramps');
+  assert.equal(pattern.mostCommonPhase, PHASE.MENSTRUATION);
+  assert.equal(pattern.typicalDaysBeforePeriod, null);
+});
+
+test('symptomCyclePattern: typicalDaysBeforePeriod - bei Gleichstand gewinnt der Wert aus dem juengeren Zyklus', () => {
+  const hist = periods(['2026-01-01', '2026-01-29', '2026-02-26', '2026-03-26'], 5);
+  const logs = [
+    { log_date: '2026-01-26', symptoms: [{ key: 'x' }] }, // Zyklus 1 (aeltester), Tag 26 -> 3 Tage vorher
+    { log_date: '2026-02-23', symptoms: [{ key: 'x' }] }, // Zyklus 2, Tag 26 -> 3 Tage vorher (2. Treffer fuer 3)
+    { log_date: '2026-03-22', symptoms: [{ key: 'x' }] }, // Zyklus 3, Tag 25 -> 4 Tage vorher
+    { log_date: '2026-04-19', symptoms: [{ key: 'x' }] }, // Zyklus 4 (juengster), Tag 25 -> 4 Tage vorher (2. Treffer fuer 4)
+  ];
+  const pattern = symptomCyclePattern(logs, hist, {}, 'x');
+  assert.equal(pattern.typicalDaysBeforePeriod, 4); // beide Werte 2x, aber 4 stammt aus dem juengeren Zyklus
+});
+
 test('symptomCyclePattern: zwei Perioden mit identischem Startdatum teilen sich NICHT dieselbe occurredOnDays-Liste (Regression)', () => {
   // Entartete, aber vom Schema nicht ausgeschlossene Eingabe: zwei Perioden
   // mit demselben start_date wuerden bei einem String-Schluessel (cycleStart)
@@ -642,7 +682,7 @@ test('symptomCyclePattern: zwei Perioden mit identischem Startdatum teilen sich 
 });
 
 test('symptomCyclePattern: ohne jede Periode gibt es nichts zu rekonstruieren', () => {
-  assert.deepEqual(symptomCyclePattern([], [], {}, 'cramps'), { cycles: [], occurredCount: 0, totalCount: 0, mostCommonPhase: null });
+  assert.deepEqual(symptomCyclePattern([], [], {}, 'cramps'), { cycles: [], occurredCount: 0, totalCount: 0, mostCommonPhase: null, typicalDaysBeforePeriod: null });
 });
 
 test('symptomCyclePattern/symptomFrequencyByPhase: reconstructCycles()-Refactor liefert unveraendertes Ergebnis (Regression)', () => {

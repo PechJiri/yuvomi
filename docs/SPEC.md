@@ -2585,6 +2585,14 @@ hit day - the ring stays visible without relying on color perception, and each c
 carries the cycle-day number as text too), as a second expandable panel alongside the severity
 trend on the same symptom-frequency row.
 
+The pattern's summary sentence prefers a concrete `typicalDaysBeforePeriod` ("Bloating often occurs
+3 days before your period") over the coarser phase-name sentence when one exists - the most common
+"N days before the next period" value among the symptom's *luteal-phase* occurrences specifically
+(days-before-period is only an intuitive framing there; a menstruation-phase or "other"-phase
+occurrence keeps the phase-name sentence, since "before your period" doesn't make sense for either).
+Requires the same value to recur across at least two cycles before it counts as a pattern rather than
+coincidence.
+
 **The cycle-length trend is a bar chart, not a line chart** (`TYPICAL_CYCLE_RANGE = {min: 24, max:
 38}`, `isTypicalCycleLength()`), each bar colored typical (module accent) or atypical (the existing
 warning token) against a shaded reference band for the range itself - the same

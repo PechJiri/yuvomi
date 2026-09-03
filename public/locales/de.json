@@ -4165,6 +4165,7 @@
                 "severityTrend": "Schweregrad-Verlauf",
                 "cyclePattern": "Zyklustag-Muster",
                 "cyclePatternSentence": "Du hast {{symptom}} in {{occurred}} von {{total}} letzten Zyklen während {{phase}} eingetragen.",
+                "cyclePatternDaysBefore": "{{symptom}} tritt häufig {{days}} Tage vor deiner Periode auf.",
                 "cyclePatternNone": "{{symptom}} kam in deinen letzten {{total}} Zyklen nicht wieder vor.",
                 "typical": "Typisch",
                 "atypical": "Untypisch",

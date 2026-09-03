@@ -114,6 +114,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The cycle-length trend chart's first bar could visually cover part of a y-axis label.** Bar
+  centers reused the same x-position formula as the line charts, which places the first/last points
+  exactly on the plot's left/right edge - fine for a zero-width point, but a bar half-width wide then
+  extends past the edge into the label gutter (a "10" tick could read as "1" behind the bar). Bar
+  centers are now inset by half the bar width from each edge.
+- **The cycle-day pattern sentence now says how many days before your period a symptom typically
+  shows up**, when that's a real pattern (the same value recurring across at least two cycles),
+  instead of only the coarser "occurs during your luteal phase."
+
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
   the native colour input to fill its grid cell; on the mobile layout, where the two-column form
   collapses to one, that cell is the whole form width. It now carries a fixed size, matching the

@@ -4749,10 +4749,24 @@ function cycleLengthTrendChartMarkup(trend) {
 
   const step = n > 1 ? (right - left) / (n - 1) : (right - left);
   const barW = Math.max(6, Math.min(28, step * 0.5));
+  // Eigene, nach innen gerueckte X-Positionen statt chartX(): das teilt sich
+  // eine Geometrie mit den Linien-Charts, deren Punkte am Rand (chartX(0,n)
+  // === left) genau auf die Plotgrenze fallen duerfen, weil ein Punkt kein
+  // Volumen hat. Ein balkenBREITER Balken an derselben Stelle ragt zur Haelfte
+  // seiner Breite in den Y-Achsen-Beschriftungsrand hinein und verdeckt dort
+  // eine Ziffer (Befund: "10" sah wie "1" aus, weil der erste Balken die
+  // rechte Haelfte der Ziffer uebermalte). Balkenmitten bekommen deshalb
+  // eigens `barW/2` Abstand zu beiden Plotgrenzen.
+  const xFor = (i) => {
+    if (n <= 1) return (left + right) / 2;
+    const usableLeft = left + barW / 2;
+    const usableRight = right - barW / 2;
+    return usableLeft + (i * (usableRight - usableLeft)) / (n - 1);
+  };
   const typicalLabel = (typical) => t(typical ? 'health.cycle.trends.typical' : 'health.cycle.trends.atypical');
 
   const bars = trend.map((e, i) => {
-    const cx = chartX(i, n);
+    const cx = xFor(i);
     const by = y(e.days);
     const typical = isTypicalCycleLength(e.days);
     const color = typical ? 'var(--module-health)' : 'var(--color-warning)';
@@ -4824,9 +4838,16 @@ function symptomIntensityTrendChartMarkup(trend, symptomLabel) {
 function symptomCyclePatternMarkup(pattern, symptomLabel) {
   if (pattern.totalCount < 2) return '';
   const phaseLabel = pattern.mostCommonPhase ? t(SYMPTOM_PHASE_LABEL_KEYS[pattern.mostCommonPhase]) : null;
-  const sentence = phaseLabel
-    ? t('health.cycle.trends.cyclePatternSentence', { symptom: symptomLabel, phase: phaseLabel, occurred: pattern.occurredCount, total: pattern.totalCount })
-    : t('health.cycle.trends.cyclePatternNone', { symptom: symptomLabel, total: pattern.totalCount });
+  // "N Tage vor der Periode" ist konkreter als "in der Lutealphase" und
+  // gewinnt deshalb, wenn typicalDaysBeforePeriod ein echtes Muster gefunden
+  // hat (mind. 2 Zyklen mit demselben Wert - siehe symptomCyclePattern()).
+  // Sonst faellt es auf die grobe Phasen-Aussage zurueck, die immer verfuegbar
+  // ist, sobald das Symptom ueberhaupt einmal vorkam.
+  const sentence = pattern.typicalDaysBeforePeriod != null
+    ? t('health.cycle.trends.cyclePatternDaysBefore', { symptom: symptomLabel, days: pattern.typicalDaysBeforePeriod })
+    : phaseLabel
+      ? t('health.cycle.trends.cyclePatternSentence', { symptom: symptomLabel, phase: phaseLabel, occurred: pattern.occurredCount, total: pattern.totalCount })
+      : t('health.cycle.trends.cyclePatternNone', { symptom: symptomLabel, total: pattern.totalCount });
 
   const rows = pattern.cycles.map((c) => {
     const cells = c.phaseByDay.map((phase, i) => {
