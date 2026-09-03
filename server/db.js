@@ -204,17 +204,32 @@ function init({ plaintextBackup = true } = {}) {
   migrate();
   reconcileCriticalSchema();
 
-  // Ältere App auf neuerer Datenbank: laut melden, nicht stumm laufen. Der
-  // Start wird nicht verweigert - ein Rollback ist meist ein Notbehelf, und
-  // eine Instanz, die gar nicht hochkommt, nähme dem Haushalt auch das
-  // Backup-Blatt. Dasselbe steht für Betreiber in docs/installation.md.
+  // Ältere App auf neuerer Datenbank: nicht starten. Die Gefahr ist nicht,
+  // dass diese Version scheitert, sondern was sie zwischendurch schreibt -
+  // Daten in einer Form, die eine schon angewendete Migration verlassen hat
+  // und die nach dem erneuten Update nie nachgezogen werden, weil die
+  // Migration als erledigt gilt. Der Rückweg ist das Backup vor dem Update
+  // (docs/installation.md, "Going back"). DB_ALLOW_NEWER_SCHEMA=1 ist der
+  // ausdrückliche Notfallschalter und wird bei jedem Start als Warnung
+  // genannt, damit er kein Dauerzustand wird.
   const unknown = unknownMigrationVersions(db);
   if (unknown.length > 0) {
-    log.error(
+    const detail =
       `This database was written by a newer Yuvomi: it carries migration ${unknown.join(', ')} ` +
-      `and this build knows up to v${latestKnownVersion()}. Running an older version on a newer ` +
-      'database is not supported. Update Yuvomi to the version that wrote it, or restore the ' +
-      'backup taken before that update.'
+      `and this build knows up to v${latestKnownVersion()}.`;
+    if (!allowNewerSchema()) {
+      db.close();
+      db = null;
+      throw new Error(
+        `[DB] ${detail} Running an older version on a newer database is not supported: what it ` +
+        'writes in the meantime can be lost on the next update. Update Yuvomi to the version ' +
+        'that wrote this database, or restore the backup taken before that update. To start ' +
+        'anyway, at your own risk, set DB_ALLOW_NEWER_SCHEMA=1.'
+      );
+    }
+    log.warn(
+      `${detail} Started anyway because DB_ALLOW_NEWER_SCHEMA is set. What this version writes ` +
+      'can be lost on the next update: take a backup now and update as soon as you can.'
     );
   }
 
@@ -7059,6 +7074,11 @@ function unknownMigrationVersions(database) {
 
 function latestKnownVersion() {
   return Math.max(0, ...MIGRATIONS.map((m) => m.version));
+}
+
+/** Notfallschalter: nur ein ausdrückliches 1/true/yes zählt, ein leerer Wert nicht. */
+function allowNewerSchema() {
+  return /^(1|true|yes)$/i.test(String(process.env.DB_ALLOW_NEWER_SCHEMA || '').trim());
 }
 
 /**

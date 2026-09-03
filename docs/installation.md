@@ -578,6 +578,7 @@ security, and troubleshooting.
 |----------|-------------|---------|----------|
 | `DB_PATH` | Path to the SQLite database file inside the container | `/data/yuvomi.db` | No |
 | `DB_ENCRYPTION_KEY` | SQLCipher AES-256 key for encryption at rest. Leave it empty and the database stays unencrypted. Once set there is no way back: it cannot be recovered and cannot be changed on an existing database. The placeholder that `.env.example` ships (`REPLACE_WITH_...`) is refused on a fresh install, because it is printed in this repository and would protect nothing. | - | No, but strongly recommended |
+| `DB_ALLOW_NEWER_SCHEMA` | Emergency switch, normally unset. An older Yuvomi refuses to start on a database a newer version has opened (see [Going back](#going-back)); `1` starts it anyway, at your own risk, with a warning on every start. | - | No |
 | `DATA_DIR` | Host directory mounted at `/data` inside the container (set in `.env` or `docker-compose.yml`). | `./data` | No |
 | `MODULES_DIR` | Host directory mounted at `/app/modules` inside the container - the drop-in folder for [third-party modules](../MODULES.md). | `./modules` | No |
 
@@ -1127,9 +1128,10 @@ Migrations only run forward. The list is append-only and a CI test keeps it that
 backup from an older Yuvomi restores into any newer one, and a database that a newer version has
 opened carries migrations an older version does not know. The way back after a bad update is
 therefore the backup you took before it, or the `.pre-restore-*` copy a restore leaves next to the
-database, never an older image on the current database: an older version started on a newer
-database reports that at start, and a backup written by a newer version is refused with a message
-to update first.
+database, never an older image on the current database: an older version refuses to start on a
+database a newer one has opened, because what it writes in the meantime can be lost on the next
+update, and a backup written by a newer version is refused with a message to update first.
+`DB_ALLOW_NEWER_SCHEMA=1` starts it anyway, at your own risk, and says so on every start.
 
 ---
 
