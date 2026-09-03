@@ -2601,6 +2601,24 @@ the average-cycle-length tile separately gets a typical/atypical badge, using th
 shown only once there's a real basis (derived from history or a manual setting) rather than on a
 bare default value.
 
+**Symptom likelihood prediction** (`predictSymptomLikelihood()`) is the one function in this module
+that genuinely predicts forward rather than summarizing history. It reuses `symptomCyclePattern()`'s
+per-cycle-day occurrence data: for each cycle-day number, only cycles that were actually long enough
+to *have* that day count as eligible (a short cycle doesn't unfairly dilute a later day's ratio), and
+a day counts as "likely" once at least half of its eligible cycles (and at least two of them - a
+single long cycle isn't a pattern) had the symptom on it. Likely day-numbers project onto the
+current cycle's real calendar dates with the same `addLocalDays()` arithmetic `predictCycle()` uses
+for period/ovulation projection. Below `MIN_HISTORY_GAPS` considered cycles there is no prediction at
+all (only `todayCycleDay`, which stays meaningful independent of prediction confidence) - the same
+threshold Phase 0 established for trusting a derived cycle-length average, reused here instead of a
+fourth tuning constant. The UI wraps this in a symptom picker (only symptoms with enough history to
+evaluate at all appear as choices), a "likely today" callout using the same deliberately
+non-diagnostic wording as the existing fertile-window disclaimer ("often occurs around this day," not
+a forecast), and a calendar overlay: the *same* month-calendar component the cycle tab already shows
+gains extra per-day markers (solid = symptom actually logged, ring = predicted-likely) rather than a
+second calendar existing side by side - the picker just changes what the existing grid highlights, in
+its own corner of each cell so it never collides with the calendar's own has-a-log marker.
+
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and
 fans out via Web Push and the household channels (Gotify, ntfy, webhook, email). Medications (`name`, `dosage_text`) and activities

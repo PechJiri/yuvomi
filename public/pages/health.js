@@ -45,6 +45,7 @@ import {
   normalizeSymptomEntries, symptomIntensityLabelKey,
   cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
   symptomCyclePattern, TYPICAL_CYCLE_RANGE, isTypicalCycleLength,
+  predictSymptomLikelihood,
 } from '/utils/health-cycle.js';
 import { HEALTH_ROUTES, renderHealthTabsBar } from '/utils/health-tabs.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -4088,6 +4089,11 @@ const cycle = {
   loaded: false,
   error: false,
   root: null,
+  // Im Trends-Abschnitt gewaehltes Symptom fuer das Wahrscheinlichkeits-Overlay
+  // (Phase 4e) - null heisst "kein Overlay", derselbe Monatskalender bleibt
+  // sonst unveraendert. Personen-/Monatswechsel setzen es zurueck (setzt
+  // sich sonst leise auf einer fremden Person/einem falschen Symptom fort).
+  likelihoodSymptom: null,
 };
 
 // Wochentags-/Phasen-Label-Keys als vollständige Konstanten (Frontend-Audit:
@@ -4182,6 +4188,7 @@ function cycleSettings() {
 
 async function switchCyclePerson() {
   cycle.anchor = todayKey();
+  cycle.likelihoodSymptom = null;
   try { await loadCycle(); cycle.error = false; }
   catch (err) { console.error('[Health] cycle load error:', err); cycle.error = err; }
   renderCycleShell();
@@ -4563,6 +4570,23 @@ function cycleCalendarMarkup(own) {
     periods: cycle.periods, logs: cycle.logs, settings: cycleSettings(), weekStartsOn: 1,
   });
 
+  // Symptom-Wahrscheinlichkeits-Overlay (Phase 4e): nur Zusatzmarker auf
+  // DEMSELBEN Monatskalender, keine zweite Kalenderflaeche - "getrackt"
+  // (Symptom an diesem Tag tatsaechlich geloggt) vs. "wahrscheinlich"
+  // (Zyklustag-Muster, aber nicht geloggt), derselbe Voll-/Umriss-Kontrast
+  // wie geloggte vs. vorhergesagte Periode.
+  let trackedDates = null;
+  let predictedDates = null;
+  if (cycle.likelihoodSymptom) {
+    const settings = cycleSettings();
+    trackedDates = new Set(
+      (cycle.logs || [])
+        .filter((l) => normalizeSymptomEntries(l.symptoms).some((e) => e.key === cycle.likelihoodSymptom))
+        .map((l) => String(l.log_date).slice(0, 10)),
+    );
+    predictedDates = new Set(predictSymptomLikelihood(cycle.logs, cycle.periods, settings, cycle.likelihoodSymptom).likelyDates);
+  }
+
   const weekdays = CYCLE_WEEKDAY_LABEL_KEYS
     .map((k) => `<span class="cycle-cal__wd">${esc(t(k))}</span>`).join('');
 
@@ -4573,6 +4597,8 @@ function cycleCalendarMarkup(own) {
     if (c.phase) cls.push(`is-${c.phase}`);
     if (c.predicted) cls.push('is-predicted');
     if (c.hasLog) cls.push('has-log');
+    if (trackedDates?.has(c.dateKey)) cls.push('is-symptom-tracked');
+    else if (predictedDates?.has(c.dateKey)) cls.push('is-symptom-predicted');
     const flowAttr = c.flow ? ` data-flow="${esc(c.flow)}"` : '';
     const tag = own ? 'button' : 'div';
     const attrs = own
@@ -4611,6 +4637,12 @@ function cycleLegendMarkup() {
     { cls: 'is-ovulation', key: 'health.cycle.legend.ovulation' },
     { cls: 'is-today', key: 'health.cycle.legend.today' },
   ];
+  if (cycle.likelihoodSymptom) {
+    items.push(
+      { cls: 'is-symptom-tracked', key: 'health.cycle.trends.symptomTracked' },
+      { cls: 'is-symptom-predicted', key: 'health.cycle.trends.symptomPredicted' },
+    );
+  }
   return `<div class="cycle-legend">${items.map((i) => `
     <span class="cycle-legend__item"><span class="cycle-legend__swatch ${i.cls}"></span>${esc(t(i.key))}</span>`).join('')}</div>`;
 }
@@ -4864,6 +4896,49 @@ function symptomFrequencyChartMarkup(freq, dayLogs, periods, settings) {
     </div>`;
 }
 
+/**
+ * Symptom-Wahrscheinlichkeit (Phase 4e) - Symptom-Wahl treibt einen "heute
+ * wahrscheinlich"-Hinweis und das Overlay auf dem Monatskalender (siehe
+ * cycleCalendarMarkup). Die Auswahl selbst ist EIN globaler UI-Zustand
+ * (cycle.likelihoodSymptom), kein Prop dieser Funktion, weil sie den
+ * Kalender an anderer Stelle auf der Seite mitbestimmt.
+ *
+ * Nur Symptome mit genug betrachtbarer Zyklus-Historie (dieselbe
+ * MIN_HISTORY_GAPS-Schwelle wie Phase 0/4e) UND mindestens einem
+ * tatsaechlichen Vorkommen erscheinen im Wahl-Chips - ein Chip, der immer
+ * "zu wenig Daten" sagt, waere kein nuetzlicher Chip.
+ */
+function symptomLikelihoodMarkup() {
+  const settings = cycleSettings();
+  const candidates = SYMPTOM_TYPES.filter((s) => {
+    const p = symptomCyclePattern(cycle.logs, cycle.periods, settings, s.value);
+    return p.totalCount >= MIN_HISTORY_GAPS && p.occurredCount > 0;
+  });
+  if (!candidates.length) return '';
+
+  const selected = candidates.some((s) => s.value === cycle.likelihoodSymptom) ? cycle.likelihoodSymptom : null;
+  const chips = candidates.map((s) => `
+    <button type="button" class="health-choice" data-likelihood-symptom="${esc(s.value)}" aria-pressed="${s.value === selected}">${esc(t(s.labelKey))}</button>`).join('');
+
+  let callout = '';
+  if (selected) {
+    const result = predictSymptomLikelihood(cycle.logs, cycle.periods, settings, selected);
+    if (result.isLikelyToday) {
+      const label = t(symptomType(selected)?.labelKey || selected);
+      callout = `
+        <p class="cycle-likelihood__callout"><i data-lucide="sparkles" aria-hidden="true"></i>${esc(t('health.cycle.trends.likelyToday', { symptom: label }))}</p>`;
+    }
+  }
+
+  return `
+    <div class="health-chart-section cycle-likelihood">
+      <div class="health-chart-section__head"><div class="health-chart-section__title">${esc(t('health.cycle.trends.likelihoodTitle'))}</div></div>
+      <p class="health-chart-section__caption">${esc(t('health.cycle.trends.likelihoodCaption'))}</p>
+      <div class="cycle-likelihood__picker" role="group" aria-label="${esc(t('health.cycle.trends.likelihoodTitle'))}">${chips}</div>
+      ${callout}
+    </div>`;
+}
+
 function cycleTrendsMarkup() {
   const lengthTrend = cycleLengthTrend(cycle.periods);
   const settings = cycleSettings();
@@ -4874,6 +4949,7 @@ function cycleTrendsMarkup() {
     lengthTrend.length >= 2 ? cycleLengthTrendChartMarkup(lengthTrend) : '',
     symptomFreq.length ? symptomFrequencyChartMarkup(symptomFreq, cycle.logs, cycle.periods, settings) : '',
     bbt.length >= 2 ? bbtTrendChartMarkup(bbt) : '',
+    symptomLikelihoodMarkup(),
   ].filter(Boolean);
 
   // Kein leerer Abschnitt: ohne genug Historie für auch nur EINEN Trend
@@ -4967,6 +5043,16 @@ function wireCycle() {
   cycle.root.querySelector('[data-action="cycle-end-period"]')?.addEventListener('click', () => cycleEndPeriodToday());
   cycle.root.querySelector('[data-action="cycle-log-today"]')?.addEventListener('click', () => openDayLogModal(todayKey()));
   cycle.root.querySelector('[data-action="cycle-settings"]')?.addEventListener('click', () => openCycleSettingsModal());
+
+  // Symptom-Wahrscheinlichkeits-Chip (Phase 4e): erneutes Antippen des schon
+  // gewaehlten Chips waehlt ab (Overlay aus) - dieselbe Toggle-Geste wie ein
+  // aktiver Filter, kein Extra-"Zuruecksetzen"-Knopf noetig.
+  cycle.root.querySelectorAll('[data-likelihood-symptom]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.likelihoodSymptom;
+      cycle.likelihoodSymptom = cycle.likelihoodSymptom === key ? null : key;
+      renderCycleShell();
+    }));
 }
 
 // Sichtbarkeit für ein Zyklus-Event vorauswählen: bestehender Wert gewinnt,

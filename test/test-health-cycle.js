@@ -21,6 +21,7 @@ const {
   detectTemperatureShift,
   cycleLengthTrend, symptomFrequencyByPhase, bbtSeries, symptomIntensityTrend,
   symptomCyclePattern, TYPICAL_CYCLE_RANGE, isTypicalCycleLength,
+  predictSymptomLikelihood,
 } = await import('../public/utils/health-cycle.js');
 
 const de = JSON.parse(readFileSync(new URL('../public/locales/de.json', import.meta.url), 'utf8'));
@@ -650,6 +651,65 @@ test('symptomCyclePattern/symptomFrequencyByPhase: reconstructCycles()-Refactor 
   assert.deepEqual(symptomFrequencyByPhase(logs, hist, {}), [
     { key: 'cramps', menstruation: 1, luteal: 0, other: 0, total: 1, avgIntensity: 2 },
   ]);
+});
+
+// --------------------------------------------------------
+// predictSymptomLikelihood (Phase 4e)
+// --------------------------------------------------------
+
+test('predictSymptomLikelihood: projiziert einen stabilen Zyklustag korrekt auf den aktuellen Zyklus, isLikelyToday', () => {
+  const hist = periods(['2026-01-01', '2026-01-29', '2026-02-26', '2026-03-26'], 5); // 28/28/28
+  const logs = [
+    { log_date: '2026-01-02', symptoms: [{ key: 'cramps' }] }, // Tag 2
+    { log_date: '2026-01-30', symptoms: [{ key: 'cramps' }] }, // Tag 2
+    { log_date: '2026-02-27', symptoms: [{ key: 'cramps' }] }, // Tag 2
+    { log_date: '2026-03-27', symptoms: [{ key: 'cramps' }] }, // Tag 2
+  ];
+  const onDay = predictSymptomLikelihood(logs, hist, {}, 'cramps', '2026-03-27');
+  assert.deepEqual(onDay.likelyDates, ['2026-03-27']);
+  assert.equal(onDay.todayCycleDay, 2);
+  assert.equal(onDay.isLikelyToday, true);
+
+  const offDay = predictSymptomLikelihood(logs, hist, {}, 'cramps', '2026-04-01');
+  assert.equal(offDay.todayCycleDay, 7);
+  assert.equal(offDay.isLikelyToday, false);
+  assert.deepEqual(offDay.likelyDates, ['2026-03-27']); // dieselbe Vorhersage, unabhaengig vom Blickpunkt "heute"
+});
+
+test('predictSymptomLikelihood: unter MIN_HISTORY_GAPS betrachteten Zyklen keine Vorhersage, todayCycleDay bleibt berechnet', () => {
+  const hist = periods(['2026-01-01', '2026-01-29'], 5); // nur 1 Zyklus betrachtbar
+  const logs = [{ log_date: '2026-01-02', symptoms: [{ key: 'cramps' }] }];
+  const result = predictSymptomLikelihood(logs, hist, {}, 'cramps', '2026-01-30');
+  assert.deepEqual(result.likelyDates, []);
+  assert.equal(result.isLikelyToday, false);
+  assert.equal(result.todayCycleDay, 2); // 2026-01-30 ist Tag 2 des (einzigen echten) Zyklus seit 2026-01-29
+});
+
+test('predictSymptomLikelihood: ohne stabilen Zyklustag keine falsche "wahrscheinlich"-Aussage', () => {
+  const hist = periods(['2026-01-01', '2026-01-29', '2026-02-26', '2026-03-26'], 5);
+  // Jeweils ein anderer Zyklustag je Zyklus - kein Tag erreicht die 50%-Schwelle.
+  const logs = [
+    { log_date: '2026-01-03', symptoms: [{ key: 'cramps' }] },  // Tag 3
+    { log_date: '2026-02-01', symptoms: [{ key: 'cramps' }] },  // Tag 4 (relativ zu 01-29)
+    { log_date: '2026-03-02', symptoms: [{ key: 'cramps' }] },  // Tag 5 (relativ zu 02-26)
+    { log_date: '2026-04-01', symptoms: [{ key: 'cramps' }] },  // Tag 7 (relativ zu 03-26)
+  ];
+  const result = predictSymptomLikelihood(logs, hist, {}, 'cramps', '2026-03-27');
+  assert.deepEqual(result.likelyDates, []);
+  assert.equal(result.isLikelyToday, false);
+});
+
+test('predictSymptomLikelihood: ein einzelner eligibler Zyklus ist kein Muster, auch bei 100% Treffer an diesem Tag', () => {
+  // Zyklus 3 (02-26, 44 Tage lang) ist der einzige, der Tag 35 ueberhaupt erreicht -
+  // der letzte, offene Zyklus faellt auf einen kuerzeren Ø-Wert (33 Tage) zurueck.
+  const hist = periods(['2026-01-01', '2026-01-29', '2026-02-26', '2026-04-11'], 5);
+  const logs = [{ log_date: '2026-04-01', symptoms: [{ key: 'cramps' }] }]; // Tag 35 des dritten Zyklus
+  const result = predictSymptomLikelihood(logs, hist, {}, 'cramps', '2026-04-11');
+  assert.deepEqual(result.likelyDates, []); // nur 1 eligibler Zyklus fuer Tag 35 (< MIN_ELIGIBLE_CYCLES_FOR_DAY)
+});
+
+test('predictSymptomLikelihood: ohne jede Periode gibt es nichts vorherzusagen', () => {
+  assert.deepEqual(predictSymptomLikelihood([], [], {}, 'cramps', '2026-01-01'), { likelyDates: [], todayCycleDay: 0, isLikelyToday: false });
 });
 
 // --------------------------------------------------------

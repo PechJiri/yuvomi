@@ -609,6 +609,70 @@ export function symptomCyclePattern(dayLogs, periods, settings = {}, symptomKey,
   return { cycles, occurredCount, totalCount: cycles.length, mostCommonPhase };
 }
 
+// Mindestanteil der ELIGIBLEN Zyklen (die diesen Zyklustag ueberhaupt hatten),
+// in denen ein Symptom an genau diesem Tag vorkam, bevor "typischerweise an
+// Tag N" als Muster gilt - ein Anteil, kein Absolutwert, damit er unabhaengig
+// von der Zyklusanzahl bleibt. Ungefaehr Clues sichtbares Verhalten; dieselbe
+// undogmatische Haltung wie beim Zykluslaenge-Referenzbereich (Phase 4d) -
+// kein Anspruch auf einen validierten klinischen Wert.
+const LIKELIHOOD_THRESHOLD = 0.5;
+// Unter zwei eligiblen Zyklen ist ein Treffer Zufall, kein Muster.
+const MIN_ELIGIBLE_CYCLES_FOR_DAY = 2;
+
+/**
+ * Sagt vorher, an welchen Tagen des AKTUELLEN Zyklus ein Symptom aufgrund
+ * seines bisherigen Zyklustag-Musters (symptomCyclePattern(), Phase 4c)
+ * wahrscheinlich auftritt (Phase 4e) - die einzige Funktion in diesem Modul,
+ * die tatsaechlich VORWAERTS vorhersagt statt Historie zusammenzufassen.
+ *
+ * Fuer jeden Zyklustag zaehlt nur, wie oft er unter den Zyklen vorkam, die
+ * UEBERHAUPT so lang waren (kuerzere Zyklen verduennen den Anteil sonst zu
+ * Unrecht) - "eligibel" statt pauschal "alle betrachteten Zyklen".
+ *
+ * Ohne mindestens MIN_HISTORY_GAPS betrachtete Zyklen (dieselbe Schwelle wie
+ * Phase 0 fuer den Zykluslaenge-Mittelwert, statt einer vierten eigenen
+ * Konstante) gibt es keine Vorhersage - nur `todayCycleDay` bleibt sinnvoll
+ * berechenbar, unabhaengig von der Vorhersage-Zuverlaessigkeit.
+ *
+ * WORTWAHL IST HIER WICHTIGER ALS SONST IM MODUL: "wahrscheinlich" bleibt
+ * eine Musteraussage ("tritt oft um diesen Tag auf"), keine medizinisch
+ * klingende Prognose - dieselbe "kein Medizinprodukt"-Disziplin wie beim
+ * bestehenden Fruchtbarkeitsfenster-Disclaimer.
+ *
+ * @param {Array<Object>} dayLogs
+ * @param {Array<Object>} periods
+ * @param {Object} settings - cycle_settings-Zeile.
+ * @param {string} symptomKey
+ * @param {string} [todayKey]
+ * @returns {{likelyDates: string[], todayCycleDay: number, isLikelyToday: boolean}}
+ */
+export function predictSymptomLikelihood(dayLogs, periods, settings = {}, symptomKey, todayKey = householdToday()) {
+  const asc = sortPeriodsAsc(periods);
+  if (!asc.length) return { likelyDates: [], todayCycleDay: 0, isLikelyToday: false };
+
+  const lastStart = dayKey(asc[asc.length - 1].start_date);
+  const todayCycleDay = daysBetween(lastStart, dayKey(todayKey)) + 1;
+
+  const pattern = symptomCyclePattern(dayLogs, periods, settings, symptomKey);
+  if (pattern.totalCount < MIN_HISTORY_GAPS) {
+    return { likelyDates: [], todayCycleDay, isLikelyToday: false };
+  }
+
+  const maxDay = Math.max(...pattern.cycles.map((c) => c.cycleLength));
+  const likelyDayNumbers = [];
+  for (let day = 1; day <= maxDay; day++) {
+    const eligible = pattern.cycles.filter((c) => c.cycleLength >= day);
+    if (eligible.length < MIN_ELIGIBLE_CYCLES_FOR_DAY) continue;
+    const hits = eligible.filter((c) => c.occurredOnDays.includes(day)).length;
+    if (hits / eligible.length >= LIKELIHOOD_THRESHOLD) likelyDayNumbers.push(day);
+  }
+
+  const likelyDates = likelyDayNumbers.map((day) => addLocalDays(lastStart, day - 1));
+  const isLikelyToday = likelyDayNumbers.includes(todayCycleDay);
+
+  return { likelyDates, todayCycleDay, isLikelyToday };
+}
+
 /**
  * Erkennt den Temperaturanstieg, der einen Eisprung bestätigt (Coverline-
  * Methode): der erste Tag, dessen Wert mindestens TEMP_SHIFT_THRESHOLD_C ueber

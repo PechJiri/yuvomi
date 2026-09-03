@@ -97,6 +97,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   typical/atypical badge (shown only once there's a real basis, not on a bare default). Also fixes a
   real gap: the cycle-variation stat card previously only appeared when fertility tracking was off -
   with it on, the default, cycle variation was never shown anywhere. It's unconditional now.
+- **The cycle tab can now predict which days a symptom is likely to occur on**, based on its
+  cycle-day pattern across recent cycles, and overlay that prediction on the existing month
+  calendar. Pick a symptom (only ones with enough logged history appear) to see a "Cramps often
+  occurs around this day in your cycle" note when today matches, and extra markers on the calendar
+  itself - a filled dot for a day it was actually logged, a ring for a day it's predicted but not yet
+  logged. No new calendar view; the same one the tab already shows just gains markers when a symptom
+  is selected.
 
 ### Fixed
 

@@ -4154,6 +4154,11 @@
                 "typical": "Typical",
                 "atypical": "Atypical",
                 "typicalRangeLabel": "Typical range: {{min}}–{{max}} days",
+                "likelihoodTitle": "Symptom patterns",
+                "likelihoodCaption": "Pick a symptom to see which days it often occurs on, based on your history.",
+                "likelyToday": "{{symptom}} often occurs around this day in your cycle.",
+                "symptomTracked": "Logged",
+                "symptomPredicted": "Often occurs here",
                 "phaseOther": "Other"
             },
             "flow": {
