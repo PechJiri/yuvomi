@@ -1508,11 +1508,12 @@ export async function render(container) {
   _container = container;
 
   const page = document.createElement('div');
-  // page-measure--narrow: die Seite setzt das Lesemass, die Zeilentraeger lesen
+  // app-page--data: die Seite setzt --layout-content; die Zeilentraeger lesen
   // es (Guard in test-frontend-audit.js). Ohne die Rolle enden Kopf und
   // Bedienzeilen neben ihrem eigenen Koerper. Die Regel kam mit v2.8.0, also
   // nach der Basis, auf der dieser Zweig gebaut wurde.
-  page.className = 'inventory-page page-measure--narrow';
+  page.className = 'inventory-page app-page app-page--data';
+  page.dataset.composition = 'data';
 
   // Sichtbarer Seitentitel statt sr-only: nur ein echtes .page-toolbar__title
   // loest das Absender-Siegel der Shell aus (router.js#wireToolbar,

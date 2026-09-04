@@ -204,6 +204,35 @@ function init({ plaintextBackup = true } = {}) {
   migrate();
   reconcileCriticalSchema();
 
+  // Ältere App auf neuerer Datenbank: nicht starten. Die Gefahr ist nicht,
+  // dass diese Version scheitert, sondern was sie zwischendurch schreibt -
+  // Daten in einer Form, die eine schon angewendete Migration verlassen hat
+  // und die nach dem erneuten Update nie nachgezogen werden, weil die
+  // Migration als erledigt gilt. Der Rückweg ist das Backup vor dem Update
+  // (docs/installation.md, "Going back"). DB_ALLOW_NEWER_SCHEMA=1 ist der
+  // ausdrückliche Notfallschalter und wird bei jedem Start als Warnung
+  // genannt, damit er kein Dauerzustand wird.
+  const unknown = unknownMigrationVersions(db);
+  if (unknown.length > 0) {
+    const detail =
+      `This database was written by a newer Yuvomi: it carries migration ${unknown.join(', ')} ` +
+      `and this build knows up to v${latestKnownVersion()}.`;
+    if (!allowNewerSchema()) {
+      db.close();
+      db = null;
+      throw new Error(
+        `[DB] ${detail} Running an older version on a newer database is not supported: what it ` +
+        'writes in the meantime can be lost on the next update. Update Yuvomi to the version ' +
+        'that wrote this database, or restore the backup taken before that update. To start ' +
+        'anyway, at your own risk, set DB_ALLOW_NEWER_SCHEMA=1.'
+      );
+    }
+    log.warn(
+      `${detail} Started anyway because DB_ALLOW_NEWER_SCHEMA is set. What this version writes ` +
+      'can be lost on the next update: take a backup now and update as soon as you can.'
+    );
+  }
+
   // Erst hier steht garantiert eine beschriebene Datei auf der Platte. Der
   // Header ist der einzige Beleg, der nicht auf einer API-Zusage beruht.
   if (DB_KEY) assertStoredEncrypted();
@@ -6941,6 +6970,21 @@ const MIGRATIONS = [
   },
   {
     version: 174,
+    description: 'Birthdays: optional name day with its own generated calendar event',
+    // A name day is an anniversary, not a birth date. Inventing a year would
+    // produce false information in APIs, exports, and date formatting, so it is
+    // stored canonically as MM-DD. Its event link is separate from the birthday
+    // so either occurrence can move, be removed, or be deleted at a provider.
+    up: `
+      ALTER TABLE birthdays ADD COLUMN name_day TEXT;
+      ALTER TABLE birthdays ADD COLUMN name_day_calendar_event_id INTEGER
+        REFERENCES calendar_events(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_birthdays_name_day_calendar_ref
+        ON birthdays(name_day_calendar_event_id);
+    `,
+  },
+  {
+    version: 175,
     description: 'Permissions: allow fine-grained capability resources',
     // `access_permissions.resource_type` is protected by a CHECK constraint.
     // SQLite cannot extend that constraint in place, so the table is rebuilt
@@ -7032,6 +7076,37 @@ function migrate() {
       }
     }
   }
+}
+
+/**
+ * Migrationsnummern, die diese Datenbank trägt und dieser Build nicht kennt.
+ *
+ * Das ist die Signatur einer NEUEREN Yuvomi-Version auf dieser Datei - nach
+ * einem Rollback des Images (Umbrel, Unraid) oder mit einem Backup aus einer
+ * neueren Installation. `migrate()` sieht nur die Gegenrichtung: es führt
+ * nach, was fehlt, und übergeht stumm, was es nicht kennt. Eine ältere App
+ * liefe damit gegen Tabellen und Spalten, die sie nicht kennt, und fiele erst
+ * dort auf, wo sie schreibt. Migrationen sind einbahnig
+ * (test:migrations-append-only); der Rückweg ist das Backup vor dem Update.
+ * @param {import('better-sqlite3-multiple-ciphers').Database} database
+ * @returns {number[]} aufsteigend, leer wenn alles bekannt ist
+ */
+function unknownMigrationVersions(database) {
+  const known = new Set(MIGRATIONS.map((m) => m.version));
+  return database
+    .prepare('SELECT version FROM schema_migrations ORDER BY version')
+    .all()
+    .map((row) => row.version)
+    .filter((version) => !known.has(version));
+}
+
+function latestKnownVersion() {
+  return Math.max(0, ...MIGRATIONS.map((m) => m.version));
+}
+
+/** Notfallschalter: nur ein ausdrückliches 1/true/yes zählt, ein leerer Wert nicht. */
+function allowNewerSchema() {
+  return /^(1|true|yes)$/i.test(String(process.env.DB_ALLOW_NEWER_SCHEMA || '').trim());
 }
 
 /**
@@ -7140,6 +7215,16 @@ function validateBackupFile(sourcePath) {
     `).get();
     if (!row) {
       throw new Error('Backup file is not a valid Yuvomi database.');
+    }
+    // Backup aus einer neueren Yuvomi-Version: ablehnen, bevor irgendetwas
+    // kopiert wird. Eingespielt liefe diese App stumm gegen ein Schema, das
+    // sie nicht kennt; der richtige erste Schritt ist das Update.
+    const unknown = unknownMigrationVersions(candidate);
+    if (unknown.length > 0) {
+      throw new Error(
+        `Backup was written by a newer Yuvomi (schema v${unknown[unknown.length - 1]}; this ` +
+        `version knows up to v${latestKnownVersion()}). Update Yuvomi first, then restore.`
+      );
     }
     return candidate.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()?.version ?? 0;
   } finally {
@@ -7260,4 +7345,4 @@ function _resetTestDatabase() {
 
 init();   // auto-initialise when module is first imported
 
-export { init, get, transaction, currentVersion, getPath, backupToFile, restoreFromFile, MIGRATIONS, reconcileCriticalSchema, _setTestDatabase, _resetTestDatabase };
+export { init, get, transaction, currentVersion, getPath, backupToFile, restoreFromFile, unknownMigrationVersions, MIGRATIONS, reconcileCriticalSchema, _setTestDatabase, _resetTestDatabase };

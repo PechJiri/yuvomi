@@ -9,7 +9,7 @@ import path from 'node:path';
 import * as db from '../db.js';
 import { createLogger } from '../logger.js';
 import { getSupportedLocales } from '../utils/i18n.js';
-import { normalizeCapabilities, buildExtensionCatalog } from './module-capabilities.js';
+import { normalizeCapabilities, buildExtensionCatalog, MODULE_ID_RE as ID_RE } from './module-capabilities.js';
 import { setExtensionScopeModules } from '../scopes.js';
 import { setExtensionPermissionCatalog } from '../permissions.js';
 
@@ -23,7 +23,6 @@ const DISABLED_KEY = 'third_party_disabled_modules';
 // Anhebung: ein aelteres Modul laesst sie weg und verhaelt sich wie zuvor.
 export const SUPPORTED_MANIFEST_VERSION = 1;
 
-const ID_RE = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
 const SAFE_RELATIVE_RE = /^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/;
 const MENU_LABEL_KEY_RE = /^[a-z][a-z0-9._-]{0,79}$/;
 const MODULE_LOCALE_FILE_RE = /^([a-z]{2,3})\.json$/;
@@ -145,6 +144,29 @@ export function normalizeManifest(raw, folderName) {
   const pathValue = String(menu.path || `/m/${id}`).trim();
   const routePath = pathValue === `/m/${id}` ? pathValue : `/m/${id}`;
 
+  const COMPOSITION = new Set(['reading', 'data', 'dashboard', 'form', 'split', 'full']);
+  const WIDTHS = new Set(['reading', 'content', 'wide']);
+  const pageRaw = manifest.page && typeof manifest.page === 'object' ? manifest.page : {};
+  const composition = COMPOSITION.has(String(pageRaw.composition || '').trim())
+    ? String(pageRaw.composition).trim()
+    : 'reading';
+  const width = WIDTHS.has(String(pageRaw.width || '').trim())
+    ? String(pageRaw.width).trim()
+    : (composition === 'data' ? 'content' : composition === 'dashboard' ? 'wide' : 'reading');
+  // Dieselbe Regel wie fuer composition und width: ein unbekannter Wert
+  // faellt auf den unterstuetzten zurueck, statt roh weitergereicht zu werden.
+  // MODULES.md verspricht `context.page` als NORMALISIERTE Erklaerung und
+  // nennt fuer beide Felder nur `standard`; ein Tippfehler im Manifest darf
+  // im Client keinen Zustand erzeugen, den es nicht gibt.
+  const NAVIGATION = new Set(['standard']);
+  const RESPONSIVE = new Set(['standard']);
+  const navigation = NAVIGATION.has(String(pageRaw.navigation || '').trim())
+    ? String(pageRaw.navigation).trim()
+    : 'standard';
+  const responsive = RESPONSIVE.has(String(pageRaw.responsive || '').trim())
+    ? String(pageRaw.responsive).trim()
+    : 'standard';
+
   return {
     id,
     name,
@@ -158,6 +180,12 @@ export function normalizeManifest(raw, folderName) {
     accent,
     entry,
     style: style || null,
+    page: {
+      composition,
+      width,
+      navigation,
+      responsive,
+    },
     route: {
       path: routePath,
       entry: modulePublicUrl(id, entry),

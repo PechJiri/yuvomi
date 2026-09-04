@@ -214,7 +214,8 @@ export async function render(container) {
   }
 
   const page = document.createElement('div');
-  page.className = 'recipes-page';
+  page.className = 'recipes-page app-page app-page--reading page-measure--narrow';
+  page.dataset.composition = 'reading';;
 
   // sr-only Titel: die geteilte Kitchen-Tabs-Leiste labelt das Modul bereits
   // sichtbar — konsistent mit Mahlzeiten/Einkauf. Der FAB ist die einzige

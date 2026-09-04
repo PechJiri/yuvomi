@@ -1035,10 +1035,20 @@ const MIGRATIONS_SQL = {
     );
   `,
 
-  // SQL-String für Migration v174 (gespiegelt aus db.js MIGRATIONS):
+  // SQL for migration v174 (mirrored from db.js MIGRATIONS):
+  // Optional name day and its own generated calendar event.
+  174: `
+    ALTER TABLE birthdays ADD COLUMN name_day TEXT;
+    ALTER TABLE birthdays ADD COLUMN name_day_calendar_event_id INTEGER
+      REFERENCES calendar_events(id) ON DELETE SET NULL;
+    CREATE INDEX IF NOT EXISTS idx_birthdays_name_day_calendar_ref
+      ON birthdays(name_day_calendar_event_id);
+  `,
+
+  // SQL-String für Migration v175 (gespiegelt aus db.js MIGRATIONS):
   // `access_permissions` akzeptiert neben Modulen und Widgets nun auch
   // feingranulare Capability-Schlüssel. Bestehende Overrides bleiben erhalten.
-  174: `
+  175: `
     CREATE TABLE access_permissions_new (
       subject_type  TEXT NOT NULL CHECK(subject_type IN ('role', 'user')),
       subject_id    TEXT NOT NULL,

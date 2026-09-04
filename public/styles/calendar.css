@@ -1076,7 +1076,7 @@
    * braucht seine Grenze beim Andocken, wo er über den Zeilen schwebt. */
   border-bottom: 1px solid var(--color-border);
   margin-bottom: var(--space-2);
-  max-width: var(--content-max-width-narrow);
+  max-width: var(--page-measure, var(--layout-reading));
   position: sticky;
   top: 0;
   background-color: var(--color-bg);

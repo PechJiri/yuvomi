@@ -2,7 +2,7 @@ import { api } from '/api.js';
 import { openModal as openSharedModal, closeModal, advancedSection } from '/components/modal.js';
 import { stagger, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
-import { t, formatDate, parseDateInput, isDateInputValid } from '/i18n.js';
+import { t, formatDate, parseDateInput, isDateInputValid, getLocale } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { todayKey } from '/utils/date.js';
@@ -14,6 +14,15 @@ import { findPageFab } from '/utils/fab.js';
 // Gross-Schreibung unterscheiden, waeren im Modul nicht auseinanderzuhalten.
 import { emptyStateHTML as sharedEmptyStateHTML, emptyHintHTML } from '/utils/empty-state.js';
 import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
+import {
+  renderAppPage,
+  renderPageHeader,
+  renderPageTitle,
+  renderPageBody,
+  renderPageActions,
+  renderPageSection,
+  renderListSection,
+} from '/utils/page-layout.js';
 
 let state = {
   birthdays: [],
@@ -72,6 +81,66 @@ function renderBirthdayReminderSection(birthday = null) {
           </select>
         </div>
       </div>
+    </div>`;
+}
+
+export function daysInNameDayMonth(month) {
+  const numeric = Number(month);
+  if (!Number.isInteger(numeric) || numeric < 1 || numeric > 12) return 0;
+  return new Date(Date.UTC(2000, numeric, 0)).getUTCDate();
+}
+
+export function normalizeNameDaySelection(month, day) {
+  const rawMonth = String(month ?? '').trim();
+  const rawDay = String(day ?? '').trim();
+  if (!rawMonth && !rawDay) return { value: null, complete: true };
+  if (!rawMonth || !rawDay) return { value: null, complete: false };
+  const monthNumber = Number(rawMonth);
+  const dayNumber = Number(rawDay);
+  if (!Number.isInteger(monthNumber) || !Number.isInteger(dayNumber)
+      || dayNumber < 1 || dayNumber > daysInNameDayMonth(monthNumber)) {
+    return { value: null, complete: false };
+  }
+  return {
+    value: `${String(monthNumber).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`,
+    complete: true,
+  };
+}
+
+function nameDayDayOptions(month, selectedDay = '') {
+  const count = daysInNameDayMonth(month);
+  const options = [`<option value="">${esc(t('birthdays.nameDayDayPlaceholder'))}</option>`];
+  for (let day = 1; day <= count; day++) {
+    const value = String(day).padStart(2, '0');
+    options.push(`<option value="${value}"${value === selectedDay ? ' selected' : ''}>${day}</option>`);
+  }
+  return options.join('');
+}
+
+export function renderNameDayField(birthday = null) {
+  const [selectedMonth = '', selectedDay = ''] = String(birthday?.name_day || '').split('-');
+  const monthFormatter = new Intl.DateTimeFormat(getLocale(), { month: 'long', timeZone: 'UTC' });
+  const months = Array.from({ length: 12 }, (_, index) => {
+    const value = String(index + 1).padStart(2, '0');
+    const label = monthFormatter.format(new Date(Date.UTC(2000, index, 1)));
+    return `<option value="${value}"${value === selectedMonth ? ' selected' : ''}>${esc(label)}</option>`;
+  }).join('');
+  return `
+    <div class="form-group birthday-name-day">
+      <span class="form-label" id="bd-name-day-label">${t('birthdays.nameDayLabel')}</span>
+      <div class="birthday-name-day__controls" role="group" aria-labelledby="bd-name-day-label">
+        <select class="form-input birthday-modal__select" id="bd-name-day-month" aria-label="${t('birthdays.nameDayMonthLabel')}">
+          <option value="">${t('birthdays.nameDayMonthPlaceholder')}</option>
+          ${months}
+        </select>
+        <select class="form-input birthday-modal__select" id="bd-name-day-day" aria-label="${t('birthdays.nameDayDayLabel')}"${selectedMonth ? '' : ' disabled'}>
+          ${nameDayDayOptions(selectedMonth, selectedDay)}
+        </select>
+        <button class="btn btn--secondary birthday-name-day__clear" type="button" id="bd-name-day-clear" aria-label="${t('birthdays.nameDayClear')}" title="${t('birthdays.nameDayClear')}">
+          <i data-lucide="x" aria-hidden="true"></i><span>${t('birthdays.nameDayClear')}</span>
+        </button>
+      </div>
+      <div class="birthday-name-day__hint">${t('birthdays.nameDayHint')}</div>
     </div>`;
 }
 
@@ -147,12 +216,15 @@ async function loadData() {
 }
 
 /**
- * Wie viele Geburtstage stehen unmittelbar an? `days_until` rechnet der Server
- * (`hydrateBirthday`), hier wird nur der Schnitt gezogen - deshalb liefert
- * dieselbe Regel auch fuer den Startwert aus `/dashboard` dieselbe Zahl.
+ * How many birthday or name-day occurrences are imminent?
+ * The server computes both distances (`hydrateBirthday`); this function only
+ * applies the cutoff, so `/dashboard` uses the same rule for its initial count.
+ * One person may count twice because the badge describes occurrences, not people.
  */
 export function countBirthdaysSoon(birthdays) {
-  return birthdays.filter((b) => (b.days_until ?? 9999) <= BIRTHDAY_BADGE_DAYS).length;
+  return birthdays.reduce((count, birthday) => count
+    + ((birthday.days_until ?? 9999) <= BIRTHDAY_BADGE_DAYS ? 1 : 0)
+    + ((birthday.name_day_days_until ?? 9999) <= BIRTHDAY_BADGE_DAYS ? 1 : 0), 0);
 }
 
 function updateBirthdayBadge() {
@@ -160,9 +232,16 @@ function updateBirthdayBadge() {
   setNavBadge('/birthdays', countBirthdaysSoon(state.birthdays), undefined, 'accent');
 }
 
-function birthdayItemHtml(birthday) {
+export function birthdayItemHtml(birthday) {
   const chip = countdownChip(birthday);
   const isToday = chip.mod === 'today';
+  const hasNameDay = birthday.next_name_day && Number.isInteger(birthday.name_day_days_until);
+  const nameDayMeta = hasNameDay
+    ? `<span class="birthday-item__name-day">`
+      + `${esc(t('birthdays.inDays', { days: birthday.name_day_days_until }))} · `
+      + `${esc(formatDate(birthday.next_name_day))} · ${esc(t('birthdays.celebratesNameDay'))}`
+      + '</span>'
+    : '';
   // Wischbedienung (Redesign Runde 4, C-2): auf Touch tragen die beiden
   // Richtungen, was bis dahin zwei Icon-Knoepfe in jeder Zeile trugen - in
   // einer Grouped-Liste die lauteste Stelle des Bildschirms. Auf
@@ -183,9 +262,10 @@ function birthdayItemHtml(birthday) {
         <strong class="list-row__name birthday-item__name">
           ${esc(birthday.name)}${isToday ? CAKE_SVG : ''}
         </strong>
-        <div class="list-row__meta birthday-item__meta">
+        <div class="list-row__meta birthday-item__meta${hasNameDay ? ' birthday-item__meta--with-name-day' : ''}">
           <span class="birthday-chip birthday-chip--${chip.mod}">${esc(chip.label)}</span>
           <span class="birthday-item__when">${esc(ageMeta(birthday))}</span>
+          ${nameDayMeta}
           ${birthday.notes ? `<span class="birthday-item__notes">${esc(birthday.notes)}</span>` : ''}
         </div>
       </div>
@@ -277,31 +357,49 @@ function wireBirthdaySwipe(host) {
 }
 
 function renderPage() {
+  // Reference page for PAGE-COMPOSITION.md: geometry only via page-layout helpers.
+  // Header and body sections share --layout-reading (PAGE-002).
   _container.replaceChildren();
-  _container.insertAdjacentHTML('beforeend', `
-    <div class="birthdays-page page-measure--narrow">
-      <div class="page-toolbar page-toolbar--wrap page-toolbar--narrow birthdays-toolbar">
-        <h1 class="page-toolbar__title">${t('birthdays.title')}</h1>
-        ${renderPageSearch({ id: 'birthdays-search', label: t('birthdays.searchPlaceholder'), placeholder: t('birthdays.searchPlaceholder'), value: state.query, clearLabel: t('common.searchClear'), className: 'birthdays-toolbar__search page-toolbar__center' })}
-        <!-- Der Aktions-Slot des Modulkopfs. Der Import-Knopf stand direkt in der
-             Leiste; die Shell dockt hier auf dem Desktop den Primärknopf an
-             (dockFabIntoToolbar in router.js), und der braucht einen Ort. -->
-        <div class="page-toolbar__actions">
+  _container.insertAdjacentHTML('beforeend', renderAppPage({
+    mode: 'reading',
+    className: 'birthdays-page',
+    legacyAlias: false,
+    header: renderPageHeader({
+      wrap: true,
+      narrow: true,
+      className: 'birthdays-toolbar',
+      title: renderPageTitle(t('birthdays.title')),
+      center: renderPageSearch({
+        id: 'birthdays-search',
+        label: t('birthdays.searchPlaceholder'),
+        placeholder: t('birthdays.searchPlaceholder'),
+        value: state.query,
+        clearLabel: t('common.searchClear'),
+        className: 'birthdays-toolbar__search page-toolbar__center',
+      }),
+      // Actions slot: Import + desktop-docked primary (dockFabIntoToolbar).
+      actions: renderPageActions(`
           <button class="btn btn--secondary birthdays-toolbar__import" id="birthdays-import-btn" type="button" aria-label="${t('birthdays.importButton')}">
             <i data-lucide="download" aria-hidden="true"></i><span>${t('birthdays.importButton')}</span>
-          </button>
-        </div>
-      </div>
-
-      <p class="birthdays-hint">${t('birthdays.calendarHint')}</p>
-
-      <div class="row-carrier birthdays-list" id="birthdays-list"></div>
-
+          </button>`),
+    }),
+    body: renderPageBody({
+      content: [
+        renderPageSection({
+          className: 'birthdays-hint-section',
+          content: `<p class="birthdays-hint">${t('birthdays.calendarHint')}</p>`,
+        }),
+        renderListSection({
+          className: 'birthdays-list-section',
+          content: `<div class="row-carrier birthdays-list" id="birthdays-list"></div>`,
+        }),
+      ].join('\n'),
+    }),
+    trailing: `
       <button class="page-fab" id="fab-new-birthday" aria-label="${t('birthdays.addButton')}" data-dock-label="${t('newLabel.birthdays')}">
         <i data-lucide="plus" class="icon-xl" aria-hidden="true"></i>
-      </button>
-    </div>
-  `);
+      </button>`,
+  }));
 
   renderList();
   if (window.lucide) window.lucide.createIcons({ el: _container });
@@ -386,12 +484,13 @@ function openBirthdayModal({ mode, birthday = null }) {
           </div>
         </div>
         ${advancedSection(`
+          ${renderNameDayField(birthday)}
           <div class="form-group">
             <label class="form-label" for="bd-notes">${t('birthdays.notesLabel')}</label>
             <textarea class="form-input" id="bd-notes" rows="3" placeholder="${t('birthdays.notesPlaceholder')}">${esc(birthday?.notes || '')}</textarea>
           </div>
           ${renderBirthdayReminderSection(birthday)}`,
-          { open: isEdit && (!!birthday?.notes || (!!birthday?.reminder_offset && birthday.reminder_offset !== '1440')) })}
+          { open: isEdit && (!!birthday?.name_day || !!birthday?.notes || (!!birthday?.reminder_offset && birthday.reminder_offset !== '1440')) })}
         <div class="birthday-modal__hint">${t('birthdays.calendarHint')}</div>
         <div class="birthday-modal__footer">
           ${isEdit ? `<button class="btn btn--danger" id="bd-delete">${t('common.delete')}</button>` : '<div></div>'}
@@ -446,6 +545,33 @@ function openBirthdayModal({ mode, birthday = null }) {
         if (reminderCustom) reminderCustom.hidden = reminderOffset.value !== 'custom';
       });
 
+      const nameDayMonth = panel.querySelector('#bd-name-day-month');
+      const nameDayDay = panel.querySelector('#bd-name-day-day');
+      const refreshNameDayDays = (preferredDay = '') => {
+        if (!nameDayDay) return;
+        const option = (value, label) => {
+          const node = document.createElement('option');
+          node.value = value;
+          node.textContent = label;
+          node.selected = value === preferredDay;
+          return node;
+        };
+        const options = [option('', t('birthdays.nameDayDayPlaceholder'))];
+        const dayCount = daysInNameDayMonth(nameDayMonth?.value);
+        for (let day = 1; day <= dayCount; day++) {
+          const value = String(day).padStart(2, '0');
+          options.push(option(value, String(day)));
+        }
+        nameDayDay.replaceChildren(...options);
+        nameDayDay.disabled = !nameDayMonth?.value;
+      };
+      nameDayMonth?.addEventListener('change', () => refreshNameDayDays(nameDayDay?.value));
+      panel.querySelector('#bd-name-day-clear')?.addEventListener('click', () => {
+        if (nameDayMonth) nameDayMonth.value = '';
+        refreshNameDayDays();
+        nameDayMonth?.focus();
+      });
+
       panel.querySelector('#bd-cancel').addEventListener('click', closeModal);
       // Löschen verwirft die Eingaben ohnehin mit dem Datensatz: der Dirty-Guard
       // hätte hier erst nach dem Verwerfen von Feldern gefragt, die gleich mit
@@ -460,9 +586,15 @@ function openBirthdayModal({ mode, birthday = null }) {
         const saveBtn = panel.querySelector('#bd-save');
         const birthDateRaw = panel.querySelector('#bd-birth-date').value;
         const birthDate = parseDateInput(birthDateRaw);
+        const nameDay = normalizeNameDaySelection(nameDayMonth?.value, nameDayDay?.value);
+        if (!nameDay.complete) {
+          window.yuvomi?.showToast(t('birthdays.nameDayIncomplete'), 'warning');
+          return;
+        }
         const body = {
           name: panel.querySelector('#bd-name').value.trim(),
           birth_date: birthDate,
+          name_day: nameDay.value,
           notes: panel.querySelector('#bd-notes').value.trim(),
           photo_data: photoData,
           reminder_offset: panel.querySelector('#bd-reminder-offset').value,

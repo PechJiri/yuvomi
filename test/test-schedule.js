@@ -4,10 +4,15 @@ process.env.DB_PATH = ':memory:';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { register } from 'node:module';
 import express from 'express';
 import { get } from '../server/db.js';
 import scheduleRouter, { isStillReferenced } from '../server/routes/schedule.js';
 import { cyclePosition, resolveEntries } from '../server/services/schedule.js';
+
+// Fuer die Verhaltenstests von overrideGroups()/rangeDifference() unten - laedt
+// public/pages/schedule.js als echtes Modul statt nur seinen Quelltext zu lesen.
+register('./test-browser-loader.mjs', import.meta.url);
 
 const database = get();
 database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('schedule-alice', 'Alice', 'x', 'member')").run();
@@ -136,6 +141,71 @@ test('the entries range is capped, and the cap names itself', async () => {
   assert.equal(overCap.status, 400, '732 days must not');
 });
 
+// `fill` writes real rows, unlike every other range-taking route in this file
+// which only reads - its cap (MAX_FILL_DAYS) is therefore its own constant,
+// not a reuse of MAX_RANGE_DAYS, and deliberately much smaller (schedule.js
+// justifies both numbers separately).
+test('overrides can be filled across a date range, self or admin-on-behalf, capped and validated', async () => {
+  const denied = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: BOB.id, from: '2027-03-01', to: '2027-03-05', shift_type_id: null } });
+  assert.equal(denied.status, 403, 'a member cannot fill someone else\'s schedule');
+
+  const inverted = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-03-10', to: '2027-03-01', shift_type_id: null } });
+  assert.equal(inverted.status, 400);
+  assert.match(inverted.body.error, /from must be before to/);
+
+  const overCap = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-01-01', to: '2027-05-01', shift_type_id: null } });
+  assert.equal(overCap.status, 400);
+  assert.match(overCap.body.error, /100 days/);
+
+  const badType = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-03-01', to: '2027-03-02', shift_type_id: 999999 } });
+  assert.equal(badType.status, 400);
+  assert.match(badType.body.error, /shift_type_id does not exist/);
+
+  // A pre-existing override in-range must be overwritten, not duplicated -
+  // fill uses the same ON CONFLICT upsert as the single-date PUT.
+  await call('PUT', '/overrides/2027-03-02', { as: ALICE, body: { user_id: ALICE.id, shift_type_id: typeId, note: 'stale' } });
+
+  const filled = await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-03-01', to: '2027-03-05', shift_type_id: null, note: 'Vacation' } });
+  assert.equal(filled.status, 200);
+  assert.equal(filled.body.data.updated, 5, 'five inclusive days, from and to both count');
+
+  const rows = database.prepare('SELECT date_key, shift_type_id, note FROM schedule_overrides WHERE user_id = ? AND date_key BETWEEN ? AND ? ORDER BY date_key').all(ALICE.id, '2027-03-01', '2027-03-05');
+  assert.equal(rows.length, 5);
+  assert.ok(rows.every((row) => row.shift_type_id === null && row.note === 'Vacation'), 'every day in range is free, including the one that was previously "stale"');
+
+  const asAdmin = await call('POST', '/overrides/fill', { as: ADMIN, body: { user_id: BOB.id, from: '2027-03-01', to: '2027-03-02', shift_type_id: typeId } });
+  assert.equal(asAdmin.status, 200, 'an admin may fill on behalf of another member');
+});
+
+// `DELETE /overrides` (collection) is `/overrides/fill`'s counterpart, for a
+// grouped range (client: overrideGroups()) that shrinks or disappears. Unlike
+// fill it is a single indexed DELETE, not a per-day write loop, so it carries
+// MAX_RANGE_DAYS (the read-side cap) rather than the smaller MAX_FILL_DAYS.
+test('a date range of overrides can be deleted in one call, self or admin-on-behalf', async () => {
+  const denied = await call('DELETE', '/overrides?user_id=' + BOB.id + '&from=2027-04-01&to=2027-04-05', { as: ALICE });
+  assert.equal(denied.status, 403, 'a member cannot clear someone else\'s schedule');
+
+  const inverted = await call('DELETE', '/overrides?user_id=' + ALICE.id + '&from=2027-04-10&to=2027-04-01', { as: ALICE });
+  assert.equal(inverted.status, 400);
+  assert.match(inverted.body.error, /from must be before to/);
+
+  await call('POST', '/overrides/fill', { as: ALICE, body: { user_id: ALICE.id, from: '2027-04-01', to: '2027-04-10', shift_type_id: null, note: 'Vacation' } });
+
+  // Deleting the middle of a ten-day range must leave exactly the two edges -
+  // this is what lets an edit shrink a grouped range from either end without
+  // touching the days it kept.
+  const deleted = await call('DELETE', '/overrides?user_id=' + ALICE.id + '&from=2027-04-04&to=2027-04-07', { as: ALICE });
+  assert.equal(deleted.status, 200);
+  assert.equal(deleted.body.data.deleted, 4);
+
+  const remaining = database.prepare('SELECT date_key FROM schedule_overrides WHERE user_id = ? AND date_key BETWEEN ? AND ? ORDER BY date_key').all(ALICE.id, '2027-04-01', '2027-04-10').map((r) => r.date_key);
+  assert.deepEqual(remaining, ['2027-04-01', '2027-04-02', '2027-04-03', '2027-04-08', '2027-04-09', '2027-04-10']);
+
+  const asAdmin = await call('DELETE', '/overrides?user_id=' + ALICE.id + '&from=2027-04-01&to=2027-04-03', { as: ADMIN });
+  assert.equal(asAdmin.status, 200, 'an admin may clear on behalf of another member');
+  assert.equal(asAdmin.body.data.deleted, 3);
+});
+
 test('a shift type may be added by anyone but only changed by its creator or an admin', async () => {
   const created = await call('POST', '/shift-types', { as: ALICE, body: { name: 'Standby', start_time: '18:00', end_time: '20:00' } });
   assert.equal(created.status, 201, 'every member may add a shift type');
@@ -230,6 +300,103 @@ test('overlapping patterns return a warning and the newer valid_from pattern win
   assert.deepEqual(response.body.data.warnings, [{ user_id: Number(carol), date_key: '2027-01-20', pattern_ids: [Number(newPattern), Number(oldPattern)] }]);
 });
 
+// The date arithmetic itself (rangeDifference) is exercised end-to-end by the
+// server test above - deleting the middle of a filled range and asserting the
+// exact remaining days IS the same computation the client runs locally before
+// calling DELETE. This test only pins the wiring: the client groups before
+// rendering, an edit reopens with editable bounds instead of a fixed date, and
+// a range delete asks first (a single day did not, until it became a group of
+// its own - one confirm dialog now covers both, so there is exactly one place
+// that can forget to ask before deleting many days at once).
+test('the Overrides tab groups consecutive same-type days and edits/deletes them as a range', () => {
+  const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
+  assert.match(schedulePage, /function overrideGroups\(overrides = state\.overrides\)/);
+  assert.match(schedulePage, /function rangeDifference\(oldFrom, oldTo, newFrom, newTo\)/);
+  assert.match(schedulePage, /data-form="override-edit"/);
+  assert.match(schedulePage, /data-action="delete-override-range"/);
+  assert.match(schedulePage, /overrideGroups\(\)\.find\(/);
+  const editBranch = schedulePage.slice(schedulePage.indexOf("form.dataset.form === 'override-edit'"), schedulePage.indexOf("await load();\n    renderPage();"));
+  assert.match(editBranch, /confirmModal\(/, 'saving an edited range confirms before writing and deleting');
+  assert.match(editBranch, /rangeDifference\(/, 'shrinking a range removes what fell outside it, not just fills the new span');
+  const deleteBranch = schedulePage.slice(schedulePage.indexOf("'delete-override-range'"), schedulePage.indexOf("'save-days'"));
+  assert.match(deleteBranch, /confirmModal\(/, 'deleting a range confirms first, unlike the old single-day delete');
+});
+
+// Real behaviour instead of a name-in-source check (PR #930 review): a text
+// guard stays green if overrideGroups() is renamed or gutted to return [].
+// Both functions now take their input as a parameter (overrideGroups(overrides),
+// already pure for rangeDifference), so a test can hand them real days and
+// check the actual grouping/diff instead of asserting on the identifier.
+test('overrideGroups() merges consecutive same-series days and splits on a gap or a change', async () => {
+  const { __test } = await import('../public/pages/schedule.js');
+  const row = (id, date_key, overrides = {}) => ({ id, user_id: 1, date_key, shift_type_id: typeId, note: null, ...overrides });
+
+  // Drei aufeinanderfolgende Tage derselben Person/Schicht -> eine Gruppe.
+  const consecutive = __test.overrideGroups([row(1, '2027-03-01'), row(2, '2027-03-02'), row(3, '2027-03-03')]);
+  assert.equal(consecutive.length, 1, 'three consecutive days of the same type must merge into one group');
+  assert.deepEqual([consecutive[0].from, consecutive[0].to], ['2027-03-01', '2027-03-03']);
+  assert.deepEqual(consecutive[0].ids, [1, 2, 3]);
+
+  // Eine Luecke (04. fehlt) -> zwei Gruppen, nicht eine ueberspannende.
+  const withGap = __test.overrideGroups([row(1, '2027-03-01'), row(2, '2027-03-02'), row(3, '2027-03-05')]);
+  assert.equal(withGap.length, 2, 'a gap in the dates must split into two groups');
+  assert.deepEqual([withGap[0].from, withGap[0].to], ['2027-03-01', '2027-03-02']);
+  assert.deepEqual([withGap[1].from, withGap[1].to], ['2027-03-05', '2027-03-05']);
+
+  // Ein Wechsel der Schichtart mitten in der Reihe splittet ebenso, obwohl die
+  // Tage selbst luckenlos sind.
+  const otherTypeId = typeId + 1;
+  const typeChange = __test.overrideGroups([row(1, '2027-03-01'), row(2, '2027-03-02', { shift_type_id: otherTypeId })]);
+  assert.equal(typeChange.length, 2, 'a different shift_type_id must not merge with its neighbour');
+});
+
+test('rangeDifference() finds exactly what fell outside a shrunk range, and nothing when it only grew', async () => {
+  const { __test } = await import('../public/pages/schedule.js');
+
+  // Verkuerzt an BEIDEN Enden: zwei Reststuecke.
+  assert.deepEqual(
+    __test.rangeDifference('2027-04-01', '2027-04-10', '2027-04-03', '2027-04-07'),
+    [{ from: '2027-04-01', to: '2027-04-02' }, { from: '2027-04-08', to: '2027-04-10' }],
+  );
+
+  // Verkuerzt nur am Ende: ein Reststueck.
+  assert.deepEqual(
+    __test.rangeDifference('2027-04-01', '2027-04-10', '2027-04-01', '2027-04-07'),
+    [{ from: '2027-04-08', to: '2027-04-10' }],
+  );
+
+  // Nur erweitert, nicht verkuerzt: keine Reststuecke - eine Erweiterung darf
+  // nichts loeschen, das ist der Unterschied zwischen "editieren" und "fuellen".
+  assert.deepEqual(__test.rangeDifference('2027-04-03', '2027-04-07', '2027-04-01', '2027-04-10'), []);
+});
+
+// The three library tabs (shift types, patterns, overrides) are one module,
+// not three, and their empty states used to say otherwise: overrides fell back
+// to a bare paragraph while its siblings already used the shared
+// emptyStateHTML grammar (icon, title, description, CTA). Caught after a user
+// noticed the mismatch directly - the same regression an add-only PR review
+// would not catch, since a bare `<p>` still renders "something."
+test('all three Schedule library tabs share the same empty-state grammar', () => {
+  const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
+  assert.match(schedulePage, /function emptyOverrideState\(\)/);
+  const emptyOverrideBody = schedulePage.slice(schedulePage.indexOf('function emptyOverrideState'), schedulePage.indexOf('function overrideRows'));
+  assert.match(emptyOverrideBody, /emptyStateHTML\(/, 'overrides must use the shared empty-state component, like patterns and shift types');
+  assert.doesNotMatch(schedulePage, /if \(!groups\.length\) return '<p>'/, 'the old bare-paragraph empty state must not come back');
+});
+
+// Vacation/Sick are shift types without a start/end time - the schema already
+// allows this (start_time and end_time are nullable as a pair, and a type
+// without them renders as "all day"), so an absence reason needed no new
+// column or endpoint, only two more preset entries. Verified server-side too,
+// by the existing 'schedule routes reject invalid shift times' test elsewhere
+// in this file exercising the same POST /shift-types with null times.
+test('quick-start includes Vacation and Sick as timeless presets, not just work shifts', () => {
+  const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
+  const presetsBlock = schedulePage.slice(schedulePage.indexOf('const SHIFT_PRESETS'), schedulePage.indexOf(']);') + 3);
+  assert.match(presetsBlock, /key: 'vacation'.*startTime: null.*endTime: null/, 'vacation must carry no times, like a real absence rather than a shift');
+  assert.match(presetsBlock, /key: 'sick'.*startTime: null.*endTime: null/, 'sick must carry no times, like a real absence rather than a shift');
+});
+
 test('calendar defaults to compact Schedule strips, includes their start time, and keeps 24-hour shifts in their start-day strip', () => {
   const calendarPage = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
   assert.match(calendarPage, /scheduleDisplay: 'compact'/);
@@ -260,7 +427,11 @@ test('Schedule uses the full desktop module shell and responsive library/statist
   const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
   const scheduleCss = readFileSync(new URL('../public/styles/schedule.css', import.meta.url), 'utf8');
   assert.doesNotMatch(schedulePage, /page-measure--narrow schedule-page/);
-  assert.match(schedulePage, /<div class=\"schedule-page\">/);
+  // Die Wurzel traegt die Modulklasse; seit dem Kompositionssystem stehen die
+  // Layout-Primitives daneben (app-page app-page--full). Geprueft wird die Sache -
+  // die Seite ist als schedule-page ausgezeichnet -, nicht die Schreibweise, sonst
+  // wird dieser Guard bei jeder korrekten Erweiterung des Wurzelmarkups rot.
+  assert.match(schedulePage, /<div class=\"schedule-page(?:\s[^\"]*)?\"/);
   assert.match(schedulePage, /schedule-library--shifts/);
   assert.match(scheduleCss, /container: schedule-page \/ inline-size/);
   assert.match(scheduleCss, /@container schedule-page \(min-width: 720px\)/);

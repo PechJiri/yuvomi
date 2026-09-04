@@ -3691,7 +3691,7 @@ test('das Lesemass haengt an der Seite, nicht am Traeger', () => {
   const layout = read('../public/styles/layout.css');
   const shared = read('../public/styles/list-row.css');
 
-  assert.match(layout, /\.page-measure--narrow\s*\{[\s\S]*?--page-measure:\s*var\(--content-max-width-narrow\)/,
+  assert.match(layout, /\.(?:page-measure--narrow|app-page--reading)\s*\{[\s\S]*?--page-measure:\s*var\(--layout-reading\)/,
     'die Rolle muss die Variable setzen - sonst liest der Rest hier nichts');
 
   // Die Traeger lesen die Variable, mit der alten Konstante als Rueckfall.
@@ -3712,7 +3712,9 @@ test('das Lesemass haengt an der Seite, nicht am Traeger', () => {
     const src = read(page);
     if (!/class="[^"]*\blist-row\b/.test(src)) continue;
     if (ZWEISPALTIG.test(src)) continue;
-    assert.match(src, /page-measure--narrow/,
+    // Calendar agenda toggles reading measure per view (is-reading-measure).
+    if (/is-reading-measure/.test(src) && /app-page--full|data-composition="full"/.test(src)) continue;
+    assert.match(src, /page-measure--narrow|app-page--(?:reading|data|dashboard|form)|data-composition="(?:reading|data|dashboard|form)"|mode:\s*'(?:reading|data|dashboard|form)'|renderAppPage\s*\(/,
       `${page}: zeigt eine Zeilenliste, traegt das Lesemass der Seite aber nicht - `
       + 'Kopf und Bedienzeilen enden dann neben ihrem eigenen Koerper');
   }
@@ -8325,7 +8327,7 @@ test('birthday and navigation headings keep a sequential hierarchy', () => {
   const birthdays = read('../public/pages/birthdays.js');
   const navigation = read('../public/settings/pages/modules-navigation.js');
 
-  assert.match(birthdays, /<h1 class="page-toolbar__title">/);
+  assert.match(birthdays, /<h1 class="page-toolbar__title">|renderPageTitle\s*\(/);
   assert.doesNotMatch(birthdays, /<h3>/);
   assert.match(navigation, /<h2 class="settings-navigation-panel__title"/);
   assert.match(navigation, /<h3 class="settings-navigation-group__title"/);
@@ -8631,6 +8633,13 @@ test('page-inline-pad contract holds across every stylesheet (#577)', () => {
 
   // (2) Wer die Content-Spalte trägt, darf sie nirgends mit einem Festwert
   //     überschreiben - auch nicht in einem späteren @media-Block derselben Datei.
+  //
+  // Composition pages may move the gutter to `.app-page__body` in layout.css
+  // (PAGE-COMPOSITION.md). That counts as the carrier when the page root uses
+  // `.app-page` / `renderAppPage` and the module CSS no longer repeats the pad.
+  const layoutCss = read('../public/styles/layout.css');
+  const compositionBodyOwnsPad = /\.app-page--(?:reading|form|data|dashboard)\s*>\s*\.app-page__body[\s\S]{0,200}?padding-inline:\s*var\(--page-inline-pad\)/.test(layoutCss);
+
   for (const mod of bleedModules) {
     const css = read(`../public/styles/${mod}.css`);
     const rules = cssRules(css);
@@ -8638,7 +8647,11 @@ test('page-inline-pad contract holds across every stylesheet (#577)', () => {
       rules.filter((r) => /padding-inline:\s*var\(--page-inline-pad\)|margin-inline:\s*var\(--page-inline-pad\)/.test(r.body))
         .flatMap((r) => r.selectors),
     );
-    assert.ok(carriers.size > 0, `${mod}: kein Träger der Content-Spalte (--page-inline-pad) gefunden (#577)`);
+    const pageFile = `../public/pages/${mod}.js`;
+    const pageSrc = existsSync(new URL(pageFile, import.meta.url)) ? read(pageFile) : '';
+    const usesCompositionBody = /app-page|renderAppPage/.test(pageSrc) && compositionBodyOwnsPad;
+    assert.ok(carriers.size > 0 || usesCompositionBody,
+      `${mod}: kein Träger der Content-Spalte (--page-inline-pad) gefunden (#577)`);
 
     for (const rule of rules) {
       for (const sel of rule.selectors.filter((s) => carriers.has(s))) {
@@ -8710,7 +8723,7 @@ test('wer seinen Körper aufs Lesemaß kappt, kappt auch seinen Kopf', () => {
   for (const file of pages) {
     const src = read(file);
     // EIN KOPF, EINE BREITE - die bewusste Gegenform (2026-08-27): wer sein
-    // Lesemass je SICHT am Koerper toggelt (page-measure--narrow), den Kopf
+    // Lesemass je SICHT am Koerper toggelt (page-measure--narrow / is-reading-measure), den Kopf
     // aber konstant laesst, hat gemischte Koerperbreiten und haelt die Kante
     // seines BREITESTEN Koerpers. Heute ist das der Kalender: drei Flaechen,
     // eine Lesebahn - und seit die Ansichts-Umschalter in der Bar-Zeile
@@ -8718,7 +8731,7 @@ test('wer seinen Körper aufs Lesemaß kappt, kappt auch seinen Kopf', () => {
     // wohnen (Sonde 19). Der Verzicht ist an der BAUART ablesbar, nicht an
     // einem Dateinamen; wer BEIDE toggelt (tasks: Liste gegen Kanban), wird
     // weiter geprueft.
-    if (/classList\.toggle\(\s*'page-measure--narrow'/.test(src)
+    if (/classList\.toggle\(\s*'(?:page-measure--narrow|is-reading-measure)'/.test(src)
       && !/classList\.toggle\(\s*'page-toolbar--narrow'/.test(src)) continue;
     // Jeder Kopf dieser Seite, egal ob als Template-Literal oder über className.
     const heads = [
@@ -8765,11 +8778,11 @@ test('wer seinen Körper aufs Lesemaß kappt, kappt auch seinen Kopf', () => {
   // rail-brechend aus.
   const spacer = narrowRules.filter((r) =>
     r.selectors.some((sel) => /\.page-toolbar--narrow::after\b/.test(sel))
-    && /flex(?:-basis)?:[^;]*var\(--content-max-width-narrow\)/.test(r.body));
+    && /flex(?:-basis)?:[^;]*var\(--page-measure,\s*var\(--layout-reading\)\)|flex(?:-basis)?:[^;]*var\(--layout-reading\)/.test(r.body));
   assert.equal(
     spacer.length, 1,
     'layout.css: .page-toolbar--narrow::after muss das Ende seiner Zeile als Flex-Slot auf '
-    + '--content-max-width-narrow zurückholen (genau eine Regel, gefunden: ' + spacer.length + ')',
+    + '--page-measure/--layout-reading zurückholen (genau eine Regel, gefunden: ' + spacer.length + ')',
   );
 
   // Und KEINE der Regeln darf den Rückhalt wieder als Marge setzen. Über ALLE
@@ -14846,4 +14859,713 @@ test('der Lucide-Ausschnitt läuft nach dem Bundle und vor jedem Modul, das ihn 
     .filter((s) => /createIcons/.test(read(`../public${s.src}`)));
   assert.deepEqual(early.map((s) => s.src), [],
     'Diese Skripte laufen vor dem Patch und rufen createIcons - der Aufruf ist dort ungescopt');
+});
+
+/* ============================================================
+ * PAGE COMPOSITION SYSTEM - PAGE-001 ... PAGE-011
+ * (docs/PAGE-COMPOSITION.md)
+ * ============================================================ */
+
+const COMPOSITION_MODES = ['reading', 'data', 'dashboard', 'form', 'split', 'full'];
+
+/**
+ * WER GEPRUEFT WIRD, STEHT IN KEINER LISTE.
+ *
+ * Die erste Fassung dieses Blocks fuehrte eine Allowlist migrierter Seiten: nur
+ * wer darin stand, wurde geprueft. Eine neue Seite waere still durchgefallen -
+ * sie stand in keiner der beiden Listen, und jede Schleife begann mit
+ * `if (!MIGRATED.has(name)) continue;`. Genau dieselbe Bauart hat die Codebasis
+ * schon zweimal bezahlt (Kuechen-Zusammenfuehrung, Budget-Guards): eine
+ * Allowlist deckt die Dateien ab, an die jemand gedacht hat, eine Regel deckt
+ * das Problem ab.
+ *
+ * Der Geltungsbereich kommt deshalb aus `router.js`. Eine Route mit
+ * `requiresAuth: false` zeichnet ohne App-Shell (Login, Setup, Einladung,
+ * Passwort-Reset) und kann den Vertrag nicht erfuellen; alles andere steht
+ * dahinter und muss ihn erfuellen. Eine morgen angelegte Seite ist an dem Tag
+ * erfasst, an dem sie eine Route bekommt.
+ */
+function routerPageRows() {
+  const router = read('../public/router.js');
+  const rows = [...router.matchAll(
+    /page:\s*'\/pages\/([\w-]+)\.js'[^}]*?requiresAuth:\s*(true|false)/g)]
+    .map((r) => ({ name: `${r[1]}.js`, auth: r[2] === 'true' }));
+  // DER AUSDRUCK MUSS SELBST ETWAS GELESEN HABEN, bevor das Dateisystem dazu
+  // kommt. Sonst kippt der Geltungsbereich beim Tod des Ausdrucks nicht auf
+  // null, sondern auf ALLES: `standalone` ist leer, die Schleife unten nimmt
+  // jede Datei, Login und Setup eingeschlossen, und jede `>=`-Untergrenze in
+  // PAGE-000 bleibt gruen - der Nachweis haette den Fall, fuer den er
+  // geschrieben wurde, nie gesehen (claude-review, zweite Runde an #995).
+  if (!rows.some((r) => !r.auth)) {
+    throw new Error('Der Router-Ausdruck liest keine Route mit requiresAuth: false mehr - '
+      + 'hat sich die Routentabelle in public/router.js umformatiert?');
+  }
+  return rows;
+}
+
+function pagesBehindAppShell() {
+  const rows = routerPageRows();
+  const shell = new Set(rows.filter((r) => r.auth).map((r) => r.name));
+  const standalone = new Set(rows.filter((r) => !r.auth).map((r) => r.name));
+  // Unterseiten ohne eigene Route (budget-stats, split-expenses ...) werden von
+  // einer App-Route nachgeladen und gehoeren damit ebenfalls hinter die Shell.
+  for (const file of walkJsFiles('../public/pages/')) {
+    const name = file.split('/').pop();
+    if (!standalone.has(name)) shell.add(name);
+  }
+  return [...shell].sort();
+}
+
+/**
+ * NOCH NICHT MIGRIERT - DIESE LISTE DARF NUR SCHRUMPFEN.
+ *
+ * Jeder Eintrag ist eine Seite, die es vor den Vertrag geschafft hat. Migrieren
+ * heisst: Zeile loeschen. PAGE-011 wird rot, wenn die Liste waechst, und ebenso,
+ * wenn ein Eintrag auf eine Seite zeigt, die es nicht mehr gibt - sonst haelt
+ * eine tote Zeile eine Ausnahme offen, die niemand mehr braucht.
+ */
+const COMPOSITION_PENDING = new Set([
+  'shopping.js',
+  'meals.js',
+  'settings.js',
+]);
+
+/** Stand bei Einfuehrung der Regel. Nach unten anpassen, nie nach oben. */
+const COMPOSITION_PENDING_MAX = 3;
+
+function compositionScope() {
+  return pagesBehindAppShell().filter((name) => !COMPOSITION_PENDING.has(name));
+}
+
+/** Seiten-CSS im Geltungsbereich; Unterseiten ohne eigene Datei fallen raus. */
+function compositionScopeCss() {
+  return compositionScope()
+    .map((name) => name.replace(/\.js$/, '.css'))
+    .filter((css) => existsSync(new URL(`../public/styles/${css}`, import.meta.url)));
+}
+
+const COMPOSITION_BLACKLIST_WIDTH = /max-width\s*:\s*(?!none|100%|var\(--(?:page-measure|layout-|content-max-width))[0-9.]+(?:px|rem|em|vw)/i;
+// Auch `calc(-1 * var(--x))` und `-.5rem` sind negative Margen - die erste
+// Fassung verlangte `-` plus Ziffer direkt nach dem Doppelpunkt und sah damit
+// genau das Idiom nicht, das dieses Repo benutzt (auch .page-section--bleed
+// selbst). Ein Guard, der sein eigenes Beispiel nicht faengt, prueft nichts.
+const COMPOSITION_NEGATIVE_MARGIN = /margin(?:-inline|-left|-right|-inline-start|-inline-end)?\s*:\s*(?:-[0-9.]|calc\(\s*-)/i;
+
+test('PAGE-000: der Geltungsbereich ist nicht leer und deckt fast alle Seiten', () => {
+  // REICHWEITEN-NACHWEIS. Ohne ihn koennte jede Regel darunter gruen sein, weil
+  // sie ueber null Dateien laeuft - ein Tippfehler im Router-Regex genuegt.
+  const rows = routerPageRows();
+  const standalone = rows.filter((r) => !r.auth).length;
+  assert.ok(rows.length >= 20,
+    `Der Router-Ausdruck liest nur ${rows.length} Routen - ohne ihn kommt der Bereich aus dem Dateisystem und ist zu GROSS, nicht leer`);
+  assert.ok(standalone >= 4,
+    `Nur ${standalone} Routen ohne App-Shell erkannt (Login, Setup, Einladung, Reset) - der Ausdruck liest requiresAuth nicht mehr`);
+  const shell = pagesBehindAppShell();
+  const scope = compositionScope();
+  const all = walkJsFiles('../public/pages/').length;
+  assert.ok(shell.length >= 20,
+    `Nur ${shell.length} Seiten hinter der App-Shell erkannt - liest der Router-Ausdruck noch?`);
+  assert.ok(!shell.includes('login.js') && !shell.includes('setup.js'),
+    'Login und Setup zeichnen ohne App-Shell und gehoeren nicht in den Geltungsbereich');
+  assert.ok(scope.length >= 15,
+    `Nur ${scope.length} Seiten im Geltungsbereich - die Regeln pruefen fast nichts`);
+  assert.ok(scope.length >= all - 8,
+    `${all - scope.length} von ${all} Seiten sind ausgenommen - das ist wieder eine Allowlist`);
+  assert.ok(compositionScopeCss().length >= 12,
+    'Zu wenige Seiten-CSS im Geltungsbereich - die CSS-Regeln laufen ins Leere');
+});
+
+test('PAGE-011: die Ausnahmeliste waechst nicht und enthaelt nur echte Seiten', () => {
+  assert.ok(COMPOSITION_PENDING.size <= COMPOSITION_PENDING_MAX,
+    `Die Ausnahmeliste ist auf ${COMPOSITION_PENDING.size} gewachsen (erlaubt: `
+    + `${COMPOSITION_PENDING_MAX}). Eine neue Seite gehoert nicht auf diese Liste, `
+    + 'sie erfuellt den Vertrag von Anfang an.');
+  assert.equal(COMPOSITION_PENDING.size, COMPOSITION_PENDING_MAX,
+    `Es sind nur noch ${COMPOSITION_PENDING.size} Ausnahmen - setze `
+    + `COMPOSITION_PENDING_MAX auf ${COMPOSITION_PENDING.size} herunter, sonst haelt `
+    + 'der Guard Platz frei, den niemand mehr braucht.');
+  const shell = new Set(pagesBehindAppShell());
+  for (const name of COMPOSITION_PENDING) {
+    assert.ok(existsSync(new URL(`../public/pages/${name}`, import.meta.url)),
+      `PAGE-011: ${name} steht auf der Ausnahmeliste, die Datei gibt es nicht mehr`);
+    assert.ok(shell.has(name),
+      `PAGE-011: ${name} liegt nicht hinter der App-Shell und braucht keine Ausnahme`);
+  }
+});
+
+test('PAGE-001: every page behind the app shell declares exactly one composition mode', () => {
+  for (const name of compositionScope()) {
+    const src = withoutHtmlComments(read(`../public/pages/${name}`));
+    const found = COMPOSITION_MODES.filter((mode) =>
+      new RegExp(`app-page--${mode}|data-composition="${mode}"|mode:\\s*'${mode}'`).test(src));
+    // Compat: page-measure--narrow alone counts as reading until aliases retire.
+    if (/page-measure--narrow/.test(src) && !found.includes('reading')) found.push('reading');
+    assert.ok(found.length >= 1, `PAGE-001 ${name}: must declare a composition mode`);
+    assert.equal(found.length, 1,
+      `PAGE-001 ${name}: exactly one mode expected, found ${found.join(',')}`);
+  }
+});
+
+test('PAGE-002: PageHeader and PageBody share composition context', () => {
+  const layout = read('../public/styles/layout.css');
+  assert.match(layout, /\.app-page--reading[\s\S]*?--page-measure:\s*var\(--layout-reading\)/,
+    'PAGE-002: reading mode must set --page-measure');
+  assert.match(layout, /\.page-measure--narrow[\s\S]*?--page-measure:\s*var\(--layout-reading\)|\.app-page--reading,\s*\n\.app-page--form,\s*\n\.page-measure--narrow/,
+    'PAGE-002: compat alias and reading mode share --page-measure');
+  // Budget KPI band must read the page measure (Header/Body axis).
+  assert.match(layout, /\.page-measure--narrow :is\([\s\S]*?\.metric-grid/,
+    'PAGE-002: .metric-grid must share the reading measure with header/list');
+  // Und der Abstand ZWISCHEN Kopf und Koerper ist Teil desselben Kontexts:
+  // birthdays.css gab sein `gap` an die Seite ab, die Seite hatte keines.
+  assert.match(layout, /\.app-page:has\(> \.app-page__body\)\s*\{[^}]*gap:\s*var\(--space-3\)/,
+    'PAGE-002: .app-page must space toolbar and .app-page__body - the module CSS no longer does');
+});
+
+test('PAGE-003: primary content must not define arbitrary width', () => {
+  for (const name of compositionScope()) {
+    const src = withoutBlockComments(read(`../public/pages/${name}`));
+    // Geprueft wird der WERT von max-width, nicht das ganze style-Attribut:
+    // mit `style="width:100%;max-width:843px"` liess der Treffer auf `100%`
+    // weiter vorn die 843px durch.
+    const hits = [...src.matchAll(/style\s*=\s*["'][^"']*?max-width\s*:\s*([^;"']+)/gi)];
+    for (const hit of hits) {
+      assert.ok(/var\(--(?:page-measure|layout-|content-max-width)/.test(hit[1]) || /^\s*(?:100%|none)\s*$/.test(hit[1]),
+        `PAGE-003 ${name}: arbitrary inline max-width - ${hit[1]}`);
+    }
+  }
+  for (const file of compositionScopeCss()) {
+    const css = withoutBlockComments(read(`../public/styles/${file}`));
+    for (const rule of eachRule(css)) {
+      if (!COMPOSITION_BLACKLIST_WIDTH.test(rule.body)) continue;
+      if (/--layout-|--page-measure|--content-max-width/.test(rule.body)) continue;
+      // Component-internal widths (chips, avatars, icons) are fine; page roots are not.
+      if (/\.(?:app-page|[\w-]+-page)\b/.test(rule.selector)) {
+        assert.fail(`PAGE-003 ${file}: page-level arbitrary width in ${rule.selector}`);
+      }
+    }
+  }
+});
+
+test('PAGE-004: layout width tokens exist and are wired', () => {
+  const tokens = read('../public/styles/tokens.css');
+  assert.match(tokens, /--layout-reading:\s*var\(--content-max-width-narrow\)/,
+    'PAGE-004: --layout-reading');
+  assert.match(tokens, /--layout-content:\s*60rem/,
+    'PAGE-004: --layout-content');
+  assert.match(tokens, /--layout-wide:\s*75rem/,
+    'PAGE-004: --layout-wide');
+  const layout = read('../public/styles/layout.css');
+  assert.match(layout, /\.app-page\s*\{/, 'PAGE-004: .app-page primitive');
+  assert.match(layout, /\.page-measure\s*\{/, 'PAGE-004: .page-measure primitive');
+  assert.match(layout, /\.page-section--bleed\s*\{/, 'PAGE-004: bleed primitive');
+  assert.ok(existsSync(new URL('../public/utils/page-layout.js', import.meta.url)),
+    'PAGE-004: page-layout.js must exist');
+});
+
+// Die geteilte Breakpoint-Skala, wie sie im Repo tatsaechlich steht: jede
+// Stufe als max-width (639) und als min-width (640) - gemessen ueber alle
+// public/styles/*.css, 121 Media-Queries, keine einzige daneben. Die erste
+// Fassung dieses Guards fuehrte 640/768/900/1024/1440 als Skala und liess
+// zusaetzlich alles unter 600 durch; damit war `@media (max-width: 637px)`,
+// das eigene Beispiel der Spec, gerade NICHT gefangen.
+const COMPOSITION_BREAKPOINT_SCALE = new Set([639, 640, 767, 768, 1023, 1024, 1439, 1440]);
+
+test('PAGE-005: pages in scope avoid local page-geometry breakpoints', () => {
+  let seen = 0;
+  for (const file of compositionScopeCss()) {
+    const css = withoutBlockComments(read(`../public/styles/${file}`));
+    const widths = [...css.matchAll(/@media[^{]*?\(\s*(?:min|max)-width\s*:\s*([0-9.]+)(px|rem|em)\s*\)/g)];
+    seen += widths.length;
+    const odd = widths
+      .filter(([, value, unit]) => unit !== 'px' || !COMPOSITION_BREAKPOINT_SCALE.has(Number(value)))
+      .map(([, value, unit]) => `${value}${unit}`);
+    assert.deepEqual(odd, [],
+      `PAGE-005 ${file}: breakpoints off the shared scale: ${odd.join(', ')} - a page does not own its own breakpoints`);
+  }
+  assert.ok(seen >= 40, `PAGE-005: only ${seen} media queries seen in scope - the scan is blind`);
+});
+
+test('PAGE-006: page-level negative margins are prohibited in scope', () => {
+  // Negative Margen an Bauteilen INNERHALB einer Seite sind erlaubt (ein Chip,
+  // der seinen Rand ausgleicht); an der Seitenwurzel oder einem `*-page`-Traeger
+  // kompensieren sie Geometrie, die dem Kern gehoert. Gezaehlt wird, was die
+  // Regex ueberhaupt sieht: sieht sie nichts, prueft die Schleife nichts.
+  let seen = 0;
+  for (const file of compositionScopeCss()) {
+    const css = withoutBlockComments(read(`../public/styles/${file}`));
+    for (const rule of eachRule(css)) {
+      if (!COMPOSITION_NEGATIVE_MARGIN.test(rule.body)) continue;
+      seen++;
+      if (/\.page-section--bleed/.test(rule.selector)) continue;
+      if (/\.(?:app-page|[\w-]+-page)\b/.test(rule.selector)) {
+        assert.fail(`PAGE-006 ${file}: page-level negative margin in ${rule.selector}`);
+      }
+    }
+  }
+  assert.ok(seen >= 3,
+    `PAGE-006: the regex matched only ${seen} negative margins in scope - it no longer sees the calc(-1 * ...) idiom`);
+});
+
+test('PAGE-007: page-layout helpers export the contract surface', () => {
+  const src = read('../public/utils/page-layout.js');
+  for (const name of [
+    'COMPOSITION_MODES',
+    'compositionModeClass',
+    'renderAppPage',
+    'renderPageHeader',
+    'renderPageTitle',
+    'renderPageActions',
+    'renderPageBody',
+    'renderPageSection',
+    'renderListSection',
+    'renderMetricBand',
+  ]) {
+    assert.match(src, new RegExp(`export (?:const|function) ${name}`),
+      `PAGE-007: missing export ${name}`);
+  }
+  assert.match(src, /COMPOSITION_MODES = Object\.freeze\(\[\s*'reading'/,
+    'PAGE-007: modes must include reading');
+});
+
+test('PAGE-006b: a page without a measure does not narrow its header', () => {
+  // `.page-toolbar--narrow` zieht das Zeilenende des Kopfes auf --page-measure.
+  // In `full` und `split` gibt es dieses Mass nicht (`--page-measure: 100%`),
+  // der Koerper laeuft ueber die Nutzbreite. Ein statisch gesetzter Modifier
+  // faellt dort auf den Rueckfall (720px) zurueck und der Kopf endet neben
+  // seinem Koerper - so kam #929 bei den Notizen an: Kopf bei 720px, das
+  // Masonry-Raster daneben bis fuenf Spalten breit. Wer je Ansicht toggelt
+  // (Kalender), wird oben unter der Kopplungsregel geprueft, nicht hier.
+  let checked = 0;
+  for (const file of compositionScope()) {
+    const src = read(`../public/pages/${file}`);
+    if (!/app-page--(?:full|split)\b|data-composition="(?:full|split)"|mode:\s*'(?:full|split)'/.test(src)) continue;
+    checked++;
+    const heads = [...src.matchAll(/class="([^"]*\bpage-toolbar\b[^"]*)"/g)].map((m) => m[1]);
+    for (const classList of heads) {
+      assert.ok(!/\bpage-toolbar--narrow\b/.test(classList),
+        `PAGE-006b ${file}: "${classList}" narrows the header on a page whose body has no measure`);
+    }
+  }
+  assert.ok(checked >= 2, `PAGE-006b: only ${checked} full/split pages found - calendar and notes should be two`);
+});
+
+test('PAGE-007b: a header keeps its slots as direct children, whatever the options', async () => {
+  // Das Absender-Siegel und der Dock-Titel suchen `:scope > .page-toolbar__title`
+  // (ux.js), die Large-Title-Regeln `.page-toolbar > .page-toolbar__title`
+  // (typography.css). Ein Wrapper um die Slots macht beides blind - auf
+  // /birthdays fehlten Siegel und Dock-Titel, weil `measured` den Titel eine
+  // Ebene tiefer legte. Runde eins an #995 nahm den Rail fuer `narrow` heraus
+  // und liess ihn ohne `narrow` als "echte Box" stehen; Runde sechs (Codex)
+  // fand, dass die Box den Titel genauso versteckt - und die Kombination war
+  // dokumentiert. Der Helper darf in KEINER Kombination einen Wrapper bauen:
+  // zwischen der Leiste und ihrem Titel steht nichts.
+  const { renderPageHeader } = await import('../public/utils/page-layout.js');
+  const slots = {
+    title: '<h1 class="page-toolbar__title">T</h1>',
+    center: '<div class="page-search"></div>',
+    actions: '<div class="page-toolbar__actions"></div>',
+  };
+  const direct = [slots.title, slots.center, slots.actions].join('\n');
+  for (const opts of [{}, { narrow: true }, { narrow: false }, { measured: true, narrow: false }, { measured: true }]) {
+    const html = renderPageHeader({ ...slots, ...opts });
+    const inner = html.match(/^<div class="page-toolbar[^"]*">\n([\s\S]*)\n<\/div>$/);
+    assert.ok(inner, `PAGE-007b: ${JSON.stringify(opts)} did not render a single toolbar element`);
+    assert.equal(inner[1], direct,
+      `PAGE-007b: ${JSON.stringify(opts)} must emit the slots as direct children of the toolbar, nothing between`);
+  }
+  // Und die Referenzseite traegt keine Option, die es nicht mehr gibt.
+  assert.doesNotMatch(read('../public/pages/birthdays.js'), /measured:/,
+    'PAGE-007b: birthdays passes no `measured` option - the helper has none');
+  // Das Beispiel in der Spec zeigt denselben Baum. Nach dem Fix oben stand
+  // dort noch `.page-toolbar__rail -> title . search . actions` - eine
+  // Anleitung, den Wrapper von Hand nachzubauen, den der Helper gerade
+  // verloren hat (Codex, dritte Runde an #995).
+  const example = read('../docs/PAGE-COMPOSITION.md').match(/### Worked example[\s\S]*?```text\n([\s\S]*?)```/);
+  assert.ok(example, 'PAGE-007b: the worked example in docs/PAGE-COMPOSITION.md is missing');
+  assert.match(example[1], /page-toolbar--narrow/, 'PAGE-007b: the worked example shows a narrow toolbar');
+  assert.doesNotMatch(example[1], /page-toolbar__rail/,
+    'PAGE-007b: the worked example must not show a rail element under a narrow toolbar');
+});
+
+test('PAGE-008: DESIGN.md points at the composition system', () => {
+  const design = read('../DESIGN.md');
+  assert.match(design, /docs\/PAGE-COMPOSITION\.md/,
+    'PAGE-008: DESIGN.md must link docs/PAGE-COMPOSITION.md');
+  assert.ok(existsSync(new URL('../docs/PAGE-COMPOSITION.md', import.meta.url)),
+    'PAGE-008: docs/PAGE-COMPOSITION.md must exist');
+  assert.ok(!existsSync(new URL('../PAGE-COMPOSITION.md', import.meta.url)),
+    'PAGE-008: the spec lives under docs/, not in the repository root');
+
+  // Die Datei ist aus der Wurzel nach docs/ gezogen; jeder Link auf eine
+  // Repo-Datei braucht seitdem ein `../`. Beim Umzug blieben sechs davon
+  // stehen und zeigten auf docs/DESIGN.md, docs/public/... - Ziele, die es
+  // nicht gibt. Aufgeloest wird von docs/ aus, so wie GitHub es tut.
+  const spec = read('../docs/PAGE-COMPOSITION.md');
+  const links = [...spec.matchAll(/\]\(([^)#]+?)(?:#[^)]*)?\)/g)]
+    .map((m) => m[1])
+    .filter((target) => !/^[a-z]+:/.test(target));
+  assert.ok(links.length >= 6, `PAGE-008: only ${links.length} relative links found - the scan is blind`);
+  const dead = links.filter((target) => !existsSync(new URL(`../docs/${target}`, import.meta.url)));
+  assert.deepEqual(dead, [],
+    `PAGE-008: links in docs/PAGE-COMPOSITION.md that do not resolve from docs/: ${dead.join(', ')}`);
+});
+
+test('PAGE-009: composition mode owns responsive split/full behaviour', () => {
+  const layout = read('../public/styles/layout.css');
+  // Das Split-Raster liegt am KOERPER. renderAppPage() legt Kopf und Koerper
+  // als Geschwister unter die Wurzel; ein Raster an der Wurzel setzte den Kopf
+  // in die linke Spalte und den ganzen Koerper in die rechte (Codex, zweite
+  // Runde an #995). Die Regel muss in der 1024px-Query stehen und auf
+  // `> .app-page__body` zielen; die Wurzel selbst darf kein Raster werden.
+  // Und es misst die SEITE, nicht den Viewport: neben der Sidebar hat die
+  // Seite bei 1024px Viewport ~804px, und ein Master bis 720px liess dem
+  // Detail ein paar Pixel (Codex, fuenfte Runde). Container-Query an der
+  // Wurzel, Master hoechstens die Haelfte. Eine namenlose @container-Query
+  // ohne Container-Vorfahren matcht NIE - der Fehler waere still (immer
+  // gestapelt), also gehoert die container-type-Deklaration mit zum Guard.
+  const splitGrid = layout.match(/@container \(min-width: 768px\) \{\s*\.app-page--split > \.app-page__body \{([^}]*)\}/);
+  assert.ok(splitGrid, 'PAGE-009: split mode must put its two-column grid on > .app-page__body inside a 768px container query');
+  assert.match(splitGrid[1], /display:\s*grid/, 'PAGE-009: the split body is a grid');
+  assert.match(splitGrid[1], /grid-template-columns:\s*minmax\(0, min\(var\(--layout-reading\), 50%\)\) minmax\(0, 1fr\)/,
+    'PAGE-009: master rail up to the reading measure but never more than half, detail takes the rest');
+  assert.doesNotMatch(layout, /@media \(min-width: \d+px\) \{\s*\.app-page--split > \.app-page__body/,
+    'PAGE-009: the split grid must not be gated by a viewport query - the page is narrower than the viewport beside the sidebar');
+  const splitRoot = [...layout.matchAll(/\.app-page--split\s*\{([^}]*)\}/g)].map((m) => m[1]);
+  assert.ok(splitRoot.some((body) => /container-type:\s*inline-size/.test(body)),
+    'PAGE-009: .app-page--split must be an inline-size container, or the @container query never matches');
+  for (const rule of layout.matchAll(/\.app-page--split\s*(?:,[^{]*)?\{([^}]*)\}/g)) {
+    assert.doesNotMatch(rule[1], /display:\s*grid|grid-template-columns/,
+      'PAGE-009: .app-page--split itself must not be a grid - header and body would become its two cells');
+  }
+  // Und der Koerper traegt das Polster: der Kopf polstert sich ueber
+  // .page-toolbar selbst, der Split-Koerper bekam nur Raster und gap - die
+  // Rails begannen bei x=0, links vom Titel (Codex, dritte Runde an #995).
+  // Die Regel steht AUSSERHALB der Query, damit auch der Stapel sie hat.
+  const splitBodies = [...layout.matchAll(/\.app-page--split > \.app-page__body \{([^}]*)\}/g)].map((m) => m[1]);
+  assert.ok(splitBodies.some((body) => /padding-inline:\s*var\(--page-inline-pad\)/.test(body)),
+    'PAGE-009: the split body must carry the page gutter (padding-inline: var(--page-inline-pad))');
+  // Ohne Mass heisst `100%`, nicht `none`: die Kopf-Formeln rechnen mit der
+  // Variable, und `none` ist in calc() kein Wert (siehe layout.css).
+  assert.match(layout, /\.app-page--split,\s*\n\.app-page--full \{\s*--page-measure:\s*100%;/,
+    'PAGE-009: full/split set --page-measure: 100% (a length the header formulas can subtract)');
+  assert.doesNotMatch(layout, /--page-measure:\s*none/,
+    'PAGE-009: --page-measure: none makes every calc() that reads it invalid');
+});
+
+test('PAGE-013: a narrow header follows the measure of ITS page, and full/split roots take the shell height', () => {
+  const layout = read('../public/styles/layout.css');
+  // Der Bar-Kopf deckelt ueber sein Padding. Die erste Fassung rechnete mit
+  // `--content-max-width-narrow` und deckelte den Kopf der Hauswirtschaft
+  // (`data`, 960px) auf 720px - Titel und Reiter endeten 240px vor den Karten
+  // (Codex an housekeeping.js:170). Die Formel liest das Mass der Seite.
+  const bar = layout.match(/\.page-toolbar--narrow:has\(> \.page-toolbar__bar\) \{([^}]*)\}/);
+  assert.ok(bar, 'PAGE-013: the bar-header rule is missing');
+  assert.match(bar[1], /calc\(100% - var\(--page-measure, var\(--content-max-width-narrow\)\) - var\(--page-inline-pad\)\)/,
+    'PAGE-013: the bar header must subtract --page-measure, not the reading width');
+  // Und jede Kopf-Formel, die ein Mass abzieht, zieht --page-measure ab:
+  // ein weiterer Literalwert waere derselbe Fehler an der naechsten Stelle.
+  const headFormulas = [...layout.matchAll(/\.page-toolbar--narrow[^{]*\{([^}]*)\}/g)]
+    .map((m) => m[1]).filter((body) => /calc\(100% -/.test(body));
+  assert.ok(headFormulas.length >= 2, `PAGE-013: only ${headFormulas.length} header formulas found - the scan is blind`);
+  for (const body of headFormulas) {
+    assert.doesNotMatch(body, /calc\(100% - var\(--(?:content-max-width-narrow|layout-reading)\)/,
+      'PAGE-013: a header formula subtracts a literal width instead of --page-measure');
+  }
+  // `flex: 1` an .app-page wirkt nicht - .page-transition ist ein Block. Damit
+  // ein `flex: 1`-Koerper in `full`/`split` etwas zu fuellen hat, stellt die
+  // Shell die Hoehe an Helper-Wurzeln bereit; Kernseiten mit eigenem
+  // `height: 100%` (Kalender, Notizen) bleiben unberuehrt.
+  assert.match(layout, /\.app-page--full:has\(> \.app-page__body\),\s*\n\.app-page--split:has\(> \.app-page__body\) \{\s*height:\s*100%;/,
+    'PAGE-013: full/split roots built by renderAppPage() must take the shell height');
+});
+
+test('PAGE-014: page-layout helpers escape every attribute they emit', async () => {
+  // Die Helfer sind die zugesagte Oberflaeche fuer Erweiterungen (MODULES.md);
+  // eine id aus einem Datensatz ist der erwartete Gebrauch der Option. Die
+  // erste Fassung ersetzte nur `"` in Attribut-WERTEN - id, className und
+  // Attribut-SCHLUESSEL gingen roh in den String (claude-review, dritte Runde
+  // an #995). Geprueft wird die AUSGABE, nicht die Schreibweise: ein Angriff
+  // in jedem der drei Pfade muss als Text ankommen, nicht als Attribut.
+  const h = await import('../public/utils/page-layout.js');
+  const hostile = 'x" onclick="alert(1)';
+  const cases = [
+    ['renderAppPage id', h.renderAppPage({ id: hostile })],
+    ['renderAppPage className', h.renderAppPage({ className: hostile })],
+    ['renderAppPage attrs value', h.renderAppPage({ attrs: { 'data-x': hostile } })],
+    ['renderPageHeader className', h.renderPageHeader({ className: hostile })],
+    ['renderPageTitle className', h.renderPageTitle('T', { className: hostile })],
+    ['renderPageActions className', h.renderPageActions('', { className: hostile })],
+    ['renderPageBody id', h.renderPageBody({ id: hostile })],
+    ['renderPageBody className', h.renderPageBody({ className: hostile })],
+    ['renderPageSection id', h.renderPageSection({ id: hostile })],
+    ['renderPageSection className', h.renderPageSection({ className: hostile })],
+    ['renderListSection id', h.renderListSection({ id: hostile })],
+    ['renderMetricBand className', h.renderMetricBand({ content: '', className: hostile })],
+  ];
+  for (const [name, html] of cases) {
+    assert.doesNotMatch(html, /onclick="/, `PAGE-014: ${name} lets a quote close the attribute`);
+    assert.match(html, /&quot; onclick=&quot;/, `PAGE-014: ${name} must escape the quote, not drop it`);
+  }
+  // Der Schluessel steht AUSSERHALB der Anfuehrungszeichen. Dort beenden
+  // Leerzeichen und `=` den Namen, und esc() kennt beide nicht: der Payload
+  // oben kam durch esc() als Schluessel unveraendert und wurde zu drei
+  // Attributen, eines davon lebendig - waehrend dieser Test mit seinem
+  // `"`-Payload gruen blieb (Codex + claude-review, vierte Runde an #995).
+  // Ein Schluessel, der kein Attributname ist, wirft; die Ausgabe wird
+  // zusaetzlich GEPARST, nicht nur als String gelesen.
+  for (const key of [hostile, 'data-x onmouseover=alert(1) z', 'x=y', 'a\tb', '', '1x', 'data-"']) {
+    assert.throws(() => h.renderAppPage({ attrs: { [key]: 'v' } }), /Invalid attribute name/,
+      `PAGE-014: attrs key ${JSON.stringify(key)} must be rejected, not serialized`);
+  }
+  // Kein DOM-Parser in den Dev-Dependencies, also der Tokenizer-Schritt des
+  // Browsers fuer den oeffnenden Tag von Hand: ein Attributname ist ein Lauf
+  // ohne Whitespace und ohne `"'>/=`, ein Wert der Inhalt der Anfuehrungs-
+  // zeichen. Das ist genau die Trennung, die den Schluessel-Payload zu drei
+  // Attributen macht - und die ein String-Vergleich nicht sieht.
+  const openingTagAttrs = (html) => {
+    const tag = html.match(/^<div\s([^>]*)>/);
+    assert.ok(tag, 'PAGE-014: the page root must open with <div ...>');
+    const attrs = new Map();
+    const re = /([^\s"'>/=]+)(?:="([^"]*)")?/g;
+    for (const m of tag[1].matchAll(re)) attrs.set(m[1], m[2] ?? '');
+    return attrs;
+  };
+  const decode = (v) => v.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const parsed = openingTagAttrs(h.renderAppPage({
+    id: hostile,
+    className: hostile,
+    attrs: { 'data-x': hostile, 'aria-label': '<b>', 'data-ok': 'v' },
+  }));
+  assert.deepEqual([...parsed.keys()].sort(), ['aria-label', 'class', 'data-composition', 'data-ok', 'data-x', 'id'],
+    'PAGE-014: the parsed root must carry exactly the six declared attributes - nothing split off, nothing live');
+  assert.equal(decode(parsed.get('id')), hostile, 'PAGE-014: the hostile id round-trips as text');
+  assert.equal(decode(parsed.get('data-x')), hostile, 'PAGE-014: the hostile value round-trips as text');
+  assert.equal(decode(parsed.get('aria-label')), '<b>', 'PAGE-014: a value with markup round-trips as text');
+  // Und die Probe auf den Tokenizer selbst: ein roher Schluessel-Payload
+  // MUSS bei ihm in drei Attribute zerfallen, sonst prueft er nichts.
+  const rawSplit = openingTagAttrs('<div class="app-page" data-x onmouseover="alert(1)" z="">');
+  assert.deepEqual([...rawSplit.keys()], ['class', 'data-x', 'onmouseover', 'z'],
+    'PAGE-014: the tokenizer must split an unquoted key the way a browser does');
+  // Slot-Inhalte bleiben roh - sie sind Markup, das der Aufrufer escaped hat.
+  assert.match(h.renderPageBody({ content: '<p>x</p>' }), /<p>x<\/p>/,
+    'PAGE-014: content slots are markup and must pass through');
+  // Und die eine Escape-Funktion, nicht eine zweite von Hand.
+  const src = read('../public/utils/page-layout.js');
+  assert.match(src, /import \{ esc \} from '\.\/html-escape\.js'/,
+    'PAGE-014: the helpers use the shared esc(), not a local replace');
+  assert.doesNotMatch(src, /replace\(\/"\/g/, 'PAGE-014: no hand-rolled quote replacement next to esc()');
+  assert.doesNotMatch(src, /esc\(key\)/, 'PAGE-014: an attribute key is validated, not escaped - esc() does not know space or =');
+  assert.match(src, /const ATTR_NAME = \/\^\[A-Za-z\]\[A-Za-z0-9:_\.-\]\*\$\//,
+    'PAGE-014: attribute keys are checked against a name pattern');
+});
+
+test('PAGE-015: a tab panel inside a page declares the mode of that page', () => {
+  // budget-stats und budget-plans sind keine Seiten, sondern Reiter im
+  // Budget: sie werden in `.budget-page.app-page--reading` gerendert. Ein
+  // eigener Modus dort setzt --page-measure fuer den Unterbaum um - das
+  // Kennzahlenband der Berichte lief auf --layout-wide (1200px), waehrend der
+  // gemeinsame Kopf und jeder andere Reiter bei 720px enden (Codex, dritte
+  // Runde an #995; auf main waren es 720). Bis Welle C den Kopf je Reiter
+  // umschaltet, erben die Panels den Modus der Seite.
+  const modeOf = (file) => {
+    const m = read(file).match(/class="[^"]*\bapp-page app-page--([a-z]+)/);
+    assert.ok(m, `PAGE-015: ${file} declares no composition mode`);
+    return m[1];
+  };
+  const page = modeOf('../public/pages/budget.js');
+  for (const panel of ['../public/pages/budget-stats.js', '../public/pages/budget-plans.js']) {
+    assert.equal(modeOf(panel), page,
+      `PAGE-015: ${panel} is a tab panel of budget.js and must declare its mode (${page}), not its own`);
+  }
+});
+
+test('PAGE-016: a page whose header runs full width puts nothing on the measure', () => {
+  // Codex, siebte Runde an #995: schedule stand auf `data` (960px), sein Kopf
+  // laeuft aber ohne --narrow voll durch, und vom Inhalt nahm nur das
+  // Kennzahlenband der Statistik das Mass - es endete bei 960, Filterkarte und
+  // Ergebniskarten daneben bei voller Breite (auf main war nichts gekappt).
+  // Ein Mass, das der Kopf nicht zeigt, sieht man an genau den Elementen, die
+  // es zufaellig konsumieren. Notes (Runde eins) und Subscriptions (Runde
+  // zwei) waren derselbe Fall; beim dritten Mal wird es eine Regel: entweder
+  // der Kopf traegt das Mass (--narrow, oder der Helfer mit seinem Default),
+  // oder die Seite ist full/split - dann ist das Mass 100% und nichts kappt.
+  //
+  // WER DAS MASS KONSUMIERT, STEHT IN DEN STYLESHEETS, nicht hier: jede Regel
+  // mit `max-width: ... --page-measure` nennt ihre Klassen selbst. Der Guard
+  // liest sie, damit ein neuer Konsument automatisch mitzaehlt.
+  const styleDir = new URL('../public/styles/', import.meta.url);
+  const consumers = new Map();
+  for (const file of readdirSync(styleDir).filter((f) => f.endsWith('.css'))) {
+    for (const { selector, body } of eachRule(read(`../public/styles/${file}`))) {
+      if (!/max-width\s*:[^;]*--page-measure/.test(body)) continue;
+      for (const fragment of selector.split(',')) {
+        // Nur das letzte Compound zaehlt: `.app-page :is(.a, .b)` kappt .a und
+        // .b, nicht jede Seite. Das :is() zerfaellt am Komma in seine Glieder.
+        const subject = fragment.trim().split(/\s*[>+~]\s*|\s+/).pop();
+        for (const cls of subject.matchAll(/\.([A-Za-z0-9_-]+)/g)) {
+          consumers.set(cls[1], `${file}: ${selector.replace(/\s+/g, ' ').trim().slice(0, 80)}`);
+        }
+      }
+    }
+  }
+  for (const known of ['page-measure', 'list-rows', 'metric-grid']) {
+    assert.ok(consumers.has(known), `PAGE-016: ${known} is not read as a consumer - the stylesheet scan is blind`);
+  }
+  assert.ok(consumers.size >= 10, `PAGE-016: only ${consumers.size} consumers found - the stylesheet scan is blind`);
+
+  let measuredWithFullHeader = 0;
+  for (const name of compositionScope()) {
+    const src = withoutBlockComments(withoutHtmlComments(read(`../public/pages/${name}`)));
+    const mode = COMPOSITION_MODES.find((m) =>
+      new RegExp(`app-page--${m}|data-composition="${m}"|mode:\\s*'${m}'`).test(src));
+    if (!mode || mode === 'full' || mode === 'split') continue;
+    const ownHeader = /page-toolbar/.test(src) || /renderPageHeader\(/.test(src);
+    // Ohne eigenen Kopf ist die Datei ein Panel; PAGE-015 bindet es an den Kopf
+    // seiner Seite.
+    if (!ownHeader) continue;
+    const narrow = /page-toolbar--narrow/.test(src)
+      || (/renderPageHeader\(/.test(src) && !/narrow:\s*false/.test(src));
+    if (narrow) continue;
+    measuredWithFullHeader += 1;
+    for (const [cls, rule] of consumers) {
+      const hit = new RegExp(`class="[^"]*(?<![\\w-])${cls}(?![\\w-])`).test(src);
+      assert.ok(!hit,
+        `PAGE-016 ${name}: mode ${mode} caps .${cls} (${rule}) at the measure while the header runs `
+        + 'full width - either narrow the header (page-toolbar--narrow) so the measure is visible '
+        + 'from the top, or declare full/split so nothing on this page is capped');
+    }
+  }
+  // Der Zweig existiert nur, solange es Seiten mit Mass und durchlaufendem Kopf
+  // gibt (health, dashboard); verschwinden sie, ist der Guard leer und sagt es.
+  assert.ok(measuredWithFullHeader >= 1,
+    'PAGE-016: no measured page with a full-width header left - drop this guard or its scope changed');
+});
+
+test('PAGE-010: full-bleed is an explicit --bleed declaration', () => {
+  const layout = read('../public/styles/layout.css');
+  assert.match(layout, /\.page-section--bleed\s*\{[\s\S]*?padding-inline:\s*var\(--page-inline-pad\)/,
+    'PAGE-010: bleed primitive must use --page-inline-pad');
+  const helpers = read('../public/utils/page-layout.js');
+  assert.match(helpers, /page-section--bleed/,
+    'PAGE-010: helpers must emit bleed class');
+});
+
+/**
+ * KEINE SEITE IST DIE REFERENZ.
+ *
+ * Die erste Fassung markierte `/birthdays` im Produktionsmarkup als
+ * `data-composition-reference="true"` und pruefte genau diese eine Seite streng.
+ * Das war ein Testhaken, der im ausgelieferten HTML stand: er kostete jeden
+ * Besucher ein Attribut und sagte ueber die anderen dreissig Seiten nichts. Die
+ * Strenge steckt jetzt in PAGE-001 bis PAGE-006 ueber den ganzen
+ * Geltungsbereich; dieser Test haelt nur den Weg zurueck zu.
+ */
+test('PAGE-012: the router applies what an extension manifest declares', () => {
+  // `page.composition` und `page.width` werden serverseitig geprueft
+  // (test-modules.js) und in MODULES.md als Vertrag versprochen. Ein Vertrag,
+  // den der Router nicht anwendet, ist ein Feld ohne Wirkung: `data` saehe aus
+  // wie `reading`, `wide` wie gar nichts. Codex fand genau das an #995 - die
+  // Erklaerung kam bis zur Admin-Liste und nicht bis zur Seite.
+  const router = withoutBlockComments(read('../public/router.js'));
+  const mount = router.slice(router.indexOf('function mountExtensionPage('));
+  assert.ok(mount.length > 0, 'PAGE-012: router.js must mount an extension page root');
+  const body = mount.slice(0, mount.indexOf('\n}\n'));
+  assert.match(body, /page\.composition/, 'PAGE-012: the mount reads page.composition');
+  assert.match(body, /COMPOSITION_MODES\.includes\(/, 'PAGE-012: an unknown mode falls back instead of leaking into a class');
+  assert.match(body, /app-page app-page--\$\{mode\}/, 'PAGE-012: the root carries the mode class');
+  assert.match(body, /dataset\.composition = mode/, 'PAGE-012: the root carries data-composition');
+  assert.match(body, /dataset\.pageWidth/, 'PAGE-012: page.width lands on the root');
+  // ... und der Renderpfad benutzt die Wurzel, nicht den nackten Wrapper.
+  assert.match(router, /mountExtensionPage\(pageWrapper, route\.thirdPartyModule\)/,
+    'PAGE-012: the extension render path must mount through the composition root');
+  assert.match(router, /page: \{ \.\.\.route\.thirdPartyModule\.page \}/,
+    'PAGE-012: the module learns its declared page via context.page');
+
+  // `page.width` hat ein Gegenstueck im CSS, sonst ist die Breite die naechste
+  // Erklaerung ohne Wirkung; und sie greift NUR in gemessenen Modi.
+  const layout = read('../public/styles/layout.css');
+  for (const [width, token] of [['reading', 'reading'], ['content', 'content'], ['wide', 'wide']]) {
+    const rule = new RegExp(`\\[data-page-width="${width}"\\]\\s*\\{[^}]*--page-measure:\\s*var\\(--layout-${token}\\)`);
+    assert.match(layout, rule, `PAGE-012: layout.css maps page.width=${width} to --layout-${token}`);
+  }
+  const widthRules = [...layout.matchAll(/^[^{]*\[data-page-width=[^{]*\{/gm)].map((m) => m[0]);
+  assert.ok(widthRules.length >= 3, 'PAGE-012: three width rules expected');
+  for (const sel of widthRules) {
+    assert.doesNotMatch(sel, /app-page--(?:full|split)/,
+      `PAGE-012: a width must not cap a page that owns its width: ${sel.trim()}`);
+    assert.match(sel, /app-page--reading/, `PAGE-012: width rules are scoped to measured modes: ${sel.trim()}`);
+  }
+});
+
+test('PAGE composition: no page marks itself as the reference implementation', () => {
+  const offenders = walkJsFiles('../public/')
+    .filter((file) => /data-composition-reference/.test(read(file)));
+  assert.deepEqual(offenders, [],
+    'Ein Kompositions-Marker ist zurueck im Produktionsmarkup. Die Zusicherung '
+    + 'gehoert in den Guard, nicht ins ausgelieferte HTML.');
+});
+
+test('PAGE composition: birthdays stays free of page geometry in module CSS', () => {
+  const src = read('../public/pages/birthdays.js');
+  const css = withoutBlockComments(read('../public/styles/birthdays.css'));
+  assert.match(src, /from ['"]\/utils\/page-layout\.js['"]/,
+    'birthdays.js must import page-layout helpers');
+  for (const name of [
+    'renderAppPage',
+    'renderPageHeader',
+    'renderPageTitle',
+    'renderPageActions',
+    'renderPageBody',
+    'renderPageSection',
+    'renderListSection',
+  ]) {
+    assert.match(src, new RegExp(name), `birthdays.js must call ${name}`);
+  }
+  assert.match(src, /mode:\s*'reading'/, 'birthdays.js must declare reading mode');
+  assert.match(src, /legacyAlias:\s*false/,
+    'birthdays.js must omit the .page-measure--narrow compat alias');
+  assert.doesNotMatch(src, /measured:|page-toolbar__rail/,
+    'birthdays.js header has no rail element and no measured option (sixth round of #995)');
+  assert.doesNotMatch(src, /page-measure--narrow/,
+    'birthdays.js must not reintroduce page-measure--narrow');
+  // Module CSS owns accent/list chrome only - no page geometry.
+  for (const rule of eachRule(css)) {
+    if (!/\.birthdays-page\b/.test(rule.selector)) continue;
+    assert.doesNotMatch(rule.body, /max-width\s*:/,
+      `birthdays.css must not set page max-width on ${rule.selector}`);
+    assert.doesNotMatch(rule.body, /margin-inline\s*:\s*var\(--page-inline-pad\)/,
+      `birthdays.css must not own page gutters on ${rule.selector}`);
+  }
+  assert.doesNotMatch(css, /\.birthdays-hint\s*\{[^}]*margin-inline\s*:\s*var\(--page-inline-pad\)/,
+    'hint gutter must come from .app-page__body, not birthdays.css');
+  assert.doesNotMatch(css, /\.birthdays-list\s*\{[^}]*margin-inline\s*:\s*var\(--page-inline-pad\)/,
+    'list gutter must come from composition body, not birthdays.css');
+});
+
+test('PAGE composition: there is no toolbar rail element anywhere under public/', () => {
+  // Bis zur sechsten Runde an #995 stand hier das Gegenteil: "measured toolbar
+  // rail exists in layout.css". Der Helper baute fuer `measured` ohne `narrow`
+  // einen `.page-toolbar__rail` um die Slots, layout.css hatte die Regeln dazu,
+  // die Doku nannte die Kombination - und jeder, der sie nahm, verlor Siegel
+  // und Dock-Titel (PAGE-007b). Rail und Modifier sind weg. Taucht einer der
+  // beiden Namen wieder auf, ist das der Wrapper auf dem Rueckweg, und dann
+  // muessen ZUERST ux.js und typography.css den Titel auch als Enkel finden.
+  const styleDir = new URL('../public/styles/', import.meta.url);
+  const files = [
+    ...readdirSync(styleDir).filter((f) => f.endsWith('.css')).map((f) => `../public/styles/${f}`),
+    ...walkFrontendFiles('../public/').filter((f) => !f.includes('/vendor/')),
+  ];
+  let seen = 0;
+  for (const file of files) {
+    seen++;
+    const src = read(file);
+    const hit = src.match(/page-toolbar__rail|page-toolbar--measured/);
+    const line = hit ? src.slice(0, hit.index).split('\n').length : 0;
+    assert.ok(!hit,
+      `${file}:${line}: "${hit?.[0]}" - the toolbar rail element is gone; the header slots are direct children (sixth round of #995)`);
+  }
+  assert.ok(seen > 100, `PAGE composition: only ${seen} files scanned for the rail - the walk is broken`);
+  const layout = read('../public/styles/layout.css');
+  assert.match(layout, /\.app-page--reading\s*>\s*\.app-page__body/,
+    'reading body must own page-inline-pad gutters');
 });

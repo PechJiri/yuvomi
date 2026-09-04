@@ -1394,7 +1394,7 @@ Planned/estimated budget (Budget → Plan). A **steady monthly plan**: one amoun
 | created_by | TEXT | User id that last set the plan, nullable |
 | updated_at | TEXT | ISO 8601 datetime, default now |
 
-`GET /api/v1/budget/plans?month=YYYY-MM` returns each category's planned vs. actual (with `remaining`, `ratio`, `over`) and the savings goal's planned vs. net balance (`met`). `PUT /api/v1/budget/plans/:category` upserts a positive amount (validated against real expense category keys or the savings sentinel); `DELETE` removes it. The Statistics tab overlays a category target marker at the planned amount (month range only); the dashboard Budget widget shows savings-goal progress when a goal is set. No FK on the category so category rename/delete never orphans the app.
+`GET /api/v1/budget/plans?month=YYYY-MM` returns each category's planned vs. actual (with `remaining`, `ratio`, `over`) and the savings goal's planned vs. net balance (`met`), plus `isCurrentMonth` for the requested month. **The verdict fields are scoped to the current month (v2.64.0):** because the table holds one amount per category with no time axis, nothing records what the plan said in an earlier month, so editing a plan today would otherwise rewrite the "over budget" answer for months that have long closed. For any month other than the current one, `over` and `met` are therefore `null` while `planned`, `actual`, `remaining` and `ratio` are still returned - the facts stay, the judgement does not. A real plan history would remove the distinction again. `PUT /api/v1/budget/plans/:category` upserts a positive amount (validated against real expense category keys or the savings sentinel); `DELETE` removes it. The Statistics tab overlays a category target marker at the planned amount (month range only); the dashboard Budget widget shows savings-goal progress when a goal is set. No FK on the category so category rename/delete never orphans the app.
 
 ### Reminders
 
@@ -1570,15 +1570,23 @@ skipped, or exhausted, `pushed_at` is set as the legacy completion marker.
 
 ### Birthdays
 
-Birthday records with optional profile photo (same crop dialog as member avatars, see Profile picture) and automatic calendar event + reminder.
+Birthday records with optional profile photo (same crop dialog as member avatars, see Profile picture),
+an optional name day, and automatic calendar events + reminders. A name day is stored as a canonical
+`MM-DD` value rather than a date with an invented year. When present, it creates a second yearly event
+in the same calendar layer and uses the birthday's existing reminder offset; clearing it removes only
+that generated event and reminder. The dashboard expands one person into separate birthday and
+name-day occurrence rows ordered by proximity, while the Birthdays module itself remains one row per
+person. No country- or name-based lookup is performed.
 
 | Column | Type | Constraint |
 |--------|------|-----------|
 | name | TEXT | NOT NULL |
 | birth_date | TEXT | DATE (YYYY-MM-DD), NOT NULL |
+| name_day | TEXT | Month and day (`MM-DD`), nullable |
 | notes | TEXT | nullable |
 | photo_data | TEXT | Base64 data URL (≤ 5 MB), nullable |
 | calendar_event_id | INTEGER | FK → calendar_events (SET NULL on delete), nullable |
+| name_day_calendar_event_id | INTEGER | FK → calendar_events (SET NULL on delete), nullable |
 | family_user_id | INTEGER | FK → Users (CASCADE delete), UNIQUE (one linked user per birthday), nullable |
 | contact_id | INTEGER | FK → Contacts (SET NULL on delete), UNIQUE partial (one birthday per source contact); set when imported from a contact, nullable |
 | created_by | INTEGER | FK → Users (CASCADE delete), NOT NULL |
@@ -1689,6 +1697,19 @@ always-available open-in-tab/download escape (the canvas is graphical, not text)
 worker and standard fonts ship self-hosted under `public/vendor/pdfjs/` (no CDN, per the no-external-
 frontend-dependencies constraint); `isEvalSupported` is disabled so the app CSP (`script-src 'self'`)
 is unchanged. (v1.31.0)
+
+**Share from the viewer (D#1014):** the document viewer offers Share through the device's native
+share sheet (Web Share API), and only there - a row action would have to fetch the file after the
+click, which is exactly where iOS drops the transient user activation. Whether Share is possible is
+decided once, in `public/utils/web-share.js`, before a byte is loaded: the type must be on the Web
+Share API's file list (PDF, PNG, JPEG, WebP, plain text, CSV - no Office formats), the context must
+be secure (HTTPS or localhost), and `navigator.canShare({ files })` must accept an empty probe file
+of that type; `'share' in navigator` is deliberately not the gate, since it is true wherever links
+are shareable. When the answer is yes, the viewer fetches the file from the authenticated download
+endpoint in the background, shows the Share button busy until it is there, and the click goes
+straight into `navigator.share()`; closing the viewer aborts the fetch and drops the file. When the
+answer is no, no dead control is shown: a line under the metadata says why (type, or browser and
+context) and Download stays the path that works everywhere.
 
 ### Family Document Access
 Allowlist for `visibility = 'restricted'` documents — only listed users can see the document.
@@ -2555,6 +2576,13 @@ them.
 | note | TEXT | optional |
 | created_at | TEXT | ISO 8601 |
 
+`POST /overrides/fill` (`user_id`, `from`, `to`, `shift_type_id`, `note`) writes the same upsert
+across an inclusive date range in one call, for covering an absence (vacation, a temporary
+reassignment) instead of one `PUT` per day. Its cap is a separate constant from `/entries`'
+`MAX_RANGE_DAYS` (731 days) — `MAX_FILL_DAYS` (100 days) is deliberately smaller, because a fill
+*writes* real rows, cutting against the "computed on read, never materialized" rule above if it
+were allowed to run for years at a time; the number is sized for an absence, not a shadow pattern.
+
 ### Access Permissions (migration v74)
 
 Role- and member-based access control for interactive users (#467). Governs which modules a
@@ -2575,12 +2603,17 @@ never see express — therefore had no module check at all (#823).
 |--------|------|-----------|
 | subject_type | TEXT | NOT NULL — `role` (a family_role) \| `user` (a specific member) |
 | subject_id | TEXT | NOT NULL — the family_role value or the user id |
-| resource_type | TEXT | NOT NULL — `module` \| `widget` |
-| resource_key | TEXT | NOT NULL — module key or dashboard widget id |
-| access | TEXT | NOT NULL — module: `none` \| `read` \| `write`; widget: `none` \| `allow` |
+| resource_type | TEXT | NOT NULL — `module` \| `widget` \| `capability` (v175, #996) |
+| resource_key | TEXT | NOT NULL — module key, dashboard widget id, or capability key |
+| access | TEXT | NOT NULL — module: `none` \| `read` \| `write`; widget and capability: `none` \| `allow` |
 | updated_at | TEXT | ISO 8601, default now |
 
-Primary key: `(subject_type, subject_id, resource_type, resource_key)`.
+Primary key: `(subject_type, subject_id, resource_type, resource_key)`. **`capability` is a schema-level
+allowance only (migration v175, #996):** the CHECK admits the value, `resolvePermissions()` and
+`getSubjectPermissions()` still read `module` and `widget` rows alone, and an ordinary save of the
+permission matrix deletes and rewrites only those two kinds, so a capability row written by a later
+feature survives it. No capability is registered by the core; the first one arrives with the feature
+that needs it.
 
 ### Quick Links (migration v160, #469)
 | Column | Type | Constraint |
@@ -2735,13 +2768,14 @@ tone): light 3.65-5.18:1, dark 7.42-12.24:1, all above the 3:1 asked of graphics
 - Rewards (v0.96.0): family points leaderboard — top 5 enabled participants by ledger balance, the leader row subtly tinted (no medal/emoji), plus a "N to approve" footer when redemptions are pending
 - Health (v0.96.0): today's medication doses as a "taken/total" progress bar with the next open dose and a low-stock reorder chip. **Personal scope (v1.50.1 · #592):** only the signed-in user's **own** medications are aggregated (private *and* family-visible ones); another member's medication never surfaces here, not even with `visibility = 'family'`. Shared medications stay on the Health page, which keeps its family-visible read scope
 - Housekeeping (v0.96.0): compact status — currently-present indicator (worker + since-time) or last visit + this-month visit count, plus an outstanding-amount chip
+- Schedule (Schedule v2): who is on shift or free today, one row per member with a resolved entry (the widget reuses `resolveEntries()`'s own rule — a member with neither a pattern nor an override for today has no row at all, the same as the module's own "today" card). Like Cycle, its own slice: `/dashboard` never carries it, the tile fetches `GET /schedule/entries` (household-wide, no owner scoping needed) plus the shift-type list client-side, and only when the tile is enabled. Default-hidden, offered as an opt-in in Customize; hidden when the Schedule module is disabled
 - Cycle (v0.98.0): **owner-only, opt-in** prediction glance — current phase, cycle day in a mini progress ring, and the next period as a countdown + date. Unlike the family-visible widgets, cycle data is **never aggregated into the shared `/dashboard` payload**: the tile fetches the signed-in user's own `/health/cycle` data client-side, and only when the tile is enabled. Default-hidden, offered as an opt-in in Customize; hidden when the Health module is disabled
 - Clock (v1.84.0 · #651): time and weekday + date, built for a wall tablet without a system bar. The digits scale with the tile width (container query on the existing `dashboard-widget` container, capped by row count so a one-row tile does not blow the date off the card), follow the user's 12h/24h and date-format preferences, and tick on the minute rather than the second (the display has no seconds). A `visibilitychange` refresh catches up after a throttled background tab. **Default-hidden:** on a device with a system clock a second one is duplication, so it is offered as an opt-in in Customize
 - Metrics row: up to four module tiles in one row, each carrying a count and a jump target, for the modules that are reachable only through "More". The row shows what is **not already on the screen**: a module the "Heute" panel already summarises is skipped, and so is one whose own widget is visible, so it follows the current layout instead of holding its own idea of it. In practice it leads with the modules a standard dashboard has no widget for at all - rewards, health and the housekeeping log. Where a household does not use those, no tile appears and the widget renders nothing. Counts come from the shared `/dashboard` payload (`openTaskCount` and the per-module figures beside it), not from one request per module. It is a widget like any other: it moves, hides and resizes in Customize, and it can be locked for a member. Its `permissions.js` entry carries `module: null`, like Family, Weather and Clock - it belongs to no single module, and it does not need to, because **each tile checks its own module** and a locked budget therefore never produces a budget tile. What the row-level lock adds is the ability to take away the row as such
 - Quick links (#469): a row of household links - name, address, picture, and who sees it. Not a module and therefore without a page of its own: managing them starts from the tile, because whoever sees the row is already where it belongs. Each tile opens in a new tab with `rel="noopener noreferrer"` and `referrerpolicy="no-referrer"`, so a target on the home network learns nothing about where this household runs its Yuvomi. A private link carries a lock mark. **Default-hidden:** on day one the row has nothing to show, and a tile that only asks to be set up is not worth adding to every existing dashboard unasked - it is offered as an opt-in in Customize. Its `permissions.js` entry carries `module: null`, like Family, Weather and Clock
 - FAB (quick actions): + Task, + Event, + Shopping list item, + Note
 
-The three newer modules (Rewards, Health, Housekeeping) start **hidden** by default — they are specialised and not active in every household, so they are offered as opt-ins in **Customize** rather than adding empty tiles to a fresh dashboard. Existing saved layouts are untouched.
+The newer modules (Rewards, Health, Housekeeping, Schedule) start **hidden** by default — they are specialised and not active in every household, so they are offered as opt-ins in **Customize** rather than adding empty tiles to a fresh dashboard. Existing saved layouts are untouched.
 
 **Widget sizes:** each widget has a configurable size using named presets (Tiny, Narrow, Tall, Standard, Large, Full) that map to `columns × rows` in the CSS grid. List widgets (tasks, calendar) default to the tall/narrow **Tall** (1×2) preset so a short list keeps useful height without occupying a full two-column row. Sizes are persisted in user preferences and survive page reloads.
 
@@ -3031,7 +3065,7 @@ Related hardening: the inbound `cancelled` delete is scoped to the reporting cal
 
   Two consequences were fixed with #856. The colour picker used to grey itself out whenever someone was assigned, with a note that the assignee's colour would override - a promise the code had stopped keeping; both the note and the greying are gone, and the picker is always usable. And because the picker matched the stored colour against its ten palette swatches to find the active one, any colour from outside that palette - an avatar colour, an `RFC 7986 COLOR` from a server, the pre-OKLCH `#007AFF` - matched nothing, so saving fell back to the first swatch and silently repainted the event. The picker now shows a colour outside its palette as an extra swatch of its own, matching is case-insensitive (CalDAV sends lower-case hex), and `colorToSave()` holds the rule that a save which did not touch the colour does not change it.
 - **Event location:** Event popup and dashboard display the location field with RFC 5545 backslash-escape normalization (`\n`, `\,`, `\;`, `\\`) via `fmtLocation()` in `public/utils/html.js`.
-- **Custom event icons:** Each event can have an icon chosen from a visual picker; the server validates against a fixed allow-list (`VALID_EVENT_ICONS` in `server/routes/calendar/helpers.js`, currently 104 entries — Lucide names plus the custom `tooth` glyph). Birthday events are automatically assigned the `cake` icon. Icon stored in `calendar_events.icon`.
+- **Custom event icons:** Each event can have an icon chosen from a visual picker; the server validates against a fixed allow-list (`VALID_EVENT_ICONS` in `server/routes/calendar/helpers.js`, currently 105 entries — Lucide names plus the custom `tooth` and `balloon` glyphs). Birthday events are automatically assigned the `cake` icon and name-day events the `balloon` icon. Icon stored in `calendar_events.icon`.
 - **Birthday layer (v2.28.0, #778):** birthdays reach the calendar from the contacts and, with a large address book, fill it with entries nobody planned as appointments; deleting one did not help because the next sync recreated it. A toggle hides them, alongside the public- and school-holiday toggles, remembered per device in `localStorage` (`yuvomi:calendar:layer:birthdays`). The marker is the `birthday_name` field the read route attaches, not the title - an appointment of the user's own that mentions a birthday is unaffected. **Since v2.51.0 the toggles live in the filter sheet rather than the toolbar**, and the birthday row is shown unconditionally: the old "only while birthdays are in range or the layer is off" condition existed so the control that brings them back could never disappear, and in a sheet a row costs no header space, while a switch that comes and goes with the data is harder to find than one that always sits in the same place.
 - **File attachments:** Events support a single file attachment (images, PDFs, Office documents, up to `MAX_UPLOAD_MB`, default 5 MB — the shared upload ceiling since v2.28.0, #806). Images are displayed inline in the event popup; other files show a download link. Drag-and-drop upload is supported in the event modal. New attachments create one `family_documents` object through the active document-storage backend and link it via `attachment_document_id`; no second binary copy is written to `attachment_data`. Existing legacy Base64 attachments remain readable. Unchanged attachments are not re-uploaded, and removing an attachment only unlinks it from the event.
 - **Overlapping events:** In week and day views, timed events that overlap in time are rendered side-by-side using a column-layout algorithm instead of stacking.
@@ -3170,10 +3204,35 @@ Off by default. Four tabs (shift types, patterns, overrides, statistics) plus a 
   is not.
 - **Overnight shifts** stay on their start day, so a night shift does not smear across two calendar
   days. `end_time <= start_time` is what marks one; `end == start` is a 24-hour shift.
+- **Quick-start presets:** the Shift Types tab's empty state offers a one-click "quick start" that
+  creates seven common presets (Early/Late/Night/Day/24-hour, plus Vacation/Sick) client-side,
+  sequentially, against the existing unrestricted `POST /shift-types` — reusing the same preset
+  values that already prefill the create-shift-type form, rather than a dedicated bulk-create
+  endpoint. Vacation and Sick carry no start/end time on purpose - a shift type without times is
+  already a valid, "all day" type (`start_time`/`end_time` are nullable as a pair), so an absence
+  reason is just a shift type nobody works, not a new concept or column.
+- **Fill a date range:** `POST /overrides/fill` writes an override across an inclusive range in one
+  call (e.g. a vacation), instead of one `PUT` per day — see Schedule Overrides above for its cap.
+  The client always confirms before submitting, since it silently overwrites any existing overrides
+  in range the way the single-date `PUT` already does, just at a larger blast radius.
+- **Grouped display and range editing:** the Overrides tab groups consecutive days for the same
+  member with the same shift type (or free day) and note into a single row — display and
+  bulk-action only, the table stays exactly one row per day. Editing a group shows its current
+  From/To as editable fields; saving reconciles automatically (`POST /overrides/fill` for the new
+  span, `DELETE /overrides` for whatever fell outside it) rather than requiring a manual
+  delete-then-refill. Deleting a group removes its whole span in one `DELETE /overrides` call and
+  always confirms first, unlike the original single-day delete (now just a group of size one).
+- **Dashboard widget:** an opt-in "who's working today" tile (off by default, like the module
+  itself), reusing `GET /entries?from=<today>&to=<today>` (no `user_id` → the whole household) —
+  the same query the page's own "today" card uses. It lists only members who have a resolved entry
+  today (a pattern or an override), matching `resolveEntries()`'s own rule that a member with
+  neither produces no entry at all; a household with shift types but nothing resolved today shows
+  its own "nothing today" state, distinct from "the module isn't set up yet."
 - **API:** `GET /api/v1/schedule/entries?from=&to=&user_id=`, `GET/POST/PUT/DELETE
   /api/v1/schedule/shift-types[/:id]`, `GET/POST/PUT/DELETE /api/v1/schedule/patterns[/:id]`,
   `GET/PUT /api/v1/schedule/patterns/:id/days[/:position]`, `GET /api/v1/schedule/overrides`,
-  `PUT/DELETE /api/v1/schedule/overrides/:dateKey`.
+  `POST /api/v1/schedule/overrides/fill`, `DELETE /api/v1/schedule/overrides` (a date range, for a
+  grouped row), `PUT/DELETE /api/v1/schedule/overrides/:dateKey`.
 
 ### Rewards (`/rewards`)
 
@@ -3395,12 +3454,12 @@ Personal birthday tracker with automatic calendar integration.
 
 - CRUD: name, birth_date (day/month/year or day/month only for age-unknown entries), notes, photo
 - Profile photo upload (PNG/JPEG/WebP, ≤ 5 MB source file; cropped in the shared dialog and stored as a 256 × 256 Base64 JPEG data URL - see Profile picture). The server still accepts GIF unchanged for API clients, but the UI does not offer it: the crop always returns a JPEG, and an animation would silently become a still
-- **Upcoming view:** birthdays sorted by days until next occurrence; shows age when year is known
+- **Upcoming view:** people stay sorted by days until their next birthday; an optional name day adds metadata to that person but never changes the order. The birthday age is shown when the birth year is known.
 - **A linked household member shows that person, not a placeholder:** an entry with `family_user_id` displays the member's photo or their initials in that member's **own** avatar colour — the same rule Contacts follows, so one person carries one colour across the overview, the calendar, tasks, contacts and here (see the identity-colour rule in DESIGN.md). Entries that belong to nobody in the household stay deliberately neutral: they have no identity colour, and the disc says so. `GET /api/v1/birthdays`, `GET /api/v1/birthdays/upcoming` and the single-record responses all carry `family_display_name`, `family_avatar_color` and `family_avatar_data`, `NULL` on unlinked entries. Because the avatar colour is freely chosen, the initials take a computed readable ink rather than the fixed one used over curated tones
 - **Countdown chip:** three steps that look like three — today carries the module colour at full strength, "within the next seven days" steps forward into the primary text colour, everything further out stays secondary. No tinted field on any of them (the scale rule in DESIGN.md)
 - **Mobile action hierarchy:** phones expose creation through the persistent FAB only; the duplicate header action is hidden so the title retains the available width.
 - **Mobile swipe:** swiping towards the row's **start** opens the entry for editing, towards its **end** deletes it (same `leading`/`trailing` vocabulary as Tasks and Shopping, so the gesture mirrors in RTL).
-- **Calendar integration:** creating or updating a birthday automatically creates/updates a recurring annual all-day calendar event (cake icon, title `Geburtstag: {Name}` in the household data language, see below); deleting a birthday removes the linked event
+- **Calendar integration:** creating or updating a birthday automatically creates/updates a recurring annual all-day calendar event (cake icon, title `Geburtstag: {Name}` in the household data language, see below). An optional name day creates a separate recurring event with a balloon icon and the same reminder offset; removing the name day removes only that generated event. Deleting the person removes both linked events.
 - **Localized event title (#631, #632):** the stored title and description follow the **household data language** (Settings → Personal → Appearance → Language, `sync_config.language`). Earlier they were written in English and only translated while rendering, which covered the web UI and nothing else — the REST API, the ICS export feed, the CalDAV/Google outbound sync and the FTS index all read the stored row and showed `Birthday: Oma` in a German household. Server-side translation reuses the same `public/locales/*.json` the client loads, read as data by `server/utils/i18n.js` (no module import across the `public/`↔`server/` layer boundary). The client-side translation in `public/utils/birthday-event.js` stays as the override for members whose display language differs from the household's. Because the description embeds a formatted date, it follows `date_format` as well; changing language, region or date format re-titles the existing events in the same request
 - **Configurable reminder:** customizable reminder offset per birthday with preset options (none, at time, 15 min, 1 h, 1 d, 2 d, 1 w, 2 w) and a fully custom interval (amount + unit). Reminder time calculated from offset; auto-dismissed when the birthday passes
 - **Import from contacts:** a toolbar action opens a selection dialog listing contacts (from CardDAV sync, vCard import, or local entry) that carry a `BDAY`/birthday. The user picks individual contacts via checkboxes; each import creates a birthday linked to its source contact (`contact_id`). Idempotent — already-imported contacts are shown with a check mark and "already added" badge and cannot be re-selected. Contacts without a stored birthday are listed separately for manual completion. Manual entry stays available for anyone not in an address book. Photos are not carried over (contact photos are raw vCard base64, not the data-URL format birthdays expect)
@@ -3450,6 +3509,16 @@ modules/
 | `menu.show` | | Set `false` to hide from navigation. |
 | `menu.label` | | Navigation label (falls back to `name`). |
 | `menu.order` | | Integer sort order in the navigation list. |
+| `menu.labelKey` | | i18n key for the navigation label, resolved through the module's locale files (#919). |
+| `manifestVersion` | | Integer format number of the manifest itself, not of the module. Omitted means 1; a higher number than this Yuvomi reads is rejected outright, never read in part. |
+| `page.composition` | | Composition mode of the module page: `reading` \| `data` \| `dashboard` \| `form` \| `split` \| `full` (#929, [`PAGE-COMPOSITION.md`](PAGE-COMPOSITION.md)). The router mounts the module in the declared `.app-page--<mode>` root; `render()` receives that root as `container`. |
+| `page.width` | | `reading` \| `content` \| `wide`; refines the measure inside a measured mode, ignored by `split` and `full`. `page.navigation` / `page.responsive` accept `standard` only. |
+| `capabilities.permissions` | | Registers the module as `ext:<module-id>` in household permissions, with optional per-widget keys (#919). Required when widgets or an API prefix are declared. |
+| `capabilities.widgets[]` | | Dashboard widgets (`<module-id>:<widget-id>`): `entry` exporting `renderWidget(container, { size, options, user })`, `defaultSize`, `defaultVisible`, optional `optionsSchema` (up to 8 keys). |
+| `capabilities.api.prefix` | | Exactly `/api/extensions/<module-id>`; any other prefix, including a core path, is rejected and the module loads as errored, so it cannot take over a core token scope. |
+| `i18n.defaultLocale` | | Fallback language for `locales/{locale}.json` shipped with the module; lookup order is UI locale, this default, `en`, `de`, then the static manifest labels. |
+
+The full contract for every optional block lives in [`MODULES.md`](../MODULES.md); this table names the fields so the data model is complete.
 
 **Where a third-party module is controlled:**
 - **Settings → Modules → Active modules** (admin-only): enable/disable an individual third-party module without restarting the server.

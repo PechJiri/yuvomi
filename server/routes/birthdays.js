@@ -28,6 +28,21 @@ function validatePhotoData(val) {
   return { value: s, error: null };
 }
 
+function validateNameDay(val) {
+  if (val === undefined) return { value: undefined, error: null };
+  if (val === null || val === '') return { value: null, error: null };
+  const value = String(val).trim();
+  const match = /^(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return { value: null, error: 'Name day must use MM-DD.' };
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const candidate = new Date(Date.UTC(2000, month - 1, day));
+  if (candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) {
+    return { value: null, error: 'Name day must be a valid month and day.' };
+  }
+  return { value, error: null };
+}
+
 /**
  * EIN GEBURTSTAG BRINGT DIE IDENTITAET SEINES MITGLIEDS MIT.
  *
@@ -103,15 +118,17 @@ router.post('/', (req, res) => {
     const vBirthDate = validateDate(req.body.birth_date, 'Birth date', true);
     const vNotes = str(req.body.notes, 'Notes', { max: MAX_TEXT, required: false });
     const vPhoto = validatePhotoData(req.body.photo_data);
-    const errors = collectErrors([vName, vBirthDate, vNotes, vPhoto]);
+    const vNameDay = validateNameDay(req.body.name_day);
+    const errors = collectErrors([vName, vBirthDate, vNotes, vPhoto, vNameDay]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     const result = db.get().prepare(`
-      INSERT INTO birthdays (name, birth_date, notes, photo_data, created_by, reminder_offset, reminder_custom_amount, reminder_custom_unit)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO birthdays (name, birth_date, name_day, notes, photo_data, created_by, reminder_offset, reminder_custom_amount, reminder_custom_unit)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       vName.value,
       vBirthDate.value,
+      vNameDay.value ?? null,
       vNotes.value,
       vPhoto.value ?? null,
       req.authUserId || req.session.userId,
@@ -170,15 +187,18 @@ router.put('/:id', (req, res) => {
     if (req.body.birth_date !== undefined) checks.push(validateDate(req.body.birth_date, 'Birth date'));
     if (req.body.notes !== undefined) checks.push(str(req.body.notes, 'Notes', { max: MAX_TEXT, required: false }));
     if (req.body.photo_data !== undefined) checks.push(validatePhotoData(req.body.photo_data));
+    if (req.body.name_day !== undefined) checks.push(validateNameDay(req.body.name_day));
     const errors = collectErrors(checks);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     const vPhoto = req.body.photo_data !== undefined ? validatePhotoData(req.body.photo_data) : { value: undefined };
+    const vNameDay = req.body.name_day !== undefined ? validateNameDay(req.body.name_day) : { value: undefined };
 
     db.get().prepare(`
       UPDATE birthdays
       SET name = COALESCE(?, name),
           birth_date = COALESCE(?, birth_date),
+          name_day = ?,
           notes = ?,
           photo_data = ?,
           reminder_offset = ?,
@@ -189,6 +209,7 @@ router.put('/:id', (req, res) => {
     `).run(
       req.body.name?.trim() ?? null,
       req.body.birth_date ?? null,
+      req.body.name_day !== undefined ? vNameDay.value : existing.name_day,
       req.body.notes !== undefined ? (req.body.notes?.trim() || null) : existing.notes,
       req.body.photo_data !== undefined ? (vPhoto.value ?? null) : existing.photo_data,
       req.body.reminder_offset !== undefined ? req.body.reminder_offset : existing.reminder_offset,

@@ -7,17 +7,248 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The Schedule module gained a quick-start for shift types, a range fill for overrides, grouped
+  range display and editing, and a "who's working today" dashboard widget.** A household with no
+  shift types yet can create seven common presets (Early/Late/Night/Day/24-hour, plus Vacation and
+  Sick - both without a start/end time, since an absence is already a valid "all day" shift type,
+  not a new concept) in one click instead of one at a time. Marking a whole date range as free (or
+  on a specific shift) - a vacation, a temporary reassignment - now takes one action instead of one
+  per day, capped separately from the read-side range limit since a fill writes real rows rather
+  than computing them on read. The Overrides tab groups consecutive same-type days into a single row
+  instead of one per day, and editing a group's From/To reconciles the change automatically - no more
+  deleting fourteen rows one at a time to adjust a two-week range. An opt-in dashboard widget shows
+  who has a shift or is free today, off by default like the module itself.
+
+- **A person can now have an optional name day beside their birthday.** The advanced section of the
+  birthday form stores a month and day without inventing a year; leaving it empty keeps the existing
+  behaviour. A saved name day becomes its own yearly entry in the birthday calendar layer, uses the
+  birthday's existing reminder lead time and appears as a separately labelled row in the dashboard
+  widget. The navigation badge counts both kinds of upcoming occasion, while the main Birthdays list
+  remains one row per person. Name-day labels, validation and calendar text are included in all 24
+  supported interface languages.
+
+- **Documents can be shared through the device's share sheet, straight from the viewer** (D#1014,
+  requested by @gdanthy). A passport scan used to take three steps to send: download, find the file,
+  share it. The viewer now carries a Share button that opens the operating system's share sheet with
+  the file - WhatsApp, Mail, AirDrop, Files, whatever is installed. It is built the way the reporter
+  proposed: the file is fetched in the background when the viewer opens, the button stays busy until
+  it is there, and the tap then goes straight into the share sheet, because a fetch between tap and
+  share is exactly where iOS drops the gesture. Whether sharing is possible is decided once, before
+  anything is loaded: the type has to be one the Web Share API accepts as a file (PDF, images, text,
+  CSV - not Word or Excel), the connection has to be secure, and the browser has to say yes to a probe.
+  Where the answer is no, there is no dead button; a line under the metadata says why, and Download
+  remains the path that works everywhere. Rows are unchanged on purpose.
+
+- **Decisions made once now have a page of their own.** [`docs/DECISIONS.md`](docs/DECISIONS.md)
+  is the counterpart to the scope page: not what Yuvomi will not become, but how something it
+  does build was decided, so that the next thread reaching the same point gets the answer instead
+  of the argument. The first entry is the one that was reached three times from three modules -
+  privacy beats admin convenience: a member's private data is never opened by a role or by an
+  update, only per person and on purpose (#584, #869, #989). The second is the pattern behind
+  three findings of the same two days: a rule lives in one place, not at a call site (#989,
+  #1013, #1007). The third is the head rule the calendar settled on 27 August and Tasks reached
+  again in #1012: one head, one width. Each entry names the rule, the reason, the code path that enforces it and
+  what would reopen or undo it, and points to the thread and the release rather than restating
+  them. Linked from the README, the scope page and the
+  contributing guide.
+
+- **An older Yuvomi on a newer database now says so, and a backup from a newer version is
+  refused.** Migrations only run forward, but nothing checked the other direction: after an image
+  rollback on Umbrel or Unraid the older version started silently on a database carrying
+  migrations it did not know, and a restore accepted any file that had a `schema_migrations`
+  table. Now an older version refuses to start on such a database and says which migration numbers
+  it does not know, which version it knows, and the way out; `DB_ALLOW_NEWER_SCHEMA=1` starts it
+  anyway for the emergency case, with a warning on every start, because what an older version
+  writes in the meantime can be lost on the next update. A restore of a newer backup is refused
+  before anything is copied, with the message to update first. The three sentences operators asked for stand in the installation guide under Updates:
+  migrations are one-way, any older backup restores into any newer version, and the way back is
+  the backup from before the update, not an older image.
+
+- **Tasks can be filtered by category, on the Board as well as in the List** (D#1017, asked by
+  @radicchiodev). The filter panel offered status, priority, person and tags, and the List could
+  group by category, but nothing filtered by it - and the Board cannot group at all, because its
+  columns are already the status. The server had accepted `?category=` since #825; the panel simply
+  never got the group. It has it now, in both views, with the same label the task form uses, and a
+  chosen category shows in the chip row and in the remembered filter sets like every other axis.
+
+### Changed
+
+- **Two promises that existed only in threads are written where people look.** The contributing
+  guide says what happens if the maintainer stops: nobody inherits repository rights, MIT allows
+  any fork at any time, and after a year without a release, a commit or a reply the fork may carry
+  the name. MODULES.md says how long `/api/v1` holds: an operation is named as deprecated in the
+  CHANGELOG and keeps working for at least 90 days after that release, and a `/api/v2` would keep
+  `/api/v1` served for twelve months.
+
 ### Fixed
 
-- **An `allowScripts` pin no longer points at a version that is not installed.** The field names
-  every package allowed to run install scripts, with an exact version, because the permission
-  applies to the reviewed build rather than to the name. Dependabot raises the dependency and the
-  lockfile but never touches that field - it does not know about it - so after every bump the pin
-  referred to a version that had been replaced. Nothing broke visibly, which is exactly why nobody
-  noticed: a permission pointing nowhere looks like one that holds. A guard now compares each pin
-  against the lockfile, so the next bump turns the suite red instead of leaving a dead pin behind.
+- **Inventory and Schedule speak all 24 languages, and a guard now notices when a module does
+  not.** Inventory shipped on 15 August and Schedule on 27 August with their texts copied from
+  English into the other 22 locales - navigation labels, forms, presets, the deadline feed settings,
+  everything - and the locale test stayed green, because it checks that every key exists, not that
+  any value was ever translated. All 222 of those texts are translated now, with one vocabulary per
+  language for each module: the shift presets say early, late and night shift the way that language
+  says it, and the module has a name of its own in every navigation. To keep it from happening to the
+  next module, a new suite counts, per locale, the texts that are still word-for-word English while
+  German is not, and holds that number against a baseline that may only fall.
+
+- **The add-subtask button stays on the task card after the first subtask** (D#1017). It used to
+  disappear as soon as a task had one, and the only other entry sat at the bottom of the subtask
+  list, which is collapsed until the progress bar is clicked - so the module read as "one subtask
+  per task" to someone who had just added one. There was never a limit; the way in was hidden. The
+  button on the card now stays, and the one at the end of the open list remains as well.
+
+- **The Tasks header holds one width across List, Board and History** (#1012). It used to jump on
+  every view switch: List and History narrowed the head to the 720px reading measure, the Board let it
+  run the full content column, and the actions on the right moved 354px back and forth (measured at
+  1358px). That was the coupling the calendar dropped on 27 August, and Tasks had not followed. Now
+  the page is built the calendar's way - the root carries no measure, List and History take the
+  reading lane back for their rows and filter row, the Board stays uncapped - and the head keeps the
+  edge of its widest body in all three views. The bodies are unchanged: the task rows still end at
+  720px, exactly as the reporter asked. The one-line version of this fix does not exist, because a
+  page that caps something at a measure has to show that measure in its head; the page had to stop
+  being a reading page first.
+
+- **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
+  the native colour input to fill its grid cell; on the mobile layout, where the two-column form
+  collapses to one, that cell is the whole form width. It now carries a fixed size, matching the
+  compact colour swatches used elsewhere in the app.
+
+- **Clearing a birthday reminder no longer leaves its reminder row behind.** Setting
+  `reminder_offset` to empty deleted the generated calendar event but not the reminder that
+  hung off it, so the household kept getting notified for an event that no longer existed. The
+  orphan is now removed with the event.
+
+- **A dashboard layout containing a third-party widget can be saved again** (#1013). With an
+  extension module that declares a dashboard widget, moving a tile, hiding one or resizing one
+  failed with `400`, and so did publishing the household default - it was not the extension widget
+  that got dropped, the whole request was refused. The storage check for a widget id lived in the
+  preferences route and knew nothing of the colon that `<module-id>:<widget-id>` carries, the form
+  this project documents for third-party widgets and builds itself. The check now lives beside the
+  function that composes those ids, so that widening one without the other is no longer possible,
+  and a guard asserts the round trip at the maximum lengths a module id and a widget id may reach.
+  Reported after the fix above had already closed its thread.
+
+- **An extension module's access level can be saved again** (#1009). Changing the access level for
+  a third-party module under Settings → Administration → Roles & permissions failed with
+  `Unknown module: ext`, and extension widget permissions failed the same way. The server was
+  right to refuse: the permissions page labels each control with `module:<key>`, and because a
+  third-party module's key is itself `ext:<moduleId>`, splitting that label on every colon kept
+  only `ext`. It now splits at the first colon, so the rest of the key survives - which also
+  repairs the second, silent consequence, where the widget list of an extension module was rebuilt
+  under a key that matched nothing. A shared helper carries the rule, and a guard keeps the call
+  site from parsing the label itself again.
+
+## [2.64.0] - 2026-09-02
 
 ### Added
+
+- **A written scope: what Yuvomi will not become.** [`docs/SCOPE.md`](docs/SCOPE.md) names three
+  boundaries that used to be re-argued in every second thread - direct bank connections, third-party
+  services in the core, and the dependency rule - and says for each one what is ruled out, what is
+  still open, and why. It is linked from the README, the backlog and the contributing guide, so a
+  feature request that runs into one of them gets an answer that does not depend on which thread it
+  landed in.
+
+### Changed
+
+- **`GET /api/v1/budget/plans` reports `isCurrentMonth`, and `over`/`met` are `null` outside the
+  current month.** The planned, actual, remaining and ratio fields are unchanged. If you read
+  `over` as a plain boolean, treat `null` as "no verdict available" rather than as "within budget";
+  the reason is in the Fixed entry below.
+
+### Fixed
+
+- **The budget plan no longer passes judgement on a month that is already over.** Editing a
+  plan changed the "over budget" verdict on months that had long closed: lower your grocery
+  budget today, and last August turned red for spending that was within the plan you
+  actually had at the time. The plan is deliberately one steady amount per category rather
+  than a value per month, and nothing records what it said back then - so for any month
+  other than the current one, Yuvomi now shows the planned and actual amounts and says
+  plainly that it is measuring against your current plan, instead of declaring a winner.
+  The current month is unchanged.
+
+## [2.63.0] - 2026-09-02
+
+### Added
+
+- **Third-party modules can declare capabilities in `module.json`** for dashboard widgets, household permissions (`ext:<module-id>`), and API token scopes - the same surfaces core modules use, without changing core application code.
+- **The dashboard dynamically loads third-party widget entry points** (`renderWidget`) from protected module assets, with per-widget error isolation and an optional generic options dialog driven by `optionsSchema`.
+- **Third-party modules can ship UI translations** in `locales/{locale}.json` with manifest `i18n.defaultLocale`, `labelKey` / `titleKey`, and the same 24 core languages as Yuvomi.
+- **OpenAPI now documents extension module capabilities** and module i18n metadata.
+
+- **Every page behind the app shell is now held to one page composition contract** (#929).
+  Layout primitives (`.app-page--*`, `page-measure`, the bleed section), the `--layout-*` width
+  tokens and the `page-layout.js` helpers arrive together with an audit that enforces them. The
+  audit derives its scope from `router.js` rather than from a list: a route with
+  `requiresAuth: false` renders without navigation and is outside the contract, everything else
+  is inside it, and a page added tomorrow is covered the day it gets a route. Three pages that
+  predate the contract are named in the guard, and a second test fails if that list grows, so
+  migrating a page is a deletion rather than a table somebody has to keep honest. The first draft
+  marked one reference page in the production markup instead; that attribute shipped to every
+  visitor and said nothing about the other thirty pages, so the guarantee moved into the guard.
+  The spec lives at `docs/PAGE-COMPOSITION.md`. Two reviews on the way in found what the first
+  cut had left undone: an extension module's `page.composition` and `page.width` were checked
+  on the server and shown in the admin list but never applied to the page, so `data` looked
+  exactly like `reading`; now the router mounts the module in the declared root (the
+  `container` a module's `render()` receives is that root, and `context.page` says which). The
+  reference page had lost the gap between its header and its body, and its measured header
+  wrapped the title in a rail that hid the module seal and the docked title; notes was declared a
+  reading page while its masonry ran the full width beside a 720px header, and is now `full`.
+  Three of the new guards were green without seeing anything: the breakpoint check let the
+  spec's own forbidden example through, the negative-margin check did not know `calc(-1 * ...)`,
+  and the inline-width check read the whole `style` attribute instead of the value. Each of
+  them now has a counter-proof. A second round found the header formula for a tab bar still
+  subtracting the reading width by name, so the housekeeping header (a `data` page) stopped
+  240px before its cards; it now subtracts the measure of its own page, and pages without one
+  (`full`, `split`) set that measure to `100%` rather than `none`, because `none` inside a
+  `calc()` does not degrade, it invalidates. The split grid sat on the page root, where the
+  helper's header and body would have become its two cells; it sits on the body now, and
+  `full`/`split` roots built by the helper take the shell height so a body can scroll on its
+  own. Subscriptions was declared `reading` while its analytics grid and list never met the
+  measure - only the KPI band did, and the page acquired a width jump; it is `full` until its
+  sections follow one measure, and split-expenses, a header over a two-column layout, is
+  `split`. The reach proof of the audit could not catch the failure it was written for: with a
+  dead router expression the scope did not shrink to nothing but widened to every page, login
+  included, and every lower bound stayed green; the expression now has to have read the
+  standalone routes before the file walk is allowed to add anything. A third round found the
+  helpers escaping only attribute values: `id`, `className` and attribute keys went into the
+  markup raw, and these helpers are the API an extension is told to build its page with, so a
+  per-record id was the expected way to hit it; every attribute value now goes through the
+  shared `esc()`. A fourth round showed that `esc()` is the wrong tool for an attribute key: it
+  knows `& < > " '` and not the space or `=` that end a name outside the quotes, so a key with
+  either in it became three attributes, one of them live, while the new guard stayed green with
+  its quote-based payload. Keys are now validated against an attribute-name pattern and an
+  invalid one throws like an unknown mode does; the guard tokenizes the opening tag the way a
+  browser does instead of reading the string. A fifth round caught the split grid measuring
+  the viewport: beside the expanded sidebar a 1024px screen leaves the page about 804px, and a
+  master rail allowed 720px of that left the detail rail a few pixels wide on common laptops;
+  the split root is a container now, the grid switches on the page's own width like the
+  expenses split already did, and the master rail never takes more than half. A sixth round
+  found the header helper still building a rail box for `measured` without `narrow`, the one
+  combination the spec still offered: a real element, not a `display: contents` shim, and it
+  put the title one level below the toolbar where the large-title rules and the collapsing
+  header look for a direct child. No page used it. The option, the element and its rules are
+  gone, every option combination renders the slots as direct children, and a guard fails on
+  either class name anywhere under `public/`. A seventh round found the schedule page declared
+  `data` (960px) under a header that runs full width: nothing showed the measure except the
+  primitives that happen to consume it, so the KPI band of the statistics ended at 960 while
+  the filter card and the result cards beside it did not (on main nothing was capped).
+  Schedule and documents, the two pages with that shape, declare `full` and cap nothing,
+  which is what they looked like before; the page's own rows inside its full-width cards
+  follow suit and no longer stop at the reading width. A guard reads the measure consumers
+  from the stylesheets and fails on any measured page whose header does not narrow but whose
+  markup contains one of them. The budget
+  reports panel had declared itself a `dashboard` inside the `reading`
+  budget page, which set the measure of its subtree to 1200px while the shared header and
+  every other tab end at 720px; it declares the mode of the page it lives in, and a guard holds
+  the two budget panels to that. A split body now carries the page gutter like the measured
+  modes (its rails started at x=0, left of the title), the manifest fields `page.navigation`
+  and `page.responsive` fall back to `standard` like `composition` and `width` do instead of
+  passing a typo through, and the worked example in the spec no longer draws the rail element
+  that the helper had stopped emitting.
 
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from
@@ -35,21 +266,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   promised field through the real normaliser, so dropping one turns the suite red rather than
   turning somebody's widget blank.
 
-
-### Added
-
-- **Third-party modules can declare capabilities in `module.json`** for dashboard widgets, household permissions (`ext:<module-id>`), and API token scopes - the same surfaces core modules use, without changing core application code.
-- **The dashboard dynamically loads third-party widget entry points** (`renderWidget`) from protected module assets, with per-widget error isolation and an optional generic options dialog driven by `optionsSchema`.
-- **Third-party modules can ship UI translations** in `locales/{locale}.json` with manifest `i18n.defaultLocale`, `labelKey` / `titleKey`, and the same 24 core languages as Yuvomi.
-- **OpenAPI now documents extension module capabilities** and module i18n metadata.
-
 ### Changed
 
 - **`GET /api/v1/modules` includes normalized `capabilities` and `i18n` metadata** (widgets, permission module metadata, API prefix, available locale files) for each installed extension module.
 - **Dashboard widgets, navigation, route guards, and admin permissions merge extension entries at runtime** from enabled modules, so third-party widget ids (`<module-id>:<widget-id>`) and `ext:<module-id>` permission keys behave like core modules.
 - **API token and MCP scope pickers include extension modules** from the live permissions catalog instead of a fixed core-only list.
-- **Extension `capabilities.api.prefix` must be exactly `/api/extensions/<module-id>`** — any other prefix, including a core path such as `/api/tasks`, is rejected so an installed module cannot take over a core token scope.
+- **Extension `capabilities.api.prefix` must be exactly `/api/extensions/<module-id>`** - any other prefix, including a core path such as `/api/tasks`, is rejected so an installed module cannot take over a core token scope.
 - **Extension UI labels resolve through a locale fallback chain** (UI language, module default, `en`, `de`, then static manifest labels) in navigation, Settings, permissions admin, and the dashboard widget chrome.
+- **`CONTRIBUTING.md` says who cleans up a stale PR: it follows from the cause, not from who has
+  time.** `main` moves faster than a review cycle. Mechanical fallout of that - rebases, `CHANGELOG`
+  collisions, the version line, `sw.js`, migration numbering - is the maintainer's; decisions inside
+  the feature stay with its author. Two promises follow: rebase once, after the review, and an open
+  architecture question never blocks a PR (#621 died waiting on one).
 
 ### Fixed
 
@@ -57,6 +285,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The extension permission catalog is scanned before the server accepts requests.** Starting the scan inside the `app.listen` callback left a window where stored `ext:<module-id> → none` rows were dropped and the deny-list treated a missing key as allow.
 - **Extension locale lookup no longer throws for module ids that collide with `Object.prototype`.** `constructor` (and `toString`) pass the module-id regex; looking them up on a plain `{}` store made `t()` throw instead of returning the key.
 - **The empty options dialog for a third-party widget no longer quotes the task-categories copy.** It has its own string.
+
+- **An `allowScripts` pin no longer points at a version that is not installed.** The field names
+  every package allowed to run install scripts, with an exact version, because the permission
+  applies to the reviewed build rather than to the name. Dependabot raises the dependency and the
+  lockfile but never touches that field - it does not know about it - so after every bump the pin
+  referred to a version that had been replaced. Nothing broke visibly, which is exactly why nobody
+  noticed: a permission pointing nowhere looks like one that holds. A guard now compares each pin
+  against the lockfile, so the next bump turns the suite red instead of leaving a dead pin behind.
 
 ## [2.62.0] - 2026-09-01
 

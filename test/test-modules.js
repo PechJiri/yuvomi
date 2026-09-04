@@ -139,7 +139,7 @@ import express from 'express';
 const dbmod = await import('../server/db.js');
 const svc = await import('../server/services/modules.js');
 const { SUPPORTED_MANIFEST_VERSION } = svc;
-const { normalizeCapabilities } = await import('../server/services/module-capabilities.js');
+const { normalizeCapabilities, fullWidgetId, isWidgetId, isNamespacedWidgetId, MODULE_ID_RE, WIDGET_SHORT_ID_RE } = await import('../server/services/module-capabilities.js');
 const { default: modulesRouter } = await import('../server/routes/modules.js');
 const db = dbmod.get();
 
@@ -499,4 +499,74 @@ test('listModules: fehlende widget entry datei → error status', async () => {
   const bad = mods.find((m) => m.id === 'bad-cap-mod');
   assert.equal(bad.status, 'error');
   assert.match(bad.error, /does not exist/i);
+});
+
+// Die Seitenerklaerung (`page.composition`, `page.width`) ist seit #929 Teil
+// des Manifests. Sie zaehlt nur, wenn der Router sie auch anwendet - der Guard
+// dafuer steht in test-frontend-audit.js (PAGE-012); hier wird die Normalisierung
+// festgehalten, auf die er sich verlaesst.
+test('page.composition wird normalisiert und page.width folgt dem Modus', () => {
+  const norm = (page) => svc.normalizeManifest({ id: 'x-mod', entry: 'index.js', page }, 'x-mod').page;
+  assert.deepEqual(norm(undefined), { composition: 'reading', width: 'reading', navigation: 'standard', responsive: 'standard' },
+    'ohne page-Block: reading in Lesebreite');
+  assert.equal(norm({ composition: 'data' }).width, 'content', 'data liest --layout-content');
+  assert.equal(norm({ composition: 'dashboard' }).width, 'wide', 'dashboard liest --layout-wide');
+  assert.equal(norm({ composition: 'full' }).width, 'reading',
+    'full traegt den Rueckfall reading - layout.css wendet width auf full/split nicht an');
+  assert.equal(norm({ composition: 'data', width: 'wide' }).width, 'wide', 'eine erklaerte Breite gewinnt');
+  assert.equal(norm({ composition: 'tabelle' }).composition, 'reading', 'ein unbekannter Modus faellt auf reading');
+  assert.equal(norm({ composition: 'data', width: 'riesig' }).width, 'content', 'eine unbekannte Breite faellt auf die des Modus');
+  // navigation/responsive folgen derselben Regel: MODULES.md nennt nur
+  // `standard`, und ein Tippfehler darf nicht als eigener Zustand ankommen
+  // (Codex, dritte Runde an #995 - die erste Fassung reichte ihn roh durch).
+  assert.equal(norm({ navigation: 'tabs' }).navigation, 'standard', 'eine unbekannte navigation faellt auf standard');
+  assert.equal(norm({ responsive: 'collapse' }).responsive, 'standard', 'ein unbekanntes responsive faellt auf standard');
+  assert.equal(norm({ navigation: 'standard', responsive: 'standard' }).navigation, 'standard', 'standard bleibt standard');
+});
+
+// ── Die Speicherform einer Widget-Id (#1013) ─────────────────────────────────
+//
+// DER EIGENTLICHE GUARD IST DER ERSTE: was `fullWidgetId()` baut, muss
+// `isWidgetId()` annehmen - und zwar an den LAENGENGRENZEN, nicht an einem
+// huebschen Beispiel. Genau daran ist #1013 gescheitert: die Speicherform stand
+// in einer anderen Datei und kannte den Doppelpunkt nicht, den die
+// Zusammensetzung erzeugt. Ein Beispiel-Test mit 'my-addon:chart' waere auch mit
+// einer Schranke von 64 Zeichen gruen geblieben, obwohl eine legale volle Id 97
+// erreichen kann.
+test('was fullWidgetId baut, nimmt die Speicherform an - auch am Rand (#1013)', () => {
+  const maxModuleId = 'm'.repeat(64);
+  const maxShortId = 'w'.repeat(32);
+  assert.ok(MODULE_ID_RE.test(maxModuleId), 'Voraussetzung: 64 Zeichen sind eine legale Modul-Id');
+  assert.ok(WIDGET_SHORT_ID_RE.test(maxShortId), 'Voraussetzung: 32 Zeichen sind eine legale Kurz-Id');
+
+  const longest = fullWidgetId(maxModuleId, maxShortId);
+  assert.equal(longest.length, 97, 'die laengste legale Widget-Id ist 97 Zeichen lang');
+  assert.ok(isWidgetId(longest), 'die laengste legale Id muss speicherbar sein');
+
+  // Eine Modul-Id darf mit einer ZIFFER beginnen (ID_RE), eine Kern-Widget-Id
+  // nicht. Wer die Namensraum-Form aus der Kern-Form ableitet, verliert das.
+  assert.ok(MODULE_ID_RE.test('7up'), 'Voraussetzung: eine Modul-Id darf mit einer Ziffer beginnen');
+  assert.ok(isWidgetId(fullWidgetId('7up', 'chart')), 'auch eine Modul-Id mit fuehrender Ziffer bleibt speicherbar');
+});
+
+test('isWidgetId nimmt Kern- und Namensraum-Ids an und weist kaputte ab (#1013)', () => {
+  for (const id of ['weather', 'tasks', 'my-addon', 'my-addon:chart', '7up:chart']) {
+    assert.ok(isWidgetId(id), `${id} muss angenommen werden`);
+  }
+  for (const id of [
+    'mo:chart',                       // Modul-Id kuerzer als drei Zeichen
+    `${'m'.repeat(65)}:chart`,        // Modul-Id zu lang
+    `my-addon:${'w'.repeat(33)}`,     // Kurz-Id zu lang
+    'a:b:c',                          // zweiter Doppelpunkt: kaputt, nicht verschachtelt
+    'my-addon:', ':chart', '::',
+    '../weather', 'My-Addon:chart', 'my-addon:Chart', 'my-addon:1chart',
+    '-my-addon:chart', 'my-addon-:chart',
+    null, undefined, 42, {},
+  ]) {
+    assert.equal(isWidgetId(id), false, `${String(id)} darf nicht angenommen werden`);
+  }
+  // Eine Kern-Id ist NICHT namensraumbehaftet - sonst wuerde jede Kachel als
+  // Fremdmodul-Widget gelten, sobald jemand die beiden Pruefungen verwechselt.
+  assert.equal(isNamespacedWidgetId('weather'), false);
+  assert.equal(isNamespacedWidgetId('my-addon:chart'), true);
 });

@@ -43,7 +43,7 @@ function addUser(db, { id, role = 'member', family_role = 'other', name = 'U' })
   return db.prepare('SELECT id, role, family_role FROM users WHERE id = ?').get(id);
 }
 
-test('migration 174 preserves overrides and permits capability resources', () => {
+test('migration 175 preserves overrides and permits capability resources', () => {
   const db = new DatabaseSync(':memory:');
   db.exec(MIGRATIONS_SQL[74]);
   db.prepare(`
@@ -52,7 +52,7 @@ test('migration 174 preserves overrides and permits capability resources', () =>
     VALUES ('role', 'child', 'module', 'notes', 'read', '2024-01-02T03:04:05Z')
   `).run();
 
-  db.exec(MIGRATIONS_SQL[174]);
+  db.exec(MIGRATIONS_SQL[175]);
 
   assert.deepEqual(
     { ...db.prepare(`
@@ -216,7 +216,7 @@ test('replaceSubjectPermissions ersetzt atomar (kein Merge)', () => {
 
 test('replaceSubjectPermissions erhält Capability-Zeilen beim Speichern von Modulen', () => {
   const db = freshDb();
-  db.exec(MIGRATIONS_SQL[174]);
+  db.exec(MIGRATIONS_SQL[175]);
   db.prepare(`
     INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
     VALUES ('role', 'child', 'capability', 'notes.categories', 'allow')

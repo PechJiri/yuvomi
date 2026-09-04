@@ -36,6 +36,14 @@ function normalizedMonthDay(birthDate, year) {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
+function normalizedNameDay(nameDay, year) {
+  const [monthStr, dayStr] = String(nameDay).split('-');
+  const month = parseInt(monthStr, 10);
+  let day = parseInt(dayStr, 10);
+  if (month === 2 && day === 29 && !leapYear(year)) day = 28;
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
 /**
  * Ein Geburtstag ist ein Kalendertag, kein Zeitpunkt - deshalb rechnen diese
  * Helfer auf Datums-Keys statt auf `Date`. Vorher mischte `nextBirthdayDate`
@@ -58,6 +66,24 @@ function nextBirthdayAge(birthDate, today = todayKey(null)) {
 
 function daysUntilBirthday(birthDate, today = todayKey(null)) {
   const next = nextBirthdayDate(birthDate, today);
+  const keyUtc = (key) => Date.UTC(
+    parseInt(key.slice(0, 4), 10),
+    parseInt(key.slice(5, 7), 10) - 1,
+    parseInt(key.slice(8, 10), 10),
+  );
+  return Math.round((keyUtc(next) - keyUtc(String(today).slice(0, 10))) / 86400000);
+}
+
+function nextNameDayDate(nameDay, today = todayKey(null)) {
+  if (!nameDay) return null;
+  const year = parseInt(String(today).slice(0, 4), 10);
+  const thisYear = normalizedNameDay(nameDay, year);
+  return thisYear >= today ? thisYear : normalizedNameDay(nameDay, year + 1);
+}
+
+function daysUntilNameDay(nameDay, today = todayKey(null)) {
+  const next = nextNameDayDate(nameDay, today);
+  if (!next) return null;
   const keyUtc = (key) => Date.UTC(
     parseInt(key.slice(0, 4), 10),
     parseInt(key.slice(5, 7), 10) - 1,
@@ -110,6 +136,14 @@ function eventDescription(name, birthDate, locale, dateFormat) {
     : translate(locale, 'birthdays.calendarEventDescriptionNoDate', { name });
 }
 
+function nameDayEventTitle(name, locale) {
+  return translate(locale, 'birthdays.nameDayCalendarEventTitle', { name });
+}
+
+function nameDayEventDescription(name, locale) {
+  return translate(locale, 'birthdays.nameDayCalendarEventDescription', { name });
+}
+
 /**
  * Löscht einen Geburtstags-Termin und merkt die beim Provider liegende Kopie zur
  * Löschung vor. Die Vormerkung muss davor passieren: danach fehlt der Weg zum
@@ -127,34 +161,47 @@ function deleteCalendarEvent(database, eventId) {
   database.prepare('DELETE FROM calendar_events WHERE id = ?').run(eventId);
 }
 
-function syncBirthdayCalendarEvent(database, birthday) {
+function syncBirthdayCalendarEvent(database, birthday, kind = 'birthday') {
+  const isNameDay = kind === 'name_day';
+  const eventIdField = isNameDay ? 'name_day_calendar_event_id' : 'calendar_event_id';
+  const linkedEventId = birthday[eventIdField];
+  const sourceDate = isNameDay
+    ? (birthday.name_day ? `2000-${birthday.name_day}` : null)
+    : birthday.birth_date;
+
   // "Keine Benachrichtigung" → Geburtstag soll weder im Dashboard noch im
   // Kalender als Termin erscheinen. Vorhandenes Event löschen und null zurückgeben.
-  if (birthday.reminder_offset === '') {
-    if (birthday.calendar_event_id) {
-      deleteCalendarEvent(database, birthday.calendar_event_id);
-      database.prepare('UPDATE birthdays SET calendar_event_id = NULL WHERE id = ?').run(birthday.id);
+  if (!sourceDate || birthday.reminder_offset === '') {
+    if (linkedEventId) {
+      database.prepare(`
+        DELETE FROM reminders
+        WHERE entity_type = 'event' AND entity_id = ? AND created_by = ?
+      `).run(linkedEventId, birthday.created_by);
+      deleteCalendarEvent(database, linkedEventId);
+      database.prepare(`UPDATE birthdays SET ${eventIdField} = NULL WHERE id = ?`).run(birthday.id);
     }
     return null;
   }
 
   const { locale, dateFormat } = resolveHouseholdFormats(database);
   const payload = {
-    title: eventTitle(birthday.name, locale),
-    description: eventDescription(birthday.name, birthday.birth_date, locale, dateFormat),
-    start_datetime: birthday.birth_date,
+    title: isNameDay ? nameDayEventTitle(birthday.name, locale) : eventTitle(birthday.name, locale),
+    description: isNameDay
+      ? nameDayEventDescription(birthday.name, locale)
+      : eventDescription(birthday.name, birthday.birth_date, locale, dateFormat),
+    start_datetime: sourceDate,
     end_datetime: null,
     all_day: 1,
     location: null,
     color: BIRTHDAY_COLOR,
-    icon: 'cake',
+    icon: isNameDay ? 'balloon' : 'cake',
     assigned_to: null,
     recurrence_rule: BIRTHDAY_RRULE,
     created_by: birthday.created_by,
   };
 
-  if (birthday.calendar_event_id) {
-    const existing = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(birthday.calendar_event_id);
+  if (linkedEventId) {
+    const existing = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(linkedEventId);
     if (existing) {
       // `external_source` wird bewusst NICHT auf 'local' zurückgesetzt. Das tat
       // diese Anweisung seit dem ersten Geburtstags-Commit, lange bevor es einen
@@ -200,7 +247,7 @@ function syncBirthdayCalendarEvent(database, birthday) {
           payload.description,
           payload.start_datetime,
           payload.start_datetime,
-          birthday.calendar_event_id,
+          linkedEventId,
         );
 
         // Marker inline statt über markEventOutbound: das schreibt über db.get()
@@ -212,7 +259,7 @@ function syncBirthdayCalendarEvent(database, birthday) {
         if (authoredChanged) {
           database.prepare(
             'UPDATE calendar_events SET outbound_dirty = 1, outbound_attempts = 0 WHERE id = ?'
-          ).run(birthday.calendar_event_id);
+          ).run(linkedEventId);
         }
       } else {
         database.prepare(`
@@ -232,10 +279,10 @@ function syncBirthdayCalendarEvent(database, birthday) {
           payload.assigned_to,
           payload.recurrence_rule,
           payload.created_by,
-          birthday.calendar_event_id,
+          linkedEventId,
         );
       }
-      return birthday.calendar_event_id;
+      return linkedEventId;
     }
   }
 
@@ -258,13 +305,16 @@ function syncBirthdayCalendarEvent(database, birthday) {
     payload.recurrence_rule,
   );
 
-  database.prepare('UPDATE birthdays SET calendar_event_id = ? WHERE id = ?')
+  database.prepare(`UPDATE birthdays SET ${eventIdField} = ? WHERE id = ?`)
     .run(result.lastInsertRowid, birthday.id);
   return result.lastInsertRowid;
 }
 
-function syncBirthdayReminder(database, birthday, from = new Date()) {
-  if (!birthday.calendar_event_id) return null;
+function syncBirthdayReminder(database, birthday, from = new Date(), kind = 'birthday') {
+  const isNameDay = kind === 'name_day';
+  const eventId = isNameDay ? birthday.name_day_calendar_event_id : birthday.calendar_event_id;
+  const sourceDate = isNameDay ? `2000-${birthday.name_day}` : birthday.birth_date;
+  if (!eventId || (isNameDay && !birthday.name_day)) return null;
   const today = todayKey(database, from);
   const tz    = householdTimeZone(database);
 
@@ -272,17 +322,17 @@ function syncBirthdayReminder(database, birthday, from = new Date()) {
     database.prepare(`
       DELETE FROM reminders
       WHERE entity_type = 'event' AND entity_id = ? AND created_by = ?
-    `).run(birthday.calendar_event_id, birthday.created_by);
+    `).run(eventId, birthday.created_by);
     return null;
   }
 
   const offsetMin = getOffsetMinutes(birthday);
-  const desired = birthdayReminderAt(birthday.birth_date, offsetMin, today, tz);
+  const desired = birthdayReminderAt(sourceDate, offsetMin, today, tz);
   const existing = database.prepare(`
     SELECT * FROM reminders
     WHERE entity_type = 'event' AND entity_id = ? AND created_by = ?
     ORDER BY created_at DESC
-  `).all(birthday.calendar_event_id, birthday.created_by);
+  `).all(eventId, birthday.created_by);
 
   const active = existing.find((row) => row.dismissed === 0);
   if (active && active.remind_at === desired) return active.id;
@@ -290,30 +340,34 @@ function syncBirthdayReminder(database, birthday, from = new Date()) {
   database.prepare(`
     DELETE FROM reminders
     WHERE entity_type = 'event' AND entity_id = ? AND created_by = ?
-  `).run(birthday.calendar_event_id, birthday.created_by);
+  `).run(eventId, birthday.created_by);
 
   const result = database.prepare(`
     INSERT INTO reminders (entity_type, entity_id, remind_at, created_by)
     VALUES ('event', ?, ?, ?)
-  `).run(birthday.calendar_event_id, desired, birthday.created_by);
+  `).run(eventId, desired, birthday.created_by);
 
   return result.lastInsertRowid;
 }
 
 function syncBirthdayArtifacts(database, birthday, from = new Date()) {
   const calendarEventId = syncBirthdayCalendarEvent(database, birthday);
-  const refreshed = { ...birthday, calendar_event_id: calendarEventId };
+  let refreshed = { ...birthday, calendar_event_id: calendarEventId };
   syncBirthdayReminder(database, refreshed, from);
+  const nameDayCalendarEventId = syncBirthdayCalendarEvent(database, refreshed, 'name_day');
+  refreshed = { ...refreshed, name_day_calendar_event_id: nameDayCalendarEventId };
+  syncBirthdayReminder(database, refreshed, from, 'name_day');
   return refreshed;
 }
 
 function deleteBirthdayArtifacts(database, birthday) {
-  if (birthday.calendar_event_id) {
+  for (const eventId of [birthday.calendar_event_id, birthday.name_day_calendar_event_id]) {
+    if (!eventId) continue;
     database.prepare(`
       DELETE FROM reminders
       WHERE entity_type = 'event' AND entity_id = ? AND created_by = ?
-    `).run(birthday.calendar_event_id, birthday.created_by);
-    deleteCalendarEvent(database, birthday.calendar_event_id);
+    `).run(eventId, birthday.created_by);
+    deleteCalendarEvent(database, eventId);
   }
 }
 
@@ -343,10 +397,15 @@ function deleteBirthdayArtifacts(database, birthday) {
 function retitleBirthdayEvents(database) {
   const { locale, dateFormat } = resolveHouseholdFormats(database);
   const rows = database.prepare(`
-    SELECT b.name, b.birth_date,
+    SELECT b.name, b.birth_date, 'birthday' AS event_kind,
            e.id, e.title, e.description, e.external_source, e.external_calendar_id
     FROM birthdays b
     JOIN calendar_events e ON e.id = b.calendar_event_id
+    UNION ALL
+    SELECT b.name, NULL AS birth_date, 'name_day' AS event_kind,
+           e.id, e.title, e.description, e.external_source, e.external_calendar_id
+    FROM birthdays b
+    JOIN calendar_events e ON e.id = b.name_day_calendar_event_id
   `).all();
 
   const update = database.prepare(
@@ -360,8 +419,12 @@ function retitleBirthdayEvents(database) {
 
   let changed = 0;
   for (const row of rows) {
-    const title = eventTitle(row.name, locale);
-    const description = eventDescription(row.name, row.birth_date, locale, dateFormat);
+    const title = row.event_kind === 'name_day'
+      ? nameDayEventTitle(row.name, locale)
+      : eventTitle(row.name, locale);
+    const description = row.event_kind === 'name_day'
+      ? nameDayEventDescription(row.name, locale)
+      : eventDescription(row.name, row.birth_date, locale, dateFormat);
     if (title === row.title && description === (row.description ?? null)) continue;
 
     update.run(title, description, row.id);
@@ -388,7 +451,28 @@ function hydrateBirthday(database, row, from = new Date()) {
     next_birthday,
     next_age: nextBirthdayAge(row.birth_date, today),
     days_until: daysUntilBirthday(row.birth_date, today),
+    next_name_day: row.name_day ? nextNameDayDate(row.name_day, today) : null,
+    name_day_days_until: row.name_day ? daysUntilNameDay(row.name_day, today) : null,
   };
+}
+
+function hydrateBirthdayOccurrences(database, row, from = new Date()) {
+  const birthday = hydrateBirthday(database, row, from);
+  const occurrences = [{
+    ...birthday,
+    kind: 'birthday',
+    next_date: birthday.next_birthday,
+  }];
+  if (birthday.name_day && birthday.next_name_day) {
+    occurrences.push({
+      ...birthday,
+      kind: 'name_day',
+      next_date: birthday.next_name_day,
+      days_until: birthday.name_day_days_until,
+      next_age: null,
+    });
+  }
+  return occurrences;
 }
 
 function syncAllBirthdayReminders(database, userId, from = new Date()) {
@@ -488,14 +572,17 @@ export {
   BIRTHDAY_RRULE,
   birthdayReminderAt,
   daysUntilBirthday,
+  daysUntilNameDay,
   deleteBirthdayArtifacts,
   eventDescription,
   eventTitle,
   hydrateBirthday,
+  hydrateBirthdayOccurrences,
   importBirthdaysFromContacts,
   listBirthdayImportCandidates,
   nextBirthdayAge,
   nextBirthdayDate,
+  nextNameDayDate,
   retitleBirthdayEvents,
   syncAllBirthdayReminders,
   syncBirthdayArtifacts,

@@ -32,6 +32,12 @@ The folder name must match the manifest `id`.
     "label": "Example",
     "icon": "box",
     "order": 100
+  },
+  "page": {
+    "composition": "reading",
+    "width": "reading",
+    "navigation": "standard",
+    "responsive": "standard"
   }
 }
 ```
@@ -56,28 +62,45 @@ Optional fields:
   (see the one-voice rule in `docs/SPEC.md`), so the frame does not change color when a visitor
   opens your page. Pick a tone that reads against both a light and a dark surface: the mark is
   filled with it and carries a light or dark glyph on top.
+- `page.composition`: one of `reading` | `data` | `dashboard` | `form` | `split` | `full`
+  (see [`docs/PAGE-COMPOSITION.md`](docs/PAGE-COMPOSITION.md)). The app applies it: the
+  `container` your `render()` receives is the `.app-page--<composition>` root, with the page
+  measure set. Declare intent; do not invent page width, gutters, or breakpoints. Build the
+  header and body with `/utils/page-layout.js`.
+- `page.width`: semantic width (`reading` | `content` | `wide`); defaults from composition and
+  refines the measure inside `reading`, `form`, `data` and `dashboard`. `split` and `full` own
+  their width and ignore it. In `split`, the first two children of the body are the master and
+  detail rails once the page is 768px wide (stacked below; the page is measured, not the
+  viewport, so the sidebar does not fool it), and the body carries the page gutter like the
+  measured modes; `full` and `split` roots take the shell height, so a body section can scroll
+  internally without your CSS sizing the page. `full` is the one mode whose body has no gutter.
+- `page.navigation` / `page.responsive`: currently `standard` only.
 
 ## Client Entry
 
 ```js
 import { api } from '/api.js';
 import { esc } from '/utils/html.js';
+import { renderPageHeader, renderPageTitle, renderPageBody, renderPageSection } from '/utils/page-layout.js';
 
 export async function render(container, context) {
+  // `container` already is your page root: the app has wrapped it in the
+  // composition you declared in module.json (`.app-page.app-page--reading`,
+  // `--page-measure` set). Render the header and the body into it; do not
+  // call renderAppPage() yourself, that would nest a second page root.
   const me = await api.get('/auth/me');
   container.replaceChildren();
-  container.insertAdjacentHTML('beforeend', `
-    <div class="page">
-      <div class="page__header">
-        <h1 class="page__title">Example Module</h1>
-      </div>
-      <section class="settings-card">
-        <p>Hello, ${esc(me.user.display_name)}</p>
-      </section>
-    </div>
-  `);
+  container.insertAdjacentHTML('beforeend',
+    renderPageHeader({ title: renderPageTitle('Example Module') })
+    + renderPageBody({
+      content: renderPageSection({
+        content: `<p>Hello, ${esc(me.user.display_name)}</p>`,
+      }),
+    }));
 }
 ```
+
+`context` carries `user` and `page`. `page` is the normalized declaration from your manifest (`composition`, `width`, `navigation`, `responsive`), so a module can branch on it without reading `module.json` a second time.
 
 Modules may import public Yuvomi browser libraries such as `/api.js`, `/i18n.js`, and utilities under `/utils/`. For calls to Yuvomi's built-in REST API, prefer `import { api } from '/api.js'`: it prefixes requests with `/api/v1`, sends the current session credentials, handles CSRF tokens, and uses non-cached fetches for user data.
 
@@ -200,7 +223,7 @@ Rules:
 - Permission module key: `ext:<module-id>` (appears in Settings -> Admin -> Roles & permissions).
 - Widget id in the dashboard: `<module-id>:<widget-id>` (namespace avoids collisions with core widgets).
 - `capabilities.permissions.module` is required when you declare widgets and/or `api.prefix`.
-- `capabilities.api.prefix`, when declared, must be exactly `/api/extensions/<module-id>` (trailing slash optional). Any other prefix — including a core path such as `/api/tasks` — is rejected and the module loads as errored.
+- `capabilities.api.prefix`, when declared, must be exactly `/api/extensions/<module-id>` (trailing slash optional). Any other prefix - including a core path such as `/api/tasks` - is rejected and the module loads as errored.
 - Widget `entry` must export `renderWidget(container, { size, options, user })`.
 - Widgets fetch their own data (typically from your sidecar API). They are not injected into `GET /api/v1/dashboard`.
 - `optionsSchema` supports up to 8 keys (`boolean`, `number`, `string`, or `enum` via `enum` array).
@@ -226,6 +249,8 @@ Two endpoints help, though they answer at different times:
 Compare the operations the module requires - method, path, and the response fields it reads - against that document while building, and again when a Yuvomi release moves. At runtime, where the document is usually out of reach, watch the version instead and read the failure: a `404` or `405` on an endpoint that worked before means the operation moved, and that is the point to degrade rather than retry. Three outcomes cover the realistic cases: run normally; keep stored data, review and export readable while blocking writes; or show a dependency error with a retry control. Refusing a write is better than issuing it against an endpoint whose meaning has changed.
 
 Third-party modules should build on `/api/v1` and the public browser libraries described above; breaking changes to those are called out in the CHANGELOG. Direct database access, private helpers under `server/`, and undocumented response fields sit outside that line and may change in any release without notice.
+
+How long that line holds: before an operation under `/api/v1` changes or goes away, it is named as deprecated in the CHANGELOG and keeps working unchanged for at least 90 days after the release that says so - a span of time rather than a number of releases, because releases here are frequent and a module author reads the CHANGELOG on their own schedule. If an `/api/v2` ever ships, `/api/v1` keeps being served for twelve months after it.
 
 ## Docker / Podman
 

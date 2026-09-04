@@ -368,7 +368,7 @@ export async function render(container, ctx = {}) {
 
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <div class="health-page page-measure--narrow">
+    <div class="health-page app-page app-page--dashboard" data-composition="dashboard">
       <!-- Kanonischer Modulkopf: die Sub-Tab-Leiste wechselt eine SICHT
            innerhalb der Gesundheit (alle Health-Routen tragen module: 'health'),
            also steht der Modulname als Large Title ueber ihr - dasselbe Muster
@@ -1845,7 +1845,8 @@ function adherenceMarkup() {
     <div class="metric-card">
       ${head}
       <div class="metric-card__value">${esc(fmtNum(pct))}%</div>
-      <div class="metric-card__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+      <div class="metric-card__progress" role="progressbar" aria-label="${esc(t('health.meds.adherence.title'))}"
+           aria-valuemin="0" aria-valuemax="100"
            aria-valuenow="${pct}" aria-valuetext="${pct}%"><span style="--fill:${pct / 100}"></span></div>
       <div class="metric-card__note">${esc(t('health.meds.adherence.summary', { taken: a.taken, planned: a.planned }))}</div>
     </div>`;
@@ -4528,7 +4529,10 @@ function cycleCalendarMarkup(own) {
         </div>
       </div>
       <div class="cycle-cal__weekdays" aria-hidden="true">${weekdays}</div>
-      <div class="cycle-cal__grid" role="grid">${cells}</div>
+      <!-- Bewusst OHNE role=grid: die Rolle verlangt row/gridcell-Struktur und
+           verspricht Pfeiltasten-Navigation, die es hier nicht gibt. Die Tage
+           sind eigenstaendige Buttons mit Datums-Label. -->
+      <div class="cycle-cal__grid">${cells}</div>
       ${cycleLegendMarkup()}
     </section>`;
 }
