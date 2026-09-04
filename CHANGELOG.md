@@ -87,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The build is pinned to what it was tested against.** CI now runs on Node 22 and Node 24 (the image has run on 24 for months while CI tested 22 alone), every GitHub Action is pinned to a commit SHA with its version as a comment, and the base image is pinned to a digest; guards refuse a floating tag and keep the CI matrix and the image's Node major together.
+
 - **Two promises that existed only in threads are written where people look.** The contributing
   guide says what happens if the maintainer stops: nobody inherits repository rights, MIT allows
   any fork at any time, and after a year without a release, a commit or a reply the fork may carry

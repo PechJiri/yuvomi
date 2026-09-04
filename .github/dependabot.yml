@@ -30,8 +30,9 @@ updates:
     # Node-Majors bleiben Handarbeit. Dependabot schlägt jeden neuen Major vor,
     # auch solange er "Current" und nicht LTS ist (Node 26 ab April 2026, LTS
     # erst ab Oktober). Ein selbst gehostetes Image läuft bei den Nutzern
-    # monatelang unangetastet, und die CI testet ausschließlich Node 22.x -
-    # der Bump käme also ungeprüft. Minor- und Patch-Updates der laufenden
+    # monatelang unangetastet, und die CI testet nur die Majors in ihrer
+    # Matrix (22.x und 24.x seit dem 4.9.2026; test:docker-publish haelt
+    # Matrix und Dockerfile zusammen) - der Bump käme also ungeprüft. Minor- und Patch-Updates der laufenden
     # LTS-Linie zieht Dependabot weiterhin selbst.
     ignore:
       - dependency-name: node
