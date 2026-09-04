@@ -93,8 +93,10 @@ A week is not seven equal days for everyone: week views in blocks (#435), a week
 (#749), and work hours and school timetables per member (PR #1018).
 
 - **Decided.** Timetables live in the Schedule module as several blocks per cycle day, not as
-  a twentieth module: one model, not two (#786, then #1018).
-- **Open.** The block-per-day shape in Schedule, and the week view that shows it.
+  a twentieth module - [entry 6](DECISIONS.md#6-one-model-not-two), from #786 and #1018.
+- **Open.** The blocks-per-cycle-day change itself, in #1022; the side-by-side view of
+  several members' timetables, decided in #1018 as a tab in Schedule rather than a mode in
+  the calendar, and still to build.
 
 ---
 
