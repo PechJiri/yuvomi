@@ -28,7 +28,7 @@ function database() {
   return db;
 }
 
-test('migration 175 creates scoped note categories without seed data', () => {
+test('migration 176 creates scoped note categories without seed data', () => {
   const db = database();
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM note_categories').get().count, 0);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM note_category_assignments').get().count, 0);
