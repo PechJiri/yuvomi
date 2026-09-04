@@ -968,6 +968,8 @@ test('der Dokument-Mount zielt auf DOCUMENT_STORAGE_LOCAL_PATH, nie auf einen fe
 // ihre Schlüssel aus den Services selbst holen.
 
 const INTENTIONALLY_UNDOCUMENTED = {
+  APP_BUILD_REVISION:
+    'Internal build revision injected by deployment infrastructure; not an installer or household setting.',
   OIKOS_INSTALLER_ROOT:
     'Interner Pfad des Installer-Prozesses (tools/installer/install-server.js), kein '
     + 'Deployment-Wert. Er beschreibt, wo der Installer selbst liegt, waehrend .env.example '

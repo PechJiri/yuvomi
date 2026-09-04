@@ -84,6 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A same-version deployment now invalidates the installed PWA shell.** The served service worker
+  receives a build-specific revision, so acceptance builds and rebuilt images no longer reuse an
+  older cache merely because the application version has not changed.
+
 - **Inventory and Schedule speak all 24 languages, and a guard now notices when a module does
   not.** Inventory shipped on 15 August and Schedule on 27 August with their texts copied from
   English into the other 22 locales - navigation labels, forms, presets, the deadline feed settings,
