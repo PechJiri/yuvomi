@@ -391,6 +391,8 @@ test('running folder uploads freeze plan controls, cancel on modal close, and su
   const save = page.slice(page.indexOf('async function saveFolderUpload'), page.indexOf('async function saveDocument'));
   assert.match(save, /setFolderUploadControlsDisabled\(panel, true\)/);
   assert.match(save, /folderUploadOutcome\(result\)/);
+  assert.match(save, /runRateLimitedOperation\([\s\S]*loadFolders\(\)[\s\S]*loadDocuments\(\)/);
+  assert.match(save, /catch \(refreshError\)[\s\S]*folderUploadOutcome\(result\)/);
   assert.match(save, /outcome\.tone/);
   assert.doesNotMatch(save, /uploadedToast', \{ count: result\.uploaded\.length \}\), 'success'/);
   const result = page.slice(page.indexOf('function renderFolderUploadResult'), page.indexOf('async function saveFolderUpload'));

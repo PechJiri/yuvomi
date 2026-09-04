@@ -328,18 +328,19 @@ async function cancellableRetryWait(delayMs, shouldCancel) {
   return !shouldCancel();
 }
 
-async function runRateLimitedWrite(operation, {
-  maxRetries,
-  shouldCancel,
-  waitForRetry,
-}) {
+export async function runRateLimitedOperation(operation, {
+  maxRetries = 3,
+  shouldCancel = () => false,
+  waitForRetry = cancellableRetryWait,
+} = {}) {
+  const retryLimit = Math.max(0, Math.floor(Number(maxRetries) || 0));
   let retries = 0;
   while (true) {
     if (shouldCancel()) throw RATE_LIMIT_CANCELLED;
     try {
       return await operation();
     } catch (error) {
-      if (error?.status !== 429 || retries >= maxRetries) throw error;
+      if (error?.status !== 429 || retries >= retryLimit) throw error;
       const waited = await waitForRetry(retryAfterDelayMs(error, retries), shouldCancel);
       if (waited === false || shouldCancel()) throw RATE_LIMIT_CANCELLED;
       retries += 1;
@@ -397,7 +398,7 @@ export async function executeFolderUploadPlan(plan, {
     }
     onProgress({ phase: 'folder', status: 'started', item: folder });
     try {
-      const created = await runRateLimitedWrite(
+      const created = await runRateLimitedOperation(
         () => createFolder({ name: folder.name, parentId, source: folder }),
         retryOptions,
       );
@@ -434,7 +435,7 @@ export async function executeFolderUploadPlan(plan, {
     }
     onProgress({ phase: 'file', status: 'started', item });
     try {
-      const uploaded = await runRateLimitedWrite(
+      const uploaded = await runRateLimitedOperation(
         () => uploadFile({
           file: item.file,
           folderId,

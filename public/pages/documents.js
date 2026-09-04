@@ -27,6 +27,7 @@ import {
   executeFolderUploadPlan,
   formatFolderUploadTimestamp,
   folderUploadOutcome,
+  runRateLimitedOperation,
   supportsDirectoryUpload,
 } from '/utils/folder-upload.js';
 
@@ -2081,8 +2082,16 @@ async function saveFolderUpload(panel, payload) {
 
   upload.completed = true;
   renderFolderUploadResult(panel, plan, result);
-  await Promise.all([loadFolders(), loadDocuments()]);
-  renderAll();
+  try {
+    await runRateLimitedOperation(
+      () => Promise.all([loadFolders(), loadDocuments()]),
+    );
+    renderAll();
+  } catch (refreshError) {
+    // The writes have already completed. A failed refresh must not turn a
+    // persisted upload into a reported upload failure.
+    console.warn('[Documents] Folder upload refresh failed:', refreshError);
+  }
   const outcome = folderUploadOutcome(result);
   const toast = outcome.toast === 'cancelled'
     ? t('documents.folderUpload.cancelled')

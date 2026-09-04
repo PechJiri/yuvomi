@@ -14,6 +14,7 @@ import {
   executeFolderUploadPlan,
   formatFolderUploadTimestamp,
   folderUploadOutcome,
+  runRateLimitedOperation,
   supportsDirectoryUpload,
 } from '../public/utils/folder-upload.js';
 
@@ -561,6 +562,32 @@ test('does not retry errors other than rate limiting', async () => {
 
   assert.equal(attempts, 1);
   assert.deepEqual(result.failed.map((failure) => failure.reason), ['storage unavailable']);
+});
+
+test('retries a rate-limited refresh after the final upload write succeeded', async () => {
+  let refreshAttempts = 0;
+  const waits = [];
+
+  const refreshed = await runRateLimitedOperation(async () => {
+    refreshAttempts += 1;
+    if (refreshAttempts === 1) {
+      throw Object.assign(new Error('Too many requests.'), {
+        status: 429,
+        retryAfter: '3',
+      });
+    }
+    return 'fresh';
+  }, {
+    maxRetries: 1,
+    waitForRetry: async (delay) => {
+      waits.push(delay);
+      return true;
+    },
+  });
+
+  assert.equal(refreshed, 'fresh');
+  assert.equal(refreshAttempts, 2);
+  assert.deepEqual(waits, [3_000]);
 });
 
 test('reports cancelled and partial upload outcomes without success semantics', () => {
