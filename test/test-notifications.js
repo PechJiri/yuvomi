@@ -411,6 +411,149 @@ test('die OpenAPI-Provider-Liste kennt jeden angebotenen Kanal (#692)', async ()
   }
 });
 
+// --------------------------------------------------------------------------
+// SSRF-Schutz der Kanaele (GHSA-f4w5-ggcc-7m5c)
+// --------------------------------------------------------------------------
+// Webhook, Gotify und ntfy riefen das nackte fetch() auf die eingetragene URL.
+// Jetzt laeuft der Aufruf ueber guardedFetch mit dem Anti-Rebinding-Lookup aus
+// utils/ssrf.js, und der Store lehnt schon beim Speichern ab, was sich ohne DNS
+// entscheiden laesst. NOTIFICATION_ALLOW_PRIVATE_NETWORK=true hebt beides auf.
+
+import http from 'node:http';
+
+function startLocalServer(handler) {
+  const server = http.createServer(handler);
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => resolve({
+      server,
+      base: `http://127.0.0.1:${server.address().port}`,
+      close: () => new Promise((r) => server.close(r)),
+    }));
+  });
+}
+
+async function withPrivateNetworkAllowed(fn) {
+  const before = process.env.NOTIFICATION_ALLOW_PRIVATE_NETWORK;
+  process.env.NOTIFICATION_ALLOW_PRIVATE_NETWORK = 'true';
+  try {
+    return await fn();
+  } finally {
+    if (before === undefined) delete process.env.NOTIFICATION_ALLOW_PRIVATE_NETWORK;
+    else process.env.NOTIFICATION_ALLOW_PRIVATE_NETWORK = before;
+  }
+}
+
+test('der Store lehnt eine private oder lokale Ziel-URL beim Speichern ab (GHSA-f4w5)', async () => {
+  const { createNotificationChannelStore } = await import('../server/services/notification-channels.js');
+  const store = createNotificationChannelStore({ db: makeDb() });
+  delete process.env.NOTIFICATION_ALLOW_PRIVATE_NETWORK;
+  const blocked = [
+    'http://169.254.169.254/latest/meta-data/',
+    'http://192.168.1.5:8080/hooks',
+    'http://10.0.0.7/',
+    'http://127.0.0.1:8080/',
+    'http://[::1]:8080/',
+    'http://localhost:8080/',
+    'http://gotify.local/',
+    'http://ha.internal:8123/api/webhook/x',
+  ];
+  for (const baseUrl of blocked) {
+    assert.throws(
+      () => store.createChannel({ provider: 'webhook', name: 'Bad', config: { baseUrl } }),
+      /private or local network/i,
+      `${baseUrl} muss abgelehnt werden`,
+    );
+  }
+  // Dieselbe Regel fuer Gotify und ntfy, und die Fehlermeldung nennt den Schalter.
+  assert.throws(
+    () => store.createChannel({ provider: 'gotify', name: 'Bad', config: { baseUrl: 'http://192.168.1.5' }, secrets: { appToken: 'x' } }),
+    /NOTIFICATION_ALLOW_PRIVATE_NETWORK/,
+  );
+  assert.throws(
+    () => store.createChannel({ provider: 'ntfy', name: 'Bad', config: { baseUrl: 'http://192.168.1.5', topic: 'family' } }),
+    /private or local network/i,
+  );
+  // Ein oeffentlicher Name bleibt speicherbar - die Aufloesung prueft erst der Versand.
+  const ok = store.createChannel({ provider: 'webhook', name: 'Ok', config: { baseUrl: 'https://hooks.example.test/x' } });
+  assert.ok(ok.id);
+  // Und der Schalter oeffnet das LAN bewusst.
+  await withPrivateNetworkAllowed(() => {
+    const lan = store.createChannel({ provider: 'gotify', name: 'LAN', config: { baseUrl: 'http://192.168.1.5' }, secrets: { appToken: 'x' } });
+    assert.equal(lan.config.baseUrl, 'http://192.168.1.5');
+  });
+});
+
+test('guardedFetch verbindet nur ueber den SSRF-Lookup - ein privates Ziel bleibt unerreicht', async () => {
+  const { guardedFetch } = await import('../server/services/notification-providers/guarded-fetch.js');
+  const hits = [];
+  const { base, close } = await startLocalServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      hits.push({ url: req.url, type: req.headers['content-type'], body });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 42 }));
+    });
+  });
+  try {
+    delete process.env.NOTIFICATION_ALLOW_PRIVATE_NETWORK;
+    await assert.rejects(() => guardedFetch(`${base}/message`, { method: 'POST', body: 'x' }), /private IP/i);
+    assert.equal(hits.length, 0, 'der lokale Server darf nichts empfangen haben');
+
+    await withPrivateNetworkAllowed(async () => {
+      const params = new URLSearchParams();
+      params.set('title', 'Yuvomi');
+      const res = await guardedFetch(`${base}/message`, { method: 'POST', body: params });
+      assert.equal(res.ok, true);
+      assert.equal(res.status, 200);
+      assert.deepEqual(await res.json(), { id: 42 });
+      assert.equal(hits.length, 1);
+      assert.match(hits[0].type, /application\/x-www-form-urlencoded/);
+      assert.equal(hits[0].body, 'title=Yuvomi');
+    });
+  } finally {
+    await close();
+  }
+});
+
+test('ohne fetchImpl senden alle drei Provider ueber guardedFetch (die Voreinstellung ist der Schutz)', async () => {
+  const { gotifyProvider } = await import('../server/services/notification-providers/gotify.js');
+  const { ntfyProvider } = await import('../server/services/notification-providers/ntfy.js');
+  const { webhookProvider } = await import('../server/services/notification-providers/webhook.js');
+  const { createNotificationService } = await import('../server/services/notifications.js');
+  const hits = [];
+  const { base, close } = await startLocalServer((req, res) => {
+    hits.push(req.url);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"id":1}');
+  });
+  const payload = { title: 'Yuvomi', body: 'Test', url: '/reminders', tag: 't', priority: 'default' };
+  try {
+    delete process.env.NOTIFICATION_ALLOW_PRIVATE_NETWORK;
+    await assert.rejects(() => gotifyProvider.send({ channel: { config: { baseUrl: base }, secrets: { appToken: 'x' } }, payload }), /private IP/i);
+    await assert.rejects(() => ntfyProvider.send({ channel: { config: { baseUrl: base, topic: 'family' }, secrets: {} }, payload }), /private IP/i);
+    await assert.rejects(() => webhookProvider.send({ channel: { config: { baseUrl: `${base}/hook` }, secrets: {} }, payload }), /private IP/i);
+    // Auch der Testversand aus den Admin-Routen nimmt die Voreinstellung.
+    const service = createNotificationService();
+    await assert.rejects(
+      () => service.testChannel({ channel: { provider: 'webhook', config: { baseUrl: `${base}/hook` }, secrets: {} }, payload }),
+      /private IP/i,
+    );
+    assert.equal(hits.length, 0, 'kein Provider hat den lokalen Server erreicht');
+
+    await withPrivateNetworkAllowed(async () => {
+      const result = await gotifyProvider.send({ channel: { config: { baseUrl: base }, secrets: { appToken: 'x' } }, payload });
+      assert.equal(result.ok, true);
+      assert.equal(result.providerMessageId, '1');
+      await ntfyProvider.send({ channel: { config: { baseUrl: base, topic: 'family' }, secrets: {} }, payload });
+      await webhookProvider.send({ channel: { config: { baseUrl: `${base}/hook` }, secrets: {} }, payload });
+      assert.deepEqual(hits, ['/message?token=x', '/family', '/hook']);
+    });
+  } finally {
+    await close();
+  }
+});
+
 test('providers throw sanitized HTTP errors', async () => {
   const { gotifyProvider } = await import('../server/services/notification-providers/gotify.js');
   await assert.rejects(() => gotifyProvider.send({

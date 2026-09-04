@@ -763,6 +763,7 @@ it in controlled environments.
 |----------|-------------|---------|----------|
 | `ICS_SUBSCRIPTION_ALLOW_PRIVATE_NETWORK` | Allow `http://` and private/local network ICS feeds; lifts SSRF protection (`true`/`false`) | `false` | No |
 | `RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK` | Allow `http://` and private/local network recipe provider (Mealie/Tandoor) targets; lifts SSRF protection (`true`/`false`) | `false` | No |
+| `NOTIFICATION_ALLOW_PRIVATE_NETWORK` | Allow private/local network notification channel targets (Webhook, Gotify, ntfy); lifts SSRF protection (`true`/`false`) | `false` | No |
 | `DMS_ALLOW_PRIVATE_NETWORK` | Allow private/local network document management targets (Paperless-ngx, Papra); `false` enforces SSRF protection (`true`/`false`) | `true` | No |
 
 > **Note the inverted default.** `DMS_ALLOW_PRIVATE_NETWORK` is the only switch in this family that

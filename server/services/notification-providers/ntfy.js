@@ -3,6 +3,8 @@
  * Zweck: Yuvomi Reminder-Payloads an ntfy Topics senden.
  */
 
+import { guardedFetch } from './guarded-fetch.js';
+
 function httpError(status) {
   if (status === 401 || status === 403) return new Error('ntfy authentication failed.');
   if (status === 404) return new Error('ntfy topic or endpoint was not found.');
@@ -16,7 +18,7 @@ function basicAuth(username, password) {
 export const ntfyProvider = {
   id: 'ntfy',
 
-  async send({ channel, payload, fetchImpl = fetch, signal } = {}) {
+  async send({ channel, payload, fetchImpl = guardedFetch, signal } = {}) {
     const baseUrl = String(channel?.config?.baseUrl ?? '').replace(/\/+$/, '');
     const topic = encodeURIComponent(String(channel?.config?.topic ?? '').replace(/^\/+/, ''));
     const headers = {
