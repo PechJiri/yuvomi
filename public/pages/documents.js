@@ -1132,10 +1132,13 @@ async function deleteFolder(folder) {
 
   try {
     const selectedSubtree = folderSubtree(folder.id);
+    const expectedSnapshot = choice === 'delete'
+      ? `&expected_snapshot=${encodeURIComponent(impact.snapshot)}`
+      : '';
     const response = await api.delete(
       `/documents/folders/${folder.id}?documents=${choice}`
       + `&expected_documents=${impact.documents}&expected_folders=${impact.removed_folders}`
-      + `&expected_snapshot=${encodeURIComponent(impact.snapshot)}`,
+      + expectedSnapshot,
     );
     const result = response.data;
     const hasNonConcurrencyFailure = result.failed_documents

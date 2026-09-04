@@ -817,6 +817,7 @@ test('DELETE with documents locks previewed documents and folders against concur
       moveFolder,
       moveFolderIntoTree,
       moveDocumentIntoTree,
+      deleteDocumentDuringDelete,
     ] = await Promise.all([
       h.callTask('PUT', `/${taskId}/documents`, {
         // The first storage item is already gone, but its row must remain visible
@@ -830,11 +831,13 @@ test('DELETE with documents locks previewed documents and folders against concur
       h.call('PUT', `/folders/${child.body.data.id}`, { parent_id: outside.body.data.id }),
       h.call('PUT', `/folders/${outside.body.data.id}`, { parent_id: root.body.data.id }),
       h.call('PUT', `/${outsideDocumentId}`, { folder_id: child.body.data.id }),
+      h.call('DELETE', `/${documents[2].id}`),
     ]);
 
     assert.equal(hiddenUpdate.status, 404);
     assert.equal(hiddenDelete.status, 404);
     assert.equal(moveDocument.status, 409);
+    assert.equal(moveDocument.body.reason, 'DOCUMENT_DELETE_IN_PROGRESS');
     assert.equal(moveFolder.status, 409);
     assert.equal(moveFolderIntoTree.status, 409);
     assert.equal(moveFolderIntoTree.body.error,
@@ -847,7 +850,9 @@ test('DELETE with documents locks previewed documents and folders against concur
     assert.equal(linkDocumentDuringDelete.status, 409);
     assert.equal(linkDocumentDuringDelete.body.reason, 'DOCUMENT_DELETE_IN_PROGRESS');
     assert.equal(archiveDocumentDuringDelete.status, 409);
-    assert.equal(archiveDocumentDuringDelete.body.reason, 'FOLDER_DELETE_IN_PROGRESS');
+    assert.equal(archiveDocumentDuringDelete.body.reason, 'DOCUMENT_DELETE_IN_PROGRESS');
+    assert.equal(deleteDocumentDuringDelete.status, 409);
+    assert.equal(deleteDocumentDuringDelete.body.reason, 'DOCUMENT_DELETE_IN_PROGRESS');
     assert.equal(get().prepare('SELECT COUNT(*) AS count FROM task_documents WHERE task_id = ?')
       .get(taskId).count, 0);
     const del = await deletion;

@@ -11,8 +11,10 @@ import { createLogger } from '../logger.js';
 import { str, collectErrors, id as validateId, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
 import { documentVisibleSql } from '../services/document-access.js';
 import {
+  DocumentDeletionInProgressError,
   documentDeleteIsActive,
   lockDocumentDeletes,
+  sendDocumentDeletionConflict,
   unlockDocumentDeletes,
 } from '../services/document-deletion-lock.js';
 import { ensureModuleFolder, isModuleFolderKey } from '../services/document-folders.js';
@@ -68,6 +70,11 @@ function deletionInProgress(res) {
     code: 409,
     reason: 'FOLDER_DELETE_IN_PROGRESS',
   });
+}
+
+function documentDeletionInProgress(res) {
+  sendDocumentDeletionConflict(res, new DocumentDeletionInProgressError());
+  return res;
 }
 
 const CATEGORIES = ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'];
@@ -1109,7 +1116,7 @@ router.put('/:id', (req, res) => {
     const existing = getVisibleDocument(id, req);
     if (!existing) return res.status(404).json({ error: 'Document not found.', code: 404 });
     if (existing.created_by !== userId(req) && !isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
-    if (documentDeleteIsActive(id)) return deletionInProgress(res);
+    if (documentDeleteIsActive(id)) return documentDeletionInProgress(res);
 
     const vName = req.body.name !== undefined ? str(req.body.name, 'Name', { max: MAX_TITLE }) : { value: null };
     const vDescription = req.body.description !== undefined ? str(req.body.description, 'Description', { max: MAX_TEXT, required: false }) : { value: null };
@@ -1162,7 +1169,7 @@ router.patch('/:id/archive', (req, res) => {
     const existing = getVisibleDocument(id, req);
     if (!existing) return res.status(404).json({ error: 'Document not found.', code: 404 });
     if (existing.created_by !== userId(req) && !isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
-    if (documentDeleteIsActive(id)) return deletionInProgress(res);
+    if (documentDeleteIsActive(id)) return documentDeletionInProgress(res);
     const status = req.body.archived === false ? 'active' : 'archived';
     db.get().prepare('UPDATE family_documents SET status = ? WHERE id = ?').run(status, id);
     res.json({ data: { id, status } });
@@ -1265,7 +1272,7 @@ router.delete('/:id', async (req, res) => {
     const existing = getVisibleDocument(id, req, true);
     if (!existing) return res.status(404).json({ error: 'Document not found.', code: 404 });
     if (existing.created_by !== userId(req) && !isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
-    if (documentDeleteIsActive(id)) return deletionInProgress(res);
+    if (documentDeleteIsActive(id)) return documentDeletionInProgress(res);
     lockDocumentDeletes([id]);
     lockedId = id;
     await deleteDocumentContent(existing);
