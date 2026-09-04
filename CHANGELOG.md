@@ -87,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Security reports now come with response times, and a security fix ships as a patch release cut from the last tag.** SECURITY.md commits to an acknowledgment within 7 days, a classification within 14 and, for a confirmed high-severity finding, a fix within 30 days; every published advisory gets a CVE and names the reporter and the fixed version. The fix travels on its own branch off the last tag, so an installation updating for it gets nothing else - the interface work waiting on `main` for its Tuesday stays there. The procedure, including the ordinary release, is now public in `docs/RELEASING.md`, so that the "if the maintainer stops" clause in CONTRIBUTING comes with the instructions a fork would need.
+
 - **The build is pinned to what it was tested against.** CI now runs on Node 22 and Node 24 (the image has run on 24 for months while CI tested 22 alone), every GitHub Action is pinned to a commit SHA with its version as a comment, and the base image is pinned to a digest; guards refuse a floating tag and keep the CI matrix and the image's Node major together.
 
 - **Two promises that existed only in threads are written where people look.** The contributing

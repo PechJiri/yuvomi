@@ -289,7 +289,9 @@ acquires rights to this repository automatically, and none are needed, because t
 licence already allows any fork at any time. What this paragraph adds is the name. If this
 repository goes a full year without a release, a commit or a reply from the maintainer,
 treat it as unmaintained, fork it, and carry the Yuvomi name with you. Your own installation
-is not affected either way; the README's "Before you commit" says why.
+is not affected either way; the README's "Before you commit" says why. The release steps are
+written down in [docs/RELEASING.md](docs/RELEASING.md), so a fork can cut its first release
+without this repository's private tooling.
 
 ---
 
@@ -399,7 +401,7 @@ So the limit is on the interface, not on the release count:
 
 Tuesday, because a household planner gets used most at the weekend: an interface change then has four days to settle before the family is standing in front of it on Saturday.
 
-**Security fixes and data-loss bugs are not held back.** They ship the moment they are ready, on any day, through the same escape hatch the guard provides.
+**Security fixes and data-loss bugs are not held back.** They ship the moment they are ready, on any day. Since v2.64.1 (4 September 2026) a security fix ships as a **patch release cut from the last tag**, carrying the fix, its tests and its documentation and nothing else: the guard judges the whole diff since the last tag, and a branch off that tag is on the second track by construction, so the interface work waiting on `main` for its Tuesday is not pulled forward with it. The steps are in [docs/RELEASING.md](docs/RELEASING.md); the `--hotfix` escape hatch below remains for a fix that cannot be separated from what is already on `main`.
 
 `npm run check:release-cadence` decides this, and it runs before the tag rather than after. A release that carries interface changes on a Thursday fails it; so does a second same-day release on the other track. The escape hatch is `--hotfix "<reason>"`, and the reason is mandatory and printed - an exception nobody has to write down is just a rule that quietly stopped applying.
 
