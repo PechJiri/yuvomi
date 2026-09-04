@@ -12,12 +12,33 @@ Three kinds of answer live here:
   route on this page.
 - **Not here.** It belongs next to Yuvomi rather than inside it - as a third-party module
   against an unmodified image. See [MODULES.md](../MODULES.md).
-- **Not at all.** Exactly two things, in the whole project: multi-tenancy (#611) and parcel
-  tracking (#378).
+- **Not at all.** Exactly two things in the product: multi-tenancy (#611) and parcel
+  tracking (#378). Section 4, about how the project is run rather than what it builds, adds one
+  more.
 
 Anything not listed here is simply not built yet. That is not the same as declined, and
 the [backlog](../BACKLOG.md) is where those live. Decisions about *how* something inside the
 scope is built, made once so they are not argued again, live in [DECISIONS.md](DECISIONS.md).
+
+---
+
+## Who Yuvomi is for
+
+**One household, on a server that household owns.** A family, a couple, or one person; in
+practice two to six people, and the design is shaped around that number rather than capped at
+it: lists are not paginated, the family is one page, every member sees every other member's
+name, and a household is one trust boundary in which privacy is a property of a row (a private
+task stays private from a parent, with no admin bypass) rather than a wall between tenants.
+Children, grandparents, a cleaner who comes on Thursdays and a guest who shares one dinner bill
+all fit inside that boundary; they are people in the household's directory, with or without a
+login of their own.
+
+What it is not designed for follows from the same shape: a club or an association, a shared flat
+whose residents change every semester, a landlord with several properties, or anyone who needs
+one instance to keep two households apart. Each of those needs the multi-tenancy that section
+"Not at all" above declines, or a membership model that expects strangers. It is not that Yuvomi
+would break at seven people; it is that every decision about what a member may see was made for
+a household, and would be the wrong decision for a group.
 
 ---
 
@@ -220,3 +241,54 @@ questions:
   third party. In an app whose whole promise is that nothing leaves the machine, that
   cannot be a setting somebody switches on without understanding it, however clearly it is
   labelled opt-in.
+
+
+---
+
+## 4. How the project is run
+
+The three sections above are about the product. This one is about the project, because the same
+six questions come back in discussions and pull requests, and each deserves the same shape of
+answer: the rule, the reason, and what would change it. All six are practice today, not plans;
+writing them down changes nothing except that the next person asking gets a link instead of an
+argument.
+
+- **No LTS branch.** Only the latest release receives fixes, and a security fix reaches it as a
+  patch release cut from that release's tag ([SECURITY.md](../SECURITY.md#supported-versions),
+  [RELEASING.md](RELEASING.md)). One maintainer can keep one line current; a second line would
+  be a promise that erodes exactly when it is needed. *Opens with:* a second maintainer who
+  commits to the older line.
+- **No four-eyes merge.** Every merge is decided by a human, and that human is the maintainer
+  ([CONTRIBUTING.md](../CONTRIBUTING.md#what-a-human-guarantees)); two automated reviewers
+  comment on every pull request and merge nothing. A required second approval with one person
+  holding the key would be theatre. *Opens with:* the same second maintainer.
+- **No translation platform.** The 24 locales live in the repository as JSON, and a guard
+  (`test:i18n-translated`) refuses a locale that regresses toward untranslated English. A hosted
+  platform would not run that guard, so a pull request from it could turn a translated file back
+  into a copy of the reference without anyone seeing it. Translations arrive as pull requests
+  against the files. *Opens with:* a platform that runs the repository's checks before it
+  writes.
+- **No hosted demo.** Yuvomi's promise is that a household's data stays on the household's
+  machine; a public instance filled with a fictional family's health notes and finances would
+  be the opposite of that promise as a first impression, and it would be one more server to
+  keep patched. What exists instead is a seed that fills a fresh installation with a realistic
+  household in one command, in English or German, so anyone can have a demo that is theirs:
+
+  ```bash
+  node scripts/seed-demo.js --db ./yuvomi.db --locale en
+  ```
+
+  This is the one "not at all" outside the product: there is no condition under which a public
+  demo instance appears.
+- **No CLA.** The licence is MIT and a contribution stays the author's, under that licence, with
+  the author's name in the history. A contributor licence agreement exists to let a project
+  relicense later; this one has no intention to. *Opens with:* nothing foreseeable - a change of
+  licence would be discussed in the open first, and a CLA would be the last step of that, not
+  the first.
+- **No fuzzing.** Input reaches the server as JSON through Express validators, and the two
+  parsers for formats written by other machines - ICS and vCard - have their own test suites
+  with the malformed cases that were reported. A fuzzing harness earns its place when a parser
+  is fed files from arbitrary sources; today those two are fed by calendar and contact servers
+  the household chose. *Opens with:* a third parser for a foreign format. The CSV bank import
+  tracked as #1000 is the likely first candidate, and that is where a fuzzing setup would be
+  added.

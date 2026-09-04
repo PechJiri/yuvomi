@@ -7,8 +7,8 @@
 
   <p>
     Tasks, calendar, budget, groceries, meals, health and more - for a family, a couple,
-    or just you. Nineteen modules on a server you own, and the only thing that leaves it
-    is a version check.
+    or just you. Nineteen modules for one household of up to six people, on a server you
+    own, and the only thing that leaves it is a version check.
   </p>
 
   <p>

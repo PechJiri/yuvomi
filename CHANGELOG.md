@@ -91,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The build is pinned to what it was tested against.** CI now runs on Node 22 and Node 24 (the image has run on 24 for months while CI tested 22 alone), every GitHub Action is pinned to a commit SHA with its version as a comment, and the base image is pinned to a digest; guards refuse a floating tag and keep the CI matrix and the image's Node major together.
 
+- **SCOPE.md now says who Yuvomi is for, and how the project is run.** A paragraph before the first boundary names the household the design is shaped around (one household, up to six people, one trust boundary) and who it is not for; a new section 4 answers the six recurring questions about the project itself (LTS, four-eyes merge, translation platform, hosted demo, CLA, fuzzing), each with the rule, the reason and the condition under which it would change. The README carries the same number.
+
 - **Two promises that existed only in threads are written where people look.** The contributing
   guide says what happens if the maintainer stops: nobody inherits repository rights, MIT allows
   any fork at any time, and after a year without a release, a commit or a reply the fork may carry
