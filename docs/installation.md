@@ -244,6 +244,23 @@ Docker pulls `ghcr.io/ulsklyc/yuvomi:latest` automatically. No build step, no No
 > set `image: ghcr.io/ulsklyc/yuvomi:2.64.1` in your compose file and bump it
 > deliberately; `latest` always points at the newest release.
 
+> **Verifying what you pull.** Every image the publish workflow builds is signed at build
+> time with [cosign](https://github.com/sigstore/cosign), keyless, under the identity of
+> that workflow, and carries a build provenance attestation and an SBOM. To check that the
+> image you are about to run is one GitHub built from a release tag of this repository:
+>
+> ```bash
+> cosign verify ghcr.io/ulsklyc/yuvomi:2.64.1 \
+>   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+>   --certificate-identity-regexp '^https://github.com/ulsklyc/yuvomi/.github/workflows/docker-publish.yml@refs/tags/v'
+> ```
+>
+> A passing check prints the certificate's claims, including the tag it was built from;
+> anything else means the image is not one this repository released. The `main` tag is
+> signed too, under `refs/heads/main`, which the pattern above deliberately excludes. Tags
+> published before September 2026 carry no signature. Provenance and SBOM travel inside the
+> image: `docker buildx imagetools inspect ghcr.io/ulsklyc/yuvomi:2.64.1 --format '{{ json .Provenance }}'`.
+
 Continue with [Step 4 — Verify](#4-verify-the-container-is-running).
 
 ---
