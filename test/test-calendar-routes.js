@@ -941,6 +941,63 @@ test('POST /:id/exceptions — 403 fremd + 201 EXDATE angelegt', async () => {
 // DELETE /:id
 // ════════════════════════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════════════════════════
+// Schreibrechte folgen der Sichtbarkeit (GHSA-fmrw-mmjw-5v9c)
+// ════════════════════════════════════════════════════════════════════════════════
+// PUT und DELETE luden den Termin nur per ID. Ein Mitglied konnte einen fremden
+// privaten Termin umschreiben (die Antwort trug die Beschreibung, die GET ihm
+// verweigert), per visibility='all' dauerhaft sichtbar machen oder loeschen.
+// Die Antwort ist 404 wie bei GET und bei den Aufgaben - kein 403, das die
+// Existenz verriete. Kein Admin-Bypass (#474).
+
+test('PUT /:id — fremder privater Termin: 404, nichts geaendert, nichts geleakt', async () => {
+  const id = insertEvent({ title: 'Therapie', start_datetime: '2035-09-01T09:00', created_by: TOM.id, visibility: 'private' });
+  db.prepare('UPDATE calendar_events SET description = ? WHERE id = ?').run('GEHEIM-BESCHREIBUNG', id);
+
+  const put = await call('PUT', `/${id}`, { actor: MARIA, body: { title: 'Von Maria', start_datetime: '2035-09-01T09:00' } });
+  assert.equal(put.status, 404, `erwartet 404, bekommen ${put.status}`);
+  assert.equal(JSON.stringify(put.body).includes('GEHEIM-BESCHREIBUNG'), false, 'die Antwort darf nichts vom Termin tragen');
+
+  // Sichtbarmachen als Angriffskette: erst PUT visibility=all, dann GET.
+  const unhide = await call('PUT', `/${id}`, { actor: MARIA, body: { title: 'x', start_datetime: '2035-09-01T09:00', visibility: 'all' } });
+  assert.equal(unhide.status, 404);
+  const get = await call('GET', `/${id}`, { actor: MARIA });
+  assert.equal(get.status, 404, 'nach dem Versuch bleibt der Termin verborgen');
+
+  const row = db.prepare('SELECT title, visibility FROM calendar_events WHERE id = ?').get(id);
+  assert.deepEqual(row, { title: 'Therapie', visibility: 'private' }, 'die Zeile ist unveraendert');
+
+  // Kein Admin-Bypass: dieselbe Antwort fuer den Admin.
+  const admin = await call('PUT', `/${id}`, { actor: ADMIN, body: { title: 'Admin', start_datetime: '2035-09-01T09:00' } });
+  assert.equal(admin.status, 404);
+
+  // Die Erstellerin selbst darf weiter.
+  const own = await call('PUT', `/${id}`, { actor: TOM, body: { title: 'Therapie (neu)', start_datetime: '2035-09-01T09:00' } });
+  assert.equal(own.status, 200);
+});
+
+test('DELETE /:id — fremder privater Termin: 404, Zeile bleibt', async () => {
+  const id = insertEvent({ title: 'Ueberraschung', start_datetime: '2035-09-02T09:00', created_by: TOM.id, visibility: 'private' });
+  const del = await call('DELETE', `/${id}`, { actor: MARIA });
+  assert.equal(del.status, 404, `erwartet 404, bekommen ${del.status}`);
+  const admin = await call('DELETE', `/${id}`, { actor: ADMIN });
+  assert.equal(admin.status, 404, 'kein Admin-Bypass');
+  assert.ok(db.prepare('SELECT 1 FROM calendar_events WHERE id = ?').get(id), 'der Termin existiert noch');
+  const own = await call('DELETE', `/${id}`, { actor: TOM });
+  assert.equal(own.status, 204);
+});
+
+test('PUT/DELETE /:id — assignees: nur Zugewiesene und Ersteller, wie bei GET', async () => {
+  const id = insertEvent({ title: 'Nur-Zugewiesene', start_datetime: '2035-09-03T09:00', created_by: TOM.id, visibility: 'assignees' });
+  const before = await call('PUT', `/${id}`, { actor: MARIA, body: { title: 'x', start_datetime: '2035-09-03T09:00' } });
+  assert.equal(before.status, 404, 'ohne Zuweisung unsichtbar');
+  assignEvent(id, MARIA.id);
+  const after = await call('PUT', `/${id}`, { actor: MARIA, body: { title: 'Von Maria', start_datetime: '2035-09-03T09:00' } });
+  assert.equal(after.status, 200, 'als Zugewiesene darf sie aendern');
+  const del = await call('DELETE', `/${id}`, { actor: MARIA });
+  assert.equal(del.status, 204, 'und loeschen');
+});
+
 test('DELETE /:id — 404 + 204', async () => {
   assert.equal((await call('DELETE', '/9999999')).status, 404);
   const id = insertEvent({ title: 'TO-DELETE', start_datetime: '2043-01-01T09:00' });

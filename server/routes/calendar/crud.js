@@ -230,6 +230,23 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Ein Termin, den die aufrufende Person nicht sehen darf, existiert fuer sie
+// auch zum Aendern und Loeschen nicht (GHSA-fmrw-mmjw-5v9c). PUT und DELETE
+// luden den Termin bisher nur per ID: jedes Mitglied konnte einen fremden
+// privaten Termin umschreiben, per `visibility: 'all'` sichtbar machen (die
+// Antwort des PUT trug schon Titel und Beschreibung) oder loeschen, waehrend
+// GET /:id ihn korrekt verbarg. Dieselbe Klausel wie dort, derselbe 404 wie bei
+// den Aufgaben - ein 403 verriete, dass es den Termin gibt. Kein Admin-Bypass,
+// wie bei jeder Sichtbarkeitsregel (#474).
+function loadVisibleEvent(id, req) {
+  const me = getUserId(req);
+  return db.get().prepare(`
+    SELECT e.* FROM calendar_events e
+    WHERE e.id = ?
+      AND ${visibilityWhere('e', 'event_assignments', 'event_id')}
+  `).get(id, me, me);
+}
+
 // --------------------------------------------------------
 // PUT /api/v1/calendar/:id
 // Termin vollständig aktualisieren.
@@ -240,7 +257,7 @@ router.put('/:id', async (req, res) => {
   let stagedUpload;
   try {
     const id    = parseInt(req.params.id, 10);
-    const event = db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(id);
+    const event = loadVisibleEvent(id, req);
     if (!event) return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
 
     const checks = [];
@@ -667,8 +684,9 @@ router.post('/:id/exceptions', (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     const id    = parseInt(req.params.id, 10);
-    const event = db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(id);
-    const queued = event ? queueEventDeletion(event) : false;
+    const event = loadVisibleEvent(id, req);
+    if (!event) return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
+    const queued = queueEventDeletion(event);
 
     const result = db.get().prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
     if (result.changes === 0)
