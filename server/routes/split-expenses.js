@@ -795,6 +795,15 @@ router.put('/expenses/:id', (req, res) => {
     const parsed = parseExpenseBody(req.body, existing.converted_currency);
     const payerId = Number(req.body.payer_id || existing.payer_id);
     const participants = Array.isArray(req.body.participants) ? req.body.participants : db.get().prepare('SELECT user_id FROM expense_splits WHERE expense_id = ?').all(existing.id).map((r) => r.user_id);
+    // Dieselbe Regel wie beim Anlegen (GHSA-4p5w-5346-8598): Zahler und
+    // Beteiligte muessen Mitglieder DIESER Gruppe sein. Der PUT nahm die IDs
+    // bisher ungeprueft - ein Mitglied konnte einer Person, die nie in der
+    // Gruppe war, eine Schuld zuschreiben, die diese nirgends sieht und nicht
+    // bestreiten kann.
+    if (!memberRole(existing.group_id, payerId)) return res.status(400).json({ error: 'Payer must be a group member.', code: 400 });
+    for (const participantId of participants) {
+      if (!memberRole(existing.group_id, Number(participantId))) return res.status(400).json({ error: 'All participants must be group members.', code: 400 });
+    }
     const splits = buildSplits({ method: parsed.method, amountMinor: parsed.convertedAmountMinor, currency: parsed.convertedCurrency, participants, splits: req.body.splits });
     db.transaction(() => {
       db.get().prepare(`

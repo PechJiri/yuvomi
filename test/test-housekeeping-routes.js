@@ -131,6 +131,37 @@ test('POST /visits/:id/pay: markiert bezahlt', async () => {
   assert.ok(r.body.data.paid_at, 'paid_at gesetzt');
 });
 
+// Ein bezahlter Besuch ist abgerechnet (GHSA-4p5w-5346-8598): Aendern, erneut
+// Bezahlen und Loeschen verlangen ab da den Admin - dieselbe Grenze wie beim
+// Anlegen des Arbeitsverhaeltnisses. Vorher bleibt der Zettel Mitgliedssache.
+test('bezahlter Besuch: Mitglied darf nicht mehr aendern, erneut bezahlen oder loeschen -> 403', async () => {
+  const before = db.prepare('SELECT daily_rate, extras, paid_at FROM housekeeping_work_sessions WHERE id = ?').get(SESSION_ID);
+  assert.ok(before.paid_at, 'Fixture: der Besuch ist bezahlt');
+
+  const put = await call('PUT', `/visits/${SESSION_ID}`, { as: MEM, body: { date: '2026-05-10', daily_rate: 99999, extras: 50000 } });
+  assert.equal(put.status, 403, `erwartet 403, bekommen ${put.status}`);
+  const pay = await call('POST', `/visits/${SESSION_ID}/pay`, { as: MEM });
+  assert.equal(pay.status, 403);
+  const del = await call('DELETE', `/visits/${SESSION_ID}`, { as: MEM });
+  assert.equal(del.status, 403);
+
+  const after = db.prepare('SELECT daily_rate, extras, paid_at FROM housekeeping_work_sessions WHERE id = ?').get(SESSION_ID);
+  assert.deepEqual(after, before, 'die abgerechnete Zeile ist unveraendert');
+});
+
+test('unbezahlter Besuch: Mitglied darf weiter pflegen (kein Rueckschritt fuer den Alltag)', async () => {
+  // Direkt eingefuegt: der Check-in kennt nur "heute", und heute ist schon belegt.
+  const openId = db.prepare(`
+    INSERT INTO housekeeping_work_sessions (worker_id, check_in, check_out, daily_rate, extras, created_by, rate_type)
+    VALUES (?, '2026-06-01T09:00:00.000Z', '2026-06-01T12:00:00.000Z', 50, 0, ?, 'daily')
+  `).run(WORKER_ID, MEMBER).lastInsertRowid;
+
+  const put = await call('PUT', `/visits/${openId}`, { as: MEM, body: { date: '2026-06-01', daily_rate: 55, extras: 5 } });
+  assert.equal(put.status, 200, `erwartet 200, bekommen ${put.status} ${JSON.stringify(put.body)}`);
+  const del = await call('DELETE', `/visits/${openId}`, { as: MEM });
+  assert.equal(del.status, 200);
+});
+
 test('DELETE /visits/:id: entfernt Besuch (danach 404)', async () => {
   const del = await call('DELETE', `/visits/${SESSION_ID}`, { as: ADM });
   assert.equal(del.status, 200);
