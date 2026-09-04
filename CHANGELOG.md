@@ -85,6 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never got the group. It has it now, in both views, with the same label the task form uses, and a
   chosen category shows in the chip row and in the remembered filter sets like every other axis.
 
+- **Notes can be organized with multiple personal or household categories.** Every member manages
+  their own private category catalog, while household categories are shared and may be managed by
+  admins or members who receive the dedicated permission. Notes may remain uncategorized. The
+  Notes API now exposes category management, ordering and assignment through one canonical
+  `scope` field, and the permission catalog includes the household-category capability.
+
 ### Changed
 
 - **Security reports now come with response times, and a security fix ships as a patch release cut from the last tag.** SECURITY.md commits to an acknowledgment within 7 days, a classification within 14 and, for a confirmed high-severity finding, a fix within 30 days; every published advisory gets a CVE and names the reporter and the fixed version. The fix travels on its own branch off the last tag, so an installation updating for it gets nothing else - the interface work waiting on `main` for its Tuesday stays there. The procedure, including the ordinary release, is now public in `docs/RELEASING.md`, so that the "if the maintainer stops" clause in CONTRIBUTING comes with the instructions a fork would need.

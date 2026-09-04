@@ -57,7 +57,7 @@ const ADM = { id: ADMIN, role: 'admin' };
 const MEM = { id: MEMBER, role: 'member' };
 
 // Katalog-abgeleitete gültige Werte (robust gegen künftige Katalog-Änderungen).
-let CATALOG, ROLE, MODULE_KEY, MODULE_LEVEL, WIDGET_ID, WIDGET_LEVEL;
+let CATALOG, ROLE, MODULE_KEY, MODULE_LEVEL, WIDGET_ID, WIDGET_LEVEL, CAPABILITY_KEY;
 test('setup: Katalog liefert Module/Widgets/Rollen/Mitglieder', async () => {
   const r = await call('GET', '/catalog', { actor: ADM });
   assert.equal(r.status, 200);
@@ -74,6 +74,8 @@ test('setup: Katalog liefert Module/Widgets/Rollen/Mitglieder', async () => {
     WIDGET_ID = CATALOG.widgets[0].id;
     WIDGET_LEVEL = CATALOG.widgetAccessLevels.find((l) => l !== CATALOG.defaults.widget);
   }
+  CAPABILITY_KEY = CATALOG.capabilities[0]?.key;
+  assert.equal(CAPABILITY_KEY, 'notes_manage_household_categories');
 });
 
 // --------------------------------------------------------------------------
@@ -149,17 +151,32 @@ test('PUT /user: Admin-Ziel wird abgelehnt -> 400 (Admins umgehen das System)', 
   assert.deepEqual(check.body.data.modules, {});
 });
 
-test('PUT /user: Mitglied-Override persistiert und wird durch leere Maps wieder geerbt', async () => {
-  const put = await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: { modules: { [MODULE_KEY]: MODULE_LEVEL } } });
+test('PUT /user: leere Maps ersetzen ihre Achse, ausgelassene Capabilities bleiben erhalten', async () => {
+  const initialBody = {
+    modules: { [MODULE_KEY]: MODULE_LEVEL },
+    capabilities: { [CAPABILITY_KEY]: 'allow' },
+    ...(WIDGET_ID && WIDGET_LEVEL ? { widgets: { [WIDGET_ID]: WIDGET_LEVEL } } : {}),
+  };
+  const put = await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: initialBody });
   assert.equal(put.status, 200);
   assert.equal(put.body.data.modules[MODULE_KEY], MODULE_LEVEL);
+  assert.equal(put.body.data.capabilities[CAPABILITY_KEY], 'allow');
 
-  // Leeres Set = alle Overrides entfernen (von Rolle erben).
+  // Starší klient posílá jen původní dvě osy: capability musí přežít.
   const cleared = await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: { modules: {}, widgets: {} } });
   assert.equal(cleared.status, 200);
   assert.deepEqual(cleared.body.data.modules, {});
+  assert.deepEqual(cleared.body.data.widgets, {});
+  assert.equal(cleared.body.data.capabilities[CAPABILITY_KEY], 'allow');
+
+  // Explicitní prázdná mapa vyčistí i třetí osu a teprve tím odstraní vše.
+  const fullyCleared = await call('PUT', `/user/${MEMBER}`, {
+    actor: ADM,
+    body: { modules: {}, widgets: {}, capabilities: {} },
+  });
+  assert.deepEqual(fullyCleared.body.data, { modules: {}, widgets: {}, capabilities: {} });
   const get = await call('GET', `/user/${MEMBER}`, { actor: ADM });
-  assert.deepEqual(get.body.data.modules, {}, 'Overrides sind entfernt');
+  assert.deepEqual(get.body.data, { modules: {}, widgets: {}, capabilities: {} }, 'alle Achsen sind entfernt');
 });
 
 test('PUT /user: Widget-Override round-trip (falls Katalog Widgets führt)', async (t) => {
@@ -168,6 +185,22 @@ test('PUT /user: Widget-Override round-trip (falls Katalog Widgets führt)', asy
   assert.equal(put.status, 200);
   assert.equal(put.body.data.widgets[WIDGET_ID], WIDGET_LEVEL);
   await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: {} }); // aufräumen
+});
+
+test('PUT /user: Capability kann erlaubt und explizit gesperrt werden', async () => {
+  const allowed = await call('PUT', `/user/${MEMBER}`, {
+    actor: ADM,
+    body: { capabilities: { [CAPABILITY_KEY]: 'allow' } },
+  });
+  assert.equal(allowed.status, 200);
+  assert.equal(allowed.body.data.capabilities[CAPABILITY_KEY], 'allow');
+
+  const blocked = await call('PUT', `/user/${MEMBER}`, {
+    actor: ADM,
+    body: { capabilities: { [CAPABILITY_KEY]: 'none' } },
+  });
+  assert.equal(blocked.status, 200);
+  assert.equal(blocked.body.data.capabilities[CAPABILITY_KEY], 'none');
 });
 
 test('teardown: Server schließen', async () => {

@@ -939,6 +939,9 @@
         "filtersDisplay": "Visning",
         "agendaDayEmpty": "Inget planerat"
     },
+    "noteCategories": {
+        "permissionLabel": "Hantera hushållets anteckningskategorier"
+    },
     "notes": {
         "title": "Anteckningar",
         "newNote": "Ny anteckning",

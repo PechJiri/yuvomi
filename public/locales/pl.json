@@ -951,6 +951,9 @@
         "filtersDisplay": "Wyświetlanie",
         "agendaDayEmpty": "Nic zaplanowane"
     },
+    "noteCategories": {
+        "permissionLabel": "Zarządzaj domowymi kategoriami notatek"
+    },
     "notes": {
         "title": "Notatki",
         "newNote": "Nowa notatka",

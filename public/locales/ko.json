@@ -951,6 +951,9 @@
         "filtersDisplay": "표시",
         "agendaDayEmpty": "예정된 일정 없음"
     },
+    "noteCategories": {
+        "permissionLabel": "가정 메모 카테고리 관리"
+    },
     "notes": {
         "title": "메모",
         "newNote": "새 메모",

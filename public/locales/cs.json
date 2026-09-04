@@ -939,6 +939,9 @@
         "filtersDisplay": "Zobrazení",
         "agendaDayEmpty": "Nic naplánováno"
     },
+    "noteCategories": {
+        "permissionLabel": "Spravovat domácí kategorie poznámek"
+    },
     "notes": {
         "title": "Nástěnka",
         "newNote": "Nová poznámka",

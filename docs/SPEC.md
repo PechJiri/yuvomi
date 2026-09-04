@@ -1058,6 +1058,40 @@ hand.
 | pinned | INTEGER | 0/1 |
 | created_by | INTEGER | FK → Users, NOT NULL |
 
+#### Note Categories (migration v176)
+
+The catalog starts empty. A personal category belongs to one user and is visible only to that
+user; a household category is visible to everyone. Every member may manage their own personal
+catalog. Managing the household catalog requires admin access or the
+`notes_manage_household_categories` capability. Category responses use `id` as their identifier
+and `scope` (`personal` or `household`) as the single catalog discriminator.
+
+| Column | Type | Constraint |
+|--------|------|-----------|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT |
+| name | TEXT | NOT NULL, trimmed length 1 to 80 |
+| name_key | TEXT | NOT NULL, normalized uniqueness key |
+| scope | TEXT | NOT NULL, `personal` \| `household` |
+| owner_user_id | INTEGER | FK → Users (CASCADE), required only for `personal` |
+| created_by | INTEGER | FK → Users (SET NULL), audit metadata |
+| sort_order | INTEGER | NOT NULL DEFAULT 0 |
+| created_at / updated_at | TEXT | ISO 8601 |
+
+#### Note Category Assignments (migration v176)
+
+A note may have any number of categories or none. Household assignments are visible to all
+members; a personal assignment is visible only to that category's owner. Deleting a category
+removes its assignments but never deletes the note.
+
+| Column | Type | Constraint |
+|--------|------|-----------|
+| note_id | INTEGER | NOT NULL, FK → Notes (CASCADE) |
+| category_id | INTEGER | NOT NULL, FK → Note Categories (CASCADE) |
+| assigned_by | INTEGER | FK → Users (SET NULL), audit metadata |
+| created_at | TEXT | ISO 8601 |
+
+Primary key: `(note_id, category_id)`.
+
 ### Contacts
 | Column | Type | Constraint |
 |--------|------|-----------|
@@ -2608,12 +2642,15 @@ never see express — therefore had no module check at all (#823).
 | access | TEXT | NOT NULL — module: `none` \| `read` \| `write`; widget and capability: `none` \| `allow` |
 | updated_at | TEXT | ISO 8601, default now |
 
-Primary key: `(subject_type, subject_id, resource_type, resource_key)`. **`capability` is a schema-level
-allowance only (migration v175, #996):** the CHECK admits the value, `resolvePermissions()` and
-`getSubjectPermissions()` still read `module` and `widget` rows alone, and an ordinary save of the
-permission matrix deletes and rewrites only those two kinds, so a capability row written by a later
-feature survives it. No capability is registered by the core; the first one arrives with the feature
-that needs it.
+Primary key: `(subject_type, subject_id, resource_type, resource_key)`. **`capability` arrived as a
+schema-level allowance (migration v175, #996) and got its first consumer in the next release
+(#991):** `PERMISSION_CAPABILITIES` in `server/permissions.js` registers
+`notes_manage_household_categories` (module `notes`), `resolvePermissions()` and
+`getSubjectPermissions()` read `capability` rows for registered keys with `none` | `allow`, default
+`none`, admins `allow`. A save of the permission matrix replaces the module and widget axes on every
+call and the capability axis only when the body carries the field, so a client that does not know
+about capabilities cannot erase them. A key that no feature registers is ignored on read, so a
+capability row written by a later feature survives an older release.
 
 ### Quick Links (migration v160, #469)
 | Column | Type | Constraint |

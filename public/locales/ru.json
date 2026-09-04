@@ -939,6 +939,9 @@
         "filtersDisplay": "Отображение",
         "agendaDayEmpty": "Ничего не запланировано"
     },
+    "noteCategories": {
+        "permissionLabel": "Управлять семейными категориями заметок"
+    },
     "notes": {
         "title": "Заметки",
         "newNote": "Новая заметка",

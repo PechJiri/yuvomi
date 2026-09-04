@@ -17,9 +17,13 @@ const userIdParam = {
   description: 'Member the overrides belong to.',
 };
 
-const BODY = 'Body: { modules, widgets } - `modules` maps a module key to `none`, `read` or `write`, '
-  + '`widgets` maps a widget id to `none` or `allow`. The set is replaced as a whole; entries that '
-  + 'match the default are not stored, so a profile only ever holds what actually deviates.';
+const BODY = 'Body: { modules, widgets, capabilities } - `modules` maps a module key to `none`, `read` or `write`, '
+  + '`widgets` maps a widget id to `none` or `allow`, and `capabilities` maps '
+  + '`notes_manage_household_categories` to `none` or `allow`. Module and widget rows are replaced on every '
+  + 'request. Capability rows are replaced only when `capabilities` is explicitly present, so older clients '
+  + 'cannot silently remove them. Role values '
+  + 'that match the default are not stored; a member-level `none` capability may be stored to override an '
+  + 'inherited `allow`.';
 
 export function permissionsPaths() {
   return {
@@ -28,7 +32,7 @@ export function permissionsPaths() {
         summary: 'Get the permission catalog',
         tag: 'Permissions',
         admin: true,
-        description: 'Modules, widgets, roles and the member list for the rights matrix. The catalog '
+        description: 'Modules, widgets, capabilities (including access levels and defaults), roles and the member list for the rights matrix. The catalog '
           + 'is the authoritative list of what can be granted - the enforcing side reads the same one, '
           + 'so the two cannot drift apart.',
       }),
@@ -68,7 +72,7 @@ export function permissionsPaths() {
         stateChanging: true,
         params: [userIdParam],
         requestBody: jsonBody(null),
-        description: `${BODY} Empty maps mean "inherit from the role" - they remove every override.`,
+        description: `${BODY} Each empty map means "inherit from the role" for that axis. To remove every override, send { modules: {}, widgets: {}, capabilities: {} }.`,
       }),
     },
   };

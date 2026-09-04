@@ -939,6 +939,9 @@
         "filtersDisplay": "Affichage",
         "agendaDayEmpty": "Rien de prévu"
     },
+    "noteCategories": {
+        "permissionLabel": "Gérer les catégories de notes du foyer"
+    },
     "notes": {
         "title": "Notes",
         "newNote": "Nouvelle note",

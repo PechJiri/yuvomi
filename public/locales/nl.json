@@ -939,6 +939,9 @@
         "filtersDisplay": "Weergave",
         "agendaDayEmpty": "Niets gepland"
     },
+    "noteCategories": {
+        "permissionLabel": "Notitiecategorieën voor het huishouden beheren"
+    },
     "notes": {
         "title": "Bord",
         "newNote": "Nieuwe notitie",

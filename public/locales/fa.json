@@ -951,6 +951,9 @@
         "filtersDisplay": "نمایش",
         "agendaDayEmpty": "چیزی برنامه‌ریزی نشده"
     },
+    "noteCategories": {
+        "permissionLabel": "مدیریت دسته‌بندی‌های یادداشت خانوادگی"
+    },
     "notes": {
         "title": "یادداشت‌ها",
         "newNote": "یادداشت جدید",

@@ -939,6 +939,9 @@
         "filtersDisplay": "表示",
         "agendaDayEmpty": "予定なし"
     },
+    "noteCategories": {
+        "permissionLabel": "世帯のメモカテゴリーを管理"
+    },
     "notes": {
         "title": "メモボード",
         "newNote": "新しいメモ",

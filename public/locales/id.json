@@ -951,6 +951,9 @@
         "filtersDisplay": "Tampilan",
         "agendaDayEmpty": "Tidak ada rencana"
     },
+    "noteCategories": {
+        "permissionLabel": "Kelola kategori catatan rumah tangga"
+    },
     "notes": {
         "title": "Catatan",
         "newNote": "Catatan baru",

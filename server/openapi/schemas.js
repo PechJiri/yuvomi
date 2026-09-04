@@ -1,3 +1,16 @@
+const noteInputProperties = {
+  title: { type: ['string', 'null'] },
+  content: { type: 'string' },
+  color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
+  pinned: {
+    oneOf: [
+      { type: 'integer', enum: [0, 1] },
+      { type: 'boolean' },
+    ],
+  },
+  category_ids: { type: 'array', maxItems: 50, uniqueItems: true, items: { type: 'integer', minimum: 1 } },
+};
+
 export const schemas = {
         ApiError: {
           type: 'object',
@@ -5,6 +18,89 @@ export const schemas = {
             error: { type: 'string' },
             code: { type: 'integer' },
             storage_code: { $ref: '#/components/schemas/DocumentStorageErrorCode' },
+          },
+        },
+        NoteCategory: {
+          type: 'object',
+          required: ['id', 'name', 'scope', 'sort_order'],
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+            scope: { type: 'string', enum: ['personal', 'household'] },
+            owner_user_id: { type: ['integer', 'null'] },
+            sort_order: { type: 'integer' },
+          },
+        },
+        Note: {
+          type: 'object',
+          required: ['id', 'content', 'pinned', 'categories'],
+          properties: {
+            id: { type: 'integer' },
+            title: { type: ['string', 'null'] },
+            content: { type: 'string' },
+            color: { type: 'string' },
+            pinned: { type: 'integer', enum: [0, 1] },
+            created_by: { type: ['integer', 'null'] },
+            creator_name: { type: ['string', 'null'] },
+            categories: { type: 'array', items: { $ref: '#/components/schemas/NoteCategory' } },
+          },
+        },
+        NoteCreateInput: {
+          type: 'object',
+          required: ['content'],
+          properties: noteInputProperties,
+        },
+        NoteUpdateInput: {
+          type: 'object',
+          properties: noteInputProperties,
+        },
+        NoteCategoryInput: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+            scope: { type: 'string', enum: ['personal', 'household'], default: 'personal' },
+          },
+        },
+        NoteCategoryRenameInput: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+          },
+        },
+        NoteCategoryReorderInput: {
+          type: 'object',
+          required: ['order'],
+          properties: {
+            order: { type: 'array', maxItems: 100, uniqueItems: true, items: { type: 'integer', minimum: 1 } },
+          },
+        },
+        NoteResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { $ref: '#/components/schemas/Note' } },
+        },
+        NoteListResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Note' } } },
+        },
+        NoteCategoryResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { $ref: '#/components/schemas/NoteCategory' } },
+        },
+        NoteCategoryListResponse: {
+          type: 'object',
+          required: ['data', 'meta'],
+          properties: {
+            data: { type: 'array', items: { $ref: '#/components/schemas/NoteCategory' } },
+            meta: {
+              type: 'object',
+              required: ['can_manage_household'],
+              properties: { can_manage_household: { type: 'boolean' } },
+            },
           },
         },
         NotificationChannel: {

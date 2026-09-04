@@ -951,6 +951,9 @@
         "filtersDisplay": "Darstellung",
         "agendaDayEmpty": "Nichts geplant"
     },
+    "noteCategories": {
+        "permissionLabel": "Gemeinsame Notizkategorien verwalten"
+    },
     "notes": {
         "title": "Notizen",
         "newNote": "Neue Notiz",

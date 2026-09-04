@@ -67,8 +67,9 @@ router.get('/role/:familyRole', (req, res) => {
 
 /**
  * PUT /api/v1/permissions/role/:familyRole
- * Body: { modules: { <key>: 'none'|'read'|'write' }, widgets: { <id>: 'none'|'allow' } }
- * Ersetzt das komplette Rollen-Profil (Standard-Werte werden nicht gespeichert).
+ * Body: { modules, widgets, capabilities }. Modul- und Widget-Achse werden bei
+ * jedem Aufruf ersetzt; Capabilities nur, wenn das Feld ausdrücklich vorkommt.
+ * So bleiben ältere Clients kompatibel. Standard-Werte werden nicht gespeichert.
  */
 router.put('/role/:familyRole', (req, res) => {
   try {
@@ -106,7 +107,8 @@ router.get('/user/:userId', (req, res) => {
 
 /**
  * PUT /api/v1/permissions/user/:userId
- * Body wie bei role. Leere Maps = „von Rolle erben" (alle Overrides entfernt).
+ * Body wie bei role. Leere Maps leeren jeweils ihre eigene Achse. Zum Entfernen
+ * aller Overrides müssen modules, widgets und capabilities leer gesendet werden.
  */
 router.put('/user/:userId', (req, res) => {
   try {

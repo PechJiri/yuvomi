@@ -939,6 +939,9 @@
         "filtersDisplay": "Εμφάνιση",
         "agendaDayEmpty": "Τίποτα προγραμματισμένο"
     },
+    "noteCategories": {
+        "permissionLabel": "Διαχείριση κοινόχρηστων κατηγοριών σημειώσεων"
+    },
     "notes": {
         "title": "Σημειώσεις",
         "newNote": "Νέα σημείωση",

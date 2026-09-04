@@ -939,6 +939,9 @@
         "filtersDisplay": "प्रदर्शन",
         "agendaDayEmpty": "कुछ भी नियोजित नहीं"
     },
+    "noteCategories": {
+        "permissionLabel": "घर की नोट श्रेणियाँ प्रबंधित करें"
+    },
     "notes": {
         "title": "नोट बोर्ड",
         "newNote": "नया नोट",

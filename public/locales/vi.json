@@ -939,6 +939,9 @@
         "filtersDisplay": "Hiển thị",
         "agendaDayEmpty": "Không có kế hoạch"
     },
+    "noteCategories": {
+        "permissionLabel": "Quản lý danh mục ghi chú gia đình"
+    },
     "notes": {
         "title": "Bảng ghi chú",
         "newNote": "Ghi chú mới",
