@@ -2603,12 +2603,17 @@ never see express — therefore had no module check at all (#823).
 |--------|------|-----------|
 | subject_type | TEXT | NOT NULL — `role` (a family_role) \| `user` (a specific member) |
 | subject_id | TEXT | NOT NULL — the family_role value or the user id |
-| resource_type | TEXT | NOT NULL — `module` \| `widget` |
-| resource_key | TEXT | NOT NULL — module key or dashboard widget id |
-| access | TEXT | NOT NULL — module: `none` \| `read` \| `write`; widget: `none` \| `allow` |
+| resource_type | TEXT | NOT NULL — `module` \| `widget` \| `capability` (v175, #996) |
+| resource_key | TEXT | NOT NULL — module key, dashboard widget id, or capability key |
+| access | TEXT | NOT NULL — module: `none` \| `read` \| `write`; widget and capability: `none` \| `allow` |
 | updated_at | TEXT | ISO 8601, default now |
 
-Primary key: `(subject_type, subject_id, resource_type, resource_key)`.
+Primary key: `(subject_type, subject_id, resource_type, resource_key)`. **`capability` is a schema-level
+allowance only (migration v175, #996):** the CHECK admits the value, `resolvePermissions()` and
+`getSubjectPermissions()` still read `module` and `widget` rows alone, and an ordinary save of the
+permission matrix deletes and rewrites only those two kinds, so a capability row written by a later
+feature survives it. No capability is registered by the core; the first one arrives with the feature
+that needs it.
 
 ### Quick Links (migration v160, #469)
 | Column | Type | Constraint |
