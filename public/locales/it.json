@@ -3002,6 +3002,7 @@
             "completedWithErrors": "Caricamento completato con errori",
             "completed": "Cartella caricata",
             "cancelled": "Caricamento annullato",
+            "cancelledDetail": "Le cartelle e i file già creati rimangono salvati.",
             "resultCounts": "{{uploaded}} caricati · {{skipped}} saltati · {{rejected}} rifiutati · {{failed}} non riusciti",
             "failedTitle": "Elementi non riusciti",
             "noUploadableFiles": "Questa cartella non contiene file caricabili.",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "Il file supera il limite di dimensione attuale.",
             "reasonNameTooLong": "Il nome di un file o di una cartella è troppo lungo.",
             "reasonTooDeep": "Il percorso supera il limite di cinque livelli di cartelle.",
-            "reasonParentFailed": "Non è stato possibile creare la cartella superiore."
+            "reasonParentFailed": "Non è stato possibile creare la cartella superiore.",
+            "reasonRateLimited": "Il server sta ricevendo troppe richieste. Riprova il caricamento più tardi."
         }
     },
     "shortcuts": {

@@ -3059,6 +3059,7 @@
             "completedWithErrors": "Upload voltooid met fouten",
             "completed": "Map geüpload",
             "cancelled": "Upload geannuleerd",
+            "cancelledDetail": "Mappen en bestanden die al zijn aangemaakt, blijven opgeslagen.",
             "resultCounts": "{{uploaded}} geüpload · {{skipped}} overgeslagen · {{rejected}} geweigerd · {{failed}} mislukt",
             "failedTitle": "Mislukte items",
             "noUploadableFiles": "Deze map bevat geen bestanden die kunnen worden geüpload.",
@@ -3071,7 +3072,8 @@
             "reasonTooLarge": "Het bestand overschrijdt de huidige groottelimiet.",
             "reasonNameTooLong": "Een bestands- of mapnaam is te lang.",
             "reasonTooDeep": "Het pad overschrijdt de limiet van vijf mapniveaus.",
-            "reasonParentFailed": "De bovenliggende map kon niet worden gemaakt."
+            "reasonParentFailed": "De bovenliggende map kon niet worden gemaakt.",
+            "reasonRateLimited": "De server ontvangt te veel verzoeken. Probeer de upload later opnieuw."
         }
     },
     "housekeeping": {

@@ -306,6 +306,47 @@ function existingIdFromRef(ref) {
   return Number.isInteger(id) && id > 0 ? id : undefined;
 }
 
+const RATE_LIMIT_CANCELLED = Symbol('rate-limit-cancelled');
+
+function retryAfterDelayMs(error, retryIndex) {
+  const raw = String(error?.retryAfter ?? '').trim();
+  if (raw) {
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 60_000);
+    const timestamp = Date.parse(raw);
+    if (Number.isFinite(timestamp)) return Math.min(Math.max(0, timestamp - Date.now()), 60_000);
+  }
+  return Math.min(1_000 * (2 ** retryIndex), 10_000);
+}
+
+async function cancellableRetryWait(delayMs, shouldCancel) {
+  const deadline = Date.now() + delayMs;
+  while (Date.now() < deadline) {
+    if (shouldCancel()) return false;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(250, deadline - Date.now())));
+  }
+  return !shouldCancel();
+}
+
+async function runRateLimitedWrite(operation, {
+  maxRetries,
+  shouldCancel,
+  waitForRetry,
+}) {
+  let retries = 0;
+  while (true) {
+    if (shouldCancel()) throw RATE_LIMIT_CANCELLED;
+    try {
+      return await operation();
+    } catch (error) {
+      if (error?.status !== 429 || retries >= maxRetries) throw error;
+      const waited = await waitForRetry(retryAfterDelayMs(error, retries), shouldCancel);
+      if (waited === false || shouldCancel()) throw RATE_LIMIT_CANCELLED;
+      retries += 1;
+    }
+  }
+}
+
 /**
  * Execute one resolved upload plan without parallel reads or writes.
  *
@@ -317,7 +358,14 @@ export async function executeFolderUploadPlan(plan, {
   uploadFile,
   onProgress = () => {},
   shouldCancel = () => false,
+  waitForRetry = cancellableRetryWait,
+  maxRateLimitRetries = 3,
 } = {}) {
+  const retryOptions = {
+    maxRetries: Math.max(0, Math.floor(Number(maxRateLimitRetries) || 0)),
+    shouldCancel,
+    waitForRetry,
+  };
   const result = {
     createdFolders: [],
     uploaded: [],
@@ -349,15 +397,22 @@ export async function executeFolderUploadPlan(plan, {
     }
     onProgress({ phase: 'folder', status: 'started', item: folder });
     try {
-      const created = await createFolder({ name: folder.name, parentId, source: folder });
+      const created = await runRateLimitedWrite(
+        () => createFolder({ name: folder.name, parentId, source: folder }),
+        retryOptions,
+      );
       const createdId = Number(created?.id ?? created);
       if (!Number.isInteger(createdId) || createdId <= 0) throw new Error('Folder creation returned no id.');
       resolvedIds.set(folder.targetRef, createdId);
       result.createdFolders.push({ ...folder, id: createdId });
       onProgress({ phase: 'folder', status: 'succeeded', item: folder, id: createdId });
     } catch (error) {
+      if (error === RATE_LIMIT_CANCELLED) {
+        result.cancelled = true;
+        return result;
+      }
       failedRefs.add(folder.targetRef);
-      const reason = error?.message || String(error);
+      const reason = error?.status === 429 ? 'rate-limited' : (error?.message || String(error));
       result.failed.push({ kind: 'folder', item: folder, reason });
       onProgress({ phase: 'folder', status: 'failed', item: folder, reason });
     }
@@ -379,17 +434,24 @@ export async function executeFolderUploadPlan(plan, {
     }
     onProgress({ phase: 'file', status: 'started', item });
     try {
-      const uploaded = await uploadFile({
-        file: item.file,
-        folderId,
-        name: item.uploadName,
-        originalName: item.uploadOriginalName,
-        source: item,
-      });
+      const uploaded = await runRateLimitedWrite(
+        () => uploadFile({
+          file: item.file,
+          folderId,
+          name: item.uploadName,
+          originalName: item.uploadOriginalName,
+          source: item,
+        }),
+        retryOptions,
+      );
       result.uploaded.push({ ...item, result: uploaded });
       onProgress({ phase: 'file', status: 'succeeded', item, result: uploaded });
     } catch (error) {
-      const reason = error?.message || String(error);
+      if (error === RATE_LIMIT_CANCELLED) {
+        result.cancelled = true;
+        return result;
+      }
+      const reason = error?.status === 429 ? 'rate-limited' : (error?.message || String(error));
       result.failed.push({ kind: 'file', item, reason });
       onProgress({ phase: 'file', status: 'failed', item, reason });
     }

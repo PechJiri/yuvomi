@@ -3002,6 +3002,7 @@
             "completedWithErrors": "Carregamento concluído com erros",
             "completed": "Pasta carregada",
             "cancelled": "Carregamento cancelado",
+            "cancelledDetail": "As pastas e os ficheiros já criados permanecem guardados.",
             "resultCounts": "{{uploaded}} carregados · {{skipped}} ignorados · {{rejected}} rejeitados · {{failed}} falharam",
             "failedTitle": "Itens com falha",
             "noUploadableFiles": "Esta pasta não contém ficheiros que possam ser carregados.",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "O ficheiro excede o limite de tamanho atual.",
             "reasonNameTooLong": "O nome de um ficheiro ou pasta é demasiado longo.",
             "reasonTooDeep": "O caminho excede o limite de cinco níveis de pastas.",
-            "reasonParentFailed": "Não foi possível criar a pasta superior."
+            "reasonParentFailed": "Não foi possível criar a pasta superior.",
+            "reasonRateLimited": "O servidor está a receber demasiados pedidos. Tente carregar novamente mais tarde."
         }
     },
     "shortcuts": {

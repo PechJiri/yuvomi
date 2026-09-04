@@ -3059,6 +3059,7 @@
             "completedWithErrors": "Upload completed with errors",
             "completed": "Folder uploaded",
             "cancelled": "Upload cancelled",
+            "cancelledDetail": "Folders and files that were already created remain saved.",
             "resultCounts": "{{uploaded}} uploaded · {{skipped}} skipped · {{rejected}} rejected · {{failed}} failed",
             "failedTitle": "Items that failed",
             "noUploadableFiles": "This folder contains no files that can be uploaded.",
@@ -3071,7 +3072,8 @@
             "reasonTooLarge": "The file exceeds the current size limit.",
             "reasonNameTooLong": "A file or folder name is too long.",
             "reasonTooDeep": "The path exceeds the five-level folder limit.",
-            "reasonParentFailed": "Its parent folder could not be created."
+            "reasonParentFailed": "Its parent folder could not be created.",
+            "reasonRateLimited": "The server is receiving too many requests. Try the upload again later."
         }
     },
     "housekeeping": {

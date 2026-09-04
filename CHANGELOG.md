@@ -27,7 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Validation follows the server's file-size, MIME-type, path and depth limits. Safe folder paths are
   still created when their own files are rejected, while a failed parent blocks only its descendants
-  and does not stop sibling branches.
+  and does not stop sibling branches. If the server's request limit is reached, the upload waits for
+  its advertised retry window and resumes automatically. Cancelling stops queued work but keeps
+  folders and files that were already created.
 
 - **A third-party module now declares which manifest format it is written in** (`manifestVersion`),
   and Yuvomi refuses one it cannot read instead of reading it in part. The extension surface from

@@ -128,6 +128,7 @@ let _search = null;
 
 export async function render(container) {
   _container = container;
+  const directoryUploadSupported = canPickDirectory();
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
     <div class="documents-page">
@@ -148,11 +149,11 @@ export async function render(container) {
               <i data-lucide="list" aria-hidden="true"></i>
             </button>
           </div>
-          <button class="btn btn--secondary documents-upload-folder-btn" id="documents-upload-folder" type="button"
+          ${directoryUploadSupported ? `<button class="btn btn--secondary documents-upload-folder-btn" id="documents-upload-folder" type="button"
                   title="${t('documents.folderUpload.openAction')}" aria-label="${t('documents.folderUpload.openAction')}">
             <i data-lucide="folder-up" class="icon-md" aria-hidden="true"></i>
             <span class="documents-upload-folder-btn__label">${t('documents.folderUpload.openAction')}</span>
-          </button>
+          </button>` : ''}
         </div>
       </div>
       <div class="documents-selectbar" id="documents-selectbar" role="toolbar" aria-label="${t('documents.selectLabel')}" hidden>
@@ -1692,6 +1693,7 @@ const FOLDER_UPLOAD_REASON_KEYS = {
   'name-too-long': 'documents.folderUpload.reasonNameTooLong',
   'too-deep': 'documents.folderUpload.reasonTooDeep',
   'parent-failed': 'documents.folderUpload.reasonParentFailed',
+  'rate-limited': 'documents.folderUpload.reasonRateLimited',
 };
 
 function folderUploadReason(reason) {
@@ -2019,6 +2021,7 @@ function renderFolderUploadResult(panel, plan, result) {
         rejected: result.rejected.length,
         failed: failures.length,
       })}</p>
+      ${result.cancelled ? `<p>${t('documents.folderUpload.cancelledDetail')}</p>` : ''}
       ${failures.length ? `
         <section class="folder-upload-result__failures">
           <h4>${t('documents.folderUpload.failedTitle')}</h4>

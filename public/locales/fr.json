@@ -3002,6 +3002,7 @@
             "completedWithErrors": "Import terminé avec des erreurs",
             "completed": "Dossier importé",
             "cancelled": "Importation annulée",
+            "cancelledDetail": "Les dossiers et fichiers déjà créés restent enregistrés.",
             "resultCounts": "{{uploaded}} importés · {{skipped}} ignorés · {{rejected}} refusés · {{failed}} en échec",
             "failedTitle": "Éléments en échec",
             "noUploadableFiles": "Ce dossier ne contient aucun fichier pouvant être importé.",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "Le fichier dépasse la limite de taille actuelle.",
             "reasonNameTooLong": "Le nom d’un fichier ou dossier est trop long.",
             "reasonTooDeep": "Le chemin dépasse la limite de cinq niveaux de dossiers.",
-            "reasonParentFailed": "Le dossier parent n’a pas pu être créé."
+            "reasonParentFailed": "Le dossier parent n’a pas pu être créé.",
+            "reasonRateLimited": "Le serveur reçoit trop de requêtes. Réessayez l’importation plus tard."
         }
     },
     "shortcuts": {

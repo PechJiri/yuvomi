@@ -3059,6 +3059,7 @@
             "completedWithErrors": "Przesyłanie zakończone z błędami",
             "completed": "Folder przesłany",
             "cancelled": "Przesyłanie anulowane",
+            "cancelledDetail": "Utworzone już foldery i przesłane pliki pozostaną zapisane.",
             "resultCounts": "{{uploaded}} przesłano · {{skipped}} pominięto · {{rejected}} odrzucono · {{failed}} nieudanych",
             "failedTitle": "Elementy zakończone niepowodzeniem",
             "noUploadableFiles": "Ten folder nie zawiera plików, które można przesłać.",
@@ -3071,7 +3072,8 @@
             "reasonTooLarge": "Plik przekracza bieżący limit rozmiaru.",
             "reasonNameTooLong": "Nazwa pliku lub folderu jest za długa.",
             "reasonTooDeep": "Ścieżka przekracza limit pięciu poziomów folderów.",
-            "reasonParentFailed": "Nie udało się utworzyć folderu nadrzędnego."
+            "reasonParentFailed": "Nie udało się utworzyć folderu nadrzędnego.",
+            "reasonRateLimited": "Serwer otrzymuje zbyt wiele żądań. Spróbuj przesłać ponownie później."
         }
     },
     "userMultiSelect": {

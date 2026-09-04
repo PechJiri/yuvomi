@@ -3002,6 +3002,7 @@
             "completedWithErrors": "Yükleme hatalarla tamamlandı",
             "completed": "Klasör yüklendi",
             "cancelled": "Yükleme iptal edildi",
+            "cancelledDetail": "Daha önce oluşturulan klasörler ve yüklenen dosyalar korunur.",
             "resultCounts": "{{uploaded}} yüklendi · {{skipped}} atlandı · {{rejected}} reddedildi · {{failed}} başarısız",
             "failedTitle": "Başarısız öğeler",
             "noUploadableFiles": "Bu klasörde yüklenebilecek dosya yok.",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "Dosya geçerli boyut sınırını aşıyor.",
             "reasonNameTooLong": "Bir dosya veya klasör adı çok uzun.",
             "reasonTooDeep": "Yol beş klasör düzeyi sınırını aşıyor.",
-            "reasonParentFailed": "Üst klasör oluşturulamadı."
+            "reasonParentFailed": "Üst klasör oluşturulamadı.",
+            "reasonRateLimited": "Sunucu çok fazla istek alıyor. Yüklemeyi daha sonra tekrar deneyin."
         }
     },
     "shortcuts": {

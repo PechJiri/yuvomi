@@ -3059,6 +3059,7 @@
             "completedWithErrors": "A feltöltés hibákkal fejeződött be",
             "completed": "Mappa feltöltve",
             "cancelled": "Feltöltés megszakítva",
+            "cancelledDetail": "A már létrehozott mappák és feltöltött fájlok megmaradnak.",
             "resultCounts": "{{uploaded}} feltöltve · {{skipped}} kihagyva · {{rejected}} elutasítva · {{failed}} sikertelen",
             "failedTitle": "Sikertelen elemek",
             "noUploadableFiles": "Ez a mappa nem tartalmaz feltölthető fájlokat.",
@@ -3071,7 +3072,8 @@
             "reasonTooLarge": "A fájl meghaladja a jelenlegi méretkorlátot.",
             "reasonNameTooLong": "Egy fájl- vagy mappanév túl hosszú.",
             "reasonTooDeep": "Az elérési út meghaladja az öt mappaszint korlátját.",
-            "reasonParentFailed": "A szülőmappát nem sikerült létrehozni."
+            "reasonParentFailed": "A szülőmappát nem sikerült létrehozni.",
+            "reasonRateLimited": "A szerver túl sok kérést kap. Próbáld meg később újra a feltöltést."
         }
     },
     "housekeeping": {

@@ -332,8 +332,9 @@ test('folder upload is a separate choice and does not change the regular multi-f
   assert.ok(page.includes("t('documents.folderUpload.unsupportedBrowser')"));
 });
 
-test('folder upload has a visible page action and opens the folder picker directly', () => {
-  assert.match(page, /id="documents-upload-folder"/);
+test('folder upload shows its page action only when the browser supports it', () => {
+  const toolbar = page.slice(page.indexOf('export async function render'), page.indexOf('function renderBreadcrumb'));
+  assert.match(toolbar, /canPickDirectory\(\)[\s\S]*id="documents-upload-folder"/);
   assert.ok(page.includes("t('documents.folderUpload.openAction')"));
   assert.match(page, /#documents-upload-folder[\s\S]*openDocumentModal\(null, \{ initialUpload: 'folder' \}\)/);
   assert.match(page, /initialUpload === 'folder'[\s\S]*folderInput\.click\(\)/);
@@ -392,6 +393,9 @@ test('running folder uploads freeze plan controls, cancel on modal close, and su
   assert.match(save, /folderUploadOutcome\(result\)/);
   assert.match(save, /outcome\.tone/);
   assert.doesNotMatch(save, /uploadedToast', \{ count: result\.uploaded\.length \}\), 'success'/);
+  const result = page.slice(page.indexOf('function renderFolderUploadResult'), page.indexOf('async function saveFolderUpload'));
+  assert.match(result, /result\.cancelled[\s\S]*documents\.folderUpload\.cancelledDetail/);
+  assert.match(page, /'rate-limited': 'documents\.folderUpload\.reasonRateLimited'/);
 });
 
 test('folder preview avoids horizontal overflow on mobile', () => {

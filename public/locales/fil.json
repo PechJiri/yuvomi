@@ -3043,7 +3043,7 @@
             "willSkip": "Laktawan ang kasalukuyang file",
             "willUpload": "I-upload ang file",
             "treeLabel": "Puno ng upload",
-            "previewTitle": "Preview: {{name}}",
+            "previewTitle": "Paunang tingin: {{name}}",
             "previewCounts": "{{files}} file · {{folders}} bagong folder · {{rejected}} tinanggihan",
             "folderConflictsTitle": "Mga salungatan sa folder ({{count}})",
             "defaultResolution": "Default para sa lahat",
@@ -3059,6 +3059,7 @@
             "completedWithErrors": "Natapos ang upload na may mga error",
             "completed": "Na-upload ang folder",
             "cancelled": "Kinansela ang pag-upload",
+            "cancelledDetail": "Mananatiling naka-save ang mga folder at file na nagawa na.",
             "resultCounts": "{{uploaded}} na-upload · {{skipped}} nilaktawan · {{rejected}} tinanggihan · {{failed}} nabigo",
             "failedTitle": "Mga nabigong item",
             "noUploadableFiles": "Walang file sa folder na ito na maaaring i-upload.",
@@ -3071,7 +3072,8 @@
             "reasonTooLarge": "Lampas ang file sa kasalukuyang limitasyon ng laki.",
             "reasonNameTooLong": "Masyadong mahaba ang pangalan ng file o folder.",
             "reasonTooDeep": "Lampas ang path sa limang antas ng folder.",
-            "reasonParentFailed": "Hindi magawa ang parent folder."
+            "reasonParentFailed": "Hindi magawa ang parent folder.",
+            "reasonRateLimited": "Masyadong maraming kahilingan ang natatanggap ng server. Subukang mag-upload muli mamaya."
         }
     },
     "userMultiSelect": {

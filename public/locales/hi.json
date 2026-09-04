@@ -3002,6 +3002,7 @@
             "completedWithErrors": "अपलोड त्रुटियों के साथ पूरा हुआ",
             "completed": "फ़ोल्डर अपलोड हुआ",
             "cancelled": "अपलोड रद्द किया गया",
+            "cancelledDetail": "पहले से बनाए गए फ़ोल्डर और अपलोड की गई फ़ाइलें सुरक्षित रहेंगी।",
             "resultCounts": "{{uploaded}} अपलोड · {{skipped}} छोड़ी · {{rejected}} अस्वीकृत · {{failed}} विफल",
             "failedTitle": "विफल आइटम",
             "noUploadableFiles": "इस फ़ोल्डर में अपलोड की जा सकने वाली फ़ाइलें नहीं हैं।",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "फ़ाइल वर्तमान आकार सीमा से बड़ी है।",
             "reasonNameTooLong": "फ़ाइल या फ़ोल्डर का नाम बहुत लंबा है।",
             "reasonTooDeep": "पथ पाँच फ़ोल्डर स्तर की सीमा से अधिक है।",
-            "reasonParentFailed": "मूल फ़ोल्डर नहीं बनाया जा सका।"
+            "reasonParentFailed": "मूल फ़ोल्डर नहीं बनाया जा सका।",
+            "reasonRateLimited": "सर्वर को अभी बहुत अधिक अनुरोध मिल रहे हैं। बाद में फिर से अपलोड करें।"
         }
     },
     "shortcuts": {

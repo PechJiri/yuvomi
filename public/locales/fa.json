@@ -3059,6 +3059,7 @@
             "completedWithErrors": "بارگذاری با خطا پایان یافت",
             "completed": "پوشه بارگذاری شد",
             "cancelled": "بارگذاری لغو شد",
+            "cancelledDetail": "پوشه‌ها و فایل‌هایی که قبلاً ایجاد شده‌اند باقی می‌مانند.",
             "resultCounts": "{{uploaded}} بارگذاری · {{skipped}} رد · {{rejected}} پذیرفته‌نشده · {{failed}} ناموفق",
             "failedTitle": "موارد ناموفق",
             "noUploadableFiles": "این پوشه فایل قابل بارگذاری ندارد.",
@@ -3071,7 +3072,8 @@
             "reasonTooLarge": "فایل از محدودیت اندازه فعلی بیشتر است.",
             "reasonNameTooLong": "نام فایل یا پوشه بیش از حد طولانی است.",
             "reasonTooDeep": "مسیر از محدودیت پنج سطح پوشه فراتر می‌رود.",
-            "reasonParentFailed": "پوشه بالادست ایجاد نشد."
+            "reasonParentFailed": "پوشه بالادست ایجاد نشد.",
+            "reasonRateLimited": "سرور در حال دریافت درخواست‌های زیادی است. بعداً دوباره بارگذاری را امتحان کنید."
         }
     },
     "userMultiSelect": {

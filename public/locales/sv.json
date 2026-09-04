@@ -3002,6 +3002,7 @@
             "completedWithErrors": "Uppladdningen slutfördes med fel",
             "completed": "Mappen har laddats upp",
             "cancelled": "Uppladdningen avbröts",
+            "cancelledDetail": "Mappar och filer som redan har skapats finns kvar.",
             "resultCounts": "{{uploaded}} uppladdade · {{skipped}} överhoppade · {{rejected}} avvisade · {{failed}} misslyckade",
             "failedTitle": "Misslyckade objekt",
             "noUploadableFiles": "Mappen innehåller inga filer som kan laddas upp.",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "Filen överskrider den aktuella storleksgränsen.",
             "reasonNameTooLong": "Ett fil- eller mappnamn är för långt.",
             "reasonTooDeep": "Sökvägen överskrider gränsen på fem mappnivåer.",
-            "reasonParentFailed": "Den överordnade mappen kunde inte skapas."
+            "reasonParentFailed": "Den överordnade mappen kunde inte skapas.",
+            "reasonRateLimited": "Servern tar emot för många förfrågningar. Försök ladda upp igen senare."
         }
     },
     "shortcuts": {

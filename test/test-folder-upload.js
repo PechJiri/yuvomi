@@ -470,6 +470,99 @@ test('stops additional writes when the user cancels a long-running upload', asyn
   assert.equal(result.uploaded.length, 1);
 });
 
+test('retries a rate-limited write after the server Retry-After delay', async () => {
+  const plan = {
+    folders: [],
+    files: [{ action: 'upload', targetRef: 'root', relativePath: 'House/file.pdf' }],
+  };
+  const waits = [];
+  let attempts = 0;
+
+  const result = await executeFolderUploadPlan(plan, {
+    uploadFile: async () => {
+      attempts += 1;
+      if (attempts === 1) throw Object.assign(new Error('Too many requests.'), {
+        status: 429,
+        retryAfter: '2',
+      });
+      return { id: 700 };
+    },
+    waitForRetry: async (delayMs) => {
+      waits.push(delayMs);
+      return true;
+    },
+  });
+
+  assert.equal(attempts, 2);
+  assert.deepEqual(waits, [2_000]);
+  assert.equal(result.uploaded.length, 1);
+  assert.deepEqual(result.failed, []);
+});
+
+test('cancels during a rate-limit wait without starting another write', async () => {
+  const plan = {
+    folders: [],
+    files: [{ action: 'upload', targetRef: 'root', relativePath: 'House/file.pdf' }],
+  };
+  let attempts = 0;
+  let cancelled = false;
+
+  const result = await executeFolderUploadPlan(plan, {
+    uploadFile: async () => {
+      attempts += 1;
+      throw Object.assign(new Error('Too many requests.'), { status: 429, retryAfter: '30' });
+    },
+    waitForRetry: async (_delayMs, shouldCancel) => {
+      cancelled = true;
+      return !shouldCancel();
+    },
+    shouldCancel: () => cancelled,
+  });
+
+  assert.equal(attempts, 1);
+  assert.equal(result.cancelled, true);
+  assert.deepEqual(result.failed, []);
+});
+
+test('bounds rate-limit retries and reports a stable reason', async () => {
+  const plan = {
+    folders: [],
+    files: [{ action: 'upload', targetRef: 'root', relativePath: 'House/file.pdf' }],
+  };
+  let attempts = 0;
+
+  const result = await executeFolderUploadPlan(plan, {
+    uploadFile: async () => {
+      attempts += 1;
+      throw Object.assign(new Error('Too many requests.'), { status: 429, retryAfter: '0' });
+    },
+    waitForRetry: async () => true,
+    maxRateLimitRetries: 2,
+  });
+
+  assert.equal(attempts, 3);
+  assert.deepEqual(result.failed.map((failure) => failure.reason), ['rate-limited']);
+});
+
+test('does not retry errors other than rate limiting', async () => {
+  const plan = {
+    folders: [],
+    files: [{ action: 'upload', targetRef: 'root', relativePath: 'House/file.pdf' }],
+  };
+  let attempts = 0;
+
+  const result = await executeFolderUploadPlan(plan, {
+    uploadFile: async () => {
+      attempts += 1;
+      throw Object.assign(new Error('storage unavailable'), { status: 503 });
+    },
+    waitForRetry: async () => assert.fail('503 must not be retried'),
+  });
+
+  assert.equal(attempts, 1);
+  assert.deepEqual(result.failed.map((failure) => failure.reason), ['storage unavailable']);
+});
+
 test('reports cancelled and partial upload outcomes without success semantics', () => {
   assert.deepEqual(folderUploadOutcome({ cancelled: true, failed: [], uploaded: [] }), {
     heading: 'cancelled',

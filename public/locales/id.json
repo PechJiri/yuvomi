@@ -3059,6 +3059,7 @@
             "completedWithErrors": "Unggahan selesai dengan kesalahan",
             "completed": "Folder diunggah",
             "cancelled": "Unggahan dibatalkan",
+            "cancelledDetail": "Folder dan file yang sudah dibuat tetap tersimpan.",
             "resultCounts": "{{uploaded}} diunggah · {{skipped}} dilewati · {{rejected}} ditolak · {{failed}} gagal",
             "failedTitle": "Item yang gagal",
             "noUploadableFiles": "Folder ini tidak berisi file yang dapat diunggah.",
@@ -3071,7 +3072,8 @@
             "reasonTooLarge": "File melebihi batas ukuran saat ini.",
             "reasonNameTooLong": "Nama file atau folder terlalu panjang.",
             "reasonTooDeep": "Jalur melebihi batas lima tingkat folder.",
-            "reasonParentFailed": "Folder induk tidak dapat dibuat."
+            "reasonParentFailed": "Folder induk tidak dapat dibuat.",
+            "reasonRateLimited": "Server sedang menerima terlalu banyak permintaan. Coba unggah lagi nanti."
         }
     },
     "userMultiSelect": {

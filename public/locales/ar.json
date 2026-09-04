@@ -3002,6 +3002,7 @@
             "completedWithErrors": "اكتمل الرفع مع وجود أخطاء",
             "completed": "تم رفع المجلد",
             "cancelled": "تم إلغاء التحميل",
+            "cancelledDetail": "ستبقى المجلدات التي تم إنشاؤها والملفات التي تم تحميلها محفوظة.",
             "resultCounts": "تم رفع {{uploaded}} · تخطي {{skipped}} · رفض {{rejected}} · فشل {{failed}}",
             "failedTitle": "العناصر التي فشلت",
             "noUploadableFiles": "لا يحتوي هذا المجلد على ملفات قابلة للرفع.",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "يتجاوز الملف حد الحجم الحالي.",
             "reasonNameTooLong": "اسم ملف أو مجلد طويل جدًا.",
             "reasonTooDeep": "يتجاوز المسار حد خمسة مستويات من المجلدات.",
-            "reasonParentFailed": "تعذر إنشاء المجلد الأب."
+            "reasonParentFailed": "تعذر إنشاء المجلد الأب.",
+            "reasonRateLimited": "يتلقى الخادم طلبات كثيرة جدًا الآن. حاول التحميل مرة أخرى لاحقًا."
         }
     },
     "shortcuts": {

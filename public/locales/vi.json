@@ -3059,6 +3059,7 @@
             "completedWithErrors": "Tải lên hoàn tất nhưng có lỗi",
             "completed": "Đã tải thư mục lên",
             "cancelled": "Đã hủy tải lên",
+            "cancelledDetail": "Các thư mục và tệp đã tạo vẫn được lưu giữ.",
             "resultCounts": "{{uploaded}} đã tải · {{skipped}} bỏ qua · {{rejected}} từ chối · {{failed}} thất bại",
             "failedTitle": "Mục bị lỗi",
             "noUploadableFiles": "Thư mục này không có tệp nào có thể tải lên.",
@@ -3071,7 +3072,8 @@
             "reasonTooLarge": "Tệp vượt quá giới hạn kích thước hiện tại.",
             "reasonNameTooLong": "Tên tệp hoặc thư mục quá dài.",
             "reasonTooDeep": "Đường dẫn vượt quá giới hạn năm cấp thư mục.",
-            "reasonParentFailed": "Không thể tạo thư mục cha."
+            "reasonParentFailed": "Không thể tạo thư mục cha.",
+            "reasonRateLimited": "Máy chủ đang nhận quá nhiều yêu cầu. Hãy thử tải lên lại sau."
         }
     },
     "housekeeping": {

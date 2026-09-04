@@ -3002,6 +3002,7 @@
             "completedWithErrors": "Carga completada con errores",
             "completed": "Carpeta subida",
             "cancelled": "Carga cancelada",
+            "cancelledDetail": "Las carpetas y los archivos ya creados permanecen guardados.",
             "resultCounts": "{{uploaded}} subidos · {{skipped}} omitidos · {{rejected}} rechazados · {{failed}} fallidos",
             "failedTitle": "Elementos con error",
             "noUploadableFiles": "Esta carpeta no contiene archivos que se puedan subir.",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "El archivo supera el límite de tamaño actual.",
             "reasonNameTooLong": "El nombre de un archivo o carpeta es demasiado largo.",
             "reasonTooDeep": "La ruta supera el límite de cinco niveles de carpetas.",
-            "reasonParentFailed": "No se pudo crear la carpeta superior."
+            "reasonParentFailed": "No se pudo crear la carpeta superior.",
+            "reasonRateLimited": "El servidor está recibiendo demasiadas solicitudes. Intenta cargar de nuevo más tarde."
         }
     },
     "shortcuts": {

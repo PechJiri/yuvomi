@@ -3002,6 +3002,7 @@
             "completedWithErrors": "エラーを伴ってアップロードが完了しました",
             "completed": "フォルダーをアップロードしました",
             "cancelled": "アップロードをキャンセルしました",
+            "cancelledDetail": "すでに作成されたフォルダーとアップロード済みのファイルは保持されます。",
             "resultCounts": "アップロード {{uploaded}} · スキップ {{skipped}} · 拒否 {{rejected}} · 失敗 {{failed}}",
             "failedTitle": "失敗した項目",
             "noUploadableFiles": "このフォルダーにはアップロード可能なファイルがありません。",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "ファイルが現在のサイズ上限を超えています。",
             "reasonNameTooLong": "ファイル名またはフォルダー名が長すぎます。",
             "reasonTooDeep": "パスがフォルダー5階層の上限を超えています。",
-            "reasonParentFailed": "親フォルダーを作成できませんでした。"
+            "reasonParentFailed": "親フォルダーを作成できませんでした。",
+            "reasonRateLimited": "サーバーへのリクエストが多すぎます。しばらくしてからもう一度アップロードしてください。"
         }
     },
     "shortcuts": {

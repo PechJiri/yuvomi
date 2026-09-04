@@ -3002,6 +3002,7 @@
             "completedWithErrors": "上传完成，但有错误",
             "completed": "文件夹已上传",
             "cancelled": "已取消上传",
+            "cancelledDetail": "已创建的文件夹和已上传的文件会保留。",
             "resultCounts": "已上传 {{uploaded}} · 已跳过 {{skipped}} · 已拒绝 {{rejected}} · 失败 {{failed}}",
             "failedTitle": "失败的项目",
             "noUploadableFiles": "此文件夹不包含可上传的文件。",
@@ -3014,7 +3015,8 @@
             "reasonTooLarge": "文件超过当前大小限制。",
             "reasonNameTooLong": "文件名或文件夹名过长。",
             "reasonTooDeep": "路径超过五层文件夹限制。",
-            "reasonParentFailed": "无法创建上级文件夹。"
+            "reasonParentFailed": "无法创建上级文件夹。",
+            "reasonRateLimited": "服务器当前收到的请求过多。请稍后重试上传。"
         }
     },
     "shortcuts": {
