@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.1] - 2026-09-04
+
 ### Security
 
 - **A member can no longer edit, un-hide or delete another member's private calendar event
