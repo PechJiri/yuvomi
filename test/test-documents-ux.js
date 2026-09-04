@@ -241,6 +241,7 @@ test('Ordnerlöschung bietet Behalten oder Mitlöschen mit exakten Server-Zahlen
   assert.match(block, /expected_documents=\$\{impact\.documents\}/);
   assert.match(block, /expected_folders=\$\{impact\.removed_folders\}/);
   assert.match(block, /choice === 'delete'[\s\S]*expected_snapshot=\$\{encodeURIComponent\(impact\.snapshot\)\}/);
+  assert.match(block, /const expectedSnapshot = choice === 'delete'[\s\S]*: '';/);
   assert.match(block, /FOLDER_CONTENT_CHANGED[\s\S]*await deleteFolder\(folder\)/);
   assert.match(block, /FOLDER_DELETE_IN_PROGRESS[\s\S]*folderDeleteInProgressToast/);
   assert.match(block, /result\.contents_changed[\s\S]*folderDeleteContentsChangedToast/);
