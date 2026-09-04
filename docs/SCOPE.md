@@ -285,6 +285,11 @@ argument.
   relicense later; this one has no intention to. *Opens with:* nothing foreseeable - a change of
   licence would be discussed in the open first, and a CLA would be the last step of that, not
   the first.
+- **No dated roadmap.** [ROADMAP.md](ROADMAP.md) names the themes the open threads add up
+  to and what is decided in each; it carries no dates and no versions, because with several
+  releases a week a date written down is wrong the next morning, and a plan with dates would
+  claim that somebody is planning. *Opens with:* a second maintainer, which is the same
+  condition as the first two points, because a date is a promise about somebody's time.
 - **No fuzzing.** Input reaches the server as JSON through Express validators, and the two
   parsers for formats written by other machines - ICS and vCard - have their own test suites
   with the malformed cases that were reported. A fuzzing harness earns its place when a parser
