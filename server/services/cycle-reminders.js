@@ -33,20 +33,19 @@ import { todayKey } from '../utils/timezone.js';
 import { resolvePermissions } from '../permissions.js';
 import { createLogger } from '../logger.js';
 import { predictCycle } from '../../public/utils/health-cycle.js';
+import { healthCycleViews } from '../routes/preferences.js';
 
 const log = createLogger('CycleReminders');
 
 /**
- * Zyklus-Tab freigeschaltet? Drei Sichten wie in server/routes/preferences.js
- * (#760): Haushalts-Default, persönliches Opt-out, beides kombiniert. Nicht
- * von dort importiert - die Helfer sind modulintern und der Gedanke ist vier
- * Zeilen, keine eigene Abhängigkeit wert.
+ * Zyklus-Tab freigeschaltet? Die Regel (Haushalts-Default, persönliches
+ * Opt-out, UND statt Override, #760) lebt in EINER exportierten Funktion,
+ * healthCycleViews() in server/routes/preferences.js - dieselbe Fassung, die
+ * auch die Präferenzen-Routen beantworten, statt einer zweiten Abschrift
+ * derselben Regel hier.
  */
 function cycleTabEnabled(database, userId) {
-  const household = database.prepare("SELECT value FROM sync_config WHERE key = 'health_cycle_enabled'").get()?.value;
-  if (household === '0') return false;
-  const personal = database.prepare('SELECT value FROM sync_config WHERE key = ?').get(`health_cycle_enabled:user:${userId}`)?.value;
-  return personal !== '0';
+  return healthCycleViews(userId).health_cycle_effective;
 }
 
 /** Fehlt diesem Nutzer der Zugriff auf das Health-Modul überhaupt? */
@@ -160,16 +159,23 @@ function syncLogNudgeReminder(database, userId, settings, today) {
  * @param {Date} [now]
  */
 export function syncCycleRemindersForUser(database, userId, now = new Date()) {
-  if (lacksHealth(database, userId) || !cycleTabEnabled(database, userId)) {
-    dropAnchorAndReminder(database, userId, 'period_predicted', 'cycle_period');
-    dropAnchorAndReminder(database, userId, 'log_nudge', 'cycle_log_nudge');
-    return;
-  }
+  // TRANSAKTIONAL, weil upsertCycleReminder() "den einen" Anker je (Nutzer,
+  // Art) per .get() liest und dann loescht/einfuegt: das Schema erzwingt nur
+  // UNIQUE(user_id, anchor_date, kind), nicht UNIQUE(user_id, kind). Ein
+  // Abbruch zwischen Lesen und Schreiben liesse sonst einen zweiten Anker
+  // zurueck, den kein spaeterer Lauf mehr sieht (er sucht ja nur "den einen").
+  database.transaction(() => {
+    if (lacksHealth(database, userId) || !cycleTabEnabled(database, userId)) {
+      dropAnchorAndReminder(database, userId, 'period_predicted', 'cycle_period');
+      dropAnchorAndReminder(database, userId, 'log_nudge', 'cycle_log_nudge');
+      return;
+    }
 
-  const today = todayKey(database, now);
-  const settings = database.prepare('SELECT * FROM cycle_settings WHERE user_id = ?').get(userId) || {};
-  syncPeriodReminder(database, userId, settings, today);
-  syncLogNudgeReminder(database, userId, settings, today);
+    const today = todayKey(database, now);
+    const settings = database.prepare('SELECT * FROM cycle_settings WHERE user_id = ?').get(userId) || {};
+    syncPeriodReminder(database, userId, settings, today);
+    syncLogNudgeReminder(database, userId, settings, today);
+  })();
 }
 
 /**

@@ -4112,7 +4112,9 @@
             "stats": {
                 "source": {
                     "history": "Basierend auf deinen letzten {{count}} Perioden",
-                    "insufficientHistory": "Vorerst ein Standardwert — noch {{count}} weitere Periode(n) für eine persönliche Vorhersage",
+                    "history_one": "Basierend auf deiner letzten Periode",
+                    "insufficientHistory": "Vorerst ein Standardwert - noch {{count}} weitere Perioden für eine persönliche Vorhersage",
+                    "insufficientHistory_one": "Vorerst ein Standardwert - noch {{count}} weitere Periode für eine persönliche Vorhersage",
                     "default": "Standardannahme (noch keine Historie erfasst)"
                 }
             },
@@ -4169,7 +4171,7 @@
                 "cyclePatternNone": "{{symptom}} kam in deinen letzten {{total}} Zyklen nicht wieder vor.",
                 "typical": "Typisch",
                 "atypical": "Untypisch",
-                "typicalRangeLabel": "Allgemein üblicher Bereich: {{min}}–{{max}} Tage",
+                "typicalRangeLabel": "Allgemein üblicher Bereich: {{min}}-{{max}} Tage",
                 "likelihoodTitle": "Symptom-Muster",
                 "likelihoodCaption": "Wähle ein Symptom, um zu sehen, an welchen Tagen es laut deiner Historie häufig auftritt.",
                 "likelyToday": "{{symptom}} tritt an diesem Zyklustag häufig auf.",

@@ -25,6 +25,7 @@ import { randomBytes } from 'node:crypto';
 import { resolveHouseholdFormats, translate } from '../utils/i18n.js';
 import { escapeICSText, foldLine } from './ics-export.js';
 import { projectFutureCycles } from '../../public/utils/health-cycle.js';
+import { todayKey } from '../utils/timezone.js';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -107,7 +108,7 @@ function buildCycleFeed(conn, userId, now = new Date()) {
     }, dtstamp));
   }
 
-  const projected = projectFutureCycles(periods, settings, now.toISOString().slice(0, 10));
+  const projected = projectFutureCycles(periods, settings, todayKey(conn, now));
   for (const cyc of projected) {
     out.push(...buildSpanVEvent({
       uid: `cycle-period-predicted-${userId}-${cyc.start}`,

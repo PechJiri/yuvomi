@@ -403,6 +403,16 @@ app.get('/feed/inventory-deadlines/:token.ics', feedLimiter, (req, res) => {
 // Vorhergesagter Zyklus-Feed (Phase 5, Health) - anders als der Inventar-Feed
 // oben ist der INHALT hier schon personengebunden (cycle_periods.user_id),
 // nicht nur das Token; siehe server/services/cycle-ics.js.
+//
+// BEWUSST UNGEGATET GEGEN DEN ZYKLUS-TAB/HEALTH-MODUL: server/services/
+// cycle-reminders.js stellt den Erinnerungs-Sync ein, sobald das Health-Modul
+// 'none' ist oder der Zyklus-Tab gesperrt wurde (Haushalt oder persönlich,
+// healthCycleViews()) - dieser Feed lässt sich davon nicht abschalten. Kein
+// Leck: der Inhalt bleibt der des Token-Besitzers selbst, kein Dritter sieht
+// je etwas Fremdes. Gleiche Lücke wie beim Inventar-Feed oben, dieselbe
+// Antwort - ein bestehendes Abo (Kalender-App auf einem anderen Gerät) soll
+// nicht stillschweigend leerlaufen, nur weil die Ansicht in der App gerade
+// gesperrt ist; Abschalten bleibt "Feed deaktivieren" in den Einstellungen.
 app.get('/feed/cycle/:token.ics', feedLimiter, (req, res) => {
   try {
     const userId = cycleIcs.findUserIdByFeedToken(db.get(), req.params.token);

@@ -146,6 +146,23 @@ function pantryExpiryBody(reminder) {
   return `${reminder.entity_title} - ${reminder.pantry_expires_on}`;
 }
 
+/**
+ * Body einer Zyklus-Erinnerung: `entity_title` ist bei diesen beiden Arten das
+ * rohe `anchor_date` (siehe REMINDER_ORIGINS-Kommentar), kein Name - "Zyklus"
+ * mit einem nackten Datum darunter sagt nicht, ob die Periode erwartet wird
+ * oder der heutige Tag noch nicht geloggt ist. Anders als
+ * subscriptionBody/warrantyBody/... nutzt das hier bewusst translate(locale,
+ * ...): reminderPayload() tut das für den Titel schon (Haushaltssprache, der
+ * Server kennt die Empfaengersprache nicht), Satzbau fuer den Body ist
+ * dieselbe Ausnahme, kein neues Prinzip.
+ */
+function cycleBody(reminder, locale) {
+  if (reminder.entity_type === 'cycle_log_nudge') {
+    return translate(locale, 'health.cycle.settings.remindLogDaily');
+  }
+  return `${translate(locale, 'health.cycle.status.nextPeriod')} - ${reminder.entity_title}`;
+}
+
 function reminderPayload(reminder, locale) {
   const title = reminder.entity_title || FALLBACK_BODY;
   const origin = REMINDER_ORIGINS[reminder.entity_type];
@@ -158,6 +175,8 @@ function reminderPayload(reminder, locale) {
     body = trackedDateBody(reminder);
   } else if (reminder.entity_type === 'pantry_item' && reminder.entity_title) {
     body = pantryExpiryBody(reminder);
+  } else if ((reminder.entity_type === 'cycle_period' || reminder.entity_type === 'cycle_log_nudge') && reminder.entity_title) {
+    body = cycleBody(reminder, locale);
   }
   return {
     // Ohne bekannte Herkunft bleibt der App-Name: er ist nichtssagend, aber nie

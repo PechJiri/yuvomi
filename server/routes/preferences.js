@@ -225,7 +225,7 @@ function cfgUserDelete(key, userId) {
 // nur enger machen, nie weiter. Deshalb UND statt Override: wer den Zyklus
 // haushaltweit abschaltet, blendet ihn für alle aus, und niemand holt ihn sich
 // einzeln zurück. Fehlender Wert = an, damit Bestandskonten ihr Verhalten behalten.
-function healthCycleViews(userId) {
+export function healthCycleViews(userId) {
   const household = cfgGet('health_cycle_enabled') !== '0';
   const personal = cfgUserGet('health_cycle_enabled', userId) !== '0';
   return {

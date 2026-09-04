@@ -1938,10 +1938,10 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
 .cycle-cal__day.is-symptom-predicted::before {
   content: "";
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 6px;
-  height: 6px;
+  top: var(--space-1);
+  right: var(--space-1);
+  width: var(--space-1h);
+  height: var(--space-1h);
   border-radius: 50%;
   z-index: 1;
 }
@@ -2123,7 +2123,7 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
   font-weight: 600;
   color: var(--module-health);
 }
-.cycle-likelihood__callout svg { width: 16px; height: 16px; flex-shrink: 0; }
+.cycle-likelihood__callout svg { width: var(--icon-md); height: var(--icon-md); flex-shrink: 0; }
 
 /* ---- Verlauf ---- */
 

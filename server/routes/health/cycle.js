@@ -69,6 +69,23 @@ function symptomsForLog(database, dayLogId) {
   ).all(dayLogId);
 }
 
+/**
+ * Batch-Fassung von symptomsForLog() für eine Liste von Tages-Logs - EIN
+ * `WHERE day_log_id IN (...)` statt einer Abfrage je Zeile, für GET
+ * /cycle/logs (das potenziell viele Zeilen zurückgibt).
+ * @returns {Map<number, Array<{key: string, intensity: number|null}>>}
+ */
+function symptomsForLogs(database, dayLogIds) {
+  const byLog = new Map(dayLogIds.map((id) => [id, []]));
+  if (dayLogIds.length === 0) return byLog;
+  const placeholders = dayLogIds.map(() => '?').join(', ');
+  const rows = database.prepare(
+    `SELECT day_log_id, symptom_key AS key, intensity FROM cycle_day_log_symptoms WHERE day_log_id IN (${placeholders}) ORDER BY id`
+  ).all(...dayLogIds);
+  for (const { day_log_id, key, intensity } of rows) byLog.get(day_log_id).push({ key, intensity });
+  return byLog;
+}
+
 /** Ersetzt die Symptom-Zeilen eines Tages-Logs vollstaendig (loeschen + neu anlegen). */
 function replaceSymptoms(database, dayLogId, entries) {
   database.prepare('DELETE FROM cycle_day_log_symptoms WHERE day_log_id = ?').run(dayLogId);
@@ -118,6 +135,15 @@ router.post('/cycle/periods', (req, res) => {
       INSERT INTO cycle_periods (user_id, start_date, end_date, note, visibility)
       VALUES (?, ?, ?, ?, ?)
     `).run(viewer, startDate.value, endDate.value, note.value, visibility.value || 'private');
+
+    // Sofort wirksam statt erst beim naechsten periodischen Lauf: ein neu
+    // geloggter Zyklus verschiebt sofort predictCycle()s naechsten
+    // Periodenbeginn, die Erinnerung soll dem nicht hinterherhinken.
+    try {
+      syncCycleRemindersForUser(db.get(), viewer);
+    } catch (err) {
+      log.error('Error syncing cycle reminders after period change:', err.message);
+    }
 
     res.status(201).json({ data: db.get().prepare('SELECT * FROM cycle_periods WHERE id = ?').get(result.lastInsertRowid) });
   } catch (err) {
@@ -195,7 +221,9 @@ router.get('/cycle/logs', (req, res) => {
     // `symptoms` kommt seit Migration 176 aus der eigenen Tabelle, nicht mehr
     // aus der (nur noch historischen) Komma-Spalte - `SELECT l.*` liefert die
     // alte Spalte zwar mit, der Überschreib unten ersetzt sie in der Antwort.
-    res.json({ data: rows.map((row) => ({ ...row, symptoms: symptomsForLog(database, row.id) })) });
+    // Batch statt eine Abfrage je Zeile (symptomsForLogs(), ein IN (...)).
+    const symptomsByLog = symptomsForLogs(database, rows.map((row) => row.id));
+    res.json({ data: rows.map((row) => ({ ...row, symptoms: symptomsByLog.get(row.id) })) });
   } catch (err) {
     log.error('Error listing cycle logs:', err.message);
     res.status(500).json({ error: 'Internal error.', code: 500 });
@@ -236,6 +264,16 @@ router.post('/cycle/logs', (req, res) => {
       replaceSymptoms(database, id, symptoms);
       return id;
     })();
+
+    // Sofort wirksam statt erst beim naechsten periodischen Lauf: der
+    // taegliche Eintrags-Hinweis (syncLogNudgeReminder) faellt weg, sobald
+    // fuer heute ein Log existiert - ohne diesen Aufruf bliebe er bis zum
+    // naechsten Sync-Durchgang stehen, obwohl die Frage schon beantwortet ist.
+    try {
+      syncCycleRemindersForUser(database, viewer);
+    } catch (err) {
+      log.error('Error syncing cycle reminders after log change:', err.message);
+    }
 
     const row = database.prepare('SELECT * FROM cycle_day_logs WHERE id = ?').get(dayLogId);
     res.status(201).json({ data: { ...row, symptoms: symptomsForLog(database, dayLogId) } });
