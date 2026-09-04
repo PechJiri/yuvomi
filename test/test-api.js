@@ -74,6 +74,25 @@ test('auth.login: 401 wirft ApiError mit status 401', async () => {
   assert.equal(thrownErr.status, 401);
 });
 
+test('api.post: 429 übernimmt Retry-After in den ApiError', async () => {
+  setup();
+  _mockFetch = () => mockResponse(
+    429,
+    { error: 'Too many requests.', code: 429 },
+    { 'Retry-After': '7' },
+  );
+
+  await assert.rejects(
+    () => api.post('/documents', {}),
+    (err) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.status, 429);
+      assert.equal(err.retryAfter, '7');
+      return true;
+    },
+  );
+});
+
 // ─── 401 auf anderen Endpunkten ─────────────────────────────────────────────
 
 test('api.get: 401 auf geschütztem Endpunkt feuert auth:expired', async () => {

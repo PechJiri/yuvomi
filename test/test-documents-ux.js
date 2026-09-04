@@ -7,9 +7,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { eachRule } from './css-rules.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (rel) => readFileSync(resolve(HERE, rel), 'utf8');
@@ -316,6 +317,139 @@ test('das Speichern referenziert den Submit-Button am Panel, nicht am Formular (
   assert.doesNotMatch(save, /form\.querySelector\('#document-submit'\)/);
   // Der Submit-Handler reicht das Panel an saveDocument durch.
   assert.match(page, /saveDocument\(event, doc, panel\)/);
+});
+// --------------------------------------------------------
+// Folder tree upload
+// --------------------------------------------------------
+
+test('folder upload is a separate choice and does not change the regular multi-file input', () => {
+  assert.match(page, /from '\/utils\/folder-upload\.js'/);
+  assert.match(page, /id="document-file" type="file" multiple/);
+  assert.match(page, /id="document-folder-input" type="file" webkitdirectory/);
+  assert.match(page, /supportsDirectoryUpload,/);
+  assert.match(page, /function canPickDirectory\(\)/);
+  assert.match(page, /navigator\.maxTouchPoints/);
+  assert.ok(page.includes("t('documents.folderUpload.unsupportedBrowser')"));
+});
+
+test('folder upload shows its page action only when the browser supports it', () => {
+  const toolbar = page.slice(page.indexOf('export async function render'), page.indexOf('function renderBreadcrumb'));
+  assert.match(toolbar, /canPickDirectory\(\)[\s\S]*id="documents-upload-folder"/);
+  assert.ok(page.includes("t('documents.folderUpload.openAction')"));
+  assert.match(page, /#documents-upload-folder[\s\S]*openDocumentModal\(null, \{ initialUpload: 'folder' \}\)/);
+  assert.match(page, /initialUpload === 'folder'[\s\S]*folderInput\.click\(\)/);
+});
+
+test('folder upload shows one preview with conflicts and rejected files before writing', () => {
+  assert.match(page, /function renderFolderUploadPreview\(/);
+  assert.match(page, /id="document-folder-upload-preview"/);
+  assert.match(page, /data-folder-conflict-default/);
+  assert.match(page, /data-file-conflict-default/);
+  assert.match(page, /data-folder-conflict-key/);
+  assert.doesNotMatch(page, /data-file-conflict-key/);
+  assert.match(page, /folder-upload-tree/);
+  assert.match(page, /role="list"/);
+  assert.match(page, /role="listitem"/);
+  assert.doesNotMatch(page, /role="tree"|role="treeitem"/);
+  assert.match(page, /folder-upload-rejected/);
+  assert.match(page, /panel\._folderUpload\.ready = false/);
+  assert.match(page, /panel\._folderUpload\.ready = true/);
+});
+
+test('dropping files emits the ordinary input change path that clears a selected folder', () => {
+  const drop = page.slice(page.indexOf("dropzone.addEventListener('drop'"), page.indexOf('const FOLDER_UPLOAD_REASON_KEYS'));
+  assert.match(drop, /input\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
+  assert.doesNotMatch(drop, /syncSelectedFile\(\);/);
+  const normalFileChange = page.slice(page.indexOf("fileInput.addEventListener('change'"), page.indexOf("folderInput.addEventListener('change'"));
+  assert.match(normalFileChange, /submit\.textContent = t\('documents\.uploadAction'\)/);
+});
+
+test('folder conflict metadata reuses the already loaded status and fetches only its counterpart', () => {
+  const loader = page.slice(page.indexOf('async function loadUploadConflictDocuments'), page.indexOf('function folderUploadTargetId'));
+  assert.match(loader, /state\.allDocuments/);
+  assert.match(loader, /state\.status === 'active' \? 'archived' : 'active'/);
+  assert.doesNotMatch(loader, /Promise\.all/);
+});
+
+test('folder upload keeps sequential writes, exposes cancellation and preserves failures', () => {
+  assert.match(page, /executeFolderUploadPlan\(/);
+  assert.match(page, /function updateFolderUploadProgress\(/);
+  assert.match(page, /function renderFolderUploadResult\(/);
+  assert.match(page, /aria-live="polite"/);
+  assert.match(page, /data-folder-upload-cancel/);
+  assert.match(page, /shouldCancel:/);
+  assert.ok(page.includes("t('documents.folderUpload.failedTitle')"));
+  assert.match(page, /await loadUploadConflictDocuments\(\)/);
+  assert.match(page, /plan\.counts\.upload < 1 && plan\.counts\.createFolders < 1/);
+});
+
+test('running folder uploads freeze plan controls, cancel on modal close, and surface non-success outcomes', () => {
+  const modal = page.slice(page.indexOf('function openDocumentModal'), page.indexOf('function bindDropzone'));
+  assert.match(modal, /onClose\(\)\s*\{[\s\S]*requestFolderUploadCancel/);
+  const binding = page.slice(page.indexOf('function bindFolderUpload'), page.indexOf('function updateFolderUploadProgress'));
+  assert.match(binding, /if \(panel\._folderUpload\.running\) return/);
+  const save = page.slice(page.indexOf('async function saveFolderUpload'), page.indexOf('async function saveDocument'));
+  assert.match(save, /setFolderUploadControlsDisabled\(panel, true\)/);
+  assert.match(save, /folderUploadOutcome\(result\)/);
+  assert.match(save, /runRateLimitedOperation\([\s\S]*loadFolders\(\)[\s\S]*loadDocuments\(\)/);
+  assert.match(save, /catch \(refreshError\)[\s\S]*folderUploadOutcome\(result\)/);
+  assert.match(save, /outcome\.tone/);
+  assert.doesNotMatch(save, /uploadedToast', \{ count: result\.uploaded\.length \}\), 'success'/);
+  const result = page.slice(page.indexOf('function renderFolderUploadResult'), page.indexOf('async function saveFolderUpload'));
+  assert.match(result, /result\.cancelled[\s\S]*documents\.folderUpload\.cancelledDetail/);
+  assert.match(page, /'rate-limited': 'documents\.folderUpload\.reasonRateLimited'/);
+});
+
+test('folder preview avoids horizontal overflow on mobile', () => {
+  assert.match(css, /\.document-upload-choices\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/);
+  assert.match(css, /\.folder-upload-preview\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.folder-upload-tree__item\s*\{[^}]*min-width:\s*0[^}]*padding-inline-start:\s*calc\(/);
+  const mobileConflictRule = [...eachRule(css)].find((rule) =>
+    rule.selector === '.folder-upload-conflict'
+      && rule.at.includes('@media (max-width: 639px)'),
+  );
+  assert.ok(mobileConflictRule, 'the conflict rule must live inside the mobile media query');
+  assert.match(mobileConflictRule.body, /grid-template-columns:\s*minmax\(0, 1fr\)/);
+});
+
+test('every supported locale contains the complete folder-upload text set', () => {
+  const localeDir = resolve(HERE, '../public/locales');
+  const files = readdirSync(localeDir).filter((file) => file.endsWith('.json'));
+  const reference = JSON.parse(read('../public/locales/de.json')).documents.folderUpload;
+  const expectedKeys = Object.keys(reference || {}).sort();
+  assert.ok(expectedKeys.length > 0, 'de.json must define documents.folderUpload');
+
+  for (const file of files) {
+    const strings = JSON.parse(read(`../public/locales/${file}`)).documents?.folderUpload;
+    assert.ok(strings, `${file}: documents.folderUpload is missing`);
+    assert.deepEqual(Object.keys(strings).sort(), expectedKeys, `${file}: key set does not match`);
+    for (const key of expectedKeys) {
+      assert.equal(typeof strings[key], 'string', `${file}: ${key} is not a string`);
+      assert.notEqual(strings[key].trim(), '', `${file}: ${key} is empty`);
+    }
+  }
+});
+
+test('folder-upload count labels have singular forms in every supported locale', () => {
+  const localeDir = resolve(HERE, '../public/locales');
+  const countKeys = ['selectedFolder', 'uploadAction', 'uploadedToast'];
+
+  for (const file of readdirSync(localeDir).filter((entry) => entry.endsWith('.json'))) {
+    const strings = JSON.parse(read(`../public/locales/${file}`)).documents.folderUpload;
+    for (const key of countKeys) {
+      assert.equal(typeof strings[`${key}_one`], 'string', `${file}: ${key}_one is missing`);
+      assert.notEqual(strings[`${key}_one`].trim(), '', `${file}: ${key}_one is empty`);
+    }
+  }
+});
+
+test('new folder-upload locale copy does not introduce em or en dashes', () => {
+  for (const file of ['ru.json', 'uk.json']) {
+    const strings = JSON.parse(read(`../public/locales/${file}`)).documents.folderUpload;
+    for (const value of Object.values(strings)) {
+      assert.doesNotMatch(value, /[—–]/, `${file}: folder-upload copy must use hyphens`);
+    }
+  }
 });
 
 // --------------------------------------------------------

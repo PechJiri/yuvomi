@@ -20,9 +20,17 @@ import { findPageFab } from '/utils/fab.js';
 // Wert, es ist nur `hidden`: der Absende-Pfad liest es unveraendert, und kommt
 // ein zweites Mitglied dazu, steht es wieder da.
 import { isSoloHousehold } from '/utils/household.js';
-import { maxUploadBytes, maxUploadMb } from '/utils/upload-limit.js';
+import { maxUploadBytes } from '/utils/upload-limit.js';
 import { mountEmptyState } from '/utils/empty-state.js';
 import { subtreeIds, folderPath, flattenFolderTree } from '/utils/folder-tree.js';
+import {
+  buildFolderUploadPlan,
+  executeFolderUploadPlan,
+  formatFolderUploadTimestamp,
+  folderUploadOutcome,
+  runRateLimitedOperation,
+  supportsDirectoryUpload,
+} from '/utils/folder-upload.js';
 
 const CATEGORIES = ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'];
 
@@ -122,6 +130,7 @@ let _search = null;
 
 export async function render(container) {
   _container = container;
+  const directoryUploadSupported = canPickDirectory();
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
     <div class="documents-page app-page app-page--full" data-composition="full">
@@ -142,6 +151,11 @@ export async function render(container) {
               <i data-lucide="list" aria-hidden="true"></i>
             </button>
           </div>
+          ${directoryUploadSupported ? `<button class="btn btn--secondary documents-upload-folder-btn" id="documents-upload-folder" type="button"
+                  title="${t('documents.folderUpload.openAction')}" aria-label="${t('documents.folderUpload.openAction')}">
+            <i data-lucide="folder-up" class="icon-md" aria-hidden="true"></i>
+            <span class="documents-upload-folder-btn__label">${t('documents.folderUpload.openAction')}</span>
+          </button>` : ''}
         </div>
       </div>
       <div class="documents-selectbar" id="documents-selectbar" role="toolbar" aria-label="${t('documents.selectLabel')}" hidden>
@@ -352,6 +366,7 @@ function applyFilters() {
 
 function bindPageEvents() {
   _container.querySelector('#documents-folder-add')?.addEventListener('click', () => openFolderModal());
+  _container.querySelector('#documents-upload-folder')?.addEventListener('click', () => openDocumentModal(null, { initialUpload: 'folder' }));
   findPageFab('fab-new-document')?.addEventListener('click', () => openDocumentModal());
 
   _search = wirePageSearch(_container, {
@@ -1487,8 +1502,9 @@ function memberOptions(selected = []) {
   `).join('');
 }
 
-function openDocumentModal(doc = null) {
+function openDocumentModal(doc = null, { initialUpload = 'files' } = {}) {
   const isEdit = !!doc;
+  let modalPanel = null;
 
   // Kontextbezogener Upload: ist im Browser ein echter Ordner gewählt, wird er
   // im Modal vorausgewählt (weiterhin änderbar). „Alle Ordner"/„Kein Ordner"
@@ -1520,6 +1536,18 @@ function openDocumentModal(doc = null) {
   const fileFieldHtml = `
         <div class="form-group">
           <label class="label" for="document-file">${t('documents.fileLabel')}</label>
+          <div class="document-upload-choices" role="group" aria-label="${esc(t('documents.folderUpload.choiceLabel'))}">
+            <label class="btn btn--secondary document-upload-choice" for="document-file">
+              <i data-lucide="files" aria-hidden="true"></i>
+              <span>${t('documents.folderUpload.chooseFiles')}</span>
+            </label>
+            <label class="btn btn--secondary document-upload-choice" id="document-folder-choice" for="document-folder-input">
+              <i data-lucide="folder-up" aria-hidden="true"></i>
+              <span>${t('documents.folderUpload.chooseFolder')}</span>
+            </label>
+            <input class="sr-only" id="document-folder-input" type="file" webkitdirectory>
+          </div>
+          <p class="document-form__hint" id="document-folder-unsupported" hidden>${t('documents.folderUpload.unsupportedBrowser')}</p>
           <label class="document-dropzone" id="document-dropzone" for="document-file">
             <input class="sr-only" id="document-file" type="file" multiple
                    ${state.allowedMimeTypes?.length ? `accept="${esc(state.allowedMimeTypes.join(','))}"` : ''}>
@@ -1530,7 +1558,8 @@ function openDocumentModal(doc = null) {
             <span class="document-dropzone__hint">${t('documents.dropzoneHint')}</span>
             <span class="document-dropzone__file" id="document-selected-file" hidden></span>
           </label>
-          <p class="document-form__hint">${t('documents.fileHint', { size: maxUploadMb() })}</p>
+          <p class="document-form__hint">${t('documents.fileHint', { size: effectiveUploadMb() })}</p>
+          <p class="document-form__hint">${t('documents.folderUpload.limitHint', { size: effectiveUploadMb() })}</p>
           <p class="document-storage-target">
             <i data-lucide="${uploadTargetIcon(state.activeUploadBackend)}" aria-hidden="true"></i>
             <span>${t('documents.activeUploadTarget', {
@@ -1538,6 +1567,7 @@ function openDocumentModal(doc = null) {
             })}</span>
             ${state.isAdmin ? `<a class="document-storage-target__link" href="/settings/sync/storage" data-nav>${t('documents.storageSettingsLink')}</a>` : ''}
           </p>
+          <section class="folder-upload-preview" id="document-folder-upload-preview" aria-live="polite" hidden></section>
         </div>`;
 
   openSharedModal({
@@ -1586,7 +1616,11 @@ function openDocumentModal(doc = null) {
         </div>
       </form>
     `,
+    onClose() {
+      requestFolderUploadCancel(modalPanel);
+    },
     onSave(panel) {
+      modalPanel = panel;
       const form = panel.querySelector('#document-form');
       const visibility = panel.querySelector('#document-visibility');
       const picker = panel.querySelector('#document-member-picker');
@@ -1594,7 +1628,15 @@ function openDocumentModal(doc = null) {
       visibility.addEventListener('change', syncVisibility);
       syncVisibility();
       bindDropzone(panel);
+      const directorySupported = bindFolderUpload(panel);
       form.addEventListener('submit', (event) => saveDocument(event, doc, panel));
+      // Die sichtbare Seitenaktion „Ordner hochladen" bewahrt die direkte
+      // Nutzeraktivierung bis zum nativen Verzeichnis-Picker. Kein Timeout:
+      // Browser dürfen einen verzögerten programmatic click als Popup blockieren.
+      if (!isEdit && initialUpload === 'folder' && directorySupported) {
+        const folderInput = panel.querySelector('#document-folder-input');
+        folderInput.click();
+      }
     },
   });
 }
@@ -1634,13 +1676,431 @@ function bindDropzone(panel) {
     });
   });
   dropzone.addEventListener('drop', (event) => {
+    if (input.disabled) return;
     const files = Array.from(event.dataTransfer?.files || []);
     if (!files.length) return;
     const transfer = new DataTransfer();
     files.forEach((file) => transfer.items.add(file));
     input.files = transfer.files;
-    syncSelectedFile();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   });
+}
+
+const FOLDER_UPLOAD_REASON_KEYS = {
+  'missing-relative-path': 'documents.folderUpload.reasonMissingPath',
+  'unsafe-path': 'documents.folderUpload.reasonUnsafePath',
+  'empty-file': 'documents.folderUpload.reasonEmptyFile',
+  'unsupported-type': 'documents.folderUpload.reasonUnsupportedType',
+  'too-large': 'documents.folderUpload.reasonTooLarge',
+  'name-too-long': 'documents.folderUpload.reasonNameTooLong',
+  'too-deep': 'documents.folderUpload.reasonTooDeep',
+  'parent-failed': 'documents.folderUpload.reasonParentFailed',
+  'rate-limited': 'documents.folderUpload.reasonRateLimited',
+};
+
+function folderUploadReason(reason) {
+  const key = FOLDER_UPLOAD_REASON_KEYS[reason];
+  return key ? t(key) : (reason || t('common.unknownError'));
+}
+
+async function loadUploadConflictDocuments() {
+  const counterpartStatus = state.status === 'active' ? 'archived' : 'active';
+  const counterpart = await api.get(`/documents?status=${counterpartStatus}`);
+  const byId = new Map();
+  for (const doc of [...state.allDocuments, ...(counterpart.data || [])]) byId.set(doc.id, doc);
+  return [...byId.values()];
+}
+
+function folderUploadTargetId(form) {
+  const value = Number(form.querySelector('#document-folder')?.value);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function effectiveUploadMb() {
+  return Math.max(1, Math.floor((state.maxFileSize || maxUploadBytes()) / (1024 * 1024)));
+}
+
+function folderUploadChoiceOptions(value, firstValue, firstLabel, secondValue, secondLabel) {
+  return `
+    <option value="${firstValue}" ${value === firstValue ? 'selected' : ''}>${firstLabel}</option>
+    <option value="${secondValue}" ${value === secondValue ? 'selected' : ''}>${secondLabel}</option>`;
+}
+
+function folderUploadTreeHtml(plan) {
+  const rows = [
+    ...plan.folders.map((folder) => ({
+      path: folder.key,
+      depth: folder.key.split('/').length,
+      icon: folder.action === 'reuse' ? 'folder-check' : 'folder-plus',
+      label: folder.name,
+      status: folder.action === 'reuse' ? t('documents.folderUpload.willMerge') : t('documents.folderUpload.willCreate'),
+      kind: 'folder',
+    })),
+    ...plan.files.filter((file) => file.action !== 'reject').map((file) => ({
+      path: file.relativePath,
+      depth: file.relativePath.split('/').length,
+      icon: file.action === 'skip' ? 'file-x' : 'file-up',
+      label: file.uploadOriginalName,
+      status: file.action === 'skip' ? t('documents.folderUpload.willSkip') : t('documents.folderUpload.willUpload'),
+      kind: 'file',
+    })),
+  ].sort((a, b) => a.path.localeCompare(b.path, getLocale()) || (a.kind === 'folder' ? -1 : 1));
+
+  return `<ul class="folder-upload-tree" role="list" aria-label="${esc(t('documents.folderUpload.treeLabel'))}">
+    ${rows.map((row) => `
+      <li class="folder-upload-tree__item folder-upload-tree__item--${row.kind}" role="listitem"
+          style="--folder-upload-depth:${Math.min(row.depth - 1, 4)}"
+          data-upload-path="${esc(row.path)}">
+        <i data-lucide="${row.icon}" aria-hidden="true"></i>
+        <span class="folder-upload-tree__name">${esc(row.label)}</span>
+        <span class="folder-upload-tree__status">${esc(row.status)}</span>
+      </li>`).join('')}
+  </ul>`;
+}
+
+function renderFolderUploadPreview(panel) {
+  const upload = panel._folderUpload;
+  const form = panel.querySelector('#document-form');
+  const host = panel.querySelector('#document-folder-upload-preview');
+  if (!upload?.files?.length || !form || !host) {
+    if (host) host.hidden = true;
+    return null;
+  }
+
+  const plan = buildFolderUploadPlan(upload.files, {
+    folders: state.folders,
+    documents: upload.documents,
+    targetFolderId: folderUploadTargetId(form),
+    maxFileSize: state.maxFileSize || maxUploadBytes(),
+    allowedMimeTypes: state.allowedMimeTypes || [],
+    timestamp: upload.timestamp,
+    folderDefault: upload.folderDefault,
+    fileDefault: upload.fileDefault,
+    folderOverrides: upload.folderOverrides,
+  });
+  upload.plan = plan;
+  host.hidden = false;
+  host.replaceChildren();
+  host.insertAdjacentHTML('beforeend', `
+    <div class="folder-upload-preview__summary">
+      <strong>${esc(t('documents.folderUpload.previewTitle', { name: plan.rootName }))}</strong>
+      <span>${esc(t('documents.folderUpload.previewCounts', {
+        files: plan.counts.upload,
+        folders: plan.counts.createFolders,
+        rejected: plan.counts.rejected,
+      }))}</span>
+    </div>
+    ${folderUploadTreeHtml(plan)}
+    ${plan.folderConflicts.length ? `
+      <details class="folder-upload-preview__section" open>
+        <summary>${t('documents.folderUpload.folderConflictsTitle', { count: plan.folderConflicts.length })}</summary>
+        <label class="folder-upload-conflict__default">
+          <span>${t('documents.folderUpload.defaultResolution')}</span>
+          <select class="input" data-folder-conflict-default>
+            ${folderUploadChoiceOptions(upload.folderDefault, 'merge', t('documents.folderUpload.merge'), 'duplicate', t('documents.folderUpload.duplicate'))}
+          </select>
+        </label>
+        <div class="folder-upload-conflicts">
+          ${plan.folderConflicts.map((folder) => `
+            <label class="folder-upload-conflict">
+              <span>${esc(folder.key)}</span>
+              <select class="input" data-folder-conflict-key="${esc(folder.key)}">
+                ${folderUploadChoiceOptions(folder.resolution, 'merge', t('documents.folderUpload.merge'), 'duplicate', t('documents.folderUpload.duplicate'))}
+              </select>
+            </label>`).join('')}
+        </div>
+      </details>` : ''}
+    ${plan.fileConflicts.length ? `
+      <details class="folder-upload-preview__section" open>
+        <summary>${t('documents.folderUpload.fileConflictsTitle', { count: plan.fileConflicts.length })}</summary>
+        <label class="folder-upload-conflict__default">
+          <span>${t('documents.folderUpload.defaultResolution')}</span>
+          <select class="input" data-file-conflict-default>
+            ${folderUploadChoiceOptions(upload.fileDefault, 'skip', t('documents.folderUpload.skip'), 'duplicate', t('documents.folderUpload.duplicate'))}
+          </select>
+        </label>
+        <div class="folder-upload-conflicts">
+          ${plan.fileConflicts.map((file) => `
+            <div class="folder-upload-conflict">
+              <span>${esc(file.relativePath)}</span>
+              <span>${esc(file.resolution === 'skip'
+                ? t('documents.folderUpload.willSkip')
+                : t('documents.folderUpload.willUpload'))}</span>
+            </div>`).join('')}
+        </div>
+      </details>` : ''}
+    ${plan.rejected.length ? `
+      <details class="folder-upload-preview__section folder-upload-rejected" open>
+        <summary>${t('documents.folderUpload.rejectedTitle', { count: plan.rejected.length })}</summary>
+        <ul>
+          ${plan.rejected.map((file) => `<li><span>${esc(file.relativePath)}</span><span>${esc(folderUploadReason(file.reason))}</span></li>`).join('')}
+        </ul>
+      </details>` : ''}
+    <p class="folder-upload-preview__limit">${esc(t('documents.folderUpload.adminLimitHint', { size: effectiveUploadMb() }))}</p>
+    <div class="folder-upload-progress" id="folder-upload-progress" aria-live="polite"></div>
+    <button class="btn btn--secondary" type="button" data-folder-upload-cancel hidden>${t('common.cancel')}</button>
+  `);
+  if (window.lucide) lucide.createIcons({ el: host });
+
+  const submit = panel.querySelector('#document-submit');
+  if (submit) submit.textContent = t('documents.folderUpload.uploadAction', { count: plan.counts.upload });
+  return plan;
+}
+
+function canPickDirectory() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  const hasWebkitDirectory = 'webkitdirectory' in input;
+  if (hasWebkitDirectory) input.webkitdirectory = true;
+  return supportsDirectoryUpload({
+    hasWebkitDirectory: hasWebkitDirectory && input.webkitdirectory === true,
+    platform: navigator.userAgentData?.platform || navigator.platform || '',
+    userAgent: navigator.userAgent || '',
+    maxTouchPoints: navigator.maxTouchPoints || 0,
+  });
+}
+
+function setFolderUploadControlsDisabled(panel, disabled) {
+  for (const selector of [
+    '#document-file',
+    '#document-folder-input',
+    '#document-folder',
+    '[data-folder-conflict-default]',
+    '[data-file-conflict-default]',
+    '[data-folder-conflict-key]',
+  ]) {
+    panel.querySelectorAll(selector).forEach((control) => {
+      control.disabled = disabled;
+    });
+  }
+}
+
+function requestFolderUploadCancel(panel) {
+  const upload = panel?._folderUpload;
+  if (!upload?.running || upload.cancelled) return false;
+  upload.cancelled = true;
+  const cancel = panel.querySelector('[data-folder-upload-cancel]');
+  if (cancel) {
+    cancel.disabled = true;
+    cancel.setAttribute('aria-disabled', 'true');
+  }
+  return true;
+}
+
+function bindFolderUpload(panel) {
+  const form = panel.querySelector('#document-form');
+  const fileInput = panel.querySelector('#document-file');
+  const folderInput = panel.querySelector('#document-folder-input');
+  const folderChoice = panel.querySelector('#document-folder-choice');
+  const unsupported = panel.querySelector('#document-folder-unsupported');
+  const preview = panel.querySelector('#document-folder-upload-preview');
+  const selected = panel.querySelector('#document-selected-file');
+  const nameGroup = panel.querySelector('#document-name')?.closest('.form-group');
+  if (!form || !fileInput || !folderInput || !preview) return false;
+
+  panel._folderUpload = {
+    files: [],
+    documents: [],
+    timestamp: formatFolderUploadTimestamp(),
+    folderDefault: 'merge',
+    fileDefault: 'skip',
+    folderOverrides: {},
+    plan: null,
+    ready: false,
+    running: false,
+    cancelled: false,
+    completed: false,
+  };
+
+  const directorySupported = canPickDirectory();
+  folderInput.disabled = !directorySupported;
+  folderChoice?.classList.toggle('is-disabled', !directorySupported);
+  folderChoice?.setAttribute('aria-disabled', String(!directorySupported));
+  if (unsupported) unsupported.hidden = directorySupported;
+
+  fileInput.addEventListener('change', () => {
+    if (panel._folderUpload.running) return;
+    if (!fileInput.files?.length) return;
+    folderInput.value = '';
+    panel._folderUpload.files = [];
+    panel._folderUpload.plan = null;
+    panel._folderUpload.ready = false;
+    preview.hidden = true;
+    const submit = panel.querySelector('#document-submit');
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = t('documents.uploadAction');
+    }
+  });
+
+  folderInput.addEventListener('change', async () => {
+    if (panel._folderUpload.running) return;
+    const files = Array.from(folderInput.files || []);
+    if (!files.length) return;
+    fileInput.value = '';
+    panel._folderUpload.files = files;
+    panel._folderUpload.timestamp = formatFolderUploadTimestamp();
+    panel._folderUpload.folderOverrides = {};
+    panel._folderUpload.ready = false;
+    panel._folderUpload.completed = false;
+    const submit = panel.querySelector('#document-submit');
+    if (submit) submit.disabled = true;
+    if (nameGroup) nameGroup.hidden = true;
+    if (selected) {
+      const root = String(files[0].webkitRelativePath || '').split('/')[0];
+      selected.hidden = false;
+      selected.textContent = t('documents.folderUpload.selectedFolder', { name: root, count: files.length });
+    }
+    try {
+      panel._folderUpload.documents = await loadUploadConflictDocuments();
+      panel._folderUpload.ready = true;
+      renderFolderUploadPreview(panel);
+      if (submit) submit.disabled = false;
+    } catch (error) {
+      const formError = form.querySelector('#document-error');
+      formError.textContent = friendlyError(error);
+      formError.hidden = false;
+    }
+  });
+
+  form.querySelector('#document-folder')?.addEventListener('change', () => {
+    if (panel._folderUpload.running) return;
+    if (panel._folderUpload.files.length) renderFolderUploadPreview(panel);
+  });
+
+  preview.addEventListener('change', (event) => {
+    if (panel._folderUpload.running) return;
+    const target = event.target;
+    if (target.matches('[data-folder-conflict-default]')) {
+      panel._folderUpload.folderDefault = target.value;
+      panel._folderUpload.folderOverrides = {};
+    } else if (target.matches('[data-file-conflict-default]')) {
+      panel._folderUpload.fileDefault = target.value;
+    } else if (target.matches('[data-folder-conflict-key]')) {
+      panel._folderUpload.folderOverrides[target.dataset.folderConflictKey] = target.value;
+    } else {
+      return;
+    }
+    renderFolderUploadPreview(panel);
+  });
+
+  preview.addEventListener('click', (event) => {
+    if (event.target.closest('[data-folder-upload-close]')) closeModal({ force: true });
+    const cancel = event.target.closest('[data-folder-upload-cancel]');
+    if (cancel) requestFolderUploadCancel(panel);
+  });
+
+  return directorySupported;
+}
+
+function updateFolderUploadProgress(panel, event, completed, total) {
+  const host = panel.querySelector('#folder-upload-progress');
+  if (!host) return;
+  const path = event.item?.relativePath || event.item?.key || event.item?.name || '';
+  host.textContent = t('documents.folderUpload.progress', { current: completed, total, name: path });
+  const row = Array.from(panel.querySelectorAll('[data-upload-path]'))
+    .find((item) => item.dataset.uploadPath === path);
+  if (row) row.dataset.uploadStatus = event.status;
+}
+
+function renderFolderUploadResult(panel, plan, result) {
+  const host = panel.querySelector('#document-folder-upload-preview');
+  if (!host) return;
+  const failures = result.failed || [];
+  const outcome = folderUploadOutcome(result);
+  const heading = outcome.heading === 'cancelled'
+    ? t('documents.folderUpload.cancelled')
+    : outcome.heading === 'completedWithErrors'
+      ? t('documents.folderUpload.completedWithErrors')
+      : t('documents.folderUpload.completed');
+  host.replaceChildren();
+  host.insertAdjacentHTML('beforeend', `
+    <div class="folder-upload-result" role="status">
+      <h3>${heading}</h3>
+      <p>${t('documents.folderUpload.resultCounts', {
+        uploaded: result.uploaded.length,
+        skipped: result.skipped.length,
+        rejected: result.rejected.length,
+        failed: failures.length,
+      })}</p>
+      ${result.cancelled ? `<p>${t('documents.folderUpload.cancelledDetail')}</p>` : ''}
+      ${failures.length ? `
+        <section class="folder-upload-result__failures">
+          <h4>${t('documents.folderUpload.failedTitle')}</h4>
+          <ul>${failures.map((failure) => `
+            <li><span>${esc(failure.item?.relativePath || failure.item?.key || '')}</span><span>${esc(folderUploadReason(failure.reason))}</span></li>`).join('')}</ul>
+        </section>` : ''}
+      ${plan.rejected.length ? `
+        <section class="folder-upload-result__failures">
+          <h4>${t('documents.folderUpload.rejectedTitle', { count: plan.rejected.length })}</h4>
+          <ul>${plan.rejected.map((file) => `<li><span>${esc(file.relativePath)}</span><span>${esc(folderUploadReason(file.reason))}</span></li>`).join('')}</ul>
+        </section>` : ''}
+      <button class="btn btn--primary" type="button" data-folder-upload-close>${t('common.close')}</button>
+    </div>`);
+}
+
+async function saveFolderUpload(panel, payload) {
+  const upload = panel._folderUpload;
+  if (!upload?.ready) throw new Error(t('common.unknownError'));
+  const plan = renderFolderUploadPreview(panel);
+  if (!plan || (plan.counts.upload < 1 && plan.counts.createFolders < 1)) {
+    throw new Error(t('documents.folderUpload.noUploadableFiles'));
+  }
+  upload.running = true;
+  upload.cancelled = false;
+  setFolderUploadControlsDisabled(panel, true);
+  const cancel = panel.querySelector('[data-folder-upload-cancel]');
+  if (cancel) {
+    cancel.hidden = false;
+    cancel.disabled = false;
+  }
+  const total = plan.counts.createFolders + plan.counts.upload;
+  let completed = 0;
+
+  let result;
+  try {
+    result = await executeFolderUploadPlan(plan, {
+      createFolder: async ({ name, parentId }) => {
+        const response = await api.post('/documents/folders', { name, parent_id: parentId });
+        return response.data;
+      },
+      uploadFile: async ({ file, folderId, name, originalName }) => api.post('/documents', {
+        ...payload,
+        folder_id: folderId,
+        name,
+        original_name: originalName,
+        content_data: await readFileAsDataUrl(file),
+      }),
+      onProgress: (event) => {
+        if (event.status === 'succeeded' || event.status === 'failed') completed += 1;
+        updateFolderUploadProgress(panel, event, completed, total);
+      },
+      shouldCancel: () => upload.cancelled,
+    });
+  } finally {
+    upload.running = false;
+  }
+
+  upload.completed = true;
+  renderFolderUploadResult(panel, plan, result);
+  try {
+    await runRateLimitedOperation(
+      () => Promise.all([loadFolders(), loadDocuments()]),
+    );
+    renderAll();
+  } catch (refreshError) {
+    // The writes have already completed. A failed refresh must not turn a
+    // persisted upload into a reported upload failure.
+    console.warn('[Documents] Folder upload refresh failed:', refreshError);
+  }
+  const outcome = folderUploadOutcome(result);
+  const toast = outcome.toast === 'cancelled'
+    ? t('documents.folderUpload.cancelled')
+    : outcome.toast === 'completedWithErrors'
+      ? t('documents.folderUpload.completedWithErrors')
+      : t('documents.folderUpload.uploadedToast', { count: result.uploaded.length });
+  window.yuvomi?.showToast(toast, outcome.tone);
+  return result;
 }
 
 async function saveDocument(event, doc, panel) {
@@ -1673,6 +2133,11 @@ async function saveDocument(event, doc, panel) {
       await api.put(`/documents/${doc.id}`, payload);
       window.yuvomi?.showToast(t('documents.savedToast'), 'success');
     } else {
+      const folderFiles = Array.from(form.querySelector('#document-folder-input')?.files || []);
+      if (folderFiles.length) {
+        await saveFolderUpload(panel, payload);
+        return;
+      }
       const files = Array.from(form.querySelector('#document-file').files || []);
       if (!files.length) throw new Error(t('documents.fileRequired'));
       const maxSize = state.maxFileSize || maxUploadBytes();
@@ -1714,7 +2179,7 @@ async function saveDocument(event, doc, panel) {
     error.textContent = friendlyError(err);
     error.hidden = false;
   } finally {
-    submit.disabled = false;
+    submit.disabled = panel._folderUpload?.completed === true;
   }
 }
 

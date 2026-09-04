@@ -103,7 +103,7 @@ async function apiFetch(path, options = {}, _retried = false) {
 
   if (!response.ok) {
     const message = data?.error || `HTTP ${response.status}`;
-    throw new ApiError(message, response.status, data);
+    throw new ApiError(message, response.status, data, response.headers.get('Retry-After'));
   }
 
   if (stateChanging) notifyCountedMutation(path);
@@ -144,11 +144,12 @@ function notifyCountedMutation(path) {
  * Strukturierter API-Fehler mit HTTP-Status-Code.
  */
 class ApiError extends Error {
-  constructor(message, status, data = null) {
+  constructor(message, status, data = null, retryAfter = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.data = data;
+    this.retryAfter = retryAfter;
   }
 }
 

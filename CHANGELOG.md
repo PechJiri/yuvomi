@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Complete directory trees can now be uploaded in one operation.** Selecting a directory keeps
+  that directory as the new root below the chosen destination, recreates supported descendants and
+  uploads their files sequentially. Before writing anything, the dialog previews the planned tree,
+  conflicts and rejected files. Existing folders may be merged or duplicated with a timestamped
+  suffix, while file conflicts can be skipped or uploaded under a timestamped name.
+
+  Validation follows the server's file-size, MIME-type, path and depth limits. Safe folder paths are
+  still created when their own files are rejected, while a failed parent blocks only its descendants
+  and does not stop sibling branches. If the server's request limit is reached, the upload waits for
+  its advertised retry window and resumes automatically. Cancelling stops queued work but keeps
+  folders and files that were already created.
+
 - **The Schedule module gained a quick-start for shift types, a range fill for overrides, grouped
   range display and editing, and a "who's working today" dashboard widget.** A household with no
   shift types yet can create seven common presets (Early/Late/Night/Day/24-hour, plus Vacation and
