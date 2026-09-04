@@ -6019,6 +6019,33 @@ const MIGRATIONS = [
           "共享支出", // zh
         ]],
         ['inventory', [
+          // Bis 5bd02b26 hiess der Ordner in 21 Sprachen "Inventory", weil das
+          // Modul mit englischen Texten ausgeliefert wurde. Seit der
+          // Uebersetzung traegt er den Modulnamen der Sprache - beide
+          // Schreibweisen stehen hier, nach derselben Regel wie bei der
+          // Haushaltshilfe unten: die alte fuer Bestandsordner, die neue fuer
+          // einen von Hand so benannten Ordner in einer nie migrierten Datenbank.
+          "المقتنيات", // ar, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inventář", // cs, seit der Uebersetzung des Moduls (5bd02b26)
+          "Απογραφή", // el, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inventario", // es, seit der Uebersetzung des Moduls (5bd02b26)
+          "اموال", // fa, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inventaire", // fr, seit der Uebersetzung des Moduls (5bd02b26)
+          "इन्वेंटरी", // hi, seit der Uebersetzung des Moduls (5bd02b26)
+          "Leltár", // hu, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inventaris", // id, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inventario", // it, seit der Uebersetzung des Moduls (5bd02b26)
+          "持ち物", // ja, seit der Uebersetzung des Moduls (5bd02b26)
+          "소지품", // ko, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inventaris", // nl, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inwentarz", // pl, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inventário", // pt, seit der Uebersetzung des Moduls (5bd02b26)
+          "Инвентарь", // ru, seit der Uebersetzung des Moduls (5bd02b26)
+          "Inventarier", // sv, seit der Uebersetzung des Moduls (5bd02b26)
+          "Envanter", // tr, seit der Uebersetzung des Moduls (5bd02b26)
+          "Інвентар", // uk, seit der Uebersetzung des Moduls (5bd02b26)
+          "Tài sản", // vi, seit der Uebersetzung des Moduls (5bd02b26)
+          "物品", // zh, seit der Uebersetzung des Moduls (5bd02b26)
           "Inventory", // ar, cs, el, en, es, fa, fil, fr, hi, hu, id, it, ja, ko, nl, pl, pt, ru, sv, tr, uk, vi, zh
           "Imbentaryo", // fil
           "Inventar", // de
