@@ -149,6 +149,14 @@ const INTENTIONALLY_NOT_IN_INSTALLER = {
   // gar nicht, wenn Yuvomi installiert wird. Die Env-Variablen bleiben als
   // zweiter Weg für Setups, die alles deklarativ halten.
   IMMICH_URL: 'In der App unter Verwaltung → Immich einzurichten; Env ist der deklarative Zweitweg.',
+  // Benachrichtigungskanaele entstehen in der App, lange nach der Installation.
+  // Anders als bei ICS-Abos und Rezept-Spiegeln scheitert der LAN-Fall hier
+  // nicht stumm: das Kanalformular lehnt eine private Adresse ab und nennt den
+  // Schalter in der Meldung (GHSA-f4w5-ggcc-7m5c). Im Wizard waere er eine Frage
+  // zu einem Kanal, den es noch nicht gibt.
+  NOTIFICATION_ALLOW_PRIVATE_NETWORK:
+    'SSRF-Opt-in fuer Benachrichtigungskanaele; der Kanal wird in der App angelegt und das '
+    + 'Formular nennt den Schalter, wenn es eine private Adresse ablehnt.',
   IMMICH_API_KEY: 'Geheimnis, das in der App gesetzt und dort auch getestet wird.',
   IMMICH_SCREENSAVER_ALBUM_ID: 'Optionale Album-Einschränkung, in der App wählbar.',
 

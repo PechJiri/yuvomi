@@ -18,6 +18,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import zlib from 'node:zlib';
+import { isIP } from 'node:net';
 
 const DEFAULT_MAX_REDIRECTS = 5;
 
@@ -42,6 +43,29 @@ const ALLOWED_PROTOCOLS = new Set(['https:', 'http:']);
 // sie weg; innerhalb desselben Origins (typisch: ein Server, der /cal auf
 // /cal/ umleitet) bleiben sie, sonst braeche jeder WebDAV-Sync.
 const ORIGIN_BOUND_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization']);
+
+// Ein Host, der schon eine IP ist, bekommt von node:http KEINEN Lookup: die
+// Adresse steht ja fest. Damit stand der `lookup`-Hook, der den SSRF-Schutz
+// traegt, bei einem Redirect auf `http://169.254.169.254/` einfach nicht im Weg
+// (GHSA-9jh6-phj9-m6qr): der erste Hop wurde am Namen geprueft, der zweite als
+// Literal ungeprueft verbunden. Deshalb ruft safeRequest den Hook fuer ein
+// IP-Literal selbst auf - mit derselben Adresse, die Node verbinden wuerde -,
+// und zwar auf jedem Hop, dem ersten eingeschlossen. Der Hook entscheidet;
+// hier steht keine eigene Liste privater Netze, sonst gaebe es zwei.
+function literalAddress(url) {
+  const host = url.hostname.startsWith('[') && url.hostname.endsWith(']')
+    ? url.hostname.slice(1, -1)
+    : url.hostname;
+  return isIP(host) ? host : null;
+}
+
+function assertLookupAcceptsLiteral(lookup, url) {
+  const address = literalAddress(url);
+  if (!lookup || !address) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    lookup(address, { all: true }, (err) => (err ? reject(err) : resolve()));
+  });
+}
 
 /**
  * Ziel-URL eines Redirects, oder ein Fehler. Ausgelagert und exportiert, weil
@@ -196,7 +220,7 @@ export function safeRequest(rawUrl, {
       outHeaders['Content-Length'] = Buffer.byteLength(body);
     }
 
-    const req = transport.request(url, { method, headers: outHeaders, lookup, signal }, (res) => {
+    const start = () => transport.request(url, { method, headers: outHeaders, lookup, signal }, (res) => {
       const status = res.statusCode;
       if (redirect === 'follow' && status >= 300 && status < 400 && res.headers.location) {
         res.resume(); // Redirect-Body verwerfen, Socket freigeben
@@ -225,8 +249,11 @@ export function safeRequest(rawUrl, {
       resolve(fetchLike(res));
     });
 
-    req.on('error', reject);
-    if (hasBody) req.write(body);
-    req.end();
+    assertLookupAcceptsLiteral(lookup, url).then(() => {
+      const req = start();
+      req.on('error', reject);
+      if (hasBody) req.write(body);
+      req.end();
+    }, reject);
   });
 }

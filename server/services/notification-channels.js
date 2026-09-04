@@ -1,9 +1,12 @@
 /**
  * Modul: Notification-Channel-Store
  * Zweck: CRUD, Validierung und write-only Secret-Handhabung fuer externe Notification-Provider.
- * Abhaengigkeiten: server/db.js
+ * Abhaengigkeiten: server/db.js, utils/ssrf.js, notification-providers/guarded-fetch.js
  */
+import { isIP } from 'node:net';
 import * as dbModule from '../db.js';
+import { isBlockedAddress, isBlockedHostname, normalizeHostname } from '../utils/ssrf.js';
+import { ENV_ALLOW_PRIVATE_NETWORK, isPrivateNetworkAllowed } from './notification-providers/guarded-fetch.js';
 import {
   WEBHOOK_TEMPLATE_PLACEHOLDERS,
   renderPayloadTemplate,
@@ -51,6 +54,15 @@ function normalizeBaseUrl(value, { keepPath = false } = {}) {
   }
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new Error('Notification channel URL scheme must be http or https.');
+  }
+  // Was sich ohne DNS entscheiden laesst, faellt schon beim Speichern: localhost,
+  // reservierte Suffixe und ein Literal aus einem privaten Netz. Die Antwort auf
+  // ein Formular ist der Ort, an dem ein Admin den Schalter erfaehrt - bei der
+  // Zustellung Stunden spaeter liest sie niemand. Die Namensaufloesung prueft
+  // guardedFetch beim Senden, je Verbindung (GHSA-f4w5-ggcc-7m5c).
+  const host = normalizeHostname(url.hostname);
+  if (!isPrivateNetworkAllowed() && (isBlockedHostname(host) || (isIP(host) && isBlockedAddress(host)))) {
+    throw new Error(`Notification channel URL must not point to a private or local network address (set ${ENV_ALLOW_PRIVATE_NETWORK}=true to allow it).`);
   }
   if (keepPath) return url.toString();
   url.pathname = url.pathname.replace(/\/+$/, '');

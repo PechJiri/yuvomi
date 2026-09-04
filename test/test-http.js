@@ -411,3 +411,102 @@ test('signal/abort: bricht laufende Anfrage ab', async () => {
     await close();
   }
 });
+
+// --------------------------------------------------------
+// IP-Literal im Redirect (GHSA-9jh6-phj9-m6qr)
+// --------------------------------------------------------
+// node:http ruft `lookup` nur fuer NAMEN auf. Ein 302 auf http://169.254.169.254/
+// lief deshalb am SSRF-Hook vorbei, obwohl er mitgereicht wurde. safeRequest
+// fragt den Hook fuer ein Literal jetzt selbst - und der Test prueft die WIRKUNG:
+// der interne Pfad darf den Server nie erreichen.
+
+function literalAwareLookup(log) {
+  // Namen loesen auf 127.0.0.1 auf (der Testserver), Literale werden abgelehnt -
+  // genau die Entscheidung, die createGuardedLookup fuer eine private IP trifft.
+  return (hostname, options, callback) => {
+    log.push(hostname);
+    if (/^[\d.]+$|:/.test(hostname)) {
+      return callback(new Error(`URL resolves to a private IP address: ${hostname}`));
+    }
+    const all = options && typeof options === 'object' && options.all;
+    if (all) return callback(null, [{ address: '127.0.0.1', family: 4 }]);
+    return callback(null, '127.0.0.1', 4);
+  };
+}
+
+test('Redirect auf ein IP-Literal fragt den lookup-Hook und bricht ab', async () => {
+  const hits = [];
+  const { server, close } = await startServer((req, res) => {
+    hits.push(req.url);
+    if (req.url === '/start') {
+      res.writeHead(302, { Location: `http://127.0.0.1:${server.address().port}/internal` });
+      res.end();
+      return;
+    }
+    res.writeHead(200);
+    res.end('secret');
+  });
+  const port = server.address().port;
+  const asked = [];
+  try {
+    await assert.rejects(
+      () => safeRequest(`http://first.example:${port}/start`, { lookup: literalAwareLookup(asked) }),
+      /private IP/i,
+    );
+    assert.deepEqual(hits, ['/start'], 'der interne Pfad darf nie erreicht werden');
+    assert.deepEqual(asked, ['first.example', '127.0.0.1'], 'der Hook sieht beide Hops, das Literal eingeschlossen');
+  } finally {
+    await close();
+  }
+});
+
+test('Ein IP-Literal als erster Hop fragt den lookup-Hook ebenfalls', async () => {
+  const { server, close } = await startServer((req, res) => { res.end('ok'); });
+  const port = server.address().port;
+  const asked = [];
+  try {
+    await assert.rejects(
+      () => safeRequest(`http://127.0.0.1:${port}/`, { lookup: literalAwareLookup(asked) }),
+      /private IP/i,
+    );
+    assert.deepEqual(asked, ['127.0.0.1']);
+    // IPv6-Literal: die Klammern der URL-Schreibweise erreichen den Hook nicht.
+    const asked6 = [];
+    await assert.rejects(
+      () => safeRequest(`http://[::1]:${port}/`, { lookup: literalAwareLookup(asked6) }),
+      /private IP/i,
+    );
+    assert.deepEqual(asked6, ['::1']);
+  } finally {
+    await close();
+  }
+});
+
+test('Ein IP-Literal, das der Hook annimmt, wird normal verbunden', async () => {
+  const { server, base, close } = await startServer((req, res) => { res.end('ok'); });
+  void server;
+  const asked = [];
+  const lookup = (hostname, options, callback) => {
+    asked.push(hostname);
+    const all = options && typeof options === 'object' && options.all;
+    if (all) return callback(null, [{ address: hostname, family: 4 }]);
+    return callback(null, hostname, 4);
+  };
+  try {
+    const resp = await safeRequest(`${base}/`, { lookup });
+    assert.equal(resp.status, 200);
+    assert.deepEqual(asked, ['127.0.0.1']);
+  } finally {
+    await close();
+  }
+});
+
+test('Ohne lookup bleibt ein IP-Literal unveraendert erreichbar', async () => {
+  const { base, close } = await startServer((req, res) => { res.end('ok'); });
+  try {
+    const resp = await safeRequest(`${base}/`);
+    assert.equal(resp.status, 200);
+  } finally {
+    await close();
+  }
+});

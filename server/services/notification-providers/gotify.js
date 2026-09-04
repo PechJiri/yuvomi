@@ -3,6 +3,8 @@
  * Zweck: Yuvomi Reminder-Payloads an Gotify senden.
  */
 
+import { guardedFetch } from './guarded-fetch.js';
+
 function httpError(status) {
   if (status === 401 || status === 403) return new Error('Gotify authentication failed.');
   if (status === 404) return new Error('Gotify endpoint was not found.');
@@ -12,7 +14,7 @@ function httpError(status) {
 export const gotifyProvider = {
   id: 'gotify',
 
-  async send({ channel, payload, fetchImpl = fetch, signal } = {}) {
+  async send({ channel, payload, fetchImpl = guardedFetch, signal } = {}) {
     const baseUrl = String(channel?.config?.baseUrl ?? '').replace(/\/+$/, '');
     const token = String(channel?.secrets?.appToken ?? '');
     const url = new URL(`${baseUrl}/message`);

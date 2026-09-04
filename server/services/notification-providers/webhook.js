@@ -9,6 +9,8 @@
  * Anbieter fuer Discord, Slack und alles Weitere zustaendig (#692, #660).
  */
 
+import { guardedFetch } from './guarded-fetch.js';
+
 export const WEBHOOK_TEMPLATE_PLACEHOLDERS = Object.freeze(['title', 'body', 'url', 'tag']);
 
 // ZWEI Muster, absichtlich verschieden weit: ersetzt wird nur, was wir fuellen
@@ -60,7 +62,7 @@ function httpError(status) {
 export const webhookProvider = {
   id: 'webhook',
 
-  async send({ channel, payload, fetchImpl = fetch, signal } = {}) {
+  async send({ channel, payload, fetchImpl = guardedFetch, signal } = {}) {
     const headers = { 'content-type': 'application/json' };
     const token = String(channel?.secrets?.token ?? '');
     if (token) headers.authorization = `Bearer ${token}`;

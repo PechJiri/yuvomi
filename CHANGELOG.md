@@ -157,6 +157,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   under a key that matched nothing. A shared helper carries the rule, and a guard keeps the call
   site from parsing the label itself again.
 
+## [2.64.1] - 2026-09-04
+
+### Security
+
+- **A member can no longer edit, un-hide or delete another member's private calendar event
+  (GHSA-fmrw-mmjw-5v9c).** `GET /calendar/:id` has always applied the per-row visibility filter, but
+  `PUT` and `DELETE` loaded the event by id alone: any member who could guess a sequential id could
+  overwrite a private appointment, read its description from the `PUT` response, set it to
+  `visibility: all` and so make it permanently readable, or delete it - while the same request
+  against a private *task* was correctly refused. Both write paths now use the same visibility
+  clause as the read path and answer `404`, as the tasks routes do, so the attempt reveals nothing.
+  There is no admin bypass, consistent with every other per-row visibility rule.
+
+- **Notification channels (Webhook, Gotify, ntfy) now go through the SSRF guard that every other
+  outbound integration already uses (GHSA-f4w5-ggcc-7m5c).** The three providers called the bare
+  global `fetch()` on the configured URL, so an admin could point a channel at `169.254.169.254` or
+  a service on the LAN and have the server `POST` to it - with a body the webhook template controls
+  entirely. Delivery now runs over the same node-native client as ICS subscriptions and the recipe
+  mirrors, with the DNS-rebinding check at socket lookup, and the channel form refuses a private or
+  local address on save, naming the switch in its message. **If your Gotify or ntfy server lives in
+  the same Docker network or LAN, set `NOTIFICATION_ALLOW_PRIVATE_NETWORK=true`** - the same
+  deployment-level opt-in the ICS feeds use, with the same default. Without it an existing LAN
+  channel stops delivering after this update and records the reason on the channel.
+
+- **A redirect to a literal internal IP no longer slips past the SSRF guard
+  (GHSA-9jh6-phj9-m6qr).** Node only consults the request-level `lookup` hook for host *names*; a
+  `302` whose `Location` was `http://169.254.169.254/` was therefore connected to without the
+  per-connection check that guards every named hop. The HTTP client now asks the hook for an IP
+  literal itself, on every hop including the first, so a public feed that redirects into the
+  server's own network is refused like a hostname that resolves there.
+
+- **Two write paths now enforce what their create paths always did (GHSA-4p5w-5346-8598).** Editing
+  a shared expense checked who was allowed to edit it but no longer, unlike creating one, whether
+  the payer and every participant are members of the group: a member could attribute a debt to a
+  person who was never in the group and cannot see or dispute it. The check is back on `PUT`.
+  And a housekeeping visit could be re-priced, re-paid or deleted by any member after it had been
+  paid; a settled visit is a real person's settled pay, so from the moment `paid_at` is set those
+  three actions require an admin, the same boundary that creating the worker has. Unpaid visits
+  stay a member's business, since whoever checks the housekeeper in also corrects the slip.
+
 ## [2.64.0] - 2026-09-02
 
 ### Added
