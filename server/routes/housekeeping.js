@@ -12,6 +12,8 @@ import * as db from '../db.js';
 import { normalizeAvatarData, syncFamilyMemberArtifacts } from '../auth.js';
 import { collectErrors, color, date, datetime, month, num, oneOf, str, id as validateId, MAX_SHORT, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
 import { minutesBetween, computeHourlyAmount } from '../services/housekeeping-billing.js';
+import { sendDocumentDeletionConflict } from '../services/document-deletion-lock.js';
+import { assertDocumentLinkTargetsAvailable } from '../services/document-links.js';
 import { dataUrlContentMatches } from '../utils/file-signature.js';
 import {
   formatDateKey,
@@ -873,6 +875,13 @@ router.put('/visits/:id', (req, res) => {
     if (vMinutesWorked.error) return res.status(400).json({ error: vMinutesWorked.error, code: 400 });
     const errors = collectErrors([vDate, vDailyRate, vExtras, vEventTitle, vPaymentTitle, vPaymentDescription, vReceiptId]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+    const receiptDocumentId = req.body.receipt_document_id !== undefined && vReceiptId.value !== null
+      ? assertDocumentLinkTargetsAvailable(
+        db.get(),
+        [vReceiptId.value],
+        req.authUserId || req.session.userId,
+      )[0] ?? null
+      : vReceiptId.value;
     if (vDailyRate.value < 0 || (vExtras.value ?? 0) < 0) {
       return res.status(400).json({ error: 'Amounts must be greater than or equal to zero.', code: 400 });
     }
@@ -895,7 +904,7 @@ router.put('/visits/:id', (req, res) => {
         checkIn,
         effectiveDailyRate,
         vExtras.value ?? 0,
-        req.body.receipt_document_id !== undefined ? vReceiptId.value : existing.receipt_document_id,
+        req.body.receipt_document_id !== undefined ? receiptDocumentId : existing.receipt_document_id,
         vMinutesWorked.value !== null ? vMinutesWorked.value : existing.minutes_worked,
         existing.id,
       );
@@ -914,6 +923,7 @@ router.put('/visits/:id', (req, res) => {
     const row = db.get().prepare('SELECT * FROM housekeeping_work_sessions WHERE id = ?').get(existing.id);
     res.json({ data: publicSession(row), summary: monthlySummary(row.check_in.slice(0, 7)) });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     log.error('PUT /visits/:id error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   }

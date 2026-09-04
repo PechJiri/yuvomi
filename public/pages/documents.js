@@ -1058,37 +1058,139 @@ async function renameFolder(folder) {
   }
 }
 
-async function deleteFolder(folder) {
-  /* WAS MITGEHT, STEHT IN DER FRAGE (#785). Ein Ordner nimmt seinen ganzen
-   * Zweig mit, und in der Seitenleiste sieht man davon nur die zugeklappte
-   * Wurzel - "Ordner loeschen?" waere dann die Frage nach einer Zeile und die
-   * Antwort auf ein Dutzend. Die Dokumente sind sicher (sie fallen auf "ohne
-   * Ordner" zurueck), aber die Struktur ist es nicht. */
-  const descendants = folderSubtree(folder.id).size - 1;
+function folderDeleteChoice(folder, impact) {
+  const descendants = Math.max(0, Number(impact.removed_folders) - 1);
+  const documents = Math.max(0, Number(impact.documents));
+  const linkedRecordLabels = [
+    ['calendar', t('nav.calendar')],
+    ['housekeeping', t('nav.housekeeping')],
+    ['split_expenses', t('splitExpenses.title')],
+    ['tasks', t('nav.tasks')],
+    ['budget', t('nav.budget')],
+    ['inventory', t('nav.inventory')],
+  ];
+  const linkedRecords = linkedRecordLabels
+    .map(([key, label]) => ({ label, count: Math.max(0, Number(impact.linked_records?.[key] || 0)) }))
+    .filter(({ count }) => count > 0)
+    .map(({ label, count }) => `${label}: ${count}`)
+    .join(' · ');
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (value) => {
+      if (resolved) return;
+      resolved = true;
+      closeModal({ force: true });
+      resolve(value);
+    };
 
-  /* Die Optionen stehen als Literal im Aufruf und nicht in einer Variablen
-   * davor: der Guard "jeder als gefaehrlich markierte Dialog nennt seine
-   * Folgen" liest sie aus dem Aufruf, und eine Kurzschreibweise (`detail`
-   * statt `detail:`) ist fuer ihn dasselbe wie gar kein Detail. */
-  const confirmed = await confirmModal(
-    t('documents.deleteFolderConfirm', { name: folder.name }),
-    {
-      danger: true,
-      confirmLabel: t('documents.deleteFolder'),
-      detail: descendants > 0
-        ? t('documents.deleteFolderSubtreeDetail', { count: descendants })
-        : t('documents.deleteFolderConfirmDetail'),
-    },
-  );
-  if (!confirmed) return;
+    openSharedModal({
+      title: t('documents.deleteFolderConfirm', { name: folder.name }),
+      size: 'sm',
+      content: `
+        <p class="modal-confirm__detail">${esc(t('documents.deleteFolderImpact', {
+          documents,
+          folders: descendants,
+        }))}</p>
+        ${linkedRecords ? `
+          <p class="modal-confirm__detail">
+            ${esc(t('documents.deleteFolderLinkedRecords'))}<br>${esc(linkedRecords)}
+          </p>` : ''}
+        ${impact.can_delete_documents ? '' : `
+          <p class="modal-confirm__detail" id="documents-folder-delete-unavailable">
+            ${esc(t('documents.deleteFolderDocumentsUnavailable'))}
+          </p>`}
+        <div class="modal-actions modal-actions--stack">
+          <button type="button" class="btn btn--primary" id="documents-folder-delete-unfile">
+            ${esc(t('documents.deleteFolderKeepDocuments', { count: documents }))}
+          </button>
+          <button type="button" class="btn btn--danger" id="documents-folder-delete-documents"
+                  ${impact.can_delete_documents ? '' : 'disabled aria-describedby="documents-folder-delete-unavailable"'}>
+            ${esc(t('documents.deleteFolderWithDocuments', { count: documents }))}
+          </button>
+          <button type="button" class="btn btn--ghost" id="documents-folder-delete-cancel">${esc(t('common.cancel'))}</button>
+        </div>`,
+      onClose: () => finish(null),
+      onSave(panel) {
+        panel.querySelector('#documents-folder-delete-unfile')?.addEventListener('click', () => finish('unfile'));
+        panel.querySelector('#documents-folder-delete-documents')?.addEventListener('click', () => finish('delete'));
+        panel.querySelector('#documents-folder-delete-cancel')?.addEventListener('click', () => finish(null));
+      },
+    });
+  });
+}
+
+async function deleteFolder(folder) {
+  let impact;
   try {
-    await api.delete(`/documents/folders/${folder.id}`);
-    window.yuvomi?.showToast(t('documents.folderDeletedToast'), 'default');
-    if (String(state.folderId) === String(folder.id)) state.folderId = '';
+    const response = await api.get(`/documents/folders/${folder.id}/delete-impact`);
+    impact = response.data;
+  } catch (err) {
+    window.yuvomi?.showToast(friendlyError(err), 'danger');
+    return;
+  }
+
+  let choice;
+  if (impact.documents > 0 || !impact.can_delete_documents) {
+    choice = await folderDeleteChoice(folder, impact);
+  } else {
+    const descendants = Math.max(0, Number(impact.removed_folders) - 1);
+    const confirmed = await confirmModal(
+      t('documents.deleteFolderConfirm', { name: folder.name }),
+      {
+        danger: true,
+        confirmLabel: t('documents.deleteFolder'),
+        detail: t('documents.deleteFolderImpact', { folders: descendants, documents: 0 }),
+      },
+    );
+    choice = confirmed ? 'unfile' : null;
+  }
+  if (!choice) return;
+
+  try {
+    const selectedSubtree = folderSubtree(folder.id);
+    const expectedSnapshot = choice === 'delete'
+      ? `&expected_snapshot=${encodeURIComponent(impact.snapshot)}`
+      : '';
+    const response = await api.delete(
+      `/documents/folders/${folder.id}?documents=${choice}`
+      + `&expected_documents=${impact.documents}&expected_folders=${impact.removed_folders}`
+      + expectedSnapshot,
+    );
+    const result = response.data;
+    const hasNonConcurrencyFailure = result.failed_documents
+      ?.some((failure) => failure.failure_stage !== 'concurrency');
+    if (result.folder_deleted === false && result.contents_changed && hasNonConcurrencyFailure) {
+      window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedWithFailuresToast'), 'warning');
+    } else if (result.folder_deleted === false && result.contents_changed) {
+      window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedToast', {
+        deleted: result.deleted_documents,
+      }), 'warning');
+    } else if (result.folder_deleted === false) {
+      window.yuvomi?.showToast(t('documents.folderDeletePartialToast', {
+        deleted: result.deleted_documents,
+        failed: result.failed_documents?.length || 0,
+      }), 'warning');
+    } else if (choice === 'delete') {
+      window.yuvomi?.showToast(t('documents.folderDeletedWithDocumentsToast', { count: result.deleted_documents }), 'default');
+    } else {
+      window.yuvomi?.showToast(t('documents.folderDeletedToast'), 'default');
+    }
+    if (result.folder_deleted !== false && selectedSubtree.has(Number(state.folderId))) state.folderId = '';
     await loadFolders();
     await loadDocuments();
     renderAll();
   } catch (err) {
+    // A stale preview is safe to refresh. An active destructive operation is a
+    // different conflict: reopening the same dialog would only loop until its
+    // lock is released, so explain that state instead.
+    if (err?.status === 409 && err.data?.reason === 'FOLDER_CONTENT_CHANGED') {
+      await deleteFolder(folder);
+      return;
+    }
+    if (err?.status === 409 && err.data?.reason === 'FOLDER_DELETE_IN_PROGRESS') {
+      window.yuvomi?.showToast(t('documents.folderDeleteInProgressToast'), 'warning');
+      return;
+    }
     window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
   }
 }

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Deleting a document folder can now either keep its documents unfiled or delete the confirmed
+  subtree together with its documents.** The dialog previews exact folder and document counts and
+  offers destructive deletion only when the user may delete every affected document. The server
+  binds confirmation to the previewed identities, locks them against concurrent moves while
+  external storage is changing, and preserves the folder structure when storage deletion fails.
+
 - **Complete directory trees can now be uploaded in one operation.** Selecting a directory keeps
   that directory as the new root below the chosen destination, recreates supported descendants and
   uploads their files sequentially. Before writing anything, the dialog previews the planned tree,

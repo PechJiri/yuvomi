@@ -19,6 +19,7 @@
  */
 
 import { documentVisibleSql, filterVisibleDocumentIds } from './document-access.js';
+import { assertDocumentsNotDeleting } from './document-deletion-lock.js';
 
 /** Felder, die ein Beleg preisgibt. Bewusst ohne Dateiinhalt. */
 const DOCUMENT_COLUMNS = 'd.name, d.original_name, d.mime_type, d.file_size';
@@ -84,11 +85,7 @@ export function documentLinksFor(database, { table, ownerColumn, ownerId, userId
  * @param {object} [options.extraValues] - konstante Zusatzspalten beim Insert
  */
 export function replaceDocumentLinks(database, { table, ownerColumn, ownerId, documentIds, userId, extraValues = {} }) {
-  const wanted = filterVisibleDocumentIds(
-    database,
-    Array.isArray(documentIds) ? documentIds : [],
-    userId
-  );
+  const wanted = assertDocumentLinkTargetsAvailable(database, documentIds, userId);
 
   const visibleExisting = database.prepare(`
     SELECT a.document_id
@@ -118,10 +115,21 @@ export function replaceDocumentLinks(database, { table, ownerColumn, ownerId, do
   })();
 }
 
+/** Prüft sichtbare Ziel-Dokumente vor einem Schreibvorgang und gibt ihre IDs zurück. */
+export function assertDocumentLinkTargetsAvailable(database, documentIds, userId) {
+  const visibleIds = filterVisibleDocumentIds(
+    database,
+    Array.isArray(documentIds) ? documentIds : [],
+    userId,
+  );
+  assertDocumentsNotDeleting(visibleIds);
+  return visibleIds;
+}
+
 /**
  * Prueft eine einzelne optionale Dokument-Referenz (z. B. settlements.proof_document_id).
  * @returns {number|null} die ID, wenn sichtbar - sonst null
  */
 export function visibleDocumentRef(database, rawId, userId) {
-  return filterVisibleDocumentIds(database, [rawId], userId)[0] ?? null;
+  return assertDocumentLinkTargetsAvailable(database, [rawId], userId)[0] ?? null;
 }

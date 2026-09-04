@@ -10,6 +10,7 @@ import { hashPassword, normalizePassword } from '../utils/password.js';
 import { createLogger } from '../logger.js';
 import { collectErrors, date as validateDate, id as validateId, str, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
 import { documentLinksFor, loadDocumentLinks, replaceDocumentLinks, visibleDocumentRef } from '../services/document-links.js';
+import { sendDocumentDeletionConflict } from '../services/document-deletion-lock.js';
 import { buildSplits, decorateMoney, minorToDecimal, parseMoneyToMinor, simplifyDebts } from '../services/split-expenses.js';
 import { CURRENCY_CODES } from '../../public/utils/currency-codes.js';
 import { syncBirthdayArtifacts } from '../services/birthdays.js';
@@ -781,6 +782,7 @@ router.post('/groups/:id/expenses', (req, res) => {
     });
     res.status(201).json({ data: serializeExpense(loadExpense(createdId, req), null, userId(req)) });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     const message = err.message || 'Invalid expense.';
     log.error('POST /groups/:id/expenses error:', err);
     res.status(message.includes('Internal') ? 500 : 400).json({ error: message, code: message.includes('Internal') ? 500 : 400 });
@@ -829,6 +831,7 @@ router.put('/expenses/:id', (req, res) => {
     });
     res.json({ data: serializeExpense(loadExpense(existing.id, req), null, userId(req)) });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     log.error('PUT /expenses/:id error:', err);
     res.status(400).json({ error: err.message || 'Invalid expense.', code: 400 });
   }
@@ -927,6 +930,7 @@ router.post('/groups/:id/settlements', (req, res) => {
     const row = db.get().prepare('SELECT * FROM settlements WHERE id = ?').get(settlementId);
     res.status(201).json({ data: decorateMoney(row) });
   } catch (err) {
+    if (sendDocumentDeletionConflict(res, err)) return;
     log.error('POST /groups/:id/settlements error:', err);
     res.status(400).json({ error: err.message || 'Invalid settlement.', code: 400 });
   }

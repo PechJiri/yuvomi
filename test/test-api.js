@@ -272,6 +272,24 @@ test('OpenAPI dokumentiert stabile Storage-Fehlercodes', () => {
   );
 });
 
+test('OpenAPI dokumentiert Konflikte bei Verknüpfungen zu laufend gelöschten Dokumenten', () => {
+  const operations = [
+    openApi.paths['/api/v1/documents/{id}/archive'].patch,
+    openApi.paths['/api/v1/tasks/{id}/documents'].put,
+    openApi.paths['/api/v1/housekeeping/visits/{id}'].put,
+    openApi.paths['/api/v1/budget'].post,
+    openApi.paths['/api/v1/budget/{id}'].put,
+    openApi.paths['/api/v1/inventory/items'].post,
+    openApi.paths['/api/v1/inventory/items/{id}'].put,
+    openApi.paths['/api/v1/split-expenses/groups/{id}/expenses'].post,
+    openApi.paths['/api/v1/split-expenses/groups/{id}/settlements'].post,
+    openApi.paths['/api/v1/split-expenses/expenses/{id}'].put,
+  ];
+  for (const operation of operations) {
+    assert.match(operation.responses[409].description, /DOCUMENT_DELETE_IN_PROGRESS/);
+  }
+});
+
 test('OpenAPI erlaubt DMS-Push für local, webdav und google_drive, aber nicht dms', () => {
   const push = openApi.paths['/api/v1/documents/dms/push'].post;
   assert.match(push.description, /local.*webdav.*google_drive/i);

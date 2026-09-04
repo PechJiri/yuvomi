@@ -34,6 +34,7 @@ import express from 'express';
 
 const dbmod = await import('../server/db.js');
 const { default: budgetRouter } = await import('../server/routes/budget.js');
+const { lockDocumentDeletes, unlockDocumentDeletes } = await import('../server/services/document-deletion-lock.js');
 const db = dbmod.get();
 
 const A = db.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('a','A','x','member')").run().lastInsertRowid;
@@ -294,6 +295,29 @@ test('PUT /:id: Sichtbarkeit umschalten (owner_id bleibt fix)', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.body.data.visibility, 'private');
   assert.equal(r.body.data.owner_id, A, 'owner_id unverändert');
+});
+
+test('PUT /:id: laufende Dokumentlöschung lässt Buchung unverändert', async () => {
+  const id = insertEntry({ title: 'vorher', amount: -5, category: 'food', date: '2033-05-23' });
+  const documentId = db.prepare(`
+    INSERT INTO family_documents
+      (name, original_name, mime_type, file_size, content_data, category, visibility, status, created_by)
+    VALUES ('Beleg', 'beleg.txt', 'text/plain', 1, ?, 'other', 'family', 'active', ?)
+  `).run(Buffer.from('x'), A).lastInsertRowid;
+
+  lockDocumentDeletes([documentId]);
+  try {
+    const r = await call('PUT', `/${id}`, {
+      body: { title: 'nachher', amount: -99, attachment_document_ids: [documentId] },
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.body.reason, 'DOCUMENT_DELETE_IN_PROGRESS');
+    const unchanged = db.prepare('SELECT title, amount FROM budget_entries WHERE id = ?').get(id);
+    assert.equal(unchanged.title, 'vorher');
+    assert.equal(unchanged.amount, -5);
+  } finally {
+    unlockDocumentDeletes([documentId]);
+  }
 });
 
 // ── PUT /:id: Loan-Payment-Kopplung ──────────────────────────────────────────────
