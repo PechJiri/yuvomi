@@ -1977,6 +1977,21 @@
         "inventoryFeedDisableConfirm": "Akış devre dışı bırakılsın mı? Mevcut abonelikler artık güncelleme almaz.",
         "inventoryFeedDisableConfirmDetail": "Bağlantı hemen hiçbir şey sunmamaya başlar. Akış daha sonra yeniden etkinleştirilirse, her abonenin elle girmesi gereken yeni bir adres oluşur.",
         "inventoryFeedHint": "Bu bağlantıyı bilen herkes eşyalarınızın hangi tarihlerinin yaklaştığını görebilir. Yalnızca kendi cihazlarınızla paylaşın.",
+        "cycleFeedTitle": "Döngüyü dışa aktar",
+        "cycleFeedDescription": "Kaydettiğin ve tahmin edilen adet dönemlerine (izleniyorsa yumurtlama ve doğurgan pencere de dahil) Apple Takvim, Google Takvim veya Thunderbird'de salt okunur olarak abone ol.",
+        "cycleFeedInactive": "Dışa aktarma akışı devre dışı.",
+        "cycleFeedActivate": "Akışı etkinleştir",
+        "cycleFeedUrlLabel": "Akış adresi",
+        "cycleFeedCopy": "Adresi kopyala",
+        "cycleFeedCopied": "Adres kopyalandı",
+        "cycleFeedSubscribe": "Takvim uygulamasında abone ol",
+        "cycleFeedRegenerate": "Yeni bağlantı oluştur",
+        "cycleFeedDisable": "Akışı devre dışı bırak",
+        "cycleFeedRegenerateConfirm": "Yeni bir bağlantı oluşturulsun mu? Eski bağlantı çalışmayı durduracak.",
+        "cycleFeedRegenerateConfirmDetail": "Eski bağlantıyı kullanan cihazlar ve hizmetler güncelleme almayı durdurur; uygulamaya bağlı olarak ya son durumlarını göstermeye devam eder ya da yeni adres oraya girilene kadar hiçbir şey göstermez.",
+        "cycleFeedDisableConfirm": "Akış devre dışı bırakılsın mı? Mevcut abonelikler artık güncelleme almayacak.",
+        "cycleFeedDisableConfirmDetail": "Bağlantı hemen hiçbir şey iletmeyi durdurur. Daha sonra yeniden etkinleştirmek, her abonenin elle girmesi gereken yeni bir adres oluşturur.",
+        "cycleFeedHint": "Bu bağlantıyı bilen herkes döngü verilerini görebilir. Yalnızca kendi cihazlarınla paylaş.",
         "caldavUrlHint": "CalDAV sunucunuzun temel adresi",
         "caldavUsernameLabel": "Kullanıcı adı",
         "calendarDisabled": "Takvim devre dışı bırakıldı",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Döngü halkası",
                 "cycleDay": "Döngü günü {{day}}",
+                "dayBadge": "Gün {{day}}",
                 "of": "{{total}} içinden"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Sonraki adet",
                 "fertileWindow": "Doğurgan pencere",
                 "ovulation": "Yumurtlama",
+                "ovulationConfirmed": "Yumurtlama onaylandı",
                 "avgCycle": "Ort. döngü uzunluğu",
                 "avgPeriod": "Ort. adet süresi",
-                "regularity": "Düzenlilik",
+                "cycleVariation": "Döngü değişkenliği",
                 "regular": "Düzenli",
                 "irregular": "Düzensiz",
                 "notEnoughData": "Yetersiz veri",
                 "noPrediction": "Tahminler için bir adet dönemi kaydet."
+            },
+            "stats": {
+                "source": {
+                    "history": "Son {{count}} döngüne göre",
+                    "history_one": "Son döngüne göre",
+                    "insufficientHistory": "Şimdilik varsayılan değer - kişiselleştirilmiş tahmin için {{count}} döngü daha kaydet",
+                    "insufficientHistory_one": "Şimdilik varsayılan değer - kişiselleştirilmiş tahmin için {{count}} döngü daha kaydet",
+                    "default": "Varsayılan kabul (henüz geçmiş kaydı yok)"
+                }
             },
             "unit": {
                 "days": "{{value}} gün"
@@ -4196,6 +4222,27 @@
                 "empty": "Henüz adet dönemi kaydedilmedi.",
                 "cycleLength": "Döngü {{value}} gün"
             },
+            "trends": {
+                "title": "Eğilimler",
+                "date": "Tarih",
+                "cycleLength": "Döngü süresi",
+                "symptomFrequency": "Semptom sıklığı",
+                "severity": "Şiddet",
+                "severityTrend": "Şiddet eğilimi",
+                "cyclePattern": "Döngü günü örüntüsü",
+                "cyclePatternSentence": "Son {{total}} döngünün {{occurred}} tanesinde {{phase}} sırasında {{symptom}} kaydettin.",
+                "cyclePatternDaysBefore": "{{symptom}} genellikle adetinden {{days}} gün önce görülür.",
+                "cyclePatternNone": "{{symptom}} son {{total}} döngünde tekrarlanmadı.",
+                "typical": "Tipik",
+                "atypical": "Atipik",
+                "typicalRangeLabel": "Tipik aralık: {{min}}-{{max}} gün",
+                "likelihoodTitle": "Semptom örüntüleri",
+                "likelihoodCaption": "Geçmişine göre hangi günlerde sık görüldüğünü görmek için bir semptom seç.",
+                "likelyToday": "{{symptom}} döngünde genellikle bu günün civarında görülür.",
+                "symptomTracked": "Kaydedildi",
+                "symptomPredicted": "Genellikle burada görülür",
+                "phaseOther": "Diğer"
+            },
             "flow": {
                 "label": "Kanama yoğunluğu",
                 "none": "Yok",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Yorgunluk",
                 "nausea": "Bulantı",
                 "cravings": "Ani açlık",
-                "insomnia": "Uykusuzluk"
+                "insomnia": "Uykusuzluk",
+                "constipation": "Kabızlık",
+                "diarrhea": "İshal",
+                "jointPain": "Eklem ağrısı",
+                "dizziness": "Baş dönmesi",
+                "hotFlashes": "Ateş basmaları",
+                "swelling": "Şişkinlik",
+                "libidoChange": "Cinsel istek değişimi",
+                "dischargeChange": "Akıntı değişimi",
+                "appetiteChange": "İştah değişimi",
+                "concentrationDifficulty": "Konsantrasyon güçlüğü"
+            },
+            "intensity": {
+                "mild": "Hafif",
+                "moderate": "Orta",
+                "severe": "Şiddetli"
+            },
+            "bbt": {
+                "label": "Bazal vücut sıcaklığı",
+                "placeholder": "örn. 36,50",
+                "unitLabel": "Birim",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "İsteğe bağlı. Düzenli ölçümlerle sıcaklık artışı, geçerli döngüde yumurtlamayı doğrulayabilir."
             },
             "mood": {
                 "label": "Ruh hâli",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "CSV olarak dışa aktar"
             },
+            "ics": {
+                "calendarName": "Yuvomi Döngü",
+                "periodSummary": "Adet",
+                "predictedPeriodSummary": "Tahmini adet",
+                "fertileWindowSummary": "Doğurgan pencere (tahmini)",
+                "ovulationSummary": "Yumurtlama (tahmini)"
+            },
             "settings": {
                 "open": "Ayarlar",
                 "title": "Döngü ayarları",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Luteal faz uzunluğu",
                 "trackFertility": "Doğurgan pencereyi göster",
                 "autoHint": "Boş bırak = geçmişinden otomatik hesaplanır.",
+                "remindPeriodDaysBefore": "Adet hatırlatıcısı",
+                "remindOff": "Kapalı",
+                "remindSameDay": "Gününde",
+                "remindPeriodDaysBeforeHint": "Tahmini sonraki adetin başlamasından önce seni bilgilendirir.",
+                "remindLogDaily": "Her gün kaydetmem için hatırlat",
                 "defaultVisibility": "Yeni kayıtlar için varsayılan görünürlük",
                 "defaultVisibilityHint": "Yeni günlüğe eklenen regl ve günlük kayıtlar için geçerlidir. Her kayıt için değiştirilebilir.",
                 "applyToAll": "Tüm kayıtlara uygula",

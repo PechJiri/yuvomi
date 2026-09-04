@@ -1977,6 +1977,21 @@
         "inventoryFeedDisableConfirm": "फ़ीड बंद करें? मौजूदा सब्सक्रिप्शन को अब अपडेट नहीं मिलेंगे।",
         "inventoryFeedDisableConfirmDetail": "लिंक तुरंत कुछ भी देना बंद कर देता है। बाद में फ़ीड दोबारा चालू करने पर एक नया पता बनता है, जिसे हर सब्सक्राइबर को हाथ से दर्ज करना होगा।",
         "inventoryFeedHint": "जो भी इस लिंक को जानता है, वह देख सकता है कि आपकी चीज़ों की कौन-सी समय-सीमाएँ नज़दीक हैं। इसे केवल अपने डिवाइस के साथ साझा करें।",
+        "cycleFeedTitle": "चक्र निर्यात करें",
+        "cycleFeedDescription": "अपनी दर्ज और अनुमानित माहवारी (साथ ही, यदि ट्रैक की जा रही हो तो ओव्यूलेशन और उपजाऊ अवधि) को Apple कैलेंडर, Google कैलेंडर या Thunderbird में केवल-पठन रूप में सब्सक्राइब करें।",
+        "cycleFeedInactive": "निर्यात फ़ीड निष्क्रिय है।",
+        "cycleFeedActivate": "फ़ीड सक्रिय करें",
+        "cycleFeedUrlLabel": "फ़ीड पता",
+        "cycleFeedCopy": "पता कॉपी करें",
+        "cycleFeedCopied": "पता कॉपी किया गया",
+        "cycleFeedSubscribe": "कैलेंडर ऐप में सब्सक्राइब करें",
+        "cycleFeedRegenerate": "नया लिंक बनाएँ",
+        "cycleFeedDisable": "फ़ीड निष्क्रिय करें",
+        "cycleFeedRegenerateConfirm": "नया लिंक बनाएँ? पुराना लिंक काम करना बंद कर देगा।",
+        "cycleFeedRegenerateConfirmDetail": "पुराने लिंक का उपयोग करने वाले डिवाइस और सेवाएँ अपडेट प्राप्त करना बंद कर देंगी, और ऐप के आधार पर या तो अपनी आखिरी स्थिति दिखाती रहेंगी या जब तक वहाँ नया पता दर्ज नहीं किया जाता, कुछ नहीं दिखाएँगी।",
+        "cycleFeedDisableConfirm": "फ़ीड निष्क्रिय करें? मौजूदा सब्सक्रिप्शन अब अपडेट प्राप्त नहीं करेंगे।",
+        "cycleFeedDisableConfirmDetail": "लिंक तुरंत कुछ भी भेजना बंद कर देता है। इसे बाद में फिर से सक्रिय करने पर एक नया पता बनता है, जिसे हर सब्सक्राइबर को हाथ से दर्ज करना होगा।",
+        "cycleFeedHint": "यह लिंक जानने वाला कोई भी व्यक्ति आपके चक्र का डेटा देख सकता है। इसे केवल अपने डिवाइस के साथ साझा करें।",
         "caldavUrlHint": "आपके CalDAV सर्वर का आधार URL",
         "caldavUsernameLabel": "उपयोगकर्ता नाम",
         "calendarDisabled": "कैलेंडर अक्षम",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "चक्र वलय",
                 "cycleDay": "चक्र दिन {{day}}",
+                "dayBadge": "दिन {{day}}",
                 "of": "{{total}} में से"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "अगली माहवारी",
                 "fertileWindow": "उपजाऊ अवधि",
                 "ovulation": "ओव्यूलेशन",
+                "ovulationConfirmed": "ओव्यूलेशन की पुष्टि हुई",
                 "avgCycle": "औसत चक्र अवधि",
                 "avgPeriod": "औसत माहवारी अवधि",
-                "regularity": "नियमितता",
+                "cycleVariation": "चक्र भिन्नता",
                 "regular": "नियमित",
                 "irregular": "अनियमित",
                 "notEnoughData": "पर्याप्त डेटा नहीं",
                 "noPrediction": "पूर्वानुमान के लिए एक माहवारी दर्ज करें।"
+            },
+            "stats": {
+                "source": {
+                    "history": "आपके पिछले {{count}} चक्रों के आधार पर",
+                    "history_one": "आपके पिछले चक्र के आधार पर",
+                    "insufficientHistory": "फ़िलहाल डिफ़ॉल्ट मान - व्यक्तिगत अनुमान के लिए {{count}} और चक्र दर्ज करें",
+                    "insufficientHistory_one": "फ़िलहाल डिफ़ॉल्ट मान - व्यक्तिगत अनुमान के लिए {{count}} और चक्र दर्ज करें",
+                    "default": "डिफ़ॉल्ट अनुमान (अभी तक कोई इतिहास दर्ज नहीं)"
+                }
             },
             "unit": {
                 "days": "{{value}} दिन"
@@ -4196,6 +4222,27 @@
                 "empty": "अभी तक कोई माहवारी दर्ज नहीं।",
                 "cycleLength": "चक्र {{value}} दिन"
             },
+            "trends": {
+                "title": "रुझान",
+                "date": "तारीख़",
+                "cycleLength": "चक्र की लंबाई",
+                "symptomFrequency": "लक्षण की आवृत्ति",
+                "severity": "गंभीरता",
+                "severityTrend": "गंभीरता का रुझान",
+                "cyclePattern": "चक्र-दिन पैटर्न",
+                "cyclePatternSentence": "आपने पिछले {{total}} में से {{occurred}} चक्रों में {{phase}} के दौरान {{symptom}} दर्ज किया।",
+                "cyclePatternDaysBefore": "{{symptom}} आमतौर पर आपकी माहवारी से {{days}} दिन पहले होता है।",
+                "cyclePatternNone": "{{symptom}} आपके पिछले {{total}} चक्रों में फिर से नहीं हुआ।",
+                "typical": "सामान्य",
+                "atypical": "असामान्य",
+                "typicalRangeLabel": "सामान्य सीमा: {{min}}-{{max}} दिन",
+                "likelihoodTitle": "लक्षण पैटर्न",
+                "likelihoodCaption": "अपने इतिहास के आधार पर यह देखने के लिए एक लक्षण चुनें कि वह किन दिनों में अक्सर होता है।",
+                "likelyToday": "{{symptom}} आपके चक्र में इस दिन के आसपास अक्सर होता है।",
+                "symptomTracked": "दर्ज किया गया",
+                "symptomPredicted": "अक्सर यहाँ होता है",
+                "phaseOther": "अन्य"
+            },
             "flow": {
                 "label": "रक्तस्राव की मात्रा",
                 "none": "कोई नहीं",
@@ -4215,7 +4262,30 @@
                 "fatigue": "थकान",
                 "nausea": "मिचली",
                 "cravings": "तीव्र भूख",
-                "insomnia": "अनिद्रा"
+                "insomnia": "अनिद्रा",
+                "constipation": "कब्ज़",
+                "diarrhea": "दस्त",
+                "jointPain": "जोड़ों का दर्द",
+                "dizziness": "चक्कर आना",
+                "hotFlashes": "गर्मी की लहरें",
+                "swelling": "सूजन",
+                "libidoChange": "यौन इच्छा में बदलाव",
+                "dischargeChange": "स्राव में बदलाव",
+                "appetiteChange": "भूख में बदलाव",
+                "concentrationDifficulty": "एकाग्रता में कठिनाई"
+            },
+            "intensity": {
+                "mild": "हल्का",
+                "moderate": "मध्यम",
+                "severe": "गंभीर"
+            },
+            "bbt": {
+                "label": "बेसल शरीर तापमान",
+                "placeholder": "उदा. 36.50",
+                "unitLabel": "इकाई",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "वैकल्पिक। नियमित माप से, तापमान में वृद्धि वर्तमान चक्र में ओव्यूलेशन की पुष्टि कर सकती है।"
             },
             "mood": {
                 "label": "मनोदशा",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "CSV के रूप में निर्यात करें"
             },
+            "ics": {
+                "calendarName": "Yuvomi चक्र",
+                "periodSummary": "माहवारी",
+                "predictedPeriodSummary": "अनुमानित माहवारी",
+                "fertileWindowSummary": "उपजाऊ अवधि (अनुमानित)",
+                "ovulationSummary": "ओव्यूलेशन (अनुमानित)"
+            },
             "settings": {
                 "open": "सेटिंग्स",
                 "title": "चक्र सेटिंग्स",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "ल्यूटियल चरण की अवधि",
                 "trackFertility": "उपजाऊ अवधि दिखाएँ",
                 "autoHint": "खाली छोड़ें = आपके इतिहास से स्वतः गणना।",
+                "remindPeriodDaysBefore": "माहवारी रिमाइंडर",
+                "remindOff": "बंद",
+                "remindSameDay": "उसी दिन",
+                "remindPeriodDaysBeforeHint": "आपकी अनुमानित अगली माहवारी शुरू होने से पहले सूचित करता है।",
+                "remindLogDaily": "मुझे रोज़ दर्ज करने की याद दिलाएँ",
                 "defaultVisibility": "नई प्रविष्टियों के लिए डिफ़ॉल्ट दृश्यता",
                 "defaultVisibilityHint": "नई दर्ज की गई अवधियों और दैनिक प्रविष्टियों पर लागू होती है। हर प्रविष्टि के लिए बदली जा सकती है।",
                 "applyToAll": "सभी प्रविष्टियों पर लागू करें",

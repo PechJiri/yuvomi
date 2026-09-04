@@ -1977,6 +1977,21 @@
         "inventoryFeedDisableConfirm": "Disattivare il feed? Le iscrizioni esistenti non riceveranno più aggiornamenti.",
         "inventoryFeedDisableConfirmDetail": "Il link smette subito di fornire qualsiasi cosa. Se il feed viene riattivato in seguito, nasce un nuovo indirizzo che ogni iscritto dovrà inserire a mano.",
         "inventoryFeedHint": "Chi conosce questo link vede quali scadenze dei tuoi oggetti sono vicine. Condividilo solo con i tuoi dispositivi.",
+        "cycleFeedTitle": "Esporta ciclo",
+        "cycleFeedDescription": "Abbonati ai tuoi cicli mestruali registrati e previsti (oltre a ovulazione e finestra fertile, se tracciate) in sola lettura in Apple Calendario, Google Calendar o Thunderbird.",
+        "cycleFeedInactive": "Il feed di esportazione è disattivato.",
+        "cycleFeedActivate": "Attiva feed",
+        "cycleFeedUrlLabel": "Indirizzo del feed",
+        "cycleFeedCopy": "Copia indirizzo",
+        "cycleFeedCopied": "Indirizzo copiato",
+        "cycleFeedSubscribe": "Abbonati nell'app calendario",
+        "cycleFeedRegenerate": "Genera nuovo link",
+        "cycleFeedDisable": "Disattiva feed",
+        "cycleFeedRegenerateConfirm": "Generare un nuovo link? Il vecchio link smetterà di funzionare.",
+        "cycleFeedRegenerateConfirmDetail": "I dispositivi e i servizi che usano il vecchio link smettono di ricevere aggiornamenti e, a seconda dell'app, continuano a mostrare l'ultimo stato oppure non mostrano nulla finché non viene inserito il nuovo indirizzo.",
+        "cycleFeedDisableConfirm": "Disattivare il feed? Gli abbonamenti esistenti non riceveranno più aggiornamenti.",
+        "cycleFeedDisableConfirmDetail": "Il link smette immediatamente di inviare dati. Riattivandolo in seguito viene creato un nuovo indirizzo che ogni abbonato dovrà inserire manualmente.",
+        "cycleFeedHint": "Chiunque conosca questo link può vedere i dati del tuo ciclo. Condividilo solo con i tuoi dispositivi.",
         "caldavUrlHint": "L'URL di base del tuo server CalDAV",
         "caldavUsernameLabel": "Nome utente",
         "calendarDisabled": "Calendario disabilitato",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Anello del ciclo",
                 "cycleDay": "Giorno del ciclo {{day}}",
+                "dayBadge": "Giorno {{day}}",
                 "of": "di {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Prossimo ciclo",
                 "fertileWindow": "Finestra fertile",
                 "ovulation": "Ovulazione",
+                "ovulationConfirmed": "Ovulazione confermata",
                 "avgCycle": "Durata media del ciclo",
                 "avgPeriod": "Durata media del ciclo mestruale",
-                "regularity": "Regolarità",
+                "cycleVariation": "Variazione del ciclo",
                 "regular": "Regolare",
                 "irregular": "Irregolare",
                 "notEnoughData": "Dati insufficienti",
                 "noPrediction": "Registra un ciclo per le previsioni."
+            },
+            "stats": {
+                "source": {
+                    "history": "Basato sugli ultimi {{count}} cicli",
+                    "history_one": "Basato sul tuo ultimo ciclo",
+                    "insufficientHistory": "Valore predefinito per ora - registra altri {{count}} cicli per una previsione personalizzata",
+                    "insufficientHistory_one": "Valore predefinito per ora - registra ancora {{count}} ciclo per una previsione personalizzata",
+                    "default": "Ipotesi predefinita (nessuna cronologia registrata finora)"
+                }
             },
             "unit": {
                 "days": "{{value}} giorni"
@@ -4196,6 +4222,27 @@
                 "empty": "Ancora nessun ciclo registrato.",
                 "cycleLength": "Ciclo {{value}} giorni"
             },
+            "trends": {
+                "title": "Tendenze",
+                "date": "Data",
+                "cycleLength": "Durata del ciclo",
+                "symptomFrequency": "Frequenza dei sintomi",
+                "severity": "Intensità",
+                "severityTrend": "Andamento dell'intensità",
+                "cyclePattern": "Andamento per giorno del ciclo",
+                "cyclePatternSentence": "Hai registrato {{symptom}} durante {{phase}} in {{occurred}} degli ultimi {{total}} cicli.",
+                "cyclePatternDaysBefore": "{{symptom}} si presenta spesso {{days}} giorni prima del ciclo.",
+                "cyclePatternNone": "{{symptom}} non si è ripresentato negli ultimi {{total}} cicli.",
+                "typical": "Tipico",
+                "atypical": "Atipico",
+                "typicalRangeLabel": "Intervallo tipico: {{min}}-{{max}} giorni",
+                "likelihoodTitle": "Andamenti dei sintomi",
+                "likelihoodCaption": "Scegli un sintomo per vedere in quali giorni si presenta più spesso, in base alla tua cronologia.",
+                "likelyToday": "{{symptom}} si presenta spesso intorno a questo giorno del ciclo.",
+                "symptomTracked": "Registrato",
+                "symptomPredicted": "Si presenta spesso qui",
+                "phaseOther": "Altro"
+            },
             "flow": {
                 "label": "Intensità del flusso",
                 "none": "Nessuna",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Stanchezza",
                 "nausea": "Nausea",
                 "cravings": "Voglie",
-                "insomnia": "Insonnia"
+                "insomnia": "Insonnia",
+                "constipation": "Stitichezza",
+                "diarrhea": "Diarrea",
+                "jointPain": "Dolori articolari",
+                "dizziness": "Capogiri",
+                "hotFlashes": "Vampate di calore",
+                "swelling": "Ritenzione idrica",
+                "libidoChange": "Cambio della libido",
+                "dischargeChange": "Cambio delle perdite",
+                "appetiteChange": "Cambio dell'appetito",
+                "concentrationDifficulty": "Difficoltà di concentrazione"
+            },
+            "intensity": {
+                "mild": "Lieve",
+                "moderate": "Moderato",
+                "severe": "Forte"
+            },
+            "bbt": {
+                "label": "Temperatura basale",
+                "placeholder": "es. 36,50",
+                "unitLabel": "Unità",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Facoltativo. Con misurazioni regolari, un aumento della temperatura può confermare l'ovulazione nel ciclo attuale."
             },
             "mood": {
                 "label": "Umore",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Esporta come CSV"
             },
+            "ics": {
+                "calendarName": "Ciclo Yuvomi",
+                "periodSummary": "Ciclo",
+                "predictedPeriodSummary": "Ciclo previsto",
+                "fertileWindowSummary": "Finestra fertile (prevista)",
+                "ovulationSummary": "Ovulazione (prevista)"
+            },
             "settings": {
                 "open": "Impostazioni",
                 "title": "Impostazioni ciclo",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Durata della fase luteale",
                 "trackFertility": "Mostra finestra fertile",
                 "autoHint": "Lascia vuoto = calcolato automaticamente dalla tua cronologia.",
+                "remindPeriodDaysBefore": "Promemoria ciclo",
+                "remindOff": "Disattivato",
+                "remindSameDay": "Il giorno stesso",
+                "remindPeriodDaysBeforeHint": "Ti avvisa prima dell'inizio previsto del prossimo ciclo.",
+                "remindLogDaily": "Ricordami di registrare ogni giorno",
                 "defaultVisibility": "Visibilità predefinita delle nuove voci",
                 "defaultVisibilityHint": "Vale per i nuovi cicli e le voci giornaliere. Modificabile per ogni voce.",
                 "applyToAll": "Applica a tutte le voci",

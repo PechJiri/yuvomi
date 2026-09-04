@@ -1977,6 +1977,21 @@
         "inventoryFeedDisableConfirm": "Stäng av flödet? Befintliga prenumerationer får inga uppdateringar längre.",
         "inventoryFeedDisableConfirmDetail": "Länken slutar omedelbart leverera något. Om flödet aktiveras igen senare skapas en ny adress som varje prenumerant måste ange för hand.",
         "inventoryFeedHint": "Den som känner till länken ser vilka datum för dina saker som snart förfaller. Dela den bara med dina egna enheter.",
+        "cycleFeedTitle": "Exportera cykel",
+        "cycleFeedDescription": "Prenumerera på dina loggade och förutspådda mensperioder (plus ägglossning och fertilt fönster, om det spåras) skrivskyddat i Apple Kalender, Google Kalender eller Thunderbird.",
+        "cycleFeedInactive": "Exportflödet är inaktiverat.",
+        "cycleFeedActivate": "Aktivera flöde",
+        "cycleFeedUrlLabel": "Flödesadress",
+        "cycleFeedCopy": "Kopiera adress",
+        "cycleFeedCopied": "Adress kopierad",
+        "cycleFeedSubscribe": "Prenumerera i kalenderapp",
+        "cycleFeedRegenerate": "Skapa ny länk",
+        "cycleFeedDisable": "Inaktivera flöde",
+        "cycleFeedRegenerateConfirm": "Skapa en ny länk? Den gamla länken slutar fungera.",
+        "cycleFeedRegenerateConfirmDetail": "Enheter och tjänster som använder den gamla länken slutar få uppdateringar och, beroende på appen, fortsätter antingen visa sitt senaste tillstånd eller visar ingenting förrän den nya adressen anges där.",
+        "cycleFeedDisableConfirm": "Inaktivera flödet? Befintliga prenumerationer slutar få uppdateringar.",
+        "cycleFeedDisableConfirmDetail": "Länken slutar omedelbart leverera något. Aktiveras flödet igen senare skapas en ny adress som varje prenumerant måste ange manuellt.",
+        "cycleFeedHint": "Alla som känner till denna länk kan se din cykeldata. Dela den bara med dina egna enheter.",
         "caldavUrlHint": "Basadressen till din CalDAV-server",
         "caldavUsernameLabel": "Användarnamn",
         "calendarDisabled": "Kalender inaktiverad",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Cykelring",
                 "cycleDay": "Cykeldag {{day}}",
+                "dayBadge": "Dag {{day}}",
                 "of": "av {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Nästa mens",
                 "fertileWindow": "Fertilt fönster",
                 "ovulation": "Ägglossning",
+                "ovulationConfirmed": "Ägglossning bekräftad",
                 "avgCycle": "Snittlängd cykel",
                 "avgPeriod": "Snittlängd mens",
-                "regularity": "Regelbundenhet",
+                "cycleVariation": "Cykelvariation",
                 "regular": "Regelbunden",
                 "irregular": "Oregelbunden",
                 "notEnoughData": "För lite data",
                 "noPrediction": "Registrera en mens för prognoser."
+            },
+            "stats": {
+                "source": {
+                    "history": "Baserat på dina senaste {{count}} cykler",
+                    "history_one": "Baserat på din senaste cykel",
+                    "insufficientHistory": "Standardvärde tills vidare - logga {{count}} cykler till för en personlig prognos",
+                    "insufficientHistory_one": "Standardvärde tills vidare - logga {{count}} cykel till för en personlig prognos",
+                    "default": "Standardantagande (ingen historik loggad än)"
+                }
             },
             "unit": {
                 "days": "{{value}} dagar"
@@ -4196,6 +4222,27 @@
                 "empty": "Inga menstruationer registrerade ännu.",
                 "cycleLength": "Cykel {{value}} dagar"
             },
+            "trends": {
+                "title": "Trender",
+                "date": "Datum",
+                "cycleLength": "Cykellängd",
+                "symptomFrequency": "Symtomfrekvens",
+                "severity": "Svårighetsgrad",
+                "severityTrend": "Svårighetsgradstrend",
+                "cyclePattern": "Mönster per cykeldag",
+                "cyclePatternSentence": "Du loggade {{symptom}} under {{phase}} i {{occurred}} av de {{total}} senaste cyklerna.",
+                "cyclePatternDaysBefore": "{{symptom}} inträffar ofta {{days}} dagar innan din mens.",
+                "cyclePatternNone": "{{symptom}} har inte återkommit under dina {{total}} senaste cykler.",
+                "typical": "Typisk",
+                "atypical": "Atypisk",
+                "typicalRangeLabel": "Typiskt intervall: {{min}}-{{max}} dagar",
+                "likelihoodTitle": "Symtommönster",
+                "likelihoodCaption": "Välj ett symtom för att se vilka dagar det ofta inträffar, baserat på din historik.",
+                "likelyToday": "{{symptom}} inträffar ofta kring denna dag i din cykel.",
+                "symptomTracked": "Loggat",
+                "symptomPredicted": "Inträffar ofta här",
+                "phaseOther": "Annat"
+            },
             "flow": {
                 "label": "Flöde",
                 "none": "Ingen",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Trötthet",
                 "nausea": "Illamående",
                 "cravings": "Sötsug",
-                "insomnia": "Sömnlöshet"
+                "insomnia": "Sömnlöshet",
+                "constipation": "Förstoppning",
+                "diarrhea": "Diarré",
+                "jointPain": "Ledvärk",
+                "dizziness": "Yrsel",
+                "hotFlashes": "Vallningar",
+                "swelling": "Vätskeansamling",
+                "libidoChange": "Förändrad sexlust",
+                "dischargeChange": "Förändrad flytning",
+                "appetiteChange": "Förändrad aptit",
+                "concentrationDifficulty": "Koncentrationssvårigheter"
+            },
+            "intensity": {
+                "mild": "Lindrig",
+                "moderate": "Måttlig",
+                "severe": "Svår"
+            },
+            "bbt": {
+                "label": "Basaltemperatur",
+                "placeholder": "t.ex. 36,50",
+                "unitLabel": "Enhet",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Valfritt. Med regelbundna mätningar kan en temperaturökning bekräfta ägglossning i den aktuella cykeln."
             },
             "mood": {
                 "label": "Humör",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Exportera som CSV"
             },
+            "ics": {
+                "calendarName": "Yuvomi cykel",
+                "periodSummary": "Mens",
+                "predictedPeriodSummary": "Förutspådd mens",
+                "fertileWindowSummary": "Fertilt fönster (förutspått)",
+                "ovulationSummary": "Ägglossning (förutspådd)"
+            },
             "settings": {
                 "open": "Inställningar",
                 "title": "Cykelinställningar",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Lutealfasens längd",
                 "trackFertility": "Visa fertilt fönster",
                 "autoHint": "Lämna tomt = beräknas automatiskt från din historik.",
+                "remindPeriodDaysBefore": "Menspåminnelse",
+                "remindOff": "Av",
+                "remindSameDay": "Samma dag",
+                "remindPeriodDaysBeforeHint": "Meddelar dig innan din förutspådda nästa mens börjar.",
+                "remindLogDaily": "Påminn mig dagligen att logga",
                 "defaultVisibility": "Standardsynlighet för nya poster",
                 "defaultVisibilityHint": "Gäller nya menstruationer och dagliga poster. Kan ändras per post.",
                 "applyToAll": "Tillämpa på alla poster",

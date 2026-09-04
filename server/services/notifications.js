@@ -16,6 +16,7 @@ import { syncAllBirthdayReminders } from './birthdays.js';
 import { resolveHouseholdLocale, translate } from '../utils/i18n.js';
 import { warrantyEndDate } from './inventory-deadlines.js';
 import { syncAllPantryExpiryReminders } from './pantry-reminders.js';
+import { syncAllCycleReminders } from './cycle-reminders.js';
 
 const log = createLogger('Notifications');
 const APP_NAME = 'Yuvomi';
@@ -103,6 +104,11 @@ const REMINDER_ORIGINS = {
   inventory_item:         { titleKey: 'nav.inventory',          url: '/inventory' },
   inventory_tracked_date: { titleKey: 'nav.inventory',          url: '/inventory' },
   pantry_item:            { titleKey: 'nav.pantry',             url: '/pantry' },
+  // Beide Zyklus-Herkuenfte teilen sich denselben Titel/Ziel - gleiches
+  // Vorbild wie schedule_entry/schedule_extra_entry (Schedule v3), zwei
+  // entity_type fuer zwei Sync-Quellen, eine Modul-Beschriftung.
+  cycle_period:           { titleKey: 'health.cycle.title',     url: '/health' },
+  cycle_log_nudge:        { titleKey: 'health.cycle.title',     url: '/health' },
 };
 
 /**
@@ -141,6 +147,23 @@ function pantryExpiryBody(reminder) {
   return `${reminder.entity_title} - ${reminder.pantry_expires_on}`;
 }
 
+/**
+ * Body einer Zyklus-Erinnerung: `entity_title` ist bei diesen beiden Arten das
+ * rohe `anchor_date` (siehe REMINDER_ORIGINS-Kommentar), kein Name - "Zyklus"
+ * mit einem nackten Datum darunter sagt nicht, ob die Periode erwartet wird
+ * oder der heutige Tag noch nicht geloggt ist. Anders als
+ * subscriptionBody/warrantyBody/... nutzt das hier bewusst translate(locale,
+ * ...): reminderPayload() tut das für den Titel schon (Haushaltssprache, der
+ * Server kennt die Empfaengersprache nicht), Satzbau fuer den Body ist
+ * dieselbe Ausnahme, kein neues Prinzip.
+ */
+function cycleBody(reminder, locale) {
+  if (reminder.entity_type === 'cycle_log_nudge') {
+    return translate(locale, 'health.cycle.settings.remindLogDaily');
+  }
+  return `${translate(locale, 'health.cycle.status.nextPeriod')} - ${reminder.entity_title}`;
+}
+
 function reminderPayload(reminder, locale) {
   const title = reminder.entity_title || FALLBACK_BODY;
   const origin = REMINDER_ORIGINS[reminder.entity_type];
@@ -153,6 +176,8 @@ function reminderPayload(reminder, locale) {
     body = trackedDateBody(reminder);
   } else if (reminder.entity_type === 'pantry_item' && reminder.entity_title) {
     body = pantryExpiryBody(reminder);
+  } else if ((reminder.entity_type === 'cycle_period' || reminder.entity_type === 'cycle_log_nudge') && reminder.entity_title) {
+    body = cycleBody(reminder, locale);
   }
   return {
     // Ohne bekannte Herkunft bleibt der App-Name: er ist nichtssagend, aber nie
@@ -306,6 +331,14 @@ export async function processDueNotifications({
     log.error('Pantry expiry sync failed:', err?.message || err);
   }
 
+  // Gleiche Stelle, gleiche Bauart: ein rollierendes Fenster je Nutzer statt
+  // haushaltweit, weil der Zyklus (anders als der Vorrat) persoenlich ist.
+  try {
+    syncAllCycleReminders(activeDb, now);
+  } catch (err) {
+    log.error('Cycle reminder sync failed:', err?.message || err);
+  }
+
   const due = activeDb.prepare(`
     SELECT r.id, r.created_by, r.entity_type,
       CASE r.entity_type
@@ -319,6 +352,8 @@ export async function processDueNotifications({
           WHERE d.id = r.entity_id
         )
         WHEN 'pantry_item' THEN (SELECT name FROM pantry_items WHERE id = r.entity_id)
+        WHEN 'cycle_period' THEN (SELECT anchor_date FROM cycle_reminder_anchors WHERE id = r.entity_id)
+        WHEN 'cycle_log_nudge' THEN (SELECT anchor_date FROM cycle_reminder_anchors WHERE id = r.entity_id)
       END AS entity_title,
       CASE WHEN r.entity_type = 'inventory_item'
         THEN (SELECT purchase_date FROM inventory_items WHERE id = r.entity_id) END AS inv_purchase_date,

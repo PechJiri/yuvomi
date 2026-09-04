@@ -6,8 +6,12 @@
  *        Person/Tag → Upsert) und die per-Person-Einstellungen (cycle_settings,
  *        nur der Eigentümer selbst) plus der Perioden-CSV-Export. Die
  *        Vorhersage-Logik (nächste Periode, Eisprung, fruchtbares Fenster) liegt
- *        bewusst rein clientseitig in public/utils/health-cycle.js - der Server
- *        speichert nur.
+ *        bewusst in EINER Datei, public/utils/health-cycle.js, absichtlich
+ *        DOM-frei geschrieben, damit sie auch außerhalb des Browsers läuft.
+ *        Dieser Router speichert nur - aber server/services/cycle-reminders.js
+ *        importiert dieselbe Datei für die Erinnerungs-Zeitpunkte, statt eine
+ *        zweite Rechnung zu führen; zwei Kopien derselben Mathematik wären
+ *        zwei Wahrheiten, die auseinanderlaufen können.
  *
  *        BEWUSSTE AUSNAHME von der Betreuung (#584): Wo Vitalwerte, Medikamente,
  *        Laborbefunde und Aktivitäten `careAwareClause()` verwenden, bleibt es
@@ -22,24 +26,73 @@ import express from 'express';
 import * as db from '../../db.js';
 import * as v from '../../middleware/validate.js';
 import { cycleToCsv } from '../../services/health-export.js';
+import { syncCycleRemindersForUser } from '../../services/cycle-reminders.js';
+import { normalizeSymptomEntries } from '../../../public/utils/health-cycle.js';
 import {
-  log, VISIBILITIES, FLOW_LEVELS, MAX_UNIT, MAX_SYMPTOMS,
+  log, VISIBILITIES, FLOW_LEVELS, MAX_UNIT,
   viewerId, visibilityClause, toBit, applyUpdate, badRequest,
   exportFilename, sendCsv, exportRange,
 } from './helpers.js';
 
 const router = express.Router();
 
-/** Normalisiert Symptome (Array oder Komma-String) zu einer bereinigten Komma-Liste. */
-function normalizeSymptoms(raw) {
-  if (raw === undefined || raw === null || raw === '') return { value: null, error: null };
-  const list = Array.isArray(raw) ? raw : String(raw).split(',');
-  const tokens = list
-    .map((s) => String(s).trim().toLowerCase())
-    .filter((s) => /^[a-z0-9_]{1,32}$/.test(s));
-  const joined = [...new Set(tokens)].join(',');
-  if (joined.length > MAX_SYMPTOMS) return { value: null, error: `symptoms may be at most ${MAX_SYMPTOMS} characters long.` };
-  return { value: joined || null, error: null };
+// Deckel auf die ANZAHL Symptome je Tag, nicht mehr auf die Zeichenlaenge der
+// (seit Migration 178 nur noch historischen) Komma-Spalte - die Symptom-Liste
+// waechst mit SYMPTOM_TYPES (aktuell 20), 40 laesst reichlich Raum, auch fuer
+// spaeter erweiterte Presets, ohne eine Endlos-Liste durchzulassen.
+const MAX_SYMPTOMS_COUNT = 40;
+
+// Anders als health_vitals.unit (freier Text, viele Metriken) macht fuer eine
+// Basaltemperatur nur eine von zwei Einheiten Sinn - und detectTemperatureShift()
+// muss beide zuverlaessig in Celsius umrechnen koennen, ein freies Textfeld
+// waere dafuer die falsche Grundlage. Plausibilitaets-Grenzen sind grosszuegige
+// Koerpertemperatur-Baender, keine medizinische Norm.
+const BASAL_TEMP_RANGE = { c: [34, 42], f: [93, 108] };
+
+/** Validiert (basal_temp, basal_temp_unit) zusammen - beide oder keins. */
+function validateBasalTemp(rawTemp, rawUnit) {
+  if (rawTemp === undefined || rawTemp === null || rawTemp === '') return { temp: null, unit: null, error: null };
+  const unit = String(rawUnit || '').toLowerCase();
+  const range = BASAL_TEMP_RANGE[unit];
+  if (!range) return { temp: null, unit: null, error: 'basal_temp_unit must be "c" or "f" when basal_temp is set.' };
+  const n = Number(rawTemp);
+  if (!Number.isFinite(n) || n < range[0] || n > range[1]) {
+    return { temp: null, unit: null, error: `basal_temp must be a number between ${range[0]} and ${range[1]} for unit "${unit}".` };
+  }
+  return { temp: n, unit, error: null };
+}
+
+/** Symptom-Zeilen eines Tages-Logs, in Einfuegereihenfolge. */
+function symptomsForLog(database, dayLogId) {
+  return database.prepare(
+    'SELECT symptom_key AS key, intensity FROM cycle_day_log_symptoms WHERE day_log_id = ? ORDER BY id'
+  ).all(dayLogId);
+}
+
+/**
+ * Batch-Fassung von symptomsForLog() für eine Liste von Tages-Logs - EIN
+ * `WHERE day_log_id IN (...)` statt einer Abfrage je Zeile, für GET
+ * /cycle/logs (das potenziell viele Zeilen zurückgibt).
+ * @returns {Map<number, Array<{key: string, intensity: number|null}>>}
+ */
+function symptomsForLogs(database, dayLogIds) {
+  const byLog = new Map(dayLogIds.map((id) => [id, []]));
+  if (dayLogIds.length === 0) return byLog;
+  const placeholders = dayLogIds.map(() => '?').join(', ');
+  const rows = database.prepare(
+    `SELECT day_log_id, symptom_key AS key, intensity FROM cycle_day_log_symptoms WHERE day_log_id IN (${placeholders}) ORDER BY id`
+  ).all(...dayLogIds);
+  for (const { day_log_id, key, intensity } of rows) byLog.get(day_log_id).push({ key, intensity });
+  return byLog;
+}
+
+/** Ersetzt die Symptom-Zeilen eines Tages-Logs vollstaendig (loeschen + neu anlegen). */
+function replaceSymptoms(database, dayLogId, entries) {
+  database.prepare('DELETE FROM cycle_day_log_symptoms WHERE day_log_id = ?').run(dayLogId);
+  const insert = database.prepare(
+    'INSERT INTO cycle_day_log_symptoms (day_log_id, symptom_key, intensity) VALUES (?, ?, ?)'
+  );
+  for (const entry of entries) insert.run(dayLogId, entry.key, entry.intensity);
 }
 
 // ---- Perioden-Episoden ----
@@ -82,6 +135,15 @@ router.post('/cycle/periods', (req, res) => {
       INSERT INTO cycle_periods (user_id, start_date, end_date, note, visibility)
       VALUES (?, ?, ?, ?, ?)
     `).run(viewer, startDate.value, endDate.value, note.value, visibility.value || 'private');
+
+    // Sofort wirksam statt erst beim naechsten periodischen Lauf: ein neu
+    // geloggter Zyklus verschiebt sofort predictCycle()s naechsten
+    // Periodenbeginn, die Erinnerung soll dem nicht hinterherhinken.
+    try {
+      syncCycleRemindersForUser(db.get(), viewer);
+    } catch (err) {
+      log.error('Error syncing cycle reminders after period change:', err.message);
+    }
 
     res.status(201).json({ data: db.get().prepare('SELECT * FROM cycle_periods WHERE id = ?').get(result.lastInsertRowid) });
   } catch (err) {
@@ -154,7 +216,14 @@ router.get('/cycle/logs', (req, res) => {
     if (req.query.from) { sql += ' AND l.log_date >= ?'; params.push(String(req.query.from)); }
     if (req.query.to)   { sql += ' AND l.log_date <= ?'; params.push(String(req.query.to)); }
     sql += ' ORDER BY l.log_date DESC, l.id DESC';
-    res.json({ data: db.get().prepare(sql).all(...params) });
+    const database = db.get();
+    const rows = database.prepare(sql).all(...params);
+    // `symptoms` kommt seit Migration 178 aus der eigenen Tabelle, nicht mehr
+    // aus der (nur noch historischen) Komma-Spalte - `SELECT l.*` liefert die
+    // alte Spalte zwar mit, der Überschreib unten ersetzt sie in der Antwort.
+    // Batch statt eine Abfrage je Zeile (symptomsForLogs(), ein IN (...)).
+    const symptomsByLog = symptomsForLogs(database, rows.map((row) => row.id));
+    res.json({ data: rows.map((row) => ({ ...row, symptoms: symptomsByLog.get(row.id) })) });
   } catch (err) {
     log.error('Error listing cycle logs:', err.message);
     res.status(500).json({ error: 'Internal error.', code: 500 });
@@ -171,21 +240,43 @@ router.post('/cycle/logs', (req, res) => {
     const mood       = v.str(b.mood, 'mood', { max: MAX_UNIT, required: false });
     const note       = v.str(b.note, 'note', { max: v.MAX_TEXT, required: false });
     const visibility = v.oneOf(b.visibility, VISIBILITIES, 'visibility');
-    const symptoms   = normalizeSymptoms(b.symptoms);
+    const symptoms   = normalizeSymptomEntries(b.symptoms);
+    const basalTemp  = validateBasalTemp(b.basal_temp, b.basal_temp_unit);
 
-    const errors = v.collectErrors([logDate, flow, mood, note, visibility, symptoms]);
+    const errors = v.collectErrors([logDate, flow, mood, note, visibility]);
+    if (symptoms.length > MAX_SYMPTOMS_COUNT) errors.push(`symptoms may include at most ${MAX_SYMPTOMS_COUNT} entries.`);
+    if (basalTemp.error) errors.push(basalTemp.error);
     if (errors.length) return badRequest(res, errors);
 
-    db.get().prepare(`
-      INSERT INTO cycle_day_logs (user_id, log_date, flow, symptoms, mood, note, visibility)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(user_id, log_date) DO UPDATE SET
-        flow = excluded.flow, symptoms = excluded.symptoms, mood = excluded.mood,
-        note = excluded.note, visibility = excluded.visibility
-    `).run(viewer, logDate.value, flow.value, symptoms.value, mood.value, note.value, visibility.value || 'private');
+    const database = db.get();
+    // Log-Zeile und ihre Symptome zusammen, sonst koennte ein Absturz
+    // dazwischen die eine ohne die andere zurücklassen.
+    const dayLogId = database.transaction(() => {
+      database.prepare(`
+        INSERT INTO cycle_day_logs (user_id, log_date, flow, mood, note, visibility, basal_temp, basal_temp_unit)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, log_date) DO UPDATE SET
+          flow = excluded.flow, mood = excluded.mood,
+          note = excluded.note, visibility = excluded.visibility,
+          basal_temp = excluded.basal_temp, basal_temp_unit = excluded.basal_temp_unit
+      `).run(viewer, logDate.value, flow.value, mood.value, note.value, visibility.value || 'private', basalTemp.temp, basalTemp.unit);
+      const id = database.prepare('SELECT id FROM cycle_day_logs WHERE user_id = ? AND log_date = ?').get(viewer, logDate.value).id;
+      replaceSymptoms(database, id, symptoms);
+      return id;
+    })();
 
-    const row = db.get().prepare('SELECT * FROM cycle_day_logs WHERE user_id = ? AND log_date = ?').get(viewer, logDate.value);
-    res.status(201).json({ data: row });
+    // Sofort wirksam statt erst beim naechsten periodischen Lauf: der
+    // taegliche Eintrags-Hinweis (syncLogNudgeReminder) faellt weg, sobald
+    // fuer heute ein Log existiert - ohne diesen Aufruf bliebe er bis zum
+    // naechsten Sync-Durchgang stehen, obwohl die Frage schon beantwortet ist.
+    try {
+      syncCycleRemindersForUser(database, viewer);
+    } catch (err) {
+      log.error('Error syncing cycle reminders after log change:', err.message);
+    }
+
+    const row = database.prepare('SELECT * FROM cycle_day_logs WHERE id = ?').get(dayLogId);
+    res.status(201).json({ data: { ...row, symptoms: symptomsForLog(database, dayLogId) } });
   } catch (err) {
     log.error('Error saving cycle log:', err.message);
     res.status(500).json({ error: 'Internal error.', code: 500 });
@@ -214,7 +305,11 @@ router.delete('/cycle/logs/:id', (req, res) => {
 
 /** Voreinstellungen, falls die Person noch keine Zeile hat. */
 function defaultCycleSettings(userId) {
-  return { user_id: userId, cycle_length_avg: null, period_length_avg: null, luteal_length: 14, track_fertility: 1, pregnancy_mode: 0, pregnancy_due_date: null, default_visibility: 'private' };
+  return {
+    user_id: userId, cycle_length_avg: null, period_length_avg: null, luteal_length: 14, track_fertility: 1,
+    pregnancy_mode: 0, pregnancy_due_date: null, default_visibility: 'private',
+    remind_period_days_before: null, remind_log_daily: 0,
+  };
 }
 
 // GET /cycle/settings  (immer die eigenen; Vorhersagen sind persönlich)
@@ -248,15 +343,21 @@ router.put('/cycle/settings', (req, res) => {
     const pregnancy = toBit(b.pregnancy_mode);
     const dueDate   = v.date(b.pregnancy_due_date, 'pregnancy_due_date');
     const defVis    = v.oneOf(b.default_visibility, VISIBILITIES, 'default_visibility');
+    // NULL = aus (Standard); sonst der Vorlauf in Tagen vor dem vorhergesagten
+    // Periodenbeginn. Obergrenze wie luteal_length: mehr Vorlauf als eine
+    // typische Lutealphase waere keine Vorwarnung mehr, sondern Dauerlaerm.
+    const remindDaysBefore = intInRange(b.remind_period_days_before, 'remind_period_days_before', 0, 14);
+    const remindLogDaily   = toBit(b.remind_log_daily);
 
-    const errors = v.collectErrors([cycleLen, periodLen, luteal, dueDate, defVis]);
+    const errors = v.collectErrors([cycleLen, periodLen, luteal, dueDate, defVis, remindDaysBefore]);
     if (b.track_fertility !== undefined && track === undefined) errors.push('track_fertility must be a boolean.');
     if (b.pregnancy_mode !== undefined && pregnancy === undefined) errors.push('pregnancy_mode must be a boolean.');
+    if (b.remind_log_daily !== undefined && remindLogDaily === undefined) errors.push('remind_log_daily must be a boolean.');
     if (errors.length) return badRequest(res, errors);
 
     db.get().prepare(`
-      INSERT INTO cycle_settings (user_id, cycle_length_avg, period_length_avg, luteal_length, track_fertility, pregnancy_mode, pregnancy_due_date, default_visibility)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO cycle_settings (user_id, cycle_length_avg, period_length_avg, luteal_length, track_fertility, pregnancy_mode, pregnancy_due_date, default_visibility, remind_period_days_before, remind_log_daily)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         cycle_length_avg = excluded.cycle_length_avg,
         period_length_avg = excluded.period_length_avg,
@@ -264,12 +365,24 @@ router.put('/cycle/settings', (req, res) => {
         track_fertility = excluded.track_fertility,
         pregnancy_mode = excluded.pregnancy_mode,
         pregnancy_due_date = excluded.pregnancy_due_date,
-        default_visibility = excluded.default_visibility
+        default_visibility = excluded.default_visibility,
+        remind_period_days_before = excluded.remind_period_days_before,
+        remind_log_daily = excluded.remind_log_daily
     `).run(viewer, cycleLen.value, periodLen.value, luteal.value === null ? 14 : luteal.value,
            track === undefined ? 1 : track,
            pregnancy === undefined ? 0 : pregnancy,
            dueDate.value,
-           defVis.value || 'private');
+           defVis.value || 'private',
+           remindDaysBefore.value,
+           remindLogDaily === undefined ? 0 : remindLogDaily);
+
+    // Sofort wirksam statt erst beim naechsten periodischen Lauf - gleiche
+    // Erwartung wie ueberall sonst (server/routes/schedule-preferences.js).
+    try {
+      syncCycleRemindersForUser(db.get(), viewer);
+    } catch (err) {
+      log.error('Error syncing cycle reminders after settings change:', err.message);
+    }
 
     res.json({ data: db.get().prepare('SELECT * FROM cycle_settings WHERE user_id = ?').get(viewer) });
   } catch (err) {

@@ -1977,6 +1977,21 @@
         "inventoryFeedDisableConfirm": "¿Desactivar el feed? Las suscripciones existentes dejarán de recibir actualizaciones.",
         "inventoryFeedDisableConfirmDetail": "El enlace deja de entregar nada de inmediato. Si el feed se vuelve a activar más tarde, se crea una nueva dirección que cada suscriptor tendrá que introducir a mano.",
         "inventoryFeedHint": "Quien conozca este enlace puede ver qué vencimientos de tus objetos se acercan. Compártelo solo con tus propios dispositivos.",
+        "cycleFeedTitle": "Exportar ciclo",
+        "cycleFeedDescription": "Suscríbete a tus periodos registrados y previstos (además de la ovulación y la ventana fértil, si se registran) en modo solo lectura en Apple Calendar, Google Calendar o Thunderbird.",
+        "cycleFeedInactive": "El feed de exportación está desactivado.",
+        "cycleFeedActivate": "Activar feed",
+        "cycleFeedUrlLabel": "Dirección del feed",
+        "cycleFeedCopy": "Copiar dirección",
+        "cycleFeedCopied": "Dirección copiada",
+        "cycleFeedSubscribe": "Suscribirse en la app de calendario",
+        "cycleFeedRegenerate": "Generar nuevo enlace",
+        "cycleFeedDisable": "Desactivar feed",
+        "cycleFeedRegenerateConfirm": "¿Generar un nuevo enlace? El enlace anterior dejará de funcionar.",
+        "cycleFeedRegenerateConfirmDetail": "Los dispositivos y servicios que usan el enlace anterior dejan de recibir actualizaciones y, según la app, siguen mostrando su último estado o no muestran nada hasta que se introduzca allí la nueva dirección.",
+        "cycleFeedDisableConfirm": "¿Desactivar el feed? Las suscripciones existentes dejarán de recibir actualizaciones.",
+        "cycleFeedDisableConfirmDetail": "El enlace deja de entregar cualquier dato de inmediato. Si vuelves a activarlo más tarde, se crea una nueva dirección que cada suscriptor deberá introducir manualmente.",
+        "cycleFeedHint": "Cualquiera que conozca este enlace puede ver tus datos del ciclo. Compártelo solo con tus propios dispositivos.",
         "caldavUrlHint": "La URL base de tu servidor CalDAV",
         "caldavUsernameLabel": "Nombre de usuario",
         "calendarDisabled": "Calendario desactivado",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Anillo del ciclo",
                 "cycleDay": "Día del ciclo {{day}}",
+                "dayBadge": "Día {{day}}",
                 "of": "de {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Próximo periodo",
                 "fertileWindow": "Ventana fértil",
                 "ovulation": "Ovulación",
+                "ovulationConfirmed": "Ovulación confirmada",
                 "avgCycle": "Duración media del ciclo",
                 "avgPeriod": "Duración media del periodo",
-                "regularity": "Regularidad",
+                "cycleVariation": "Variación del ciclo",
                 "regular": "Regular",
                 "irregular": "Irregular",
                 "notEnoughData": "Datos insuficientes",
                 "noPrediction": "Registra un periodo para ver predicciones."
+            },
+            "stats": {
+                "source": {
+                    "history": "Basado en tus últimos {{count}} periodos",
+                    "history_one": "Basado en tu último periodo",
+                    "insufficientHistory": "Valor predeterminado por ahora - registra {{count}} periodos más para una predicción personalizada",
+                    "insufficientHistory_one": "Valor predeterminado por ahora - registra {{count}} periodo más para una predicción personalizada",
+                    "default": "Suposición predeterminada (aún sin historial registrado)"
+                }
             },
             "unit": {
                 "days": "{{value}} días"
@@ -4196,6 +4222,27 @@
                 "empty": "Aún no se han registrado periodos.",
                 "cycleLength": "Ciclo {{value}} días"
             },
+            "trends": {
+                "title": "Tendencias",
+                "date": "Fecha",
+                "cycleLength": "Duración del ciclo",
+                "symptomFrequency": "Frecuencia de síntomas",
+                "severity": "Intensidad",
+                "severityTrend": "Evolución de la intensidad",
+                "cyclePattern": "Patrón por día del ciclo",
+                "cyclePatternSentence": "Registraste {{symptom}} durante {{phase}} en {{occurred}} de los últimos {{total}} ciclos.",
+                "cyclePatternDaysBefore": "{{symptom}} suele aparecer {{days}} días antes de tu periodo.",
+                "cyclePatternNone": "{{symptom}} no se ha repetido en tus últimos {{total}} ciclos.",
+                "typical": "Típico",
+                "atypical": "Atípico",
+                "typicalRangeLabel": "Rango típico: {{min}}-{{max}} días",
+                "likelihoodTitle": "Patrones de síntomas",
+                "likelihoodCaption": "Elige un síntoma para ver en qué días suele aparecer, según tu historial.",
+                "likelyToday": "{{symptom}} suele aparecer alrededor de este día de tu ciclo.",
+                "symptomTracked": "Registrado",
+                "symptomPredicted": "Suele aparecer aquí",
+                "phaseOther": "Otra"
+            },
             "flow": {
                 "label": "Intensidad del flujo",
                 "none": "Ninguna",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Fatiga",
                 "nausea": "Náuseas",
                 "cravings": "Antojos",
-                "insomnia": "Insomnio"
+                "insomnia": "Insomnio",
+                "constipation": "Estreñimiento",
+                "diarrhea": "Diarrea",
+                "jointPain": "Dolor articular",
+                "dizziness": "Mareos",
+                "hotFlashes": "Sofocos",
+                "swelling": "Retención de líquidos",
+                "libidoChange": "Cambio de libido",
+                "dischargeChange": "Cambio en el flujo",
+                "appetiteChange": "Cambio de apetito",
+                "concentrationDifficulty": "Dificultad para concentrarse"
+            },
+            "intensity": {
+                "mild": "Leve",
+                "moderate": "Moderado",
+                "severe": "Intenso"
+            },
+            "bbt": {
+                "label": "Temperatura basal",
+                "placeholder": "p. ej. 36,50",
+                "unitLabel": "Unidad",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Opcional. Con mediciones regulares, un aumento de temperatura puede confirmar la ovulación del ciclo actual."
             },
             "mood": {
                 "label": "Estado de ánimo",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Exportar como CSV"
             },
+            "ics": {
+                "calendarName": "Ciclo de Yuvomi",
+                "periodSummary": "Periodo",
+                "predictedPeriodSummary": "Periodo previsto",
+                "fertileWindowSummary": "Ventana fértil (prevista)",
+                "ovulationSummary": "Ovulación (prevista)"
+            },
             "settings": {
                 "open": "Ajustes",
                 "title": "Ajustes del ciclo",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Duración de la fase lútea",
                 "trackFertility": "Mostrar ventana fértil",
                 "autoHint": "Déjalo vacío = se calcula automáticamente a partir de tu historial.",
+                "remindPeriodDaysBefore": "Recordatorio de periodo",
+                "remindOff": "Desactivado",
+                "remindSameDay": "El mismo día",
+                "remindPeriodDaysBeforeHint": "Te avisa antes de que empiece tu próximo periodo previsto.",
+                "remindLogDaily": "Recordarme registrar cada día",
                 "defaultVisibility": "Visibilidad predeterminada de nuevas entradas",
                 "defaultVisibilityHint": "Se aplica a los nuevos periodos y registros diarios. Ajustable en cada entrada.",
                 "applyToAll": "Aplicar a todas las entradas",

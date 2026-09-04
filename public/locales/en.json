@@ -1951,6 +1951,21 @@
         "inventoryFeedDisableConfirm": "Disable the feed? Existing subscriptions will no longer receive updates.",
         "inventoryFeedDisableConfirmDetail": "The link stops delivering anything immediately. Turning it back on later creates a new address that every subscriber has to enter by hand.",
         "inventoryFeedHint": "Anyone who knows this link can see which of your items' deadlines are coming up. Only share it with your own devices.",
+        "cycleFeedTitle": "Export cycle",
+        "cycleFeedDescription": "Subscribe to your logged and predicted periods (plus ovulation and fertile window, if tracked) read-only in Apple Calendar, Google Calendar, or Thunderbird.",
+        "cycleFeedInactive": "The export feed is disabled.",
+        "cycleFeedActivate": "Activate feed",
+        "cycleFeedUrlLabel": "Feed address",
+        "cycleFeedCopy": "Copy address",
+        "cycleFeedCopied": "Address copied",
+        "cycleFeedSubscribe": "Subscribe in calendar app",
+        "cycleFeedRegenerate": "Generate new link",
+        "cycleFeedDisable": "Disable feed",
+        "cycleFeedRegenerateConfirm": "Generate a new link? The old link will stop working.",
+        "cycleFeedRegenerateConfirmDetail": "Devices and services using the old link stop receiving updates and, depending on the app, either keep showing their last state or show nothing until the new address is entered there.",
+        "cycleFeedDisableConfirm": "Disable the feed? Existing subscriptions will no longer receive updates.",
+        "cycleFeedDisableConfirmDetail": "The link stops delivering anything immediately. Turning it back on later creates a new address that every subscriber has to enter by hand.",
+        "cycleFeedHint": "Anyone who knows this link can see your cycle data. Only share it with your own devices.",
         "caldavDescription": "Connect multiple CalDAV accounts (iCloud, Nextcloud, Radicale, Baikal, etc.) and choose which calendars to sync.",
         "caldavAddAccount": "Add CalDAV Account",
         "caldavEmptyState": "No CalDAV accounts connected yet. Add your first account to get started.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Cycle ring",
                 "cycleDay": "Cycle day {{day}}",
+                "dayBadge": "Day {{day}}",
                 "of": "of {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Next period",
                 "fertileWindow": "Fertile window",
                 "ovulation": "Ovulation",
+                "ovulationConfirmed": "Ovulation confirmed",
                 "avgCycle": "Avg. cycle length",
                 "avgPeriod": "Avg. period length",
-                "regularity": "Regularity",
+                "cycleVariation": "Cycle variation",
                 "regular": "Regular",
                 "irregular": "Irregular",
                 "notEnoughData": "Not enough data",
                 "noPrediction": "Log a period to see predictions."
+            },
+            "stats": {
+                "source": {
+                    "history": "Based on your last {{count}} periods",
+                    "history_one": "Based on your last period",
+                    "insufficientHistory": "Default for now - log {{count}} more periods for a personalized prediction",
+                    "insufficientHistory_one": "Default for now - log {{count}} more period for a personalized prediction",
+                    "default": "Default assumption (no history logged yet)"
+                }
             },
             "unit": {
                 "days": "{{value}} days"
@@ -4196,6 +4222,27 @@
                 "empty": "No periods logged yet.",
                 "cycleLength": "Cycle {{value}} days"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Date",
+                "cycleLength": "Cycle length",
+                "symptomFrequency": "Symptom frequency",
+                "severity": "Severity",
+                "severityTrend": "Severity trend",
+                "cyclePattern": "Cycle-day pattern",
+                "cyclePatternSentence": "You logged {{symptom}} during {{phase}} in {{occurred}} of {{total}} recent cycles.",
+                "cyclePatternDaysBefore": "{{symptom}} often occurs {{days}} days before your period.",
+                "cyclePatternNone": "{{symptom}} hasn't recurred in your last {{total}} cycles.",
+                "typical": "Typical",
+                "atypical": "Atypical",
+                "typicalRangeLabel": "Typical range: {{min}}-{{max}} days",
+                "likelihoodTitle": "Symptom patterns",
+                "likelihoodCaption": "Pick a symptom to see which days it often occurs on, based on your history.",
+                "likelyToday": "{{symptom}} often occurs around this day in your cycle.",
+                "symptomTracked": "Logged",
+                "symptomPredicted": "Often occurs here",
+                "phaseOther": "Other"
+            },
             "flow": {
                 "label": "Flow",
                 "none": "None",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Fatigue",
                 "nausea": "Nausea",
                 "cravings": "Cravings",
-                "insomnia": "Insomnia"
+                "insomnia": "Insomnia",
+                "constipation": "Constipation",
+                "diarrhea": "Diarrhea",
+                "jointPain": "Joint pain",
+                "dizziness": "Dizziness",
+                "hotFlashes": "Hot flashes",
+                "swelling": "Swelling",
+                "libidoChange": "Libido change",
+                "dischargeChange": "Discharge change",
+                "appetiteChange": "Appetite change",
+                "concentrationDifficulty": "Difficulty concentrating"
+            },
+            "intensity": {
+                "mild": "Mild",
+                "moderate": "Moderate",
+                "severe": "Severe"
+            },
+            "bbt": {
+                "label": "Basal body temperature",
+                "placeholder": "e.g. 36.50",
+                "unitLabel": "Unit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optional. With regular measurements, a temperature rise can confirm ovulation for the current cycle."
             },
             "mood": {
                 "label": "Mood",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Export as CSV"
             },
+            "ics": {
+                "calendarName": "Yuvomi Cycle",
+                "periodSummary": "Period",
+                "predictedPeriodSummary": "Predicted period",
+                "fertileWindowSummary": "Fertile window (predicted)",
+                "ovulationSummary": "Ovulation (predicted)"
+            },
             "settings": {
                 "open": "Settings",
                 "title": "Cycle settings",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Luteal phase length",
                 "trackFertility": "Show fertile window",
                 "autoHint": "Leave empty to calculate automatically from your history.",
+                "remindPeriodDaysBefore": "Period reminder",
+                "remindOff": "Off",
+                "remindSameDay": "On the day",
+                "remindPeriodDaysBeforeHint": "Notifies you before your predicted next period starts.",
+                "remindLogDaily": "Remind me daily to log",
                 "defaultVisibility": "Default visibility for new entries",
                 "defaultVisibilityHint": "Applies to newly logged periods and daily entries. Still adjustable per entry.",
                 "applyToAll": "Apply to all entries",

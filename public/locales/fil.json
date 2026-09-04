@@ -1980,6 +1980,21 @@
         "inventoryFeedDisableConfirm": "I-disable ang feed? Hindi na makakatanggap ng mga update ang mga kasalukuyang subscription.",
         "inventoryFeedDisableConfirmDetail": "Agad nang hihinto ang link sa paghahatid ng kahit ano. Kapag muling in-activate ang feed, may gagawing bagong address na kailangang ilagay nang manu-mano ng bawat subscriber.",
         "inventoryFeedHint": "Sinumang nakakaalam ng link na ito ay makikita kung aling mga takdang petsa ng mga gamit mo ang paparating na. Ibahagi lang ito sa sarili mong mga device.",
+        "cycleFeedTitle": "I-export ang siklo",
+        "cycleFeedDescription": "Mag-subscribe sa iyong naitala at inaasahang regla (kasama ang obulasyon at matabang panahon, kung sinusubaybayan) sa read-only mode sa Apple Calendar, Google Calendar, o Thunderbird.",
+        "cycleFeedInactive": "Naka-disable ang export feed.",
+        "cycleFeedActivate": "I-activate ang feed",
+        "cycleFeedUrlLabel": "Address ng feed",
+        "cycleFeedCopy": "Kopyahin ang address",
+        "cycleFeedCopied": "Nakopya ang address",
+        "cycleFeedSubscribe": "Mag-subscribe sa calendar app",
+        "cycleFeedRegenerate": "Gumawa ng bagong link",
+        "cycleFeedDisable": "I-disable ang feed",
+        "cycleFeedRegenerateConfirm": "Gumawa ng bagong link? Hindi na gagana ang lumang link.",
+        "cycleFeedRegenerateConfirmDetail": "Ang mga device at serbisyong gumagamit ng lumang link ay hindi na makakatanggap ng mga update, at depende sa app, patuloy nilang ipapakita ang huling estado o wala silang ipapakita hanggang ilagay doon ang bagong address.",
+        "cycleFeedDisableConfirm": "I-disable ang feed? Ang mga umiiral na subscription ay hindi na makakatanggap ng mga update.",
+        "cycleFeedDisableConfirmDetail": "Agad na titigil ang link sa pagpapadala ng kahit ano. Ang muling pag-activate nito sa hinaharap ay gagawa ng bagong address na kailangang manong ilagay ng bawat subscriber.",
+        "cycleFeedHint": "Sinumang nakakaalam ng link na ito ay makakakita ng data ng iyong siklo. Ibahagi lamang ito sa sarili mong mga device.",
         "caldavDescription": "Kumonekta sa maraming CalDAV account (iCloud, Nextcloud, Radicale, Baikal, atbp.) at piliin kung aling mga kalendaryo ang isi-sync.",
         "caldavAddAccount": "Magdagdag ng CalDAV Account",
         "caldavEmptyState": "Wala pang nakakonektang CalDAV account. Idagdag ang iyong unang account para makapagsimula.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Singsing ng siklo",
                 "cycleDay": "Araw {{day}} ng siklo",
+                "dayBadge": "Araw {{day}}",
                 "of": "sa {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Susunod na regla",
                 "fertileWindow": "Matabang panahon",
                 "ovulation": "Obulasyon",
+                "ovulationConfirmed": "Nakumpirma ang obulasyon",
                 "avgCycle": "Karaniwang haba ng siklo",
                 "avgPeriod": "Karaniwang haba ng regla",
-                "regularity": "Pagiging regular",
+                "cycleVariation": "Pagbabago ng siklo",
                 "regular": "Regular",
                 "irregular": "Iregular",
                 "notEnoughData": "Kulang ang datos",
                 "noPrediction": "Magtala ng regla para makita ang mga hula."
+            },
+            "stats": {
+                "source": {
+                    "history": "Base sa huling {{count}} siklo mo",
+                    "history_one": "Base sa huling siklo mo",
+                    "insufficientHistory": "Default na halaga sa ngayon - mag-log pa ng {{count}} siklo para sa personalized na hula",
+                    "insufficientHistory_one": "Default na halaga sa ngayon - mag-log pa ng {{count}} siklo para sa personalized na hula",
+                    "default": "Default na palagay (wala pang naitalang kasaysayan)"
+                }
             },
             "unit": {
                 "days": "{{value}} araw"
@@ -4196,6 +4222,27 @@
                 "empty": "Wala pang naitalang regla.",
                 "cycleLength": "Siklo {{value}} araw"
             },
+            "trends": {
+                "title": "Mga Trend",
+                "date": "Petsa",
+                "cycleLength": "Haba ng siklo",
+                "symptomFrequency": "Dalas ng sintomas",
+                "severity": "Tindi",
+                "severityTrend": "Trend ng tindi",
+                "cyclePattern": "Pattern ayon sa araw ng siklo",
+                "cyclePatternSentence": "Nag-log ka ng {{symptom}} noong {{phase}} sa {{occurred}} sa {{total}} kamakailang siklo.",
+                "cyclePatternDaysBefore": "Madalas lumitaw ang {{symptom}} {{days}} araw bago ang iyong regla.",
+                "cyclePatternNone": "Hindi na naulit ang {{symptom}} sa huling {{total}} siklo mo.",
+                "typical": "Karaniwan",
+                "atypical": "Hindi karaniwan",
+                "typicalRangeLabel": "Karaniwang saklaw: {{min}}-{{max}} araw",
+                "likelihoodTitle": "Mga pattern ng sintomas",
+                "likelihoodCaption": "Pumili ng sintomas para makita kung anong mga araw ito madalas lumitaw, base sa iyong kasaysayan.",
+                "likelyToday": "Madalas lumitaw ang {{symptom}} sa palibot ng araw na ito ng iyong siklo.",
+                "symptomTracked": "Naitala",
+                "symptomPredicted": "Madalas lumitaw dito",
+                "phaseOther": "Iba pa"
+            },
             "flow": {
                 "label": "Daloy",
                 "none": "Wala",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Pagkapagod",
                 "nausea": "Pagduduwal",
                 "cravings": "Paglilihi sa pagkain",
-                "insomnia": "Hirap matulog"
+                "insomnia": "Hirap matulog",
+                "constipation": "Pagtitibi",
+                "diarrhea": "Pagtatae",
+                "jointPain": "Pananakit ng kasukasuan",
+                "dizziness": "Pagkahilo",
+                "hotFlashes": "Pag-iinit ng katawan",
+                "swelling": "Pamamaga",
+                "libidoChange": "Pagbabago ng libido",
+                "dischargeChange": "Pagbabago ng discharge",
+                "appetiteChange": "Pagbabago ng gana",
+                "concentrationDifficulty": "Hirap sa pagkonsentra"
+            },
+            "intensity": {
+                "mild": "Banayad",
+                "moderate": "Katamtaman",
+                "severe": "Matindi"
+            },
+            "bbt": {
+                "label": "Basal na temperatura ng katawan",
+                "placeholder": "hal. 36.50",
+                "unitLabel": "Yunit",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Opsyonal. Sa regular na pagsukat, ang pagtaas ng temperatura ay maaaring magkumpirma ng obulasyon sa kasalukuyang siklo."
             },
             "mood": {
                 "label": "Kalooban",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "I-export bilang CSV"
             },
+            "ics": {
+                "calendarName": "Siklo ng Yuvomi",
+                "periodSummary": "Regla",
+                "predictedPeriodSummary": "Inaasahang regla",
+                "fertileWindowSummary": "Matabang panahon (inaasahan)",
+                "ovulationSummary": "Obulasyon (inaasahan)"
+            },
             "settings": {
                 "open": "Mga Setting",
                 "title": "Mga setting ng siklo",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Haba ng yugtong luteal",
                 "trackFertility": "Ipakita ang matabang panahon",
                 "autoHint": "Iwanang blangko para awtomatikong kalkulahin mula sa iyong kasaysayan.",
+                "remindPeriodDaysBefore": "Paalala sa regla",
+                "remindOff": "Naka-off",
+                "remindSameDay": "Sa araw mismo",
+                "remindPeriodDaysBeforeHint": "Ipinapaalam sa iyo bago magsimula ang inaasahang susunod mong regla.",
+                "remindLogDaily": "Paalalahanan ako araw-araw na mag-log",
                 "defaultVisibility": "Default na pagiging nakikita para sa mga bagong entry",
                 "defaultVisibilityHint": "Naaangkop sa mga bagong itinalang regla at pang-araw-araw na entry. Maiaayos pa rin bawat entry.",
                 "applyToAll": "Ipatupad sa lahat ng entry",

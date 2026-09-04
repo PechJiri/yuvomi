@@ -21,6 +21,7 @@ import * as appleCalendar from './services/apple-calendar.js';
 import * as icsSubscription from './services/ics-subscription.js';
 import * as icsExport from './services/ics-export.js';
 import * as inventoryDeadlinesIcs from './services/inventory-deadlines-ics.js';
+import * as cycleIcs from './services/cycle-ics.js';
 import * as caldavReminders from './services/caldav-reminders-sync.js';
 import * as caldavSync from './services/caldav-sync.js';
 import * as outlookCalendar from './services/outlook-calendar.js';
@@ -416,6 +417,33 @@ app.get('/feed/inventory-deadlines/:token.ics', feedLimiter, (req, res) => {
     const ics = inventoryDeadlinesIcs.buildInventoryDeadlinesFeed(db.get());
     res.set('Cache-Control', 'private, no-store');
     res.set('Content-Disposition', 'inline; filename="yuvomi-inventory-deadlines.ics"');
+    res.type('text/calendar; charset=utf-8').send(ics);
+  } catch (err) {
+    log.error('', err);
+    res.status(500).type('text/plain').send('Internal error');
+  }
+});
+
+// Vorhergesagter Zyklus-Feed (Phase 5, Health) - anders als der Inventar-Feed
+// oben ist der INHALT hier schon personengebunden (cycle_periods.user_id),
+// nicht nur das Token; siehe server/services/cycle-ics.js.
+//
+// BEWUSST UNGEGATET GEGEN DEN ZYKLUS-TAB/HEALTH-MODUL: server/services/
+// cycle-reminders.js stellt den Erinnerungs-Sync ein, sobald das Health-Modul
+// 'none' ist oder der Zyklus-Tab gesperrt wurde (Haushalt oder persönlich,
+// healthCycleViews()) - dieser Feed lässt sich davon nicht abschalten. Kein
+// Leck: der Inhalt bleibt der des Token-Besitzers selbst, kein Dritter sieht
+// je etwas Fremdes. Gleiche Lücke wie beim Inventar-Feed oben, dieselbe
+// Antwort - ein bestehendes Abo (Kalender-App auf einem anderen Gerät) soll
+// nicht stillschweigend leerlaufen, nur weil die Ansicht in der App gerade
+// gesperrt ist; Abschalten bleibt "Feed deaktivieren" in den Einstellungen.
+app.get('/feed/cycle/:token.ics', feedLimiter, (req, res) => {
+  try {
+    const userId = cycleIcs.findUserIdByFeedToken(db.get(), req.params.token);
+    if (!userId) return res.status(404).type('text/plain').send('Not found');
+    const ics = cycleIcs.buildCycleFeed(db.get(), userId);
+    res.set('Cache-Control', 'private, no-store');
+    res.set('Content-Disposition', 'inline; filename="yuvomi-cycle.ics"');
     res.type('text/calendar; charset=utf-8').send(ics);
   } catch (err) {
     log.error('', err);

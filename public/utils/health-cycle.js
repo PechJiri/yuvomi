@@ -10,14 +10,28 @@
  *                          nächsten Periode, fruchtbares Fenster = 6 Tage).
  *        - buildCycleCalendar(): Monatsraster mit farbcodierten Phasen je Tag.
  *        - cycleRing(): Segment-Brüche (0..1) für das SVG-Ring-Widget.
+ *        - normalizeSymptomEntries() (Phase 2): Symptom-Auswahl eines Tages zu
+ *                          `{key, intensity}[]`, Intensität 1-3 optional.
  *        Bewusst KEINE i18n/DOM — in Node ohne Browser testbar (labelKeys liefern
  *        die Übersetzung erst im UI).
- * Abhängigkeiten: /utils/date.js (ebenfalls DOM-frei).
+ * Abhängigkeiten: ./date.js (ebenfalls DOM-frei; relativer Import, siehe
+ *                 Kommentar dort - server/services/cycle-reminders.js
+ *                 importiert diese Datei direkt).
  */
 
 // `todayKey` heisst hier schon ein Parameter (bzw. eine lokale Bindung), der den
 // Bezugstag traegt - der Import kommt deshalb unter eigenem Namen herein.
-import { addLocalDays, startOfLocalWeekKey, todayKey as householdToday } from '/utils/date.js';
+//
+// RELATIV, NICHT '/utils/date.js': anders als der Rest der App (die feste
+// Wurzel-Pfade fuer browser-weite Eindeutigkeit nutzt) muss DIESE Datei auch
+// ausserhalb des Browsers ohne Loader-Trick importierbar bleiben - Node
+// kennt '/utils/date.js' nicht als Web-Root-Pfad, sondern als absoluten
+// Dateisystempfad, der nicht existiert. server/services/cycle-reminders.js
+// importiert diese Datei direkt (Single Source of Truth fuer die
+// Vorhersage-Mathematik, server und Client rechnen dasselbe), und date.js
+// liegt im selben Verzeichnis - ein relativer Import loest in beiden Welten
+// identisch auf.
+import { addLocalDays, startOfLocalWeekKey, todayKey as householdToday } from './date.js';
 
 // --------------------------------------------------------
 // Preset-Definitionen
@@ -38,21 +52,80 @@ export function flowLevel(value) {
   return FLOW_LEVELS.find((f) => f.value === value) || null;
 }
 
-// Symptome (Mehrfachauswahl je Tag). Icon = Lucide-Name.
+// Symptome (Mehrfachauswahl je Tag, seit Phase 2 mit optionaler 1-3-
+// Intensitaet je Auswahl). Icon = Lucide-Name. `hasIntensity` steht an jedem
+// Eintrag (nicht als globale Regel), damit ein Preset ohne sinnvolle Abstufung
+// (kaeme eines dazu) sie auslassen koennte, ohne die Form der Liste zu aendern.
 export const SYMPTOM_TYPES = Object.freeze([
-  { value: 'cramps',        labelKey: 'health.cycle.symptom.cramps',        icon: 'zap' },
-  { value: 'headache',      labelKey: 'health.cycle.symptom.headache',      icon: 'brain' },
-  { value: 'backache',      labelKey: 'health.cycle.symptom.backache',      icon: 'move-vertical' },
-  { value: 'bloating',      labelKey: 'health.cycle.symptom.bloating',      icon: 'circle-dot' },
-  { value: 'tender_breasts', labelKey: 'health.cycle.symptom.tenderBreasts', icon: 'heart' },
-  { value: 'acne',          labelKey: 'health.cycle.symptom.acne',          icon: 'sparkle' },
-  { value: 'fatigue',       labelKey: 'health.cycle.symptom.fatigue',       icon: 'battery-low' },
-  { value: 'nausea',        labelKey: 'health.cycle.symptom.nausea',        icon: 'thermometer' },
-  { value: 'cravings',      labelKey: 'health.cycle.symptom.cravings',      icon: 'cookie' },
-  { value: 'insomnia',      labelKey: 'health.cycle.symptom.insomnia',      icon: 'moon' },
+  { value: 'cramps',        labelKey: 'health.cycle.symptom.cramps',        icon: 'zap',            hasIntensity: true },
+  { value: 'headache',      labelKey: 'health.cycle.symptom.headache',      icon: 'brain',           hasIntensity: true },
+  { value: 'backache',      labelKey: 'health.cycle.symptom.backache',      icon: 'move-vertical',   hasIntensity: true },
+  { value: 'bloating',      labelKey: 'health.cycle.symptom.bloating',      icon: 'circle-dot',      hasIntensity: true },
+  { value: 'tender_breasts', labelKey: 'health.cycle.symptom.tenderBreasts', icon: 'heart',          hasIntensity: true },
+  { value: 'acne',          labelKey: 'health.cycle.symptom.acne',          icon: 'sparkle',         hasIntensity: true },
+  { value: 'fatigue',       labelKey: 'health.cycle.symptom.fatigue',       icon: 'battery-low',     hasIntensity: true },
+  { value: 'nausea',        labelKey: 'health.cycle.symptom.nausea',        icon: 'thermometer',     hasIntensity: true },
+  { value: 'cravings',      labelKey: 'health.cycle.symptom.cravings',      icon: 'cookie',          hasIntensity: true },
+  { value: 'insomnia',      labelKey: 'health.cycle.symptom.insomnia',      icon: 'moon',            hasIntensity: true },
+  { value: 'constipation',  labelKey: 'health.cycle.symptom.constipation',  icon: 'circle-dashed',   hasIntensity: true },
+  { value: 'diarrhea',      labelKey: 'health.cycle.symptom.diarrhea',      icon: 'droplets',        hasIntensity: true },
+  { value: 'joint_pain',    labelKey: 'health.cycle.symptom.jointPain',     icon: 'bone',             hasIntensity: true },
+  { value: 'dizziness',     labelKey: 'health.cycle.symptom.dizziness',     icon: 'waves',            hasIntensity: true },
+  { value: 'hot_flashes',   labelKey: 'health.cycle.symptom.hotFlashes',    icon: 'thermometer-sun',  hasIntensity: true },
+  { value: 'swelling',      labelKey: 'health.cycle.symptom.swelling',      icon: 'glass-water',      hasIntensity: true },
+  { value: 'libido_change', labelKey: 'health.cycle.symptom.libidoChange',  icon: 'flame',            hasIntensity: true },
+  { value: 'discharge_change', labelKey: 'health.cycle.symptom.dischargeChange', icon: 'droplet',     hasIntensity: true },
+  { value: 'appetite_change', labelKey: 'health.cycle.symptom.appetiteChange', icon: 'utensils',      hasIntensity: true },
+  { value: 'concentration_difficulty', labelKey: 'health.cycle.symptom.concentrationDifficulty', icon: 'brain-circuit', hasIntensity: true },
 ]);
 
 export const SYMPTOM_VALUES = Object.freeze(SYMPTOM_TYPES.map((s) => s.value));
+
+// Abstufung einer Symptom-Auswahl (1-3, optional). Kein 4./5. Grad - drei
+// Stufen sind schnell antippbar und decken, was ein Tagesprotokoll braucht;
+// mehr waere eine klinische Skala, die dieses Modul nicht sein will (siehe
+// "kein Medizinprodukt" in docs/SPEC.md).
+export const INTENSITY_LEVELS = Object.freeze([
+  { value: 1, labelKey: 'health.cycle.intensity.mild' },
+  { value: 2, labelKey: 'health.cycle.intensity.moderate' },
+  { value: 3, labelKey: 'health.cycle.intensity.severe' },
+]);
+
+/** labelKey zu einer Intensitaet (1-3) oder null, wenn keine gueltige Stufe. */
+export function symptomIntensityLabelKey(intensity) {
+  const level = INTENSITY_LEVELS.find((l) => l.value === Number(intensity));
+  return level ? level.labelKey : null;
+}
+
+const SYMPTOM_KEY_RE = /^[a-z0-9_]{1,32}$/;
+
+/**
+ * Normalisiert eine Symptom-Auswahl zu `{ key, intensity }[]`, dedupliziert
+ * nach `key` (letzter Eintrag gewinnt) und klemmt `intensity` auf 1-3 oder
+ * `null`. Nimmt sowohl das aktuelle Array-Format
+ * (`[{ key, intensity }, ...]`) als auch, für Abwärtskompatibilität mit vor
+ * Phase 2 gespeicherten Werten, einen Komma-String oder ein reines
+ * String-Array ohne Intensität entgegen - beide ergeben `intensity: null`.
+ * Unbekannte/unlesbare Einträge werden still verworfen, nicht als Fehler
+ * gemeldet: dieselbe Haltung wie die frühere `normalizeSymptoms()`.
+ *
+ * @param {Array<string|{key: string, intensity?: number}>|string} raw
+ * @returns {Array<{key: string, intensity: number|null}>}
+ */
+export function normalizeSymptomEntries(raw) {
+  if (raw === undefined || raw === null || raw === '') return [];
+  const list = typeof raw === 'string' ? raw.split(',') : (Array.isArray(raw) ? raw : []);
+  const byKey = new Map();
+  for (const item of list) {
+    const isObj = item !== null && typeof item === 'object';
+    const key = String(isObj ? (item.key ?? '') : item).trim().toLowerCase();
+    if (!SYMPTOM_KEY_RE.test(key)) continue;
+    const n = isObj ? Number(item.intensity) : NaN;
+    const intensity = Number.isInteger(n) && n >= 1 && n <= 3 ? n : null;
+    byKey.set(key, { key, intensity });
+  }
+  return [...byKey.values()];
+}
 
 /** Preset-Definition zu einem Symptom-Wert oder null (unbekannt/entfernt). */
 export function symptomType(value) {
@@ -92,7 +165,22 @@ const DEFAULT_PERIOD = 5;
 const DEFAULT_LUTEAL = 14;
 const FERTILE_WINDOW_DAYS = 6; // Eisprungtag + 5 Tage davor
 const MAX_HISTORY = 6;         // gleitender Mittelwert über bis zu 6 Zyklen
+// erst ab 3 Lücken (4 geloggte Perioden) gilt der Mittelwert als belastbar; exportiert,
+// damit die UI dieselbe Schwelle für die "noch X Perioden"-Hinweise nutzen kann.
+export const MIN_HISTORY_GAPS = 3;
 const GESTATION_DAYS = 280;    // Naegele-Regel: 40 Wochen von der letzten Periode
+
+// Allgemein ueblicher Zykluslaenge-Bereich (Phase 4d), Standardliteratur (z.B.
+// ACOG-nahe Quellen) - bewusst ZUSAETZLICH zum SELBSTBEZUEGLICHEN `regular`/
+// `variation` in cycleStats() (Abweichung vom eigenen Mittel), nicht dessen
+// Ersatz: die beiden beantworten verschiedene Fragen ("liegt das im
+// allgemein ueblichen Bereich" vs. "ist DEIN Zyklus fuer DICH konsistent").
+export const TYPICAL_CYCLE_RANGE = Object.freeze({ min: 24, max: 38 });
+
+/** Liegt eine Zykluslaenge (Tage) im allgemein ueblichen Bereich? */
+export function isTypicalCycleLength(days) {
+  return Number.isFinite(days) && days >= TYPICAL_CYCLE_RANGE.min && days <= TYPICAL_CYCLE_RANGE.max;
+}
 
 // --------------------------------------------------------
 // Datums-Helfer (YYYY-MM-DD, ohne UTC-Shift-Fallen)
@@ -155,6 +243,25 @@ export function cycleGaps(periods) {
   return gaps;
 }
 
+/**
+ * Zykluslängen-Verlauf für die Trend-Ansicht (Phase 4) - dieselben Abstände
+ * wie cycleGaps(), aber mit dem Datum des jeweils NEUEN Zyklus statt einer
+ * nackten Zahl, und über die GESAMTE Historie statt der letzten MAX_HISTORY:
+ * cycleStats() begrenzt den gleitenden Mittelwert bewusst, ein Trend-Chart
+ * soll dagegen genau zeigen, ob/wie sich der Rhythmus über die Zeit verändert.
+ * @param {Array<Object>} periods
+ * @returns {Array<{date: string, days: number}>}
+ */
+export function cycleLengthTrend(periods) {
+  const asc = sortPeriodsAsc(periods);
+  const trend = [];
+  for (let i = 1; i < asc.length; i += 1) {
+    const days = daysBetween(asc[i - 1].start_date, asc[i].start_date);
+    if (Number.isFinite(days) && days > 0) trend.push({ date: dayKey(asc[i].start_date), days });
+  }
+  return trend;
+}
+
 /** Periodenlängen (Ende − Start + 1) abgeschlossener Episoden. */
 export function periodLengths(periods) {
   return sortPeriodsAsc(periods)
@@ -165,7 +272,11 @@ export function periodLengths(periods) {
 
 /**
  * Kennzahlen aus der Perioden-Historie. Nutzer-Einstellungen (settings) haben
- * Vorrang vor den abgeleiteten Mittelwerten; fehlt beides, greifen Defaults.
+ * Vorrang vor den abgeleiteten Mittelwerten; der abgeleitete Mittelwert greift
+ * erst ab MIN_HISTORY_GAPS Lücken, sonst (und ganz ohne Historie) greift der
+ * Default. `source` unterscheidet die vier Fälle: 'settings' | 'history' |
+ * 'insufficient_history' (Historie vorhanden, aber noch unter der Schwelle) |
+ * 'default'.
  * @returns {{ count, avgCycle, avgPeriod, lutealLength, minCycle, maxCycle,
  *             variation, regular, trackFertility, source }}
  */
@@ -174,8 +285,13 @@ export function cycleStats(periods, settings = {}) {
   const gaps = cycleGaps(asc).slice(-MAX_HISTORY);
   const lengths = periodLengths(asc).slice(-MAX_HISTORY);
 
-  const derivedCycle = clampInt(mean(gaps), 15, 60);
-  const derivedPeriod = clampInt(mean(lengths), 1, 15);
+  // Ein einzelner (oder zweiter) Zyklus kann ein Ausreißer sein - der abgeleitete
+  // Mittelwert gilt erst ab MIN_HISTORY_GAPS Lücken als belastbar genug, um den
+  // DEFAULT_CYCLE-Fallback zu ersetzen. Darunter bleibt es beim Default, auch wenn
+  // schon (wenige) Perioden geloggt sind - das unterscheidet 'insufficient_history'
+  // von einem echten Kaltstart ohne jede Historie.
+  const derivedCycle = gaps.length >= MIN_HISTORY_GAPS ? clampInt(mean(gaps), 15, 60) : null;
+  const derivedPeriod = lengths.length >= MIN_HISTORY_GAPS ? clampInt(mean(lengths), 1, 15) : null;
 
   // Achtung: Number(null) === 0 (nicht NaN) — NULL/'' erst zu null normalisieren,
   // sonst würde eine leere Einstellung fälschlich auf die Clamp-Untergrenze fallen.
@@ -202,7 +318,7 @@ export function cycleStats(periods, settings = {}) {
     variation,
     regular,
     trackFertility: settings.track_fertility === undefined ? true : !!settings.track_fertility,
-    source: settingCycle ? 'settings' : (derivedCycle ? 'history' : 'default'),
+    source: settingCycle ? 'settings' : (derivedCycle ? 'history' : (gaps.length > 0 ? 'insufficient_history' : 'default')),
   };
 }
 
@@ -257,20 +373,390 @@ export function pregnancyInfo(settings = {}, todayKey = householdToday()) {
 }
 
 // --------------------------------------------------------
+// Basaltemperatur (BBT) — Eisprung-Bestätigung per Temperaturanstieg
+// --------------------------------------------------------
+
+// 0,2 °C ist die uebliche Schwelle der "3-ueber-6"-Coverline-Methode
+// (Fruchtbarkeitsbewusstsein-Praxis, nicht klinisch normiert - siehe
+// "kein Medizinprodukt" in docs/SPEC.md). Sechs Tage Basislinie, drei Tage
+// ueber der Schwelle in Folge.
+const TEMP_SHIFT_THRESHOLD_C = 0.2;
+const TEMP_BASELINE_READINGS = 6;
+const TEMP_SUSTAINED_DAYS = 3;
+
+/** Celsius aus einem Wert + Einheit ('c'|'f'), oder null bei unbrauchbarer Eingabe. */
+function toCelsius(value, unit) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return unit === 'f' ? (n - 32) * 5 / 9 : n;
+}
+
+/**
+ * Basaltemperatur-Messungen aus Tages-Logs, nach Celsius vereinheitlicht,
+ * chronologisch sortiert. Geteilte Grundlage für detectTemperatureShift() und
+ * bbtSeries() - beide brauchen dieselbe Extraktion, nur mit/ohne Zyklus-Filter.
+ * @param {Array<Object>} dayLogs
+ * @param {string} [sinceKey] - nur Messungen ab diesem Datum (YYYY-MM-DD).
+ */
+function temperatureReadings(dayLogs, sinceKey = null) {
+  const since = sinceKey ? dayKey(sinceKey) : null;
+  return (dayLogs || [])
+    .filter((l) => l && l.basal_temp != null && (!since || dayKey(l.log_date) >= since))
+    .map((l) => ({ date: dayKey(l.log_date), celsius: toCelsius(l.basal_temp, l.basal_temp_unit) }))
+    .filter((r) => r.celsius != null)
+    .sort((a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : 0)));
+}
+
+/**
+ * Basaltemperatur-Reihe für die Trend-Ansicht (Phase 4) - alle geloggten
+ * Messungen, nicht nur die des laufenden Zyklus (anders als
+ * detectTemperatureShift(), das bewusst nur den AKTUELLEN Zyklus bewertet).
+ * @param {Array<Object>} dayLogs
+ * @returns {Array<{date: string, celsius: number}>}
+ */
+export function bbtSeries(dayLogs) {
+  return temperatureReadings(dayLogs);
+}
+
+/**
+ * Zyklus-Grenzen je geloggter Periode - die gemeinsame Basis von
+ * symptomFrequencyByPhase() (Phase 4) und symptomCyclePattern() (Phase 4c),
+ * herausgezogen statt zweimal dieselbe Rekonstruktion zu pflegen. Aufsteigend
+ * sortiert (ältester Zyklus zuerst), wie sortPeriodsAsc() es liefert.
+ *
+ * Der letzte (ggf. noch laufende) Zyklus hat keinen "nächsten" Periodenstart -
+ * er fällt auf Ø-Zykluslänge (cycleStats()) zurück, dieselbe Regel wie
+ * predictCycle().
+ *
+ * @param {Array<Object>} periods
+ * @param {Object} [settings] - cycle_settings-Zeile (für luteal_length).
+ * @returns {Array<{cycleStart: string, nextStart: string, mensEnd: string, lutealStart: string}>}
+ */
+function reconstructCycles(periods, settings = {}) {
+  const asc = sortPeriodsAsc(periods);
+  if (!asc.length) return [];
+  const stats = cycleStats(asc, settings);
+  return asc.map((p, i) => {
+    const cycleStart = dayKey(p.start_date);
+    const nextStart = i + 1 < asc.length ? dayKey(asc[i + 1].start_date) : addLocalDays(cycleStart, stats.avgCycle);
+    const mensEnd = p.end_date ? dayKey(p.end_date) : addLocalDays(cycleStart, stats.avgPeriod - 1);
+    const lutealStart = addLocalDays(nextStart, -stats.lutealLength);
+    return { cycleStart, nextStart, mensEnd, lutealStart };
+  });
+}
+
+/**
+ * Ordnet EINEN Tag innerhalb EINES bekannten Zyklus einer von drei Phasen zu.
+ *
+ * DREI EIMER STATT FÜNF, UND DAS IST ABSICHT: predictCycle()/buildCycleCalendar()
+ * kennen fünf Phasen, aber immer nur für EINEN (den aktuellen) Zyklus relativ zu
+ * "heute". Für JEDEN historischen Tag dieselben fünf Grenzen (insbesondere
+ * follikulär vs. fruchtbar) nachzubilden bräuchte eine zweite, über alle
+ * vergangenen Zyklen laufende Kopie dieser Logik - fehleranfällig für einen
+ * Nutzen, den ein grobes Raster schon trägt. Menstruation (geloggter Zeitraum)
+ * und Luteal (Eisprung-Tag bis zum nächsten Periodenbeginn, aus dem TATSÄCHLICHEN
+ * Abstand der jeweiligen Perioden - nicht aus einem Haushalts-Durchschnitt)
+ * beantworten die eigentlich gefragten Muster ("PMS-Symptome", "Periodenschmerz");
+ * alles andere fällt in eine dritte "other"-Sammelkategorie - kein eigener
+ * PHASE-Wert, weil sie bewusst KEIN fruchtbares Fenster behauptet.
+ *
+ * @param {{cycleStart: string, mensEnd: string, lutealStart: string}} cyc - ein Eintrag aus reconstructCycles().
+ * @param {string} dateKey
+ * @returns {string} PHASE.MENSTRUATION | PHASE.LUTEAL | 'other'
+ */
+function classifyDayPhase(cyc, dateKey) {
+  if (daysBetween(cyc.cycleStart, dateKey) >= 0 && daysBetween(dateKey, cyc.mensEnd) >= 0) return PHASE.MENSTRUATION;
+  if (daysBetween(cyc.lutealStart, dateKey) >= 0) return PHASE.LUTEAL;
+  return 'other';
+}
+
+/**
+ * Symptom-Häufigkeit je Zyklus-Phase, für die Trend-Ansicht (Phase 4) -
+ * beantwortet "häufen sich meine Symptome vor der Periode" statt nur "wie oft
+ * kam Symptom X überhaupt vor". Tage vor der ersten geloggten Periode gehören
+ * zu keinem bekannten Zyklus und werden übersprungen, nicht geraten.
+ *
+ * @param {Array<Object>} dayLogs
+ * @param {Array<Object>} periods
+ * @param {Object} [settings] - cycle_settings-Zeile (für luteal_length).
+ * @returns {Array<{key: string, menstruation: number, luteal: number, other: number, total: number}>}
+ *          absteigend nach total sortiert.
+ */
+export function symptomFrequencyByPhase(dayLogs, periods, settings = {}) {
+  const cycles = reconstructCycles(periods, settings);
+  if (!cycles.length) return [];
+
+  function phaseFor(dateKey) {
+    const cyc = cycles.find((c) => daysBetween(c.cycleStart, dateKey) >= 0 && daysBetween(dateKey, c.nextStart) > 0);
+    return cyc ? classifyDayPhase(cyc, dateKey) : null;
+  }
+
+  const counts = new Map();
+  for (const log of (dayLogs || [])) {
+    if (!log?.log_date) continue;
+    const phase = phaseFor(dayKey(log.log_date));
+    if (!phase) continue;
+    for (const entry of normalizeSymptomEntries(log.symptoms)) {
+      const c = counts.get(entry.key) || { key: entry.key, [PHASE.MENSTRUATION]: 0, [PHASE.LUTEAL]: 0, other: 0, total: 0, _intensities: [] };
+      c[phase] += 1;
+      c.total += 1;
+      if (entry.intensity != null) c._intensities.push(entry.intensity);
+      counts.set(entry.key, c);
+    }
+  }
+  // avgIntensity (Phase 4b): Mittel der gradierten Vorkommen dieses Symptoms,
+  // oder null, wenn keine einzige Auswahl gradiert wurde - "nicht gradiert"
+  // bleibt von "mild" unterscheidbar.
+  return [...counts.values()]
+    .map(({ _intensities, ...c }) => ({ ...c, avgIntensity: mean(_intensities) }))
+    .sort((a, b) => b.total - a.total);
+}
+
+/**
+ * Schweregrad-Verlauf EINES Symptoms über die Zeit (Phase 4b) - anders als
+ * symptomFrequencyByPhase() (wie oft/wo im Zyklus) beantwortet das "wird es
+ * schlimmer oder besser". Nur gradierte Vorkommen dieses einen Symptoms,
+ * chronologisch; ungradierte Auswahl hat keinen Schweregrad zu plotten.
+ * @param {Array<Object>} dayLogs
+ * @param {string} symptomKey
+ * @returns {Array<{date: string, intensity: number}>}
+ */
+export function symptomIntensityTrend(dayLogs, symptomKey) {
+  const out = [];
+  for (const log of (dayLogs || [])) {
+    if (!log?.log_date) continue;
+    for (const entry of normalizeSymptomEntries(log.symptoms)) {
+      if (entry.key === symptomKey && entry.intensity != null) {
+        out.push({ date: dayKey(log.log_date), intensity: entry.intensity });
+      }
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : 0)));
+}
+
+/**
+ * Zyklustag-Muster EINES Symptoms über die letzten `maxCycles` Zyklen
+ * (Phase 4c) - beantwortet "an welchem Zyklustag taucht das typischerweise
+ * auf", eine dritte Frage neben "wie oft" (symptomFrequencyByPhase) und "wie
+ * stark" (symptomIntensityTrend). Zyklustage sind 1-indiziert ab dem
+ * jeweiligen cycleStart, nicht Kalendertage - erst dadurch lassen sich Zyklen
+ * unterschiedlicher Länge im selben Raster vergleichen.
+ *
+ * `occurredCount`/`totalCount` zählen ZYKLEN (nicht Einzel-Vorkommen): "in 2
+ * von 3 Zyklen" - ein Symptom, das innerhalb eines Zyklus mehrfach auftaucht,
+ * zählt für diesen einen Zyklus trotzdem nur einmal. `mostCommonPhase` zählt
+ * dagegen jedes Einzel-Vorkommen; bei Gleichstand gewinnt Menstruation vor
+ * Luteal vor Sonstige (die Sammelkategorie gewinnt einen Gleichstand nie) -
+ * eine feste, dokumentierte Regel statt eines unklaren "irgendeine".
+ *
+ * Jeder Zyklus traegt zusaetzlich `phaseByDay` (ein Eintrag je Zyklustag,
+ * 'menstruation' | 'luteal' | 'other') - eine Erweiterung ueber die im Plan
+ * skizzierte `{cycleStart, cycleLength, occurredOnDays}`-Form hinaus: die
+ * geplante UI (ein Raster mit phasengefaerbten Tageszellen) braucht genau
+ * diese Klassifikation, und sie hier einmal mitzuliefern ist die einzige
+ * Alternative zu einer dritten, im UI-Code laufenden Kopie derselben
+ * Grenzen-Rekonstruktion (siehe classifyDayPhase()-Dokblock).
+ *
+ * `typicalDaysBeforePeriod`: die haeufigste "N Tage vor der naechsten Periode"-
+ * Zahl unter den LUTEALEN Vorkommen (nutzerseitig angefragt, statt nur der
+ * groben Phase - "tritt 2 Tage vorher auf" ist konkreter als "tritt in der
+ * Lutealphase auf"). Nur dort ist "davor" eine natuerliche Bezugsgroesse;
+ * waehrend der Menstruation oder in "Sonstige" bleibt sie unbeantwortet
+ * (`null`). +1, weil der letzte Zyklustag selbst schon 1 Tag davor liegt,
+ * nicht 0 Tage. Erst ab zwei Zyklen mit demselben Wert gilt es als Muster,
+ * sonst `null` - ein einzelner Treffer waere Zufall, kein Befund.
+ *
+ * @param {Array<Object>} dayLogs
+ * @param {Array<Object>} periods
+ * @param {Object} settings - cycle_settings-Zeile (für luteal_length).
+ * @param {string} symptomKey
+ * @param {number} [maxCycles=6]
+ * @returns {{cycles: Array<{cycleStart: string, cycleLength: number, occurredOnDays: number[], phaseByDay: string[]}>,
+ *            occurredCount: number, totalCount: number, mostCommonPhase: string|null,
+ *            typicalDaysBeforePeriod: number|null}}
+ */
+export function symptomCyclePattern(dayLogs, periods, settings = {}, symptomKey, maxCycles = 6) {
+  const allCycles = reconstructCycles(periods, settings);
+  if (!allCycles.length) return { cycles: [], occurredCount: 0, totalCount: 0, mostCommonPhase: null, typicalDaysBeforePeriod: null };
+
+  // Juengster Zyklus zuerst, auf maxCycles gedeckelt.
+  const recent = [...allCycles].reverse().slice(0, maxCycles);
+  // Nach dem CYKLUS-OBJEKT selbst indiziert, nicht nach cycleStart: zwei
+  // Perioden mit identischem Startdatum (entartete, aber vom Schema nicht
+  // ausgeschlossene Eingabe) haetten sonst denselben String-Schluessel und
+  // teilten sich dieselbe occurredOnDays-Liste.
+  const occByCycle = new Map(recent.map((c) => [c, []]));
+  const phaseCounts = { [PHASE.MENSTRUATION]: 0, [PHASE.LUTEAL]: 0, other: 0 };
+
+  for (const log of (dayLogs || [])) {
+    if (!log?.log_date) continue;
+    const dateKey = dayKey(log.log_date);
+    const cyc = recent.find((c) => daysBetween(c.cycleStart, dateKey) >= 0 && daysBetween(dateKey, c.nextStart) > 0);
+    if (!cyc) continue;
+    const hasSymptom = normalizeSymptomEntries(log.symptoms).some((e) => e.key === symptomKey);
+    if (!hasSymptom) continue;
+    occByCycle.get(cyc).push(daysBetween(cyc.cycleStart, dateKey) + 1);
+    phaseCounts[classifyDayPhase(cyc, dateKey)] += 1;
+  }
+
+  const cycles = recent.map((c) => {
+    const cycleLength = daysBetween(c.cycleStart, c.nextStart);
+    const phaseByDay = Array.from({ length: cycleLength }, (_, i) => classifyDayPhase(c, addLocalDays(c.cycleStart, i)));
+    return {
+      cycleStart: c.cycleStart,
+      cycleLength,
+      occurredOnDays: occByCycle.get(c).sort((a, b) => a - b),
+      phaseByDay,
+    };
+  });
+
+  const occurredCount = cycles.filter((c) => c.occurredOnDays.length > 0).length;
+  const maxPhaseCount = Math.max(...Object.values(phaseCounts));
+  const mostCommonPhase = maxPhaseCount > 0
+    ? [PHASE.MENSTRUATION, PHASE.LUTEAL, 'other'].find((k) => phaseCounts[k] === maxPhaseCount)
+    : null;
+
+  // Haeufigste "N Tage vor der Periode" unter den LUTEALEN Vorkommen - "vor
+  // der Periode" ist nur dort eine natuerliche Bezugsgroesse (waehrend der
+  // Menstruation oder in der Sammelkategorie "Sonstige" ergibt "davor" keinen
+  // intuitiven Sinn). +1, weil der letzte Zyklustag selbst schon 1 Tag vor dem
+  // naechsten Periodenbeginn liegt, nicht 0. Erst ab zwei Zyklen mit demselben
+  // Wert gilt das als Muster statt Zufall; bei Gleichstand gewinnt der Wert
+  // aus dem juengeren Zyklus (cycles ist bereits juengster-zuerst sortiert).
+  const lutealDaysBeforeCounts = new Map();
+  for (const c of cycles) {
+    for (const day of c.occurredOnDays) {
+      if (c.phaseByDay[day - 1] !== PHASE.LUTEAL) continue;
+      const daysBefore = c.cycleLength - day + 1;
+      lutealDaysBeforeCounts.set(daysBefore, (lutealDaysBeforeCounts.get(daysBefore) || 0) + 1);
+    }
+  }
+  let typicalDaysBeforePeriod = null;
+  let bestCount = 1;
+  for (const [daysBefore, count] of lutealDaysBeforeCounts) {
+    if (count > bestCount) { bestCount = count; typicalDaysBeforePeriod = daysBefore; }
+  }
+
+  return { cycles, occurredCount, totalCount: cycles.length, mostCommonPhase, typicalDaysBeforePeriod };
+}
+
+// Mindestanteil der ELIGIBLEN Zyklen (die diesen Zyklustag ueberhaupt hatten),
+// in denen ein Symptom an genau diesem Tag vorkam, bevor "typischerweise an
+// Tag N" als Muster gilt - ein Anteil, kein Absolutwert, damit er unabhaengig
+// von der Zyklusanzahl bleibt. Ungefaehr Clues sichtbares Verhalten; dieselbe
+// undogmatische Haltung wie beim Zykluslaenge-Referenzbereich (Phase 4d) -
+// kein Anspruch auf einen validierten klinischen Wert.
+const LIKELIHOOD_THRESHOLD = 0.5;
+// Unter zwei eligiblen Zyklen ist ein Treffer Zufall, kein Muster.
+const MIN_ELIGIBLE_CYCLES_FOR_DAY = 2;
+
+/**
+ * Sagt vorher, an welchen Tagen des AKTUELLEN Zyklus ein Symptom aufgrund
+ * seines bisherigen Zyklustag-Musters (symptomCyclePattern(), Phase 4c)
+ * wahrscheinlich auftritt (Phase 4e) - die einzige Funktion in diesem Modul,
+ * die tatsaechlich VORWAERTS vorhersagt statt Historie zusammenzufassen.
+ *
+ * Fuer jeden Zyklustag zaehlt nur, wie oft er unter den Zyklen vorkam, die
+ * UEBERHAUPT so lang waren (kuerzere Zyklen verduennen den Anteil sonst zu
+ * Unrecht) - "eligibel" statt pauschal "alle betrachteten Zyklen".
+ *
+ * Ohne mindestens MIN_HISTORY_GAPS betrachtete Zyklen (dieselbe Schwelle wie
+ * Phase 0 fuer den Zykluslaenge-Mittelwert, statt einer vierten eigenen
+ * Konstante) gibt es keine Vorhersage - nur `todayCycleDay` bleibt sinnvoll
+ * berechenbar, unabhaengig von der Vorhersage-Zuverlaessigkeit.
+ *
+ * WORTWAHL IST HIER WICHTIGER ALS SONST IM MODUL: "wahrscheinlich" bleibt
+ * eine Musteraussage ("tritt oft um diesen Tag auf"), keine medizinisch
+ * klingende Prognose - dieselbe "kein Medizinprodukt"-Disziplin wie beim
+ * bestehenden Fruchtbarkeitsfenster-Disclaimer.
+ *
+ * @param {Array<Object>} dayLogs
+ * @param {Array<Object>} periods
+ * @param {Object} settings - cycle_settings-Zeile.
+ * @param {string} symptomKey
+ * @param {string} [todayKey]
+ * @returns {{likelyDates: string[], todayCycleDay: number, isLikelyToday: boolean}}
+ */
+export function predictSymptomLikelihood(dayLogs, periods, settings = {}, symptomKey, todayKey = householdToday()) {
+  const asc = sortPeriodsAsc(periods);
+  if (!asc.length) return { likelyDates: [], todayCycleDay: 0, isLikelyToday: false };
+
+  const lastStart = dayKey(asc[asc.length - 1].start_date);
+  const todayCycleDay = daysBetween(lastStart, dayKey(todayKey)) + 1;
+
+  const pattern = symptomCyclePattern(dayLogs, periods, settings, symptomKey);
+  if (pattern.totalCount < MIN_HISTORY_GAPS) {
+    return { likelyDates: [], todayCycleDay, isLikelyToday: false };
+  }
+
+  const maxDay = Math.max(...pattern.cycles.map((c) => c.cycleLength));
+  const likelyDayNumbers = [];
+  for (let day = 1; day <= maxDay; day++) {
+    const eligible = pattern.cycles.filter((c) => c.cycleLength >= day);
+    if (eligible.length < MIN_ELIGIBLE_CYCLES_FOR_DAY) continue;
+    const hits = eligible.filter((c) => c.occurredOnDays.includes(day)).length;
+    if (hits / eligible.length >= LIKELIHOOD_THRESHOLD) likelyDayNumbers.push(day);
+  }
+
+  const likelyDates = likelyDayNumbers.map((day) => addLocalDays(lastStart, day - 1));
+  const isLikelyToday = likelyDayNumbers.includes(todayCycleDay);
+
+  return { likelyDates, todayCycleDay, isLikelyToday };
+}
+
+/**
+ * Erkennt den Temperaturanstieg, der einen Eisprung bestätigt (Coverline-
+ * Methode): der erste Tag, dessen Wert mindestens TEMP_SHIFT_THRESHOLD_C ueber
+ * dem Mittel der TEMP_BASELINE_READINGS vorangehenden (niedrigeren) Messungen
+ * liegt, sofern die naechsten TEMP_SUSTAINED_DAYS − 1 Tage denselben Schwellwert
+ * halten. Arbeitet auf der REIHENFOLGE der tatsaechlich geloggten Messungen,
+ * nicht auf Kalendertagen - fehlende Tage sind damit kein Sonderfall.
+ *
+ * Bewusst KEINE Ausnahme-Regel fuer einen einzelnen Ausreisser-Tag (wie echte
+ * Fruchtbarkeitsbewusstsein-Methoden sie kennen) - eine einfache, nachvoll-
+ * ziehbare Regel statt einer zweiten, die niemand ohne Anleitung nachrechnen
+ * kann. Rauschen (ein Tag unter der Schwelle innerhalb der drei) lässt diesen
+ * Kandidaten scheitern; die Schleife prüft den nächsten möglichen Starttag.
+ *
+ * @param {Array<Object>} dayLogs  - cycle_day_logs-Zeilen (log_date, basal_temp, basal_temp_unit).
+ * @param {string} cycleStart      - Beginn des aktuellen Zyklus (YYYY-MM-DD); Messungen davor zählen nicht.
+ * @returns {string|null} Datum (YYYY-MM-DD) des ersten Tages im Anstieg, oder null ohne hinreichenden Befund.
+ */
+export function detectTemperatureShift(dayLogs, cycleStart) {
+  const readings = temperatureReadings(dayLogs, cycleStart);
+
+  if (readings.length < TEMP_BASELINE_READINGS + TEMP_SUSTAINED_DAYS) return null;
+
+  for (let i = TEMP_BASELINE_READINGS; i <= readings.length - TEMP_SUSTAINED_DAYS; i += 1) {
+    const baseline = mean(readings.slice(i - TEMP_BASELINE_READINGS, i).map((r) => r.celsius));
+    if (baseline == null) continue;
+    const threshold = baseline + TEMP_SHIFT_THRESHOLD_C;
+    const sustained = readings.slice(i, i + TEMP_SUSTAINED_DAYS).every((r) => r.celsius >= threshold);
+    if (sustained) return readings[i].date;
+  }
+  return null;
+}
+
+// --------------------------------------------------------
 // Vorhersage
 // --------------------------------------------------------
 
 /**
  * Leitet den aktuellen Zyklusstand + die Vorhersagen ab.
  * Kalendermethode: Eisprung = nächster Periodenstart − Lutealphase; fruchtbares
- * Fenster = Eisprungtag und die 5 Tage davor. Rein statistische Schätzung.
+ * Fenster = Eisprungtag und die 5 Tage davor. Rein statistische Schätzung -
+ * bestätigt ein Temperaturanstieg (detectTemperatureShift()) den Eisprung des
+ * LAUFENDEN Zyklus, ersetzt dessen Datum das kalendarische (`ovulationConfirmed:
+ * true`); künftige Zyklen bleiben Kalendermethode, da es für sie noch keine
+ * Messwerte geben kann.
  *
  * @param {Array<Object>} periods - Perioden-Historie (start_date/end_date).
  * @param {Object} settings       - cycle_settings-Zeile (kann leer sein).
  * @param {string} [todayKey]     - Referenz-„heute" (YYYY-MM-DD), Default: heute.
+ * @param {Array<Object>} [dayLogs] - Tages-Logs (fuer die BBT-Bestätigung; ohne sie bleibt es Kalendermethode).
  * @returns {Object} { hasData, ... }
  */
-export function predictCycle(periods, settings = {}, todayKey = householdToday()) {
+export function predictCycle(periods, settings = {}, todayKey = householdToday(), dayLogs = []) {
   const asc = sortPeriodsAsc(periods);
   const stats = cycleStats(asc, settings);
   const today = dayKey(todayKey);
@@ -308,7 +794,12 @@ export function predictCycle(periods, settings = {}, todayKey = householdToday()
   });
 
   const trackFertility = stats.trackFertility;
-  const ovulationDate = addLocalDays(nextStart, -lutealLength);
+  let ovulationDate = addLocalDays(nextStart, -lutealLength);
+  let ovulationConfirmed = false;
+  if (trackFertility) {
+    const confirmed = detectTemperatureShift(dayLogs, lastStart);
+    if (confirmed) { ovulationDate = confirmed; ovulationConfirmed = true; }
+  }
   const fertileStart = addLocalDays(ovulationDate, -(FERTILE_WINDOW_DAYS - 1));
   const fertileEnd = ovulationDate;
 
@@ -340,6 +831,7 @@ export function predictCycle(periods, settings = {}, todayKey = householdToday()
     nextStart,
     daysUntilNext,
     ovulationDate: trackFertility ? ovulationDate : null,
+    ovulationConfirmed: trackFertility ? ovulationConfirmed : false,
     fertileStart: trackFertility ? fertileStart : null,
     fertileEnd: trackFertility ? fertileEnd : null,
     daysUntilOvulation: trackFertility ? daysBetween(today, ovulationDate) : null,
@@ -363,6 +855,43 @@ function loggedPeriodPhase(dateKey, periodsAsc, avgPeriod) {
 }
 
 /**
+ * Projiziert die nächsten drei Zyklen (Periode, Eisprung, fruchtbares Fenster)
+ * rein nach der Kalendermethode - die Formel stand bisher inline in
+ * buildCycleCalendar() (die sie jetzt von hier aufruft) und braucht der
+ * ICS-Feed (Phase 5, server/services/cycle-ics.js) für denselben Horizont.
+ * Eine dritte Kopie derselben Rechnung wäre die Alternative gewesen.
+ *
+ * Leer im Schwangerschafts-Modus oder ganz ohne Historie - keine Projektion
+ * ohne Basis, dieselbe Regel wie predictCycle()/buildCycleCalendar() schon
+ * immer befolgt haben.
+ *
+ * @param {Array<Object>} periods
+ * @param {Object} [settings]
+ * @param {string} [todayKey]
+ * @returns {Array<{start: string, end: string, ovulation: string, fertileStart: string, fertileEnd: string}>}
+ */
+export function projectFutureCycles(periods, settings = {}, todayKey = householdToday()) {
+  const asc = sortPeriodsAsc(periods);
+  if (!asc.length || pregnancyInfo(settings, todayKey).active) return [];
+
+  const stats = cycleStats(asc, settings);
+  const lastStart = dayKey(asc[asc.length - 1].start_date);
+  const projected = [];
+  for (let k = 1; k <= 3; k += 1) {
+    const start = addLocalDays(lastStart, stats.avgCycle * k);
+    const ovulation = addLocalDays(start, -stats.lutealLength);
+    projected.push({
+      start,
+      end: addLocalDays(start, stats.avgPeriod - 1),
+      ovulation,
+      fertileStart: addLocalDays(ovulation, -(FERTILE_WINDOW_DAYS - 1)),
+      fertileEnd: ovulation,
+    });
+  }
+  return projected;
+}
+
+/**
  * Baut das Monatsraster (6 Wochen) für den Monat um `anchorKey`. Jede Zelle trägt
  * ihre Phase (farbcodiert) und – sofern vorhanden – den Tages-Log (Flow).
  * Vorhergesagte Perioden/Eisprünge werden über bis zu drei Folgezyklen projiziert,
@@ -380,7 +909,7 @@ function loggedPeriodPhase(dateKey, periodsAsc, avgPeriod) {
 export function buildCycleCalendar(anchorKey, { periods = [], logs = [], settings = {}, todayKey = householdToday(), weekStartsOn = 1 } = {}) {
   const asc = sortPeriodsAsc(periods);
   const stats = cycleStats(asc, settings);
-  const { avgCycle, avgPeriod, lutealLength, trackFertility } = stats;
+  const { avgPeriod, trackFertility } = stats;
   const today = dayKey(todayKey);
 
   const logByDate = new Map();
@@ -388,25 +917,10 @@ export function buildCycleCalendar(anchorKey, { periods = [], logs = [], setting
     if (l && l.log_date) logByDate.set(dayKey(l.log_date), l);
   }
 
-  // Projizierte Zyklen (nur zukünftige, ab dem letzten geloggten Start).
-  // Im Schwangerschafts-Modus entfällt jede Projektion — geloggte Perioden
-  // bleiben sichtbar, aber es werden keine künftigen Phasen vorhergesagt.
-  const pregnant = pregnancyInfo(settings, today).active;
-  const projected = [];
-  if (asc.length && !pregnant) {
-    const lastStart = dayKey(asc[asc.length - 1].start_date);
-    for (let k = 1; k <= 3; k += 1) {
-      const start = addLocalDays(lastStart, avgCycle * k);
-      const ovul = addLocalDays(start, -lutealLength);
-      projected.push({
-        start,
-        end: addLocalDays(start, avgPeriod - 1),
-        ovulation: ovul,
-        fertileStart: addLocalDays(ovul, -(FERTILE_WINDOW_DAYS - 1)),
-        fertileEnd: ovul,
-      });
-    }
-  }
+  // Projizierte Zyklen (nur zukünftige, ab dem letzten geloggten Start) -
+  // dieselbe Projektion wie projectFutureCycles() (Phase 5 braucht denselben
+  // Horizont fuer den ICS-Feed), hier nur aufgerufen statt inline wiederholt.
+  const projected = projectFutureCycles(asc, settings, today);
 
   const anchor = dayKey(anchorKey);
   const monthStr = anchor.slice(0, 7); // YYYY-MM
@@ -438,7 +952,10 @@ export function buildCycleCalendar(anchorKey, { periods = [], logs = [], setting
       phase,
       predicted,
       flow: log?.flow || null,
-      hasLog: !!log && !!(log.flow || log.symptoms || log.mood || log.note),
+      // symptoms ist seit Phase 2 ein Array ({key, intensity}[], vom Server
+      // aus cycle_day_log_symptoms zusammengesetzt) - ein LEERES Array ist in
+      // JS wahr, `.length` ist die eigentliche Frage "gibt es welche".
+      hasLog: !!log && !!(log.flow || log.symptoms?.length || log.mood || log.note),
     };
   };
 
@@ -483,7 +1000,14 @@ export function cycleRing(prediction) {
 
   let ovulationFrac = null;
   if (prediction.trackFertility) {
-    const ovDay = total - prediction.lutealLength;            // Zyklustag des Eisprungs
+    // Kalendermethode: Zyklustag des Eisprungs = Zykluslänge − Lutealphase.
+    // Bei bestätigtem Anstieg (Phase 3) zählt stattdessen der TATSÄCHLICHE
+    // Zyklustag des bestätigten Datums - sonst zeigte der Ring weiter die
+    // kalendarische Position, obwohl ein Messwert etwas anderes belegt.
+    let ovDay = total - prediction.lutealLength;
+    if (prediction.ovulationConfirmed && prediction.lastStart && prediction.ovulationDate) {
+      ovDay = daysBetween(prediction.lastStart, prediction.ovulationDate) + 1;
+    }
     const fStart = ovDay - (FERTILE_WINDOW_DAYS - 1);
     const f = seg(fStart, ovDay);
     if (f.end > f.start) segments.push({ phase: PHASE.FERTILE, start: f.start, end: f.end });
@@ -495,5 +1019,5 @@ export function cycleRing(prediction) {
   const clampedDay = Math.min(Math.max(prediction.cycleDay, 1), total);
   const currentFrac = (clampedDay - 0.5) / total;
 
-  return { total, segments, ovulationFrac, currentFrac };
+  return { total, segments, ovulationFrac, currentFrac, ovulationConfirmed: !!prediction.ovulationConfirmed };
 }

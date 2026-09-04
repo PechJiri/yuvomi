@@ -97,6 +97,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Notes API now exposes category management, ordering and assignment through one canonical
   `scope` field, and the permission catalog includes the household-category capability.
 
+- **The Health module's cycle tracker gains reminders and a more honest prediction.** `cycleStats()`
+  now requires at least three logged cycle gaps (four periods) before trusting a derived average
+  over the 28-day default - with only one or two gaps a single atypical cycle could silently drive
+  the prediction, and the UI had no way to tell a genuine derived average apart from a coincidental
+  match with the default. A new `insufficient_history` source value, surfaced as a caption on the
+  cycle stat card, makes the distinction visible. Two new opt-in reminders - an upcoming-period
+  notice (configurable lead time) and a daily nudge to log today, suppressed once a log for the day
+  exists - reuse the same push/notification-channel pipeline as every other reminder source
+  (`reminders.entity_type` widened for `cycle_period`/`cycle_log_nudge`, migration 177). Neither a
+  predicted date nor "not yet logged" is a stored row, so both anchor to a new
+  `cycle_reminder_anchors` table, the same pattern Schedule uses for its own computed-on-read
+  entries. `server/services/cycle-reminders.js` reuses `predictCycle()` from
+  `public/utils/health-cycle.js` directly rather than a second copy of the prediction math - which
+  required switching that file's one dependency (`date.js`) from a browser-root absolute import to
+  a relative one, so it resolves in Node without a test loader.
+- **Cycle day logs can now grade a symptom's severity, not just note its presence.** The symptom
+  picker grew from 10 to 20 presets, and each one accepts an optional mild/moderate/severe rating -
+  one tap on a symptom chip cycles through off, mild, moderate, severe, and back to off, with a
+  small dot indicator showing the current grade. Storage moved from a comma-separated column to a
+  normalized `cycle_day_log_symptoms` table (migration 178, backfilled from the old column, which
+  is now frozen and no longer read or written); `normalizeSymptomEntries()` in
+  `public/utils/health-cycle.js` is the single normalizer for both the new `{key, intensity}[]`
+  shape and, for backward compatibility, the old comma-string/string-array shape. Also fixed a
+  latent bug this surfaced: the month calendar's "does this day have a log" check treated the
+  `symptoms` field as a plain truthy value, which is correct for a string but wrong for an array -
+  an empty array is truthy in JavaScript, so a day with no flow, mood, or note but an empty symptom
+  list would have been misreported as logged.
+- **Day logs can optionally track basal body temperature, and a sustained rise now confirms
+  ovulation for the current cycle instead of only estimating it from the calendar.** A day log
+  accepts a temperature reading and unit (migration 179); `detectTemperatureShift()` in
+  `public/utils/health-cycle.js` implements the standard "3-over-6" coverline method - the first
+  reading at least 0.2°C above the mean of the 6 preceding readings, sustained for 3 readings in a
+  row, confirms ovulation. It works over the sequence of logged readings rather than calendar days
+  (missing days aren't a special case) and, deliberately, skips the single-outlier-day exception
+  real fertility-awareness methods allow, favoring a rule that's simple to check over one that's
+  more forgiving. When a shift is found in the current cycle, the prediction's ovulation date, the
+  fertile window, the cycle ring's marker position, and the stat card's label all switch from
+  "predicted" to "confirmed"; future cycles keep using the calendar method, since they have no
+  readings yet.
+- **The cycle tab gains a Trends section** with a cycle-length chart, a basal-temperature chart,
+  and a symptom-frequency breakdown, each appearing only once there's enough history to be worth
+  showing. The two line charts reuse this app's existing shared chart geometry
+  (`public/utils/chart.js`, already used by Vitals/Labs/Activity) rather than a new charting
+  system. Symptom frequency groups every logged symptom into menstruation, luteal (PMS window), or
+  other, based on each cycle's own actual length rather than a household average, and shows the top
+  8 as stacked proportion bars - deliberately three buckets instead of the ring/calendar's five,
+  since accurately reconstructing follicular/fertile/ovulation boundaries for every past cycle
+  would need a second copy of the prediction logic running over history, for a distinction the
+  questions this view answers ("period symptom" or "PMS symptom") don't need.
+- **The cycle ring shows the current cycle day as its own badge**, connected to the "today" marker
+  by a short line, instead of packing the day number into the ring's small center alongside the
+  phase label and status line. The center now holds just those two.
+- **Symptom frequency in the Trends section now surfaces severity, not just count.** Each entry
+  gets an `avgIntensity` (the mean of its graded occurrences), shown as the same three-dot
+  indicator used in the day-log editor - a symptom logged rarely but always severely no longer
+  looks identical to one logged often but mildly. A symptom with at least two graded readings also
+  gets an expandable severity-trend chart, reusing the Trends section's line-chart geometry.
+- **The symptom-frequency list gains a second expandable view: which cycle day a symptom typically
+  lands on.** For up to the six most recent cycles, a plain-language sentence ("You logged Cramps
+  during Menstruation in 3 of 4 recent cycles") plus a compact per-cycle grid, day cells colored by
+  phase with an inset ring marking a day the symptom actually occurred - a ring rather than a second
+  color, so a hit day stays distinguishable without relying on color perception.
+- **The cycle-length trend is now a bar chart, colored by whether each cycle falls in the typical
+  24-38 day range**, against a shaded band for that range - the same visual language the lab-value
+  chart already uses for a normal range. The average-cycle-length stat card gets a matching
+  typical/atypical badge (shown only once there's a real basis, not on a bare default). Also fixes a
+  real gap: the cycle-variation stat card previously only appeared when fertility tracking was off -
+  with it on, the default, cycle variation was never shown anywhere. It's unconditional now.
+- **The cycle tab can now predict which days a symptom is likely to occur on**, based on its
+  cycle-day pattern across recent cycles, and overlay that prediction on the existing month
+  calendar. Pick a symptom (only ones with enough logged history appear) to see a "Cramps often
+  occurs around this day in your cycle" note when today matches, and extra markers on the calendar
+  itself - a filled dot for a day it was actually logged, a ring for a day it's predicted but not yet
+  logged. No new calendar view; the same one the tab already shows just gains markers when a symptom
+  is selected.
+- **Cycle predictions can now be subscribed to as a read-only calendar feed**, the same Lock-Screen/
+  Calendar-app trick already used for the household calendar and inventory warranty dates. Unlike
+  the inventory feed, this one's *content* - not just the access token - is personal: it reflects
+  only the subscriber's own logged and predicted periods (plus ovulation and fertile window, if
+  tracked), never a household-wide view, keeping cycle data out of the caregiver-sharing system the
+  same way the rest of this module already does. Manage it from Settings → Personal → Feeds,
+  alongside the other two feeds already there.
+
 ### Changed
 
 - **Security reports now come with response times, and a security fix ships as a patch release cut from the last tag.** SECURITY.md commits to an acknowledgment within 7 days, a classification within 14 and, for a confirmed high-severity finding, a fix within 30 days; every published advisory gets a CVE and names the reporter and the fixed version. The fix travels on its own branch off the last tag, so an installation updating for it gets nothing else - the interface work waiting on `main` for its Tuesday stays there. The procedure, including the ordinary release, is now public in `docs/RELEASING.md`, so that the "if the maintainer stops" clause in CONTRIBUTING comes with the instructions a fork would need.
@@ -148,6 +231,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   720px, exactly as the reporter asked. The one-line version of this fix does not exist, because a
   page that caps something at a measure has to show that measure in its head; the page had to stop
   being a reading page first.
+
+
+- **The cycle-length trend chart's bars sat flush against the plot edges, with no date under most of
+  them.** Both traced back to the same cause: bar centers reused the x-position formula the line
+  charts use for their point positions, which places the first/last points exactly on the plot edge
+  (correct for a zero-width point) and relies on "first/middle/last" axis labels (enough context for
+  a continuous line, not for discrete bars - a "10" y-axis tick could even read as "1" behind the
+  first bar). Bars now sit in their own equal-width band with padding to their neighbors and to both
+  plot edges, and every bar gets its own date underneath (thinned to a fixed stride only once there
+  are more bars than the chart can label without overlapping, always keeping the first and last).
+- **The cycle-day pattern sentence now says how many days before your period a symptom typically
+  shows up**, when that's a real pattern (the same value recurring across at least two cycles),
+  instead of only the coarser "occurs during your luteal phase."
+- **The cycle-length trend chart's typical/atypical bar colors had no legend** - the only place that
+  distinction was spelled out was a hover tooltip, invisible on a touch device. Added the same
+  legend component the calendar and symptom-frequency chart already use.
+- **The cycle ring's phase colors (period/fertile/ovulation) also had no legend**, same problem as
+  the bar chart above. Added a compact legend below the ring with just the colors it actually
+  renders - lighter than the calendar's full legend, which also covers "predicted" and "today" states
+  that don't have a distinct color on the ring. The swatches themselves match the ring's own solid
+  arcs and filled ovulation dot, not the calendar's paler washes/hatching/hollow-ring styling that the
+  shared legend component uses elsewhere - the ring never renders those cues, so borrowing them made
+  the legend describe a different picture than the one above it.
+
 
 - **The shift-type colour picker no longer spans the full row on a phone.** `width: 100%` stretched
   the native colour input to fill its grid cell; on the mobile layout, where the two-column form

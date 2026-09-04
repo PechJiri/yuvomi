@@ -1957,6 +1957,21 @@
         "inventoryFeedDisableConfirm": "خوراک غیرفعال شود؟ اشتراک‌های موجود دیگر به‌روزرسانی نمی‌گیرند.",
         "inventoryFeedDisableConfirmDetail": "پیوند بلافاصله دیگر چیزی ارائه نمی‌کند. اگر خوراک بعداً دوباره فعال شود، نشانی جدیدی ساخته می‌شود که هر مشترک باید آن را دستی وارد کند.",
         "inventoryFeedHint": "هر کسی که این پیوند را بداند می‌تواند ببیند کدام مهلت‌های اموال شما نزدیک است. آن را فقط با دستگاه‌های خودتان به اشتراک بگذارید.",
+        "cycleFeedTitle": "خروجی چرخه",
+        "cycleFeedDescription": "قاعدگی‌های ثبت‌شده و پیش‌بینی‌شده‌ات (به‌علاوه تخمک‌گذاری و پنجره باروری، در صورت پیگیری) را فقط‌خواندنی در تقویم اپل، تقویم گوگل یا Thunderbird دنبال کن.",
+        "cycleFeedInactive": "فید خروجی غیرفعال است.",
+        "cycleFeedActivate": "فعال‌سازی فید",
+        "cycleFeedUrlLabel": "نشانی فید",
+        "cycleFeedCopy": "کپی نشانی",
+        "cycleFeedCopied": "نشانی کپی شد",
+        "cycleFeedSubscribe": "دنبال کردن در برنامه تقویم",
+        "cycleFeedRegenerate": "ایجاد پیوند جدید",
+        "cycleFeedDisable": "غیرفعال کردن فید",
+        "cycleFeedRegenerateConfirm": "پیوند جدید ایجاد شود؟ پیوند قدیمی از کار می‌افتد.",
+        "cycleFeedRegenerateConfirmDetail": "دستگاه‌ها و سرویس‌هایی که از پیوند قدیمی استفاده می‌کنند، دیگر به‌روزرسانی دریافت نمی‌کنند و بسته به برنامه، یا آخرین وضعیت خود را نشان می‌دهند یا تا زمانی که نشانی جدید در آن‌جا وارد شود چیزی نمایش نمی‌دهند.",
+        "cycleFeedDisableConfirm": "فید غیرفعال شود؟ اشتراک‌های موجود دیگر به‌روزرسانی دریافت نمی‌کنند.",
+        "cycleFeedDisableConfirmDetail": "پیوند بلافاصله از ارسال هر چیزی باز می‌ایستد. فعال‌سازی دوباره آن در آینده نشانی جدیدی می‌سازد که هر مشترک باید آن را دستی دوباره وارد کند.",
+        "cycleFeedHint": "هر کسی که این پیوند را بداند می‌تواند داده‌های چرخه‌ات را ببیند. آن را فقط با دستگاه‌های خودت به اشتراک بگذار.",
         "caldavDescription": "چند حساب CalDAV (iCloud، Nextcloud، Radicale، Baikal و غیره) را متصل کرده و انتخاب کنید کدام تقویم‌ها همگام شوند.",
         "caldavAddAccount": "افزودن حساب CalDAV",
         "caldavEmptyState": "هنوز حساب CalDAV متصلی نیست. برای شروع، اولین حساب خود را اضافه کنید.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "حلقه چرخه",
                 "cycleDay": "روز چرخه {{day}}",
+                "dayBadge": "روز {{day}}",
                 "of": "از {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "قاعدگی بعدی",
                 "fertileWindow": "پنجره باروری",
                 "ovulation": "تخمک‌گذاری",
+                "ovulationConfirmed": "تخمک‌گذاری تأیید شد",
                 "avgCycle": "میانگین طول چرخه",
                 "avgPeriod": "میانگین طول قاعدگی",
-                "regularity": "منظم بودن",
+                "cycleVariation": "نوسان چرخه",
                 "regular": "منظم",
                 "irregular": "نامنظم",
                 "notEnoughData": "داده کافی نیست",
                 "noPrediction": "برای پیش‌بینی یک قاعدگی ثبت کنید."
+            },
+            "stats": {
+                "source": {
+                    "history": "بر اساس {{count}} چرخه اخیرت",
+                    "history_one": "بر اساس آخرین چرخه‌ات",
+                    "insufficientHistory": "فعلاً مقدار پیش‌فرض - برای پیش‌بینی شخصی‌سازی‌شده {{count}} چرخه دیگر ثبت کن",
+                    "insufficientHistory_one": "فعلاً مقدار پیش‌فرض - برای پیش‌بینی شخصی‌سازی‌شده {{count}} چرخه دیگر ثبت کن",
+                    "default": "فرض پیش‌فرض (هنوز سابقه‌ای ثبت نشده)"
+                }
             },
             "unit": {
                 "days": "{{value}} روز"
@@ -4196,6 +4222,27 @@
                 "empty": "هنوز قاعدگی‌ای ثبت نشده است.",
                 "cycleLength": "چرخه {{value}} روز"
             },
+            "trends": {
+                "title": "روندها",
+                "date": "تاریخ",
+                "cycleLength": "طول چرخه",
+                "symptomFrequency": "فراوانی علائم",
+                "severity": "شدت",
+                "severityTrend": "روند شدت",
+                "cyclePattern": "الگوی روز چرخه",
+                "cyclePatternSentence": "در {{occurred}} چرخه از {{total}} چرخه اخیر، در طول {{phase}} علامت {{symptom}} را ثبت کردی.",
+                "cyclePatternDaysBefore": "{{symptom}} اغلب {{days}} روز قبل از قاعدگی‌ات رخ می‌دهد.",
+                "cyclePatternNone": "{{symptom}} در {{total}} چرخه اخیرت دوباره رخ نداده است.",
+                "typical": "معمول",
+                "atypical": "غیرمعمول",
+                "typicalRangeLabel": "بازه معمول: {{min}}-{{max}} روز",
+                "likelihoodTitle": "الگوهای علائم",
+                "likelihoodCaption": "علامتی را انتخاب کن تا بر اساس سابقه‌ات ببینی معمولاً در چه روزهایی رخ می‌دهد.",
+                "likelyToday": "{{symptom}} اغلب حوالی همین روز از چرخه‌ات رخ می‌دهد.",
+                "symptomTracked": "ثبت‌شده",
+                "symptomPredicted": "اغلب اینجا رخ می‌دهد",
+                "phaseOther": "دیگر"
+            },
             "flow": {
                 "label": "شدت خونریزی",
                 "none": "هیچ",
@@ -4215,7 +4262,30 @@
                 "fatigue": "خستگی",
                 "nausea": "تهوع",
                 "cravings": "ولع غذایی",
-                "insomnia": "بی‌خوابی"
+                "insomnia": "بی‌خوابی",
+                "constipation": "یبوست",
+                "diarrhea": "اسهال",
+                "jointPain": "درد مفاصل",
+                "dizziness": "سرگیجه",
+                "hotFlashes": "گرگرفتگی",
+                "swelling": "احتباس آب",
+                "libidoChange": "تغییر میل جنسی",
+                "dischargeChange": "تغییر ترشحات",
+                "appetiteChange": "تغییر اشتها",
+                "concentrationDifficulty": "مشکل تمرکز"
+            },
+            "intensity": {
+                "mild": "خفیف",
+                "moderate": "متوسط",
+                "severe": "شدید"
+            },
+            "bbt": {
+                "label": "دمای پایه بدن",
+                "placeholder": "مثلاً ۳۶.۵۰",
+                "unitLabel": "واحد",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "اختیاری. با اندازه‌گیری منظم، افزایش دما می‌تواند تخمک‌گذاری در چرخه فعلی را تأیید کند."
             },
             "mood": {
                 "label": "خلق‌وخو",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "خروجی CSV"
             },
+            "ics": {
+                "calendarName": "چرخه Yuvomi",
+                "periodSummary": "قاعدگی",
+                "predictedPeriodSummary": "قاعدگی پیش‌بینی‌شده",
+                "fertileWindowSummary": "پنجره باروری (پیش‌بینی‌شده)",
+                "ovulationSummary": "تخمک‌گذاری (پیش‌بینی‌شده)"
+            },
             "settings": {
                 "open": "تنظیمات",
                 "title": "تنظیمات چرخه",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "طول فاز لوتئال",
                 "trackFertility": "نمایش پنجره باروری",
                 "autoHint": "خالی بگذارید = به‌طور خودکار از سابقه شما محاسبه می‌شود.",
+                "remindPeriodDaysBefore": "یادآوری قاعدگی",
+                "remindOff": "خاموش",
+                "remindSameDay": "همان روز",
+                "remindPeriodDaysBeforeHint": "قبل از شروع قاعدگی بعدی پیش‌بینی‌شده به تو اطلاع می‌دهد.",
+                "remindLogDaily": "هر روز برای ثبت به من یادآوری کن",
                 "defaultVisibility": "نمایانی پیش‌فرض برای موارد جدید",
                 "defaultVisibilityHint": "برای پریودها و ثبت‌های روزانهٔ جدید اعمال می‌شود. برای هر مورد قابل تغییر است.",
                 "applyToAll": "اعمال بر همهٔ موارد",

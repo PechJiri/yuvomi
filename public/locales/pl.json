@@ -1957,6 +1957,21 @@
         "inventoryFeedDisableConfirm": "Wyłączyć kanał? Istniejące subskrypcje nie będą już otrzymywać aktualizacji.",
         "inventoryFeedDisableConfirmDetail": "Link natychmiast przestaje cokolwiek dostarczać. Jeśli kanał zostanie później włączony ponownie, powstanie nowy adres, który każdy subskrybent musi wpisać ręcznie.",
         "inventoryFeedHint": "Kto zna ten link, widzi, które terminy Twoich rzeczy się zbliżają. Udostępniaj go tylko własnym urządzeniom.",
+        "cycleFeedTitle": "Eksportuj cykl",
+        "cycleFeedDescription": "Subskrybuj swoje zarejestrowane i przewidywane miesiączki (a także owulację i okno płodności, jeśli są śledzone) tylko do odczytu w Apple Calendar, Google Kalendarz lub Thunderbird.",
+        "cycleFeedInactive": "Kanał eksportu jest wyłączony.",
+        "cycleFeedActivate": "Włącz kanał",
+        "cycleFeedUrlLabel": "Adres kanału",
+        "cycleFeedCopy": "Kopiuj adres",
+        "cycleFeedCopied": "Adres skopiowany",
+        "cycleFeedSubscribe": "Subskrybuj w aplikacji kalendarza",
+        "cycleFeedRegenerate": "Wygeneruj nowy link",
+        "cycleFeedDisable": "Wyłącz kanał",
+        "cycleFeedRegenerateConfirm": "Wygenerować nowy link? Stary link przestanie działać.",
+        "cycleFeedRegenerateConfirmDetail": "Urządzenia i usługi korzystające ze starego linku przestaną otrzymywać aktualizacje i, w zależności od aplikacji, będą nadal pokazywać ostatni stan albo nie pokażą nic, dopóki nie wprowadzi się tam nowego adresu.",
+        "cycleFeedDisableConfirm": "Wyłączyć kanał? Istniejące subskrypcje przestaną otrzymywać aktualizacje.",
+        "cycleFeedDisableConfirmDetail": "Link natychmiast przestaje cokolwiek dostarczać. Ponowne włączenie go później tworzy nowy adres, który każdy subskrybent musi wprowadzić ręcznie.",
+        "cycleFeedHint": "Każdy, kto zna ten link, może zobaczyć dane Twojego cyklu. Udostępniaj go tylko własnym urządzeniom.",
         "caldavDescription": "Połącz wiele kont CalDAV (iCloud, Nextcloud, Radicale, Baikal itp.) i wybierz, które kalendarze mają być synchronizowane.",
         "caldavAddAccount": "Dodaj konto CalDAV",
         "caldavEmptyState": "Brak połączonych kont CalDAV. Dodaj pierwsze konto, aby rozpocząć.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Pierścień cyklu",
                 "cycleDay": "Dzień cyklu {{day}}",
+                "dayBadge": "Dzień {{day}}",
                 "of": "z {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Następna miesiączka",
                 "fertileWindow": "Okno płodności",
                 "ovulation": "Owulacja",
+                "ovulationConfirmed": "Owulacja potwierdzona",
                 "avgCycle": "Śr. długość cyklu",
                 "avgPeriod": "Śr. długość miesiączki",
-                "regularity": "Regularność",
+                "cycleVariation": "Zmienność cyklu",
                 "regular": "Regularny",
                 "irregular": "Nieregularny",
                 "notEnoughData": "Za mało danych",
                 "noPrediction": "Zapisz miesiączkę, aby uzyskać prognozy."
+            },
+            "stats": {
+                "source": {
+                    "history": "Na podstawie ostatnich {{count}} cykli",
+                    "history_one": "Na podstawie ostatniego cyklu",
+                    "insufficientHistory": "Na razie wartość domyślna - zarejestruj jeszcze {{count}} cykli, aby uzyskać spersonalizowaną prognozę",
+                    "insufficientHistory_one": "Na razie wartość domyślna - zarejestruj jeszcze {{count}} cykl, aby uzyskać spersonalizowaną prognozę",
+                    "default": "Domyślne założenie (brak jeszcze zarejestrowanej historii)"
+                }
             },
             "unit": {
                 "days": "{{value}} dni"
@@ -4196,6 +4222,27 @@
                 "empty": "Nie zapisano jeszcze miesiączek.",
                 "cycleLength": "Cykl {{value}} dni"
             },
+            "trends": {
+                "title": "Trendy",
+                "date": "Data",
+                "cycleLength": "Długość cyklu",
+                "symptomFrequency": "Częstość objawów",
+                "severity": "Nasilenie",
+                "severityTrend": "Trend nasilenia",
+                "cyclePattern": "Wzorzec dni cyklu",
+                "cyclePatternSentence": "Zarejestrowałaś {{symptom}} podczas {{phase}} w {{occurred}} z ostatnich {{total}} cykli.",
+                "cyclePatternDaysBefore": "{{symptom}} często występuje {{days}} dni przed miesiączką.",
+                "cyclePatternNone": "{{symptom}} nie powtórzył się w ostatnich {{total}} cyklach.",
+                "typical": "Typowy",
+                "atypical": "Nietypowy",
+                "typicalRangeLabel": "Typowy zakres: {{min}}-{{max}} dni",
+                "likelihoodTitle": "Wzorce objawów",
+                "likelihoodCaption": "Wybierz objaw, aby zobaczyć, w które dni najczęściej występuje, na podstawie Twojej historii.",
+                "likelyToday": "{{symptom}} często występuje w okolicach tego dnia Twojego cyklu.",
+                "symptomTracked": "Zarejestrowano",
+                "symptomPredicted": "Często występuje tutaj",
+                "phaseOther": "Inne"
+            },
             "flow": {
                 "label": "Intensywność krwawienia",
                 "none": "Brak",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Zmęczenie",
                 "nausea": "Nudności",
                 "cravings": "Napady głodu",
-                "insomnia": "Bezsenność"
+                "insomnia": "Bezsenność",
+                "constipation": "Zaparcia",
+                "diarrhea": "Biegunka",
+                "jointPain": "Ból stawów",
+                "dizziness": "Zawroty głowy",
+                "hotFlashes": "Uderzenia gorąca",
+                "swelling": "Zatrzymanie wody",
+                "libidoChange": "Zmiana libido",
+                "dischargeChange": "Zmiana upławów",
+                "appetiteChange": "Zmiana apetytu",
+                "concentrationDifficulty": "Trudności z koncentracją"
+            },
+            "intensity": {
+                "mild": "Łagodne",
+                "moderate": "Umiarkowane",
+                "severe": "Silne"
+            },
+            "bbt": {
+                "label": "Temperatura podstawowa",
+                "placeholder": "np. 36,50",
+                "unitLabel": "Jednostka",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Opcjonalnie. Przy regularnych pomiarach wzrost temperatury może potwierdzić owulację w bieżącym cyklu."
             },
             "mood": {
                 "label": "Nastrój",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Eksportuj jako CSV"
             },
+            "ics": {
+                "calendarName": "Cykl Yuvomi",
+                "periodSummary": "Miesiączka",
+                "predictedPeriodSummary": "Przewidywana miesiączka",
+                "fertileWindowSummary": "Okno płodności (przewidywane)",
+                "ovulationSummary": "Owulacja (przewidywana)"
+            },
             "settings": {
                 "open": "Ustawienia",
                 "title": "Ustawienia cyklu",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Długość fazy lutealnej",
                 "trackFertility": "Pokaż okno płodności",
                 "autoHint": "Pozostaw puste = obliczane automatycznie z historii.",
+                "remindPeriodDaysBefore": "Przypomnienie o miesiączce",
+                "remindOff": "Wyłączone",
+                "remindSameDay": "W tym samym dniu",
+                "remindPeriodDaysBeforeHint": "Powiadamia przed rozpoczęciem przewidywanej następnej miesiączki.",
+                "remindLogDaily": "Przypominaj mi codziennie o rejestrowaniu",
                 "defaultVisibility": "Domyślna widoczność nowych wpisów",
                 "defaultVisibilityHint": "Dotyczy nowo zapisanych miesiączek i wpisów dziennych. Można zmienić dla każdego wpisu.",
                 "applyToAll": "Zastosuj do wszystkich wpisów",

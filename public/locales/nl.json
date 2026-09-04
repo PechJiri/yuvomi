@@ -1928,6 +1928,21 @@
         "inventoryFeedDisableConfirm": "Feed uitschakelen? Bestaande abonnementen ontvangen geen updates meer.",
         "inventoryFeedDisableConfirmDetail": "De link levert meteen niets meer. Wordt de feed later weer ingeschakeld, dan ontstaat een nieuw adres dat elke abonnee met de hand opnieuw moet invoeren.",
         "inventoryFeedHint": "Wie deze link kent, ziet welke termijnen van je spullen binnenkort verlopen. Deel hem alleen met je eigen apparaten.",
+        "cycleFeedTitle": "Cyclus exporteren",
+        "cycleFeedDescription": "Abonneer je op je geregistreerde en voorspelde menstruaties (plus eisprong en vruchtbare periode, indien bijgehouden) alleen-lezen in Apple Agenda, Google Agenda of Thunderbird.",
+        "cycleFeedInactive": "De exportfeed is uitgeschakeld.",
+        "cycleFeedActivate": "Feed activeren",
+        "cycleFeedUrlLabel": "Feedadres",
+        "cycleFeedCopy": "Adres kopiëren",
+        "cycleFeedCopied": "Adres gekopieerd",
+        "cycleFeedSubscribe": "Abonneren in agenda-app",
+        "cycleFeedRegenerate": "Nieuwe link genereren",
+        "cycleFeedDisable": "Feed uitschakelen",
+        "cycleFeedRegenerateConfirm": "Een nieuwe link genereren? De oude link werkt daarna niet meer.",
+        "cycleFeedRegenerateConfirmDetail": "Apparaten en diensten die de oude link gebruiken, ontvangen geen updates meer en blijven, afhankelijk van de app, hun laatste status tonen of tonen niets meer totdat daar het nieuwe adres wordt ingevoerd.",
+        "cycleFeedDisableConfirm": "De feed uitschakelen? Bestaande abonnementen ontvangen geen updates meer.",
+        "cycleFeedDisableConfirmDetail": "De link stopt direct met alles leveren. Later opnieuw activeren maakt een nieuw adres aan dat elke abonnee handmatig opnieuw moet invoeren.",
+        "cycleFeedHint": "Iedereen die deze link kent, kan je cyclusgegevens zien. Deel hem alleen met je eigen apparaten.",
         "caldavDescription": "Verbind meerdere CalDAV-accounts (iCloud, Nextcloud, Radicale, Baikal, enz.) en kies welke kalenders je wilt synchroniseren.",
         "caldavAddAccount": "CalDAV-account toevoegen",
         "caldavEmptyState": "Nog geen CalDAV-accounts verbonden. Voeg je eerste account toe om te beginnen.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Cyclusring",
                 "cycleDay": "Cyclusdag {{day}}",
+                "dayBadge": "Dag {{day}}",
                 "of": "van {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Volgende menstruatie",
                 "fertileWindow": "Vruchtbare periode",
                 "ovulation": "Eisprong",
+                "ovulationConfirmed": "Eisprong bevestigd",
                 "avgCycle": "Gem. cyclusduur",
                 "avgPeriod": "Gem. menstruatieduur",
-                "regularity": "Regelmaat",
+                "cycleVariation": "Cyclusvariatie",
                 "regular": "Regelmatig",
                 "irregular": "Onregelmatig",
                 "notEnoughData": "Te weinig gegevens",
                 "noPrediction": "Registreer een menstruatie voor voorspellingen."
+            },
+            "stats": {
+                "source": {
+                    "history": "Gebaseerd op je laatste {{count}} cycli",
+                    "history_one": "Gebaseerd op je laatste cyclus",
+                    "insufficientHistory": "Voorlopig een standaardwaarde - registreer nog {{count}} cycli voor een persoonlijke voorspelling",
+                    "insufficientHistory_one": "Voorlopig een standaardwaarde - registreer nog {{count}} cyclus voor een persoonlijke voorspelling",
+                    "default": "Standaardaanname (nog geen geschiedenis geregistreerd)"
+                }
             },
             "unit": {
                 "days": "{{value}} dagen"
@@ -4196,6 +4222,27 @@
                 "empty": "Nog geen menstruaties geregistreerd.",
                 "cycleLength": "Cyclus {{value}} dagen"
             },
+            "trends": {
+                "title": "Trends",
+                "date": "Datum",
+                "cycleLength": "Cycluslengte",
+                "symptomFrequency": "Frequentie van symptomen",
+                "severity": "Ernst",
+                "severityTrend": "Verloop van de ernst",
+                "cyclePattern": "Patroon per cyclusdag",
+                "cyclePatternSentence": "Je registreerde {{symptom}} tijdens {{phase}} in {{occurred}} van de laatste {{total}} cycli.",
+                "cyclePatternDaysBefore": "{{symptom}} komt vaak {{days}} dagen voor je menstruatie voor.",
+                "cyclePatternNone": "{{symptom}} is niet teruggekeerd in je laatste {{total}} cycli.",
+                "typical": "Typisch",
+                "atypical": "Atypisch",
+                "typicalRangeLabel": "Typisch bereik: {{min}}-{{max}} dagen",
+                "likelihoodTitle": "Symptoompatronen",
+                "likelihoodCaption": "Kies een symptoom om te zien op welke dagen het, op basis van je geschiedenis, vaak voorkomt.",
+                "likelyToday": "{{symptom}} komt vaak rond deze dag van je cyclus voor.",
+                "symptomTracked": "Geregistreerd",
+                "symptomPredicted": "Komt hier vaak voor",
+                "phaseOther": "Overig"
+            },
             "flow": {
                 "label": "Bloedverlies",
                 "none": "Geen",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Vermoeidheid",
                 "nausea": "Misselijkheid",
                 "cravings": "Eetbuien",
-                "insomnia": "Slapeloosheid"
+                "insomnia": "Slapeloosheid",
+                "constipation": "Obstipatie",
+                "diarrhea": "Diarree",
+                "jointPain": "Gewrichtspijn",
+                "dizziness": "Duizeligheid",
+                "hotFlashes": "Opvliegers",
+                "swelling": "Vochtretentie",
+                "libidoChange": "Verandering in libido",
+                "dischargeChange": "Verandering in afscheiding",
+                "appetiteChange": "Verandering in eetlust",
+                "concentrationDifficulty": "Concentratieproblemen"
+            },
+            "intensity": {
+                "mild": "Licht",
+                "moderate": "Matig",
+                "severe": "Ernstig"
+            },
+            "bbt": {
+                "label": "Basale lichaamstemperatuur",
+                "placeholder": "bijv. 36,50",
+                "unitLabel": "Eenheid",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Optioneel. Bij regelmatige metingen kan een temperatuurstijging de eisprong in de huidige cyclus bevestigen."
             },
             "mood": {
                 "label": "Stemming",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Exporteren als CSV"
             },
+            "ics": {
+                "calendarName": "Yuvomi cyclus",
+                "periodSummary": "Menstruatie",
+                "predictedPeriodSummary": "Voorspelde menstruatie",
+                "fertileWindowSummary": "Vruchtbare periode (voorspeld)",
+                "ovulationSummary": "Eisprong (voorspeld)"
+            },
             "settings": {
                 "open": "Instellingen",
                 "title": "Cyclusinstellingen",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Lengte luteale fase",
                 "trackFertility": "Vruchtbare periode tonen",
                 "autoHint": "Leeg laten = automatisch berekend uit je geschiedenis.",
+                "remindPeriodDaysBefore": "Menstruatieherinnering",
+                "remindOff": "Uit",
+                "remindSameDay": "Op de dag zelf",
+                "remindPeriodDaysBeforeHint": "Waarschuwt je voordat je voorspelde volgende menstruatie begint.",
+                "remindLogDaily": "Herinner me dagelijks aan registreren",
                 "defaultVisibility": "Standaardzichtbaarheid van nieuwe items",
                 "defaultVisibilityHint": "Geldt voor nieuw gelogde menstruaties en dagitems. Per item aanpasbaar.",
                 "applyToAll": "Op alle items toepassen",

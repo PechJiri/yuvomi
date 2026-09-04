@@ -1977,6 +1977,21 @@
         "inventoryFeedDisableConfirm": "تعطيل الخلاصة؟ لن تتلقى الاشتراكات الحالية تحديثات بعد الآن.",
         "inventoryFeedDisableConfirmDetail": "يتوقف الرابط فورًا عن تقديم أي شيء. وإذا أُعيد تفعيل الخلاصة لاحقًا، يُنشأ عنوان جديد يجب على كل مشترك إدخاله يدويًا.",
         "inventoryFeedHint": "كل من يعرف هذا الرابط يمكنه رؤية المواعيد النهائية القريبة لمقتنياتك. شاركه مع أجهزتك الخاصة فقط.",
+        "cycleFeedTitle": "تصدير الدورة",
+        "cycleFeedDescription": "اشترك في دوراتك المسجَّلة والمتوقَّعة (بالإضافة إلى الإباضة ونافذة الخصوبة، إن كانت متتبَّعة) للقراءة فقط في تقويم Apple أو تقويم Google أو Thunderbird.",
+        "cycleFeedInactive": "تغذية التصدير معطَّلة.",
+        "cycleFeedActivate": "تفعيل التغذية",
+        "cycleFeedUrlLabel": "عنوان التغذية",
+        "cycleFeedCopy": "نسخ العنوان",
+        "cycleFeedCopied": "تم نسخ العنوان",
+        "cycleFeedSubscribe": "الاشتراك في تطبيق التقويم",
+        "cycleFeedRegenerate": "إنشاء رابط جديد",
+        "cycleFeedDisable": "تعطيل التغذية",
+        "cycleFeedRegenerateConfirm": "إنشاء رابط جديد؟ سيتوقف الرابط القديم عن العمل.",
+        "cycleFeedRegenerateConfirmDetail": "ستتوقف الأجهزة والخدمات التي تستخدم الرابط القديم عن تلقي التحديثات، وحسب التطبيق ستستمر في عرض آخر حالة لها أو لن تعرض شيئًا حتى يُدخَل العنوان الجديد فيها.",
+        "cycleFeedDisableConfirm": "تعطيل التغذية؟ لن تتلقى الاشتراكات الحالية أي تحديثات بعد الآن.",
+        "cycleFeedDisableConfirmDetail": "يتوقف الرابط فورًا عن نقل أي بيانات. وإعادة تفعيله لاحقًا يُنشئ عنوانًا جديدًا يتعيّن على كل مشترك إدخاله يدويًا.",
+        "cycleFeedHint": "أي شخص يعرف هذا الرابط يمكنه رؤية بيانات دورتك. شاركه فقط مع أجهزتك الخاصة.",
         "caldavUrlHint": "العنوان الأساسي لخادم CalDAV",
         "caldavUsernameLabel": "اسم المستخدم",
         "calendarDisabled": "تم تعطيل التقويم",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "حلقة الدورة",
                 "cycleDay": "يوم الدورة {{day}}",
+                "dayBadge": "يوم {{day}}",
                 "of": "من {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "الدورة التالية",
                 "fertileWindow": "نافذة الخصوبة",
                 "ovulation": "الإباضة",
+                "ovulationConfirmed": "تم تأكيد الإباضة",
                 "avgCycle": "متوسط طول الدورة",
                 "avgPeriod": "متوسط مدة الدورة",
-                "regularity": "الانتظام",
+                "cycleVariation": "تفاوت الدورة",
                 "regular": "منتظمة",
                 "irregular": "غير منتظمة",
                 "notEnoughData": "بيانات غير كافية",
                 "noPrediction": "سجّلي دورة للحصول على التوقعات."
+            },
+            "stats": {
+                "source": {
+                    "history": "استنادًا إلى آخر {{count}} دورات",
+                    "history_one": "استنادًا إلى دورتك الأخيرة",
+                    "insufficientHistory": "قيمة افتراضية حاليًا - سجّلي {{count}} دورات إضافية للحصول على توقّع شخصي",
+                    "insufficientHistory_one": "قيمة افتراضية حاليًا - سجّلي دورة واحدة إضافية للحصول على توقّع شخصي",
+                    "default": "افتراض مبدئي (لم يُسجَّل سجل بعد)"
+                }
             },
             "unit": {
                 "days": "{{value}} يوم"
@@ -4196,6 +4222,27 @@
                 "empty": "لم تُسجَّل أي دورات بعد.",
                 "cycleLength": "دورة {{value}} يوم"
             },
+            "trends": {
+                "title": "الاتجاهات",
+                "date": "التاريخ",
+                "cycleLength": "مدة الدورة",
+                "symptomFrequency": "تكرار الأعراض",
+                "severity": "الشدة",
+                "severityTrend": "اتجاه الشدة",
+                "cyclePattern": "نمط أيام الدورة",
+                "cyclePatternSentence": "سجّلتِ {{symptom}} أثناء {{phase}} في {{occurred}} من أصل {{total}} دورات أخيرة.",
+                "cyclePatternDaysBefore": "غالبًا ما يظهر {{symptom}} قبل {{days}} أيام من دورتك.",
+                "cyclePatternNone": "لم يتكرر {{symptom}} في آخر {{total}} دورات لديك.",
+                "typical": "معتاد",
+                "atypical": "غير معتاد",
+                "typicalRangeLabel": "النطاق المعتاد: {{min}}-{{max}} أيام",
+                "likelihoodTitle": "أنماط الأعراض",
+                "likelihoodCaption": "اختاري عرضًا لمعرفة الأيام التي يظهر فيها غالبًا، استنادًا إلى سجلّك.",
+                "likelyToday": "غالبًا ما يظهر {{symptom}} حول هذا اليوم من دورتك.",
+                "symptomTracked": "مسجَّل",
+                "symptomPredicted": "يظهر غالبًا هنا",
+                "phaseOther": "أخرى"
+            },
             "flow": {
                 "label": "شدة النزيف",
                 "none": "لا شيء",
@@ -4215,7 +4262,30 @@
                 "fatigue": "إرهاق",
                 "nausea": "غثيان",
                 "cravings": "نهم",
-                "insomnia": "أرق"
+                "insomnia": "أرق",
+                "constipation": "إمساك",
+                "diarrhea": "إسهال",
+                "jointPain": "ألم المفاصل",
+                "dizziness": "دوخة",
+                "hotFlashes": "هبّات ساخنة",
+                "swelling": "احتباس السوائل",
+                "libidoChange": "تغيّر الرغبة الجنسية",
+                "dischargeChange": "تغيّر الإفرازات",
+                "appetiteChange": "تغيّر الشهية",
+                "concentrationDifficulty": "صعوبة التركيز"
+            },
+            "intensity": {
+                "mild": "خفيف",
+                "moderate": "متوسط",
+                "severe": "شديد"
+            },
+            "bbt": {
+                "label": "درجة الحرارة الأساسية",
+                "placeholder": "مثال: 36.50",
+                "unitLabel": "الوحدة",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "اختياري. مع القياسات المنتظمة، يمكن لارتفاع درجة الحرارة تأكيد الإباضة في الدورة الحالية."
             },
             "mood": {
                 "label": "المزاج",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "تصدير كملف CSV"
             },
+            "ics": {
+                "calendarName": "دورة Yuvomi",
+                "periodSummary": "الدورة",
+                "predictedPeriodSummary": "الدورة المتوقعة",
+                "fertileWindowSummary": "نافذة الخصوبة (متوقعة)",
+                "ovulationSummary": "الإباضة (متوقعة)"
+            },
             "settings": {
                 "open": "الإعدادات",
                 "title": "إعدادات الدورة",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "مدة الطور الأصفري",
                 "trackFertility": "عرض نافذة الخصوبة",
                 "autoHint": "اتركيه فارغًا = يُحسب تلقائيًا من سجلّك.",
+                "remindPeriodDaysBefore": "تذكير بالدورة",
+                "remindOff": "إيقاف",
+                "remindSameDay": "في نفس اليوم",
+                "remindPeriodDaysBeforeHint": "يُعلمك قبل بدء دورتك القادمة المتوقعة.",
+                "remindLogDaily": "ذكّريني يوميًا بالتسجيل",
                 "defaultVisibility": "الظهور الافتراضي للإدخالات الجديدة",
                 "defaultVisibilityHint": "ينطبق على الدورات والسجلات اليومية المسجّلة حديثًا. يمكن تغييره لكل إدخال.",
                 "applyToAll": "التطبيق على كل الإدخالات",

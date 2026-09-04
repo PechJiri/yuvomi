@@ -1957,6 +1957,21 @@
         "inventoryFeedDisableConfirm": "Nonaktifkan feed? Langganan yang ada tidak akan menerima pembaruan lagi.",
         "inventoryFeedDisableConfirmDetail": "Tautan langsung berhenti mengirim apa pun. Jika feed diaktifkan lagi nanti, alamat baru dibuat dan setiap pelanggan harus memasukkannya secara manual.",
         "inventoryFeedHint": "Siapa pun yang tahu tautan ini dapat melihat tenggat barang Anda yang akan tiba. Bagikan hanya dengan perangkat Anda sendiri.",
+        "cycleFeedTitle": "Ekspor siklus",
+        "cycleFeedDescription": "Berlangganan menstruasi yang dicatat dan diprediksi (ditambah ovulasi dan masa subur, jika dilacak) secara baca saja di Apple Calendar, Google Kalender, atau Thunderbird.",
+        "cycleFeedInactive": "Feed ekspor dinonaktifkan.",
+        "cycleFeedActivate": "Aktifkan feed",
+        "cycleFeedUrlLabel": "Alamat feed",
+        "cycleFeedCopy": "Salin alamat",
+        "cycleFeedCopied": "Alamat disalin",
+        "cycleFeedSubscribe": "Berlangganan di aplikasi kalender",
+        "cycleFeedRegenerate": "Buat tautan baru",
+        "cycleFeedDisable": "Nonaktifkan feed",
+        "cycleFeedRegenerateConfirm": "Buat tautan baru? Tautan lama akan berhenti berfungsi.",
+        "cycleFeedRegenerateConfirmDetail": "Perangkat dan layanan yang menggunakan tautan lama akan berhenti menerima pembaruan, dan tergantung aplikasinya, akan tetap menampilkan status terakhir atau tidak menampilkan apa pun sampai alamat baru dimasukkan di sana.",
+        "cycleFeedDisableConfirm": "Nonaktifkan feed? Langganan yang ada tidak akan lagi menerima pembaruan.",
+        "cycleFeedDisableConfirmDetail": "Tautan langsung berhenti mengirimkan apa pun. Mengaktifkannya kembali nanti akan membuat alamat baru yang harus dimasukkan ulang secara manual oleh setiap pelanggan.",
+        "cycleFeedHint": "Siapa pun yang mengetahui tautan ini dapat melihat data siklusmu. Bagikan hanya dengan perangkatmu sendiri.",
         "caldavDescription": "Sambungkan beberapa akun CalDAV (iCloud, Nextcloud, Radicale, Baikal, dll.) dan pilih kalender mana yang disinkronkan.",
         "caldavAddAccount": "Tambah akun CalDAV",
         "caldavEmptyState": "Belum ada akun CalDAV yang tersambung. Tambahkan akun pertama Anda untuk memulai.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Cincin siklus",
                 "cycleDay": "Hari siklus {{day}}",
+                "dayBadge": "Hari {{day}}",
                 "of": "dari {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Menstruasi berikutnya",
                 "fertileWindow": "Masa subur",
                 "ovulation": "Ovulasi",
+                "ovulationConfirmed": "Ovulasi terkonfirmasi",
                 "avgCycle": "Rata-rata panjang siklus",
                 "avgPeriod": "Rata-rata lama menstruasi",
-                "regularity": "Keteraturan",
+                "cycleVariation": "Variasi siklus",
                 "regular": "Teratur",
                 "irregular": "Tidak teratur",
                 "notEnoughData": "Data tidak cukup",
                 "noPrediction": "Catat menstruasi untuk mendapatkan prediksi."
+            },
+            "stats": {
+                "source": {
+                    "history": "Berdasarkan {{count}} siklus terakhirmu",
+                    "history_one": "Berdasarkan siklus terakhirmu",
+                    "insufficientHistory": "Nilai bawaan untuk saat ini - catat {{count}} siklus lagi untuk prediksi yang dipersonalisasi",
+                    "insufficientHistory_one": "Nilai bawaan untuk saat ini - catat {{count}} siklus lagi untuk prediksi yang dipersonalisasi",
+                    "default": "Asumsi bawaan (belum ada riwayat tercatat)"
+                }
             },
             "unit": {
                 "days": "{{value}} hari"
@@ -4196,6 +4222,27 @@
                 "empty": "Belum ada menstruasi yang dicatat.",
                 "cycleLength": "Siklus {{value}} hari"
             },
+            "trends": {
+                "title": "Tren",
+                "date": "Tanggal",
+                "cycleLength": "Panjang siklus",
+                "symptomFrequency": "Frekuensi gejala",
+                "severity": "Tingkat keparahan",
+                "severityTrend": "Tren tingkat keparahan",
+                "cyclePattern": "Pola hari siklus",
+                "cyclePatternSentence": "Kamu mencatat {{symptom}} selama {{phase}} pada {{occurred}} dari {{total}} siklus terakhir.",
+                "cyclePatternDaysBefore": "{{symptom}} sering muncul {{days}} hari sebelum menstruasimu.",
+                "cyclePatternNone": "{{symptom}} tidak muncul lagi dalam {{total}} siklus terakhirmu.",
+                "typical": "Umum",
+                "atypical": "Tidak umum",
+                "typicalRangeLabel": "Rentang umum: {{min}}-{{max}} hari",
+                "likelihoodTitle": "Pola gejala",
+                "likelihoodCaption": "Pilih gejala untuk melihat hari-hari kemunculannya, berdasarkan riwayatmu.",
+                "likelyToday": "{{symptom}} sering muncul di sekitar hari ini dalam siklusmu.",
+                "symptomTracked": "Tercatat",
+                "symptomPredicted": "Sering muncul di sini",
+                "phaseOther": "Lainnya"
+            },
             "flow": {
                 "label": "Volume darah",
                 "none": "Tidak ada",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Kelelahan",
                 "nausea": "Mual",
                 "cravings": "Ngidam",
-                "insomnia": "Sulit tidur"
+                "insomnia": "Sulit tidur",
+                "constipation": "Sembelit",
+                "diarrhea": "Diare",
+                "jointPain": "Nyeri sendi",
+                "dizziness": "Pusing",
+                "hotFlashes": "Rasa panas mendadak",
+                "swelling": "Retensi cairan",
+                "libidoChange": "Perubahan gairah seksual",
+                "dischargeChange": "Perubahan keputihan",
+                "appetiteChange": "Perubahan nafsu makan",
+                "concentrationDifficulty": "Kesulitan berkonsentrasi"
+            },
+            "intensity": {
+                "mild": "Ringan",
+                "moderate": "Sedang",
+                "severe": "Berat"
+            },
+            "bbt": {
+                "label": "Suhu basal tubuh",
+                "placeholder": "mis. 36,50",
+                "unitLabel": "Satuan",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Opsional. Dengan pengukuran rutin, kenaikan suhu dapat mengonfirmasi ovulasi pada siklus saat ini."
             },
             "mood": {
                 "label": "Suasana hati",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Ekspor sebagai CSV"
             },
+            "ics": {
+                "calendarName": "Siklus Yuvomi",
+                "periodSummary": "Menstruasi",
+                "predictedPeriodSummary": "Menstruasi yang diprediksi",
+                "fertileWindowSummary": "Masa subur (prediksi)",
+                "ovulationSummary": "Ovulasi (prediksi)"
+            },
             "settings": {
                 "open": "Pengaturan",
                 "title": "Pengaturan siklus",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Panjang fase luteal",
                 "trackFertility": "Tampilkan masa subur",
                 "autoHint": "Kosongkan = dihitung otomatis dari riwayatmu.",
+                "remindPeriodDaysBefore": "Pengingat menstruasi",
+                "remindOff": "Nonaktif",
+                "remindSameDay": "Pada hari-H",
+                "remindPeriodDaysBeforeHint": "Memberitahumu sebelum menstruasi berikutnya yang diprediksi dimulai.",
+                "remindLogDaily": "Ingatkan aku setiap hari untuk mencatat",
                 "defaultVisibility": "Visibilitas bawaan untuk entri baru",
                 "defaultVisibilityHint": "Berlaku untuk periode dan catatan harian yang baru dicatat. Dapat diubah per entri.",
                 "applyToAll": "Terapkan ke semua entri",

@@ -107,6 +107,13 @@ export function healthPaths() {
       get: op({ summary: 'Get the viewer\'s cycle prediction settings', tag: 'Health' }),
       put: op({ summary: 'Update the viewer\'s cycle prediction settings', tag: 'Health', stateChanging: true, requestBody: jsonBody(null) }),
     },
+    '/api/v1/health/cycle/feed': {
+      get: op({ summary: 'Get own predicted-cycle ICS feed status', tag: 'Health' }),
+      delete: op({ summary: 'Disable own predicted-cycle ICS feed', tag: 'Health', stateChanging: true }),
+    },
+    '/api/v1/health/cycle/feed/regenerate': {
+      post: op({ summary: 'Regenerate own predicted-cycle ICS feed token', tag: 'Health', stateChanging: true }),
+    },
     '/api/v1/health/export/cycle': {
       get: op({ summary: 'Export period history as CSV', tag: 'Health', description: 'Scoped to the viewer; `?user_id=`, `from`, `to` filters supported. Returns `text/csv`.' }),
     },

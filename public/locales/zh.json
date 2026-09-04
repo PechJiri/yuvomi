@@ -1977,6 +1977,21 @@
         "inventoryFeedDisableConfirm": "禁用订阅源？现有订阅将不再收到更新。",
         "inventoryFeedDisableConfirmDetail": "链接会立即停止提供任何内容。以后重新启用时会生成新地址，每个订阅者都需要手动重新输入。",
         "inventoryFeedHint": "知道此链接的人都能看到你的物品有哪些到期日临近。请只与你自己的设备共享。",
+        "cycleFeedTitle": "导出周期",
+        "cycleFeedDescription": "在 Apple 日历、Google 日历或 Thunderbird 中只读订阅你记录和预测的经期(如有追踪,还包括排卵和易孕期)。",
+        "cycleFeedInactive": "导出订阅源已停用。",
+        "cycleFeedActivate": "启用订阅源",
+        "cycleFeedUrlLabel": "订阅源地址",
+        "cycleFeedCopy": "复制地址",
+        "cycleFeedCopied": "地址已复制",
+        "cycleFeedSubscribe": "在日历应用中订阅",
+        "cycleFeedRegenerate": "生成新链接",
+        "cycleFeedDisable": "停用订阅源",
+        "cycleFeedRegenerateConfirm": "要生成新链接吗?旧链接将停止工作。",
+        "cycleFeedRegenerateConfirmDetail": "使用旧链接的设备和服务将不再收到更新,具体取决于应用,它们要么继续显示上次的状态,要么在输入新地址前不显示任何内容。",
+        "cycleFeedDisableConfirm": "要停用订阅源吗?现有订阅将不再收到更新。",
+        "cycleFeedDisableConfirmDetail": "链接会立即停止提供任何内容。之后重新启用会生成一个新地址,每个订阅者都需要手动重新输入。",
+        "cycleFeedHint": "任何知道此链接的人都能看到你的周期数据。请只与自己的设备共享。",
         "caldavUrlHint": "CalDAV 服务器的基础地址",
         "caldavUsernameLabel": "用户名",
         "calendarDisabled": "已停用日历",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "周期环",
                 "cycleDay": "周期第 {{day}} 天",
+                "dayBadge": "第{{day}}天",
                 "of": "共 {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "下次月经",
                 "fertileWindow": "易孕期",
                 "ovulation": "排卵",
+                "ovulationConfirmed": "排卵已确认",
                 "avgCycle": "平均周期长度",
                 "avgPeriod": "平均经期长度",
-                "regularity": "规律性",
+                "cycleVariation": "周期波动",
                 "regular": "规律",
                 "irregular": "不规律",
                 "notEnoughData": "数据不足",
                 "noPrediction": "记录一次月经以获得预测。"
+            },
+            "stats": {
+                "source": {
+                    "history": "基于你最近 {{count}} 个周期",
+                    "history_one": "基于你上一个周期",
+                    "insufficientHistory": "暂用默认值 - 再记录 {{count}} 个周期以获得个性化预测",
+                    "insufficientHistory_one": "暂用默认值 - 再记录 {{count}} 个周期以获得个性化预测",
+                    "default": "默认假设(尚未记录历史数据)"
+                }
             },
             "unit": {
                 "days": "{{value}} 天"
@@ -4196,6 +4222,27 @@
                 "empty": "尚未记录任何月经。",
                 "cycleLength": "周期 {{value}} 天"
             },
+            "trends": {
+                "title": "趋势",
+                "date": "日期",
+                "cycleLength": "周期长度",
+                "symptomFrequency": "症状频率",
+                "severity": "严重程度",
+                "severityTrend": "严重程度变化",
+                "cyclePattern": "周期日模式",
+                "cyclePatternSentence": "在最近 {{total}} 个周期中,有 {{occurred}} 次你在{{phase}}期间记录了{{symptom}}。",
+                "cyclePatternDaysBefore": "{{symptom}}通常在经期前 {{days}} 天出现。",
+                "cyclePatternNone": "{{symptom}}在你最近 {{total}} 个周期中未再出现。",
+                "typical": "典型",
+                "atypical": "非典型",
+                "typicalRangeLabel": "典型范围:{{min}}-{{max}} 天",
+                "likelihoodTitle": "症状模式",
+                "likelihoodCaption": "选择一个症状,查看根据你的历史记录它常出现在哪些天。",
+                "likelyToday": "{{symptom}}通常在你周期的这一天前后出现。",
+                "symptomTracked": "已记录",
+                "symptomPredicted": "常在此处出现",
+                "phaseOther": "其他"
+            },
             "flow": {
                 "label": "经量",
                 "none": "无",
@@ -4215,7 +4262,30 @@
                 "fatigue": "疲劳",
                 "nausea": "恶心",
                 "cravings": "食欲大增",
-                "insomnia": "失眠"
+                "insomnia": "失眠",
+                "constipation": "便秘",
+                "diarrhea": "腹泻",
+                "jointPain": "关节痛",
+                "dizziness": "头晕",
+                "hotFlashes": "潮热",
+                "swelling": "水肿",
+                "libidoChange": "性欲变化",
+                "dischargeChange": "分泌物变化",
+                "appetiteChange": "食欲变化",
+                "concentrationDifficulty": "注意力难以集中"
+            },
+            "intensity": {
+                "mild": "轻度",
+                "moderate": "中度",
+                "severe": "重度"
+            },
+            "bbt": {
+                "label": "基础体温",
+                "placeholder": "例如 36.50",
+                "unitLabel": "单位",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "可选。通过定期测量,体温升高可以确认当前周期的排卵。"
             },
             "mood": {
                 "label": "心情",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "导出为 CSV"
             },
+            "ics": {
+                "calendarName": "Yuvomi 周期",
+                "periodSummary": "经期",
+                "predictedPeriodSummary": "预测经期",
+                "fertileWindowSummary": "易孕期(预测)",
+                "ovulationSummary": "排卵(预测)"
+            },
             "settings": {
                 "open": "设置",
                 "title": "周期设置",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "黄体期长度",
                 "trackFertility": "显示易孕期",
                 "autoHint": "留空 = 根据历史记录自动计算。",
+                "remindPeriodDaysBefore": "经期提醒",
+                "remindOff": "关闭",
+                "remindSameDay": "当天提醒",
+                "remindPeriodDaysBeforeHint": "在预测的下次经期开始前通知你。",
+                "remindLogDaily": "每天提醒我记录",
                 "defaultVisibility": "新条目的默认可见性",
                 "defaultVisibilityHint": "适用于新记录的经期和每日记录。每条可单独更改。",
                 "applyToAll": "应用于所有条目",

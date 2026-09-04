@@ -661,13 +661,17 @@ test('Cycle-Log: Upsert je Person/Tag (zweiter POST aktualisiert)', async () => 
   const first = await call('POST', '/cycle/logs', { log_date: '2026-05-02', flow: 'light', symptoms: ['cramps', 'fatigue'], mood: 'sad' });
   assert.equal(first.status, 201);
   assert.equal(first.body.data.flow, 'light');
-  assert.equal(first.body.data.symptoms, 'cramps,fatigue');
+  // symptoms ist seit Phase 2 {key, intensity}[] statt einer Komma-Zeile - das
+  // alte String-Array-Format bleibt als Eingabe gültig, ergibt aber
+  // intensity: null (die gab es vor Phase 2 nicht).
+  assert.deepEqual(first.body.data.symptoms, [{ key: 'cramps', intensity: null }, { key: 'fatigue', intensity: null }]);
   const firstId = first.body.data.id;
 
-  const second = await call('POST', '/cycle/logs', { log_date: '2026-05-02', flow: 'heavy', symptoms: ['cramps'] });
+  const second = await call('POST', '/cycle/logs', { log_date: '2026-05-02', flow: 'heavy', symptoms: [{ key: 'cramps', intensity: 2 }] });
   assert.equal(second.body.data.id, firstId); // gleiche Zeile
   assert.equal(second.body.data.flow, 'heavy');
-  assert.equal(second.body.data.symptoms, 'cramps');
+  // Voller Ersatz, kein Merge: 'fatigue' aus dem ersten POST ist weg.
+  assert.deepEqual(second.body.data.symptoms, [{ key: 'cramps', intensity: 2 }]);
 
   const list = await call('GET', '/cycle/logs');
   assert.equal(list.body.data.filter((l) => l.log_date === '2026-05-02').length, 1);
@@ -1002,9 +1006,67 @@ test('Cycle: Perioden from/to-Filter + Log löschen', async () => {
 
 test('Cycle-Log: zu lange Symptomliste → 400', async () => {
   asA();
-  const many = Array.from({ length: 40 }, (_, i) => `symptomlongtoken${i}`);
+  // Deckel liegt seit Phase 2 auf der ANZAHL (MAX_SYMPTOMS_COUNT = 40), nicht
+  // mehr auf der Zeichenlänge einer Komma-Zeile - 41 eindeutige Einträge
+  // reißen die Grenze, 40 selbst nicht.
+  const many = Array.from({ length: 41 }, (_, i) => `symptomlongtoken${i}`);
   const r = await call('POST', '/cycle/logs', { log_date: '2028-05-01', symptoms: many });
   assert.equal(r.status, 400);
+});
+
+test('Cycle-Log: Symptom-Intensität wird gespeichert, gelesen und über PATCH-artigen Re-POST ersetzt', async () => {
+  asA();
+  const created = await call('POST', '/cycle/logs', {
+    log_date: '2028-05-02',
+    symptoms: [{ key: 'headache', intensity: 3 }, { key: 'nausea' }],
+  });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body.data.symptoms, [{ key: 'headache', intensity: 3 }, { key: 'nausea', intensity: null }]);
+
+  const list = await call('GET', '/cycle/logs?from=2028-05-02&to=2028-05-02');
+  const row = list.body.data.find((l) => l.log_date === '2028-05-02');
+  assert.deepEqual(row.symptoms, [{ key: 'headache', intensity: 3 }, { key: 'nausea', intensity: null }]);
+});
+
+test('Cycle-Log: Basaltemperatur wird gespeichert, gelesen und beim Weglassen gelöscht', async () => {
+  asA();
+  const created = await call('POST', '/cycle/logs', { log_date: '2028-05-03', basal_temp: 36.42, basal_temp_unit: 'c' });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.data.basal_temp, 36.42);
+  assert.equal(created.body.data.basal_temp_unit, 'c');
+
+  const list = await call('GET', '/cycle/logs?from=2028-05-03&to=2028-05-03');
+  const row = list.body.data.find((l) => l.log_date === '2028-05-03');
+  assert.equal(row.basal_temp, 36.42);
+  assert.equal(row.basal_temp_unit, 'c');
+
+  // Voller Ersatz wie bei allen anderen Feldern dieser Route: weggelassen heißt geloescht.
+  const cleared = await call('POST', '/cycle/logs', { log_date: '2028-05-03', flow: 'light' });
+  assert.equal(cleared.body.data.basal_temp, null);
+  assert.equal(cleared.body.data.basal_temp_unit, null);
+});
+
+test('Cycle-Log: Basaltemperatur ohne Einheit, mit unbekannter Einheit oder außerhalb des Plausibilitätsbereichs → 400', async () => {
+  asA();
+  const noUnit = await call('POST', '/cycle/logs', { log_date: '2028-05-04', basal_temp: 36.5 });
+  assert.equal(noUnit.status, 400);
+
+  const badUnit = await call('POST', '/cycle/logs', { log_date: '2028-05-04', basal_temp: 36.5, basal_temp_unit: 'k' });
+  assert.equal(badUnit.status, 400);
+
+  const tooLowC = await call('POST', '/cycle/logs', { log_date: '2028-05-04', basal_temp: 10, basal_temp_unit: 'c' });
+  assert.equal(tooLowC.status, 400);
+
+  const tooHighF = await call('POST', '/cycle/logs', { log_date: '2028-05-04', basal_temp: 200, basal_temp_unit: 'f' });
+  assert.equal(tooHighF.status, 400);
+});
+
+test('Cycle-Log: Basaltemperatur in Fahrenheit wird unverändert gespeichert (keine serverseitige Umrechnung)', async () => {
+  asA();
+  const r = await call('POST', '/cycle/logs', { log_date: '2028-05-05', basal_temp: 97.9, basal_temp_unit: 'f' });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.basal_temp, 97.9);
+  assert.equal(r.body.data.basal_temp_unit, 'f');
 });
 
 test('Cycle-Periode: PATCH aller Felder + Fremdzugriff-404', async () => {

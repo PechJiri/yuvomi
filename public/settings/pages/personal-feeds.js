@@ -1,20 +1,26 @@
 /**
  * Modul: Feed-Abos (persoenlich)
- * Zweck: Die beiden schreibgeschuetzten ICS-Feeds, mit denen eine Person
+ * Zweck: Die drei schreibgeschuetzten ICS-Feeds, mit denen eine Person
  *        Yuvomi-Daten in ihrem eigenen Kalenderprogramm abonniert - der
- *        Haushaltskalender und die Inventar-Fristen.
+ *        Haushaltskalender, die Inventar-Fristen und der Zyklus.
  *
- * Warum ein eigenes Blatt und warum unter `personal`: beide Tokens haengen an
- * der eigenen users-Zeile (calendar_feed_token, Migration 61;
- * inventory_deadlines_feed_token, Migration 144), und beide Routen tragen
- * serverseitig bewusst keinen Admin-Check. Sie lagen trotzdem auf
- * `sync-calendar`, das adminOnly ist - in einem Haushalt mit fuenf Mitgliedern
- * konnte also genau eine Person ihr eigenes Abo einrichten oder zurueckziehen.
- * Was in den Feed HINEIN kommt (CalDAV-Konten, ICS-Abos, Kalenderimport),
- * bleibt eine Haushaltsfrage und damit auf dem gegateten Blatt; was aus ihm
- * HERAUS geht, ist persoenlich. Vierter Fall desselben Musters, siehe die
- * Kommentare an `personal-calendar`, `personal-tasks` und `modules-navigation`
- * in ../registry.js.
+ * Warum ein eigenes Blatt und warum unter `personal`: alle drei Tokens haengen
+ * an der eigenen users-Zeile (calendar_feed_token, Migration 61;
+ * inventory_deadlines_feed_token, Migration 144; cycle_feed_token,
+ * Migration 180), und alle drei Routen tragen serverseitig bewusst keinen
+ * Admin-Check. Die ersten beiden lagen trotzdem auf `sync-calendar`, das
+ * adminOnly ist - in einem Haushalt mit fuenf Mitgliedern konnte also genau
+ * eine Person ihr eigenes Abo einrichten oder zurueckziehen. Was in den Feed
+ * HINEIN kommt (CalDAV-Konten, ICS-Abos, Kalenderimport), bleibt eine
+ * Haushaltsfrage und damit auf dem gegateten Blatt; was aus ihm HERAUS geht,
+ * ist persoenlich. Vierter Fall desselben Musters, siehe die Kommentare an
+ * `personal-calendar`, `personal-tasks` und `modules-navigation` in
+ * ../registry.js.
+ *
+ * Der Zyklus-Feed unterscheidet sich vom Inventar-Feed genau an der Stelle,
+ * die server/services/cycle-ics.js dokumentiert: der FEED-INHALT ist
+ * personengebunden (nicht nur das Token), keine Haushalts-Aggregation - das
+ * haelt Zyklusdaten aus dem Betreuungs-Freigabe-System heraus (#584).
  */
 
 import { api } from '/api.js';
@@ -43,6 +49,14 @@ function renderPage(container) {
       <div class="settings-card">
         <p class="settings-card-description">${t('settings.inventoryFeedDescription')}</p>
         <div id="inventory-feed-body"></div>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2 class="settings-section__title">${t('settings.cycleFeedTitle')}</h2>
+      <div class="settings-card">
+        <p class="settings-card-description">${t('settings.cycleFeedDescription')}</p>
+        <div id="cycle-feed-body"></div>
       </div>
     </section>
   `);
@@ -259,6 +273,100 @@ async function loadInventoryFeed(container) {
 }
 
 // --------------------------------------------------------------------------
+// Read-only ICS export feed - predicted cycle (Phase 5)
+// --------------------------------------------------------------------------
+
+function renderCycleFeedInactive(body) {
+  body.replaceChildren();
+  body.insertAdjacentHTML('beforeend', `
+    <p class="settings-card-description">${t('settings.cycleFeedInactive')}</p>
+    <div class="settings-form-actions">
+      <button type="button" class="btn btn--primary" id="cycle-feed-activate">${t('settings.cycleFeedActivate')}</button>
+    </div>
+  `);
+}
+
+function renderCycleFeedActive(body, data) {
+  const webcal = data.url.replace(/^https?:\/\//i, 'webcal://');
+  body.replaceChildren();
+  body.insertAdjacentHTML('beforeend', `
+    <div class="form-group">
+      <label class="form-label" for="cycle-feed-url">${t('settings.cycleFeedUrlLabel')}</label>
+      <input id="cycle-feed-url" class="form-input" type="text" readonly value="${esc(data.url)}">
+      <p class="form-hint">${t('settings.cycleFeedHint')}</p>
+    </div>
+    <div class="settings-form-actions">
+      <button type="button" class="btn btn--secondary" id="cycle-feed-copy">${t('settings.cycleFeedCopy')}</button>
+      <a class="btn btn--secondary" href="${esc(webcal)}">${t('settings.cycleFeedSubscribe')}</a>
+      <button type="button" class="btn btn--secondary" id="cycle-feed-regen">${t('settings.cycleFeedRegenerate')}</button>
+      <button type="button" class="btn btn--danger-outline" id="cycle-feed-disable">${t('settings.cycleFeedDisable')}</button>
+    </div>
+  `);
+}
+
+async function loadCycleFeed(container) {
+  const body = container.querySelector('#cycle-feed-body');
+  if (!body) return;
+
+  const reload = () => loadCycleFeed(container);
+
+  let res;
+  try {
+    res = await api.get('/health/cycle/feed');
+  } catch (err) {
+    body.replaceChildren();
+    body.appendChild(createInlineError(err.message || t('common.errorGeneric')));
+    return;
+  }
+
+  const data = res?.data;
+  if (!data) {
+    renderCycleFeedInactive(body);
+    body.querySelector('#cycle-feed-activate')?.addEventListener('click', async () => {
+      try {
+        await api.post('/health/cycle/feed/regenerate');
+        showToast(t('settings.cycleFeedTitle'), 'success');
+        await reload();
+      } catch (err) {
+        showToast(err.message || t('common.errorGeneric'), 'danger');
+      }
+    });
+    return;
+  }
+
+  renderCycleFeedActive(body, data);
+
+  body.querySelector('#cycle-feed-copy')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard?.writeText(data.url);
+      showToast(t('settings.cycleFeedCopied'), 'success');
+    } catch (err) {
+      showToast(err.message || t('common.errorGeneric'), 'danger');
+    }
+  });
+  body.querySelector('#cycle-feed-regen')?.addEventListener('click', async () => {
+    if (!await confirmModal(t('settings.cycleFeedRegenerateConfirm'),
+      { danger: true, detail: t('settings.cycleFeedRegenerateConfirmDetail') })) return;
+    try {
+      await api.post('/health/cycle/feed/regenerate');
+      await reload();
+    } catch (err) {
+      showToast(err.message || t('common.errorGeneric'), 'danger');
+    }
+  });
+  body.querySelector('#cycle-feed-disable')?.addEventListener('click', async () => {
+    if (!await confirmModal(t('settings.cycleFeedDisableConfirm'),
+      { danger: true, detail: t('settings.cycleFeedDisableConfirmDetail') })) return;
+    try {
+      await api.delete('/health/cycle/feed');
+      await reload();
+    } catch (err) {
+      showToast(err.message || t('common.errorGeneric'), 'danger');
+    }
+  });
+}
+
+// --------------------------------------------------------------------------
 // Entry point
 // --------------------------------------------------------------------------
 
@@ -266,5 +374,6 @@ export async function render(container) {
   renderPage(container);
   await loadFeedExport(container);
   await loadInventoryFeed(container);
+  await loadCycleFeed(container);
   window.lucide?.createIcons({ el: container });
 }

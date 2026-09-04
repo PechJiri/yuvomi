@@ -1945,6 +1945,21 @@
         "inventoryFeedDisableConfirm": "Vypnout kanál? Stávající odběry už nebudou dostávat aktualizace.",
         "inventoryFeedDisableConfirmDetail": "Odkaz okamžitě přestane cokoli poskytovat. Pokud kanál později znovu zapnete, vznikne nová adresa, kterou musí každý odběratel zadat ručně.",
         "inventoryFeedHint": "Kdo zná tento odkaz, vidí, které lhůty vašich věcí se blíží. Sdílejte ho jen se svými vlastními zařízeními.",
+        "cycleFeedTitle": "Exportovat cyklus",
+        "cycleFeedDescription": "Přihlaste se k odběru zaznamenaných a předpovídaných menstruací (a také ovulace a plodného okna, pokud jsou sledovány) pouze pro čtení v Apple Kalendáři, Google Kalendáři nebo Thunderbirdu.",
+        "cycleFeedInactive": "Exportní kanál je vypnutý.",
+        "cycleFeedActivate": "Aktivovat kanál",
+        "cycleFeedUrlLabel": "Adresa kanálu",
+        "cycleFeedCopy": "Kopírovat adresu",
+        "cycleFeedCopied": "Adresa zkopírována",
+        "cycleFeedSubscribe": "Přihlásit se k odběru v kalendářové aplikaci",
+        "cycleFeedRegenerate": "Vytvořit nový odkaz",
+        "cycleFeedDisable": "Vypnout kanál",
+        "cycleFeedRegenerateConfirm": "Vytvořit nový odkaz? Starý odkaz přestane fungovat.",
+        "cycleFeedRegenerateConfirmDetail": "Zařízení a služby používající starý odkaz přestanou dostávat aktualizace a podle aplikace buď zobrazují svůj poslední stav, nebo nezobrazují nic, dokud se tam nezadá nová adresa.",
+        "cycleFeedDisableConfirm": "Vypnout kanál? Stávající odběry přestanou dostávat aktualizace.",
+        "cycleFeedDisableConfirmDetail": "Odkaz okamžitě přestane cokoli doručovat. Jeho opětovné zapnutí později vytvoří novou adresu, kterou musí každý odběratel ručně zadat znovu.",
+        "cycleFeedHint": "Kdokoli, kdo zná tento odkaz, může vidět data vašeho cyklu. Sdílejte jej pouze s vlastními zařízeními.",
         "caldavDescription": "Připojte více CalDAV účtů (iCloud, Nextcloud, Radicale, Baikal atd.) a vyberte, které kalendáře se synchronizují.",
         "caldavAddAccount": "Přidat CalDAV účet",
         "caldavEmptyState": "Zatím nejsou připojeny žádné CalDAV účty. Přidejte svůj první účet a začněte.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Prstenec cyklu",
                 "cycleDay": "Den cyklu {{day}}",
+                "dayBadge": "Den {{day}}",
                 "of": "z {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Příští menstruace",
                 "fertileWindow": "Plodné období",
                 "ovulation": "Ovulace",
+                "ovulationConfirmed": "Ovulace potvrzena",
                 "avgCycle": "Prům. délka cyklu",
                 "avgPeriod": "Prům. délka menstruace",
-                "regularity": "Pravidelnost",
+                "cycleVariation": "Variabilita cyklu",
                 "regular": "Pravidelný",
                 "irregular": "Nepravidelný",
                 "notEnoughData": "Málo dat",
                 "noPrediction": "Zaznamenej menstruaci pro předpovědi."
+            },
+            "stats": {
+                "source": {
+                    "history": "Na základě posledních {{count}} cyklů",
+                    "history_one": "Na základě posledního cyklu",
+                    "insufficientHistory": "Zatím výchozí hodnota - zaznamenejte ještě {{count}} cyklů pro osobní předpověď",
+                    "insufficientHistory_one": "Zatím výchozí hodnota - zaznamenejte ještě {{count}} cyklus pro osobní předpověď",
+                    "default": "Výchozí předpoklad (zatím nezaznamenána žádná historie)"
+                }
             },
             "unit": {
                 "days": "{{value}} dní"
@@ -4196,6 +4222,27 @@
                 "empty": "Zatím nezaznamenána žádná menstruace.",
                 "cycleLength": "Cyklus {{value}} dní"
             },
+            "trends": {
+                "title": "Trendy",
+                "date": "Datum",
+                "cycleLength": "Délka cyklu",
+                "symptomFrequency": "Frekvence symptomů",
+                "severity": "Závažnost",
+                "severityTrend": "Trend závažnosti",
+                "cyclePattern": "Vzorec podle dne cyklu",
+                "cyclePatternSentence": "Zaznamenali jste {{symptom}} během {{phase}} v {{occurred}} z posledních {{total}} cyklů.",
+                "cyclePatternDaysBefore": "{{symptom}} se často objevuje {{days}} dní před menstruací.",
+                "cyclePatternNone": "{{symptom}} se ve vašich posledních {{total}} cyklech znovu neobjevil.",
+                "typical": "Typické",
+                "atypical": "Atypické",
+                "typicalRangeLabel": "Typický rozsah: {{min}}-{{max}} dní",
+                "likelihoodTitle": "Vzorce symptomů",
+                "likelihoodCaption": "Vyberte symptom a zjistěte, ve které dny se podle vaší historie často objevuje.",
+                "likelyToday": "{{symptom}} se často objevuje kolem tohoto dne vašeho cyklu.",
+                "symptomTracked": "Zaznamenáno",
+                "symptomPredicted": "Zde se často objevuje",
+                "phaseOther": "Ostatní"
+            },
             "flow": {
                 "label": "Intenzita krvácení",
                 "none": "Žádná",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Únava",
                 "nausea": "Nevolnost",
                 "cravings": "Chutě na jídlo",
-                "insomnia": "Nespavost"
+                "insomnia": "Nespavost",
+                "constipation": "Zácpa",
+                "diarrhea": "Průjem",
+                "jointPain": "Bolest kloubů",
+                "dizziness": "Závratě",
+                "hotFlashes": "Návaly horka",
+                "swelling": "Zadržování vody",
+                "libidoChange": "Změna libida",
+                "dischargeChange": "Změna výtoku",
+                "appetiteChange": "Změna chuti k jídlu",
+                "concentrationDifficulty": "Potíže se soustředěním"
+            },
+            "intensity": {
+                "mild": "Mírné",
+                "moderate": "Střední",
+                "severe": "Silné"
+            },
+            "bbt": {
+                "label": "Bazální tělesná teplota",
+                "placeholder": "např. 36,50",
+                "unitLabel": "Jednotka",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Volitelné. Při pravidelném měření může nárůst teploty potvrdit ovulaci v aktuálním cyklu."
             },
             "mood": {
                 "label": "Nálada",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Exportovat jako CSV"
             },
+            "ics": {
+                "calendarName": "Cyklus Yuvomi",
+                "periodSummary": "Menstruace",
+                "predictedPeriodSummary": "Předpokládaná menstruace",
+                "fertileWindowSummary": "Plodné okno (předpokládané)",
+                "ovulationSummary": "Ovulace (předpokládaná)"
+            },
             "settings": {
                 "open": "Nastavení",
                 "title": "Nastavení cyklu",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Délka luteální fáze",
                 "trackFertility": "Zobrazit plodné období",
                 "autoHint": "Ponech prázdné = vypočítá se automaticky z tvé historie.",
+                "remindPeriodDaysBefore": "Připomenutí menstruace",
+                "remindOff": "Vypnuto",
+                "remindSameDay": "V daný den",
+                "remindPeriodDaysBeforeHint": "Upozorní vás před předpokládaným začátkem příští menstruace.",
+                "remindLogDaily": "Připomínat mi denně zaznamenat záznam",
                 "defaultVisibility": "Výchozí viditelnost nových záznamů",
                 "defaultVisibilityHint": "Platí pro nově zaznamenané menstruace a denní záznamy. Lze změnit u každého záznamu.",
                 "applyToAll": "Použít na všechny záznamy",

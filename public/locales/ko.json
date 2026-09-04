@@ -1957,6 +1957,21 @@
         "inventoryFeedDisableConfirm": "피드를 비활성화할까요? 기존 구독은 더 이상 업데이트를 받지 못합니다.",
         "inventoryFeedDisableConfirmDetail": "링크는 즉시 아무것도 전달하지 않습니다. 나중에 피드를 다시 활성화하면 새 주소가 만들어지며, 모든 구독자가 직접 다시 입력해야 합니다.",
         "inventoryFeedHint": "이 링크를 아는 사람은 누구나 소지품의 어떤 기한이 다가오는지 볼 수 있습니다. 본인의 기기와만 공유하세요.",
+        "cycleFeedTitle": "주기 내보내기",
+        "cycleFeedDescription": "기록 및 예측된 생리(추적 중이라면 배란과 가임기 포함)를 Apple 캘린더, Google 캘린더 또는 Thunderbird에서 읽기 전용으로 구독하세요.",
+        "cycleFeedInactive": "내보내기 피드가 비활성화되어 있습니다.",
+        "cycleFeedActivate": "피드 활성화",
+        "cycleFeedUrlLabel": "피드 주소",
+        "cycleFeedCopy": "주소 복사",
+        "cycleFeedCopied": "주소가 복사되었습니다",
+        "cycleFeedSubscribe": "캘린더 앱에서 구독",
+        "cycleFeedRegenerate": "새 링크 생성",
+        "cycleFeedDisable": "피드 비활성화",
+        "cycleFeedRegenerateConfirm": "새 링크를 생성할까요? 기존 링크는 더 이상 작동하지 않습니다.",
+        "cycleFeedRegenerateConfirmDetail": "기존 링크를 사용하는 기기와 서비스는 더 이상 업데이트를 받지 못하며, 앱에 따라 마지막 상태를 계속 표시하거나 새 주소가 입력될 때까지 아무것도 표시하지 않습니다.",
+        "cycleFeedDisableConfirm": "피드를 비활성화할까요? 기존 구독은 더 이상 업데이트를 받지 못합니다.",
+        "cycleFeedDisableConfirmDetail": "링크는 즉시 아무것도 전달하지 않습니다. 나중에 다시 활성화하면 새 주소가 생성되며, 모든 구독자가 이를 직접 다시 입력해야 합니다.",
+        "cycleFeedHint": "이 링크를 아는 사람은 누구나 주기 데이터를 볼 수 있습니다. 본인의 기기와만 공유하세요.",
         "caldavDescription": "여러 CalDAV 계정(iCloud, Nextcloud, Radicale, Baikal 등)을 연결하고 동기화할 캘린더를 선택하세요.",
         "caldavAddAccount": "CalDAV 계정 추가",
         "caldavEmptyState": "아직 연결된 CalDAV 계정이 없습니다. 첫 계정을 추가하여 시작하세요.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "주기 링",
                 "cycleDay": "주기 {{day}}일차",
+                "dayBadge": "{{day}}일차",
                 "of": "{{total}} 중"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "다음 생리",
                 "fertileWindow": "가임기",
                 "ovulation": "배란",
+                "ovulationConfirmed": "배란 확인됨",
                 "avgCycle": "평균 주기 길이",
                 "avgPeriod": "평균 생리 기간",
-                "regularity": "규칙성",
+                "cycleVariation": "주기 변동",
                 "regular": "규칙적",
                 "irregular": "불규칙",
                 "notEnoughData": "데이터 부족",
                 "noPrediction": "예측을 위해 생리를 기록하세요."
+            },
+            "stats": {
+                "source": {
+                    "history": "최근 {{count}}개 주기를 기준으로",
+                    "history_one": "가장 최근 주기를 기준으로",
+                    "insufficientHistory": "현재는 기본값입니다 - 맞춤 예측을 위해 {{count}}개 주기를 더 기록하세요",
+                    "insufficientHistory_one": "현재는 기본값입니다 - 맞춤 예측을 위해 {{count}}개 주기를 더 기록하세요",
+                    "default": "기본 가정값(아직 기록된 이력 없음)"
+                }
             },
             "unit": {
                 "days": "{{value}}일"
@@ -4196,6 +4222,27 @@
                 "empty": "아직 기록된 생리가 없습니다.",
                 "cycleLength": "주기 {{value}}일"
             },
+            "trends": {
+                "title": "추세",
+                "date": "날짜",
+                "cycleLength": "주기 길이",
+                "symptomFrequency": "증상 빈도",
+                "severity": "정도",
+                "severityTrend": "정도 추이",
+                "cyclePattern": "주기일별 패턴",
+                "cyclePatternSentence": "최근 {{total}}개 주기 중 {{occurred}}회, {{phase}} 동안 {{symptom}}을(를) 기록했습니다.",
+                "cyclePatternDaysBefore": "{{symptom}}은(는) 생리 {{days}}일 전에 자주 나타납니다.",
+                "cyclePatternNone": "{{symptom}}은(는) 최근 {{total}}개 주기에서 다시 나타나지 않았습니다.",
+                "typical": "일반적",
+                "atypical": "비정상적",
+                "typicalRangeLabel": "일반적 범위: {{min}}-{{max}}일",
+                "likelihoodTitle": "증상 패턴",
+                "likelihoodCaption": "이력에 따라 자주 나타나는 날짜를 확인하려면 증상을 선택하세요.",
+                "likelyToday": "{{symptom}}은(는) 주기의 이 날 즈음에 자주 나타납니다.",
+                "symptomTracked": "기록됨",
+                "symptomPredicted": "여기서 자주 나타남",
+                "phaseOther": "기타"
+            },
             "flow": {
                 "label": "생리량",
                 "none": "없음",
@@ -4215,7 +4262,30 @@
                 "fatigue": "피로",
                 "nausea": "메스꺼움",
                 "cravings": "식욕 폭발",
-                "insomnia": "불면"
+                "insomnia": "불면",
+                "constipation": "변비",
+                "diarrhea": "설사",
+                "jointPain": "관절통",
+                "dizziness": "어지러움",
+                "hotFlashes": "홍조",
+                "swelling": "부종",
+                "libidoChange": "성욕 변화",
+                "dischargeChange": "분비물 변화",
+                "appetiteChange": "식욕 변화",
+                "concentrationDifficulty": "집중력 저하"
+            },
+            "intensity": {
+                "mild": "경미",
+                "moderate": "중간",
+                "severe": "심함"
+            },
+            "bbt": {
+                "label": "기초 체온",
+                "placeholder": "예: 36.50",
+                "unitLabel": "단위",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "선택 사항입니다. 정기적으로 측정하면 체온 상승으로 현재 주기의 배란을 확인할 수 있습니다."
             },
             "mood": {
                 "label": "기분",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "CSV로 내보내기"
             },
+            "ics": {
+                "calendarName": "Yuvomi 주기",
+                "periodSummary": "생리",
+                "predictedPeriodSummary": "예측 생리",
+                "fertileWindowSummary": "가임기(예측)",
+                "ovulationSummary": "배란(예측)"
+            },
             "settings": {
                 "open": "설정",
                 "title": "주기 설정",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "황체기 길이",
                 "trackFertility": "가임기 표시",
                 "autoHint": "비워 두면 기록에서 자동 계산됩니다.",
+                "remindPeriodDaysBefore": "생리 알림",
+                "remindOff": "끄기",
+                "remindSameDay": "당일",
+                "remindPeriodDaysBeforeHint": "예측된 다음 생리가 시작되기 전에 알려줍니다.",
+                "remindLogDaily": "매일 기록하도록 알림",
                 "defaultVisibility": "새 항목의 기본 공개 범위",
                 "defaultVisibilityHint": "새로 기록한 생리와 일일 기록에 적용됩니다. 항목마다 변경할 수 있습니다.",
                 "applyToAll": "모든 항목에 적용",

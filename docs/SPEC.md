@@ -2517,11 +2517,29 @@ is writable by anyone for themselves.
 | user_id | INTEGER | FK → Users (CASCADE delete), NOT NULL |
 | log_date | TEXT | NOT NULL — YYYY-MM-DD |
 | flow | TEXT | `spotting` \| `light` \| `medium` \| `heavy` (nullable) |
-| symptoms | TEXT | comma-separated stable symptom keys |
+| symptoms | TEXT | **Legacy, frozen as of migration 178.** Comma-separated symptom keys; no longer written or read by the API — see `cycle_day_log_symptoms` below. Kept only so a raw DB backup from before that migration stays readable. |
 | mood | TEXT | |
 | note | TEXT | |
 | visibility | TEXT | `private` \| `family`, default `private` |
+| basal_temp | REAL | nullable (migration 179) — optional daily basal body temperature |
+| basal_temp_unit | TEXT | nullable, `c` \| `f` — required together with `basal_temp`; free-text-per-entry like `health_vitals.unit` (no household-wide C/F setting exists), but constrained to these two at the route since the shift-detection algorithm must convert reliably |
 | created_at / updated_at | TEXT | ISO 8601, default now |
+
+**`cycle_day_log_symptoms`** (migration 178) — graded symptom selections for a day log, normalized
+out of the legacy `symptoms` column so each selection can carry its own severity.
+
+| Column | Type | Constraint |
+|--------|------|-----------|
+| day_log_id | INTEGER | FK → `cycle_day_logs` (CASCADE delete), NOT NULL |
+| symptom_key | TEXT | NOT NULL — one of `SYMPTOM_TYPES` (`public/utils/health-cycle.js`, 20 presets) |
+| intensity | INTEGER | nullable, 1–3 (mild/moderate/severe) — `NULL` means selected without a grade |
+
+`UNIQUE(day_log_id, symptom_key)`. The API's `symptoms` field on a day log is this table's rows as
+`{key, intensity}[]`, not the legacy column; `POST /health/cycle/logs` fully replaces a log's
+symptom rows on every save (delete + re-insert), same "no diffing" approach as the day log itself.
+`normalizeSymptomEntries()` (`public/utils/health-cycle.js`) is the single normalizer for both the
+current array format and, for backward compatibility with pre-migration-176 clients, a comma
+string or plain string array (both yield `intensity: null`).
 
 **`cycle_settings`** — per-member prediction parameters (`user_id` primary key).
 
@@ -2534,7 +2552,159 @@ is writable by anyone for themselves.
 | pregnancy_mode | INTEGER | 0/1, default 0 — when 1, all cycle predictions pause (migration 82) |
 | pregnancy_due_date | TEXT | nullable YYYY-MM-DD estimated due date; cleared when pregnancy_mode is off |
 | default_visibility | TEXT | `private` \| `family`, default `private` (migration 96) — pre-selects the visibility for newly logged periods and day logs; per-entry override always available |
+| remind_period_days_before | INTEGER | nullable, 0–14 (migration 177) — NULL = off; days of lead time before the predicted next period for a `cycle_period` reminder |
+| remind_log_daily | INTEGER | 0/1, default 0 (migration 177) — daily nudge to log today, suppressed once a `cycle_day_logs` row exists for the day |
 | created_at / updated_at | TEXT | ISO 8601, default now |
+
+**Cycle reminders** (migration 177) widen `reminders.entity_type` with `cycle_period` and
+`cycle_log_nudge`, following the same pipeline as every other reminder source (Web Push +
+household notification channels via `server/services/notifications.js`). Neither a predicted
+period date nor "not yet logged today" is a stored row, so both anchor to
+`cycle_reminder_anchors` (`user_id`, `anchor_date`, `kind`) the same way Schedule's pattern days
+anchor to `schedule_reminder_entries` — a stable id for `reminders.entity_id` to reference.
+`server/services/cycle-reminders.js` reuses `predictCycle()` from `public/utils/health-cycle.js`
+directly (imported server-side via a relative path so it resolves in Node without a browser or a
+test loader) rather than a second copy of the prediction math. Both reminder types are derived,
+server-sync-owned entity types (`DERIVED_ENTITY_TYPES` in `server/routes/reminders.js`) — a caller
+cannot hand-set one via the generic reminders API, matching `pantry_item`'s existing precedent.
+
+**Optional basal body temperature (BBT) tracking** (migration 179) lets a day log carry a daily
+temperature reading. `detectTemperatureShift()` (`public/utils/health-cycle.js`) implements a
+coverline method: the first reading at least 0.2°C above the mean of the 6 preceding (lower)
+readings, sustained for 3 consecutive readings, confirms ovulation — the same "3-over-6" rule
+fertility-awareness methods use, deliberately without the single-outlier-day exception those
+methods allow (a simple, checkable rule over a more forgiving but harder-to-verify one). It works
+on the *sequence* of logged readings, not calendar days, so missing days aren't a special case.
+When a shift is detected within the current cycle, `predictCycle()` (given the day logs as its 4th
+argument) replaces the calendar-method ovulation date with the confirmed one and sets
+`ovulationConfirmed: true`; future cycles stay calendar-method, since they have no readings yet.
+The cycle ring repositions its ovulation marker to the confirmed date's actual cycle day and gains
+an outer ring around the marker; the fertile-window stat card's ovulation line switches label. No
+household-wide temperature-unit setting exists (matching `health_vitals.unit`'s per-entry
+convention); the unit travels with each reading and `detectTemperatureShift()` converts internally.
+
+**A Trends section** on the cycle tab (purely client-side aggregation, no new endpoints) shows up
+to three charts once there's enough history, each hidden individually when its own data is too
+thin: a **cycle-length line chart** (`cycleLengthTrend()`, every logged gap with its date, unlimited
+history — unlike `cycleStats()`'s rolling `MAX_HISTORY` window, a trend view exists specifically to
+show whether the rhythm is changing over time), a **BBT line chart** (`bbtSeries()`, all logged
+readings converted to Celsius), and a **symptom-frequency list** (`symptomFrequencyByPhase()`) as
+stacked proportion bars for the top 8 symptoms by total count. The two line charts reuse the shared
+chart geometry (`public/utils/chart.js`, the same one Vitals/Labs/Activity use) rather than a new
+chart system; the proportion bars follow this codebase's existing bar-with-track convention
+(`--seg-share` on a flex child, same idea as `.schedule-stat-row__track`) rather than the axis-chart
+geometry, since a share-of-whole isn't an axis quantity. Symptom frequency classifies each day log
+into one of three buckets — `menstruation` (within a logged period), `luteal` (from that specific
+cycle's own ovulation day, i.e. its actual next-period date minus luteal length — not a household
+average) to the next period, `other` (everything else) — deliberately coarser than the five
+ring/calendar phases: reconstructing follicular/fertile/ovulation boundaries correctly for every
+past cycle would need a second, error-prone copy of `predictCycle()`'s logic running over history
+instead of "today," for a distinction the two most commonly asked questions ("is this a period
+symptom" / "is this a PMS symptom") don't need. Days before the first logged period aren't
+classified and are excluded, not guessed.
+
+**The cycle ring** carries a "Day N" badge next to its current-day marker, connected by a short
+line, instead of packing the day number into the ring's small center area alongside the phase label
+and status line. The center now only holds those two; the day number moved out to the badge, which
+follows the marker's angle around the ring (`cyclePolar()`) so it stays visually attached wherever
+"today" falls in the cycle. It also carries a compact `.cycle-legend` right below it - the ring's
+phase colors (period/fertile/ovulation) were previously explained only by a hover tooltip, invisible
+on touch. It's a deliberately smaller selection than the calendar's legend below it on the same
+page: only the colors the ring actually renders (`cycleRing()`'s segments) - the calendar also
+distinguishes "predicted" and "today," which don't have a distinct color on the ring, so those items
+are left out here rather than shown unexplained. Fertile/ovulation drop out of the legend entirely
+when `trackFertility` is off, matching that the ring itself renders no such segments then.
+
+**Symptom frequency entries carry an `avgIntensity`** (`symptomFrequencyByPhase()`), the mean of
+that symptom's graded (1–3) occurrences, `null` if none were graded — additive to the existing
+per-phase counts. The frequency list shows it as the same three-dot indicator used in the day-log
+editor. A symptom with at least two graded readings gets an expandable "Severity trend" panel
+(`symptomIntensityTrend()`, reusing the Trends section's line-chart geometry with an intensity
+y-axis instead of days/°C) so a rarely-but-severely logged symptom is distinguishable from an
+often-but-mildly logged one — something a plain occurrence count can't show.
+
+**A per-symptom cycle-day pattern view** (`symptomCyclePattern()`) answers a third question neither
+of the above can: not "how often" or "how severe," but "which cycle day does this symptom
+reliably land on." It reuses `symptomFrequencyByPhase()`'s cycle-boundary reconstruction, factored
+out into a shared internal `reconstructCycles()` helper (and a shared `classifyDayPhase()` for the
+three-bucket classification) rather than a third copy of the same math. For up to the six most
+recent cycles it returns each cycle's actual length, which cycle-day(s) the symptom occurred on
+(1-indexed from that cycle's own start, so cycles of different lengths line up), and a per-day
+phase classification for the whole cycle. `occurredCount`/`totalCount` count *cycles* ("in 2 of 3
+cycles"), not raw occurrences - a symptom that recurs several times within one cycle still only
+counts once for that cycle. The UI renders this as a plain-language sentence plus a compact grid
+(one bar per cycle, phase-colored day cells, an inset ring rather than a second color marking a
+hit day - the ring stays visible without relying on color perception, and each cell's `title`
+carries the cycle-day number as text too), as a second expandable panel alongside the severity
+trend on the same symptom-frequency row.
+
+The pattern's summary sentence prefers a concrete `typicalDaysBeforePeriod` ("Bloating often occurs
+3 days before your period") over the coarser phase-name sentence when one exists - the most common
+"N days before the next period" value among the symptom's *luteal-phase* occurrences specifically
+(days-before-period is only an intuitive framing there; a menstruation-phase or "other"-phase
+occurrence keeps the phase-name sentence, since "before your period" doesn't make sense for either).
+Requires the same value to recur across at least two cycles before it counts as a pattern rather than
+coincidence.
+
+**The cycle-length trend is a bar chart, not a line chart** (`TYPICAL_CYCLE_RANGE = {min: 24, max:
+38}`, `isTypicalCycleLength()`), each bar colored typical (module accent) or atypical (the existing
+warning token) against a shaded reference band for the range itself - the same
+`.health-chart__band`/`.health-chart__band-line` pattern the lab-value chart already uses for a
+normal range, reused rather than invented twice, plus a `.cycle-legend` (the same component the
+calendar and symptom-frequency chart already use) spelling out what the two bar colors mean - without
+it, that distinction only lived in a hover tooltip, invisible on a touch device. The range is a
+population-level reference figure,
+deliberately separate from `cycleStats()`'s own `regular`/`variation` (deviation from *the user's
+own* recent average) - the two answer different questions ("is this within the usual range" vs. "is
+your cycle consistent for you") and neither replaces the other. Scoping this also surfaced a real
+gap: the cycle stat-card row only ever showed a regularity tile when `trackFertility` was *off*
+(`prediction.trackFertility ? fertileWindowCard : regularityCard`, an either/or) - with fertility
+tracking on, the default, cycle variation was invisible. The regularity tile (now labeled by what it
+shows, cycle variation in days, with the regular/irregular judgment as its caption) is unconditional;
+the average-cycle-length tile separately gets a typical/atypical badge, using the population range,
+shown only once there's a real basis (derived from history or a manual setting) rather than on a
+bare default value.
+
+**Symptom likelihood prediction** (`predictSymptomLikelihood()`) is the one function in this module
+that genuinely predicts forward rather than summarizing history. It reuses `symptomCyclePattern()`'s
+per-cycle-day occurrence data: for each cycle-day number, only cycles that were actually long enough
+to *have* that day count as eligible (a short cycle doesn't unfairly dilute a later day's ratio), and
+a day counts as "likely" once at least half of its eligible cycles (and at least two of them - a
+single long cycle isn't a pattern) had the symptom on it. Likely day-numbers project onto the
+current cycle's real calendar dates with the same `addLocalDays()` arithmetic `predictCycle()` uses
+for period/ovulation projection. Below `MIN_HISTORY_GAPS` considered cycles there is no prediction at
+all (only `todayCycleDay`, which stays meaningful independent of prediction confidence) - the same
+threshold Phase 0 established for trusting a derived cycle-length average, reused here instead of a
+fourth tuning constant. The UI wraps this in a symptom picker (only symptoms with enough history to
+evaluate at all appear as choices), a "likely today" callout using the same deliberately
+non-diagnostic wording as the existing fertile-window disclaimer ("often occurs around this day," not
+a forecast), and a calendar overlay: the *same* month-calendar component the cycle tab already shows
+gains extra per-day markers (solid = symptom actually logged, ring = predicted-likely) rather than a
+second calendar existing side by side - the picker just changes what the existing grid highlights, in
+its own corner of each cell so it never collides with the calendar's own has-a-log marker.
+
+**A per-user, read-only predicted-cycle ICS feed** (migration 180, `users.cycle_feed_token`) gives
+Lock-Screen/Calendar-app visibility without a native app - the same trick already used for the
+household calendar and inventory-warranty feeds (`server/services/ics-export.js`,
+`server/services/inventory-deadlines-ics.js`), whose `escapeICSText`/`foldLine` helpers and
+token-column-on-`users` pattern `server/services/cycle-ics.js` reuses directly.
+**Unlike the inventory feed, the feed *content* here is personal, not just the token**: cycle data
+is already owned per-user (`cycle_periods.user_id`), so `buildCycleFeed(conn, userId, now)` filters
+to exactly that user, with no household aggregation - keeping cycle data out of the caregiver-grant
+system exactly as the rest of this module already does (#584; a share stays `visibility: 'family'`,
+never a feed subscription to someone else's data). The feed carries a VEVENT per logged period
+(stable UID from the DB row) plus, unless pregnancy mode is active, up to three predicted future
+periods and (when fertility tracking is on) their fertile windows/ovulation - the same three-cycle
+horizon `buildCycleCalendar()` already projects. That projection formula moved into a new exported
+`projectFutureCycles()`, extracted out of `buildCycleCalendar()`'s own inline loop (which now calls
+it) rather than duplicating the calendar-method math a third time for the feed. Management (get
+status / regenerate / disable) lives at `/api/v1/health/cycle/feed`
+(`server/routes/health/cycle-feed.js`), the unauthenticated feed itself at
+`GET /feed/cycle/:token.ics` (`server/index.js`) - same split as every other ICS feed in this app.
+The subscribe UI is a third section on the existing personal-feeds settings page
+(`public/settings/pages/personal-feeds.js`, alongside the calendar and inventory feeds it already
+manages), not a new page and not inside the cycle tab's own settings modal - keeping every "export my
+own data as a link" control in the one place a person already goes to manage the other two.
 
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and
@@ -3220,7 +3390,7 @@ One page module with six deep-link routes (pattern like Settings, not like the K
 - **Medications:** medication list (name, dose, form, active/PRN), schedule editor (time slots + weekday mask + dose), "due today" view with take/skip, 7-day adherence bar, and stock/refill warnings. Reminders are delivered through the existing push/notification-channel layer (`server/services/medication-scheduler.js`) — no separate reminder table.
 - **Labs:** reports with multiple analytes (value, unit, reference low/high); `low`/`normal`/`high` flag derived from value + range and colour-coded via tokens; per-analyte trend chart with a reference band; neutral medical disclaimer.
 - **Activity:** training log (preset or custom type, duration, optional distance/intensity/calories, note); weekly summary cards and a native SVG bar chart per weekday.
-- **Cycle:** menstrual cycle tracking. Period episodes (start/end + flow), per-day logs (flow intensity, symptoms, mood), and calendar-method predictions of the next period, ovulation, and fertile window (luteal length, cycle/period averages derived from history or overridden in settings). A native **SVG cycle-ring** shows the current phase, cycle day, and countdown; a month calendar colour-codes logged and predicted periods, the fertile window, and ovulation; plus prediction stat cards, a period history, and CSV export. A **pregnancy mode** (migration 82) in the cycle settings pauses all predictions (next period, ovulation, fertile window, ring, and calendar projection); with an optional estimated due date it instead shows the gestational week (Naegele rule, 280 days), trimester, countdown, and a progress bar, while daily logging stays available. Cycle data defaults to `private`; a per-member **default-visibility** setting (migration 96) can pre-select `family` for newly logged periods and day logs instead, and an **"apply to all"** action in the cycle settings bulk-updates every existing entry to the chosen visibility (`PATCH /health/cycle/visibility`, strictly own-scoped). The visibility of any single period or day log stays overridable in its own modal. The fertile window carries a clear disclaimer that it is not contraception and no substitute for medical advice. Cycle data is deliberately kept out of global search; the only dashboard surface is an **opt-in, owner-only tile** (v0.98.0) that shows the signed-in user's own next-period countdown and current phase — it is never added to the shared dashboard payload. The calendar distinguishes phases with **non-colour cues** (solid fill, diagonal hatch, ringed day, outline) as well as colour, so it stays legible with colour-vision deficiency. **Today carries the app accent, not the module tone (v2.24.1):** its ring used the Health colour, which is the tone in that grid closest to the period colour — and today is frequently a logged day, so both rings met on the same cell. Measured (CIEDE2000, JND 2.3) the distance to `--cycle-period` rose from 17.23 light / 14.33 dark to 31.50 / 25.97, and the grid's smallest pairwise distance from 17.23 / 14.33 to 26.60 / 25.97. It is also the mark the calendar and the datepicker already use for the current day; the 2 px ring width stays, because 1.5 px already belongs to a predicted period.
+- **Cycle:** menstrual cycle tracking. Period episodes (start/end + flow), per-day logs (flow intensity, a curated 20-symptom picker with an optional 1–3 severity each, mood), and calendar-method predictions of the next period, ovulation, and fertile window (luteal length, cycle/period averages derived from history or overridden in settings). A native **SVG cycle-ring** shows the current phase, cycle day, and countdown; a month calendar colour-codes logged and predicted periods, the fertile window, and ovulation; plus prediction stat cards, a period history, and CSV export. A **pregnancy mode** (migration 82) in the cycle settings pauses all predictions (next period, ovulation, fertile window, ring, and calendar projection); with an optional estimated due date it instead shows the gestational week (Naegele rule, 280 days), trimester, countdown, and a progress bar, while daily logging stays available. Cycle data defaults to `private`; a per-member **default-visibility** setting (migration 96) can pre-select `family` for newly logged periods and day logs instead, and an **"apply to all"** action in the cycle settings bulk-updates every existing entry to the chosen visibility (`PATCH /health/cycle/visibility`, strictly own-scoped). The visibility of any single period or day log stays overridable in its own modal. The fertile window carries a clear disclaimer that it is not contraception and no substitute for medical advice. Cycle data is deliberately kept out of global search; the only dashboard surface is an **opt-in, owner-only tile** (v0.98.0) that shows the signed-in user's own next-period countdown and current phase — it is never added to the shared dashboard payload. The calendar distinguishes phases with **non-colour cues** (solid fill, diagonal hatch, ringed day, outline) as well as colour, so it stays legible with colour-vision deficiency. **Today carries the app accent, not the module tone (v2.24.1):** its ring used the Health colour, which is the tone in that grid closest to the period colour — and today is frequently a logged day, so both rings met on the same cell. Measured (CIEDE2000, JND 2.3) the distance to `--cycle-period` rose from 17.23 light / 14.33 dark to 31.50 / 25.97, and the grid's smallest pairwise distance from 17.23 / 14.33 to 26.60 / 25.97. It is also the mark the calendar and the datepicker already use for the current day; the 2 px ring width stays, because 1.5 px already belongs to a predicted period.
 - **Overview:** aggregated landing view — due-today medications with inline take/skip, latest vitals cards (deep-link to the Vitals tab), adherence rate + streak, quick-capture buttons, upcoming reminders, and a **CSV export** bar (one download per area — vitals, activities, labs, medication logs — with optional date range).
 - **Search & shortcuts:** medications and activities appear in global search (FTS5) with the same visibility scoping and deep-link to the Meds/Activity tab; the `g h` keyboard shortcut jumps to the last-visited Health tab.
 - **Accessibility:** the sub-tab bar and the range chip row expose `role="tablist"`/`tab` with arrow-key navigation and roving tabindex; the person menu carries the menu keyboard behaviour from the shared `popover-menu` (focus moves onto the active choice on open, arrows wrap, Home/End, Tab leaves) and hands focus back to the freshly rendered trigger after a switch; SVG charts carry `role="img"` + `aria-label`; take/skip/save actions announce via the polite/assertive live regions; modals trap focus and restore it on close.

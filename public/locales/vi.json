@@ -1905,6 +1905,21 @@
         "inventoryFeedDisableConfirm": "Tắt nguồn? Các đăng ký hiện có sẽ không nhận được cập nhật nữa.",
         "inventoryFeedDisableConfirmDetail": "Liên kết lập tức ngừng cung cấp bất cứ thứ gì. Nếu sau này bật lại nguồn, một địa chỉ mới sẽ được tạo và mỗi người đăng ký phải nhập lại bằng tay.",
         "inventoryFeedHint": "Ai biết liên kết này đều có thể thấy những thời hạn nào của tài sản bạn sắp đến. Chỉ chia sẻ với thiết bị của chính bạn.",
+        "cycleFeedTitle": "Xuất chu kỳ",
+        "cycleFeedDescription": "Đăng ký theo dõi kỳ kinh đã ghi và dự đoán (cùng với rụng trứng và cửa sổ dễ thụ thai, nếu có theo dõi) ở chế độ chỉ đọc trong Apple Calendar, Google Lịch hoặc Thunderbird.",
+        "cycleFeedInactive": "Nguồn xuất đang tắt.",
+        "cycleFeedActivate": "Kích hoạt nguồn cấp",
+        "cycleFeedUrlLabel": "Địa chỉ nguồn cấp",
+        "cycleFeedCopy": "Sao chép địa chỉ",
+        "cycleFeedCopied": "Đã sao chép địa chỉ",
+        "cycleFeedSubscribe": "Đăng ký trong ứng dụng lịch",
+        "cycleFeedRegenerate": "Tạo liên kết mới",
+        "cycleFeedDisable": "Tắt nguồn cấp",
+        "cycleFeedRegenerateConfirm": "Tạo liên kết mới? Liên kết cũ sẽ ngừng hoạt động.",
+        "cycleFeedRegenerateConfirmDetail": "Các thiết bị và dịch vụ đang dùng liên kết cũ sẽ ngừng nhận cập nhật và, tùy ứng dụng, sẽ tiếp tục hiển thị trạng thái cuối cùng hoặc không hiển thị gì cho đến khi nhập địa chỉ mới ở đó.",
+        "cycleFeedDisableConfirm": "Tắt nguồn cấp? Các đăng ký hiện có sẽ không còn nhận cập nhật.",
+        "cycleFeedDisableConfirmDetail": "Liên kết ngừng gửi bất kỳ dữ liệu nào ngay lập tức. Kích hoạt lại sau này sẽ tạo địa chỉ mới mà mỗi người đăng ký phải tự nhập lại.",
+        "cycleFeedHint": "Bất kỳ ai biết liên kết này đều có thể xem dữ liệu chu kỳ của bạn. Chỉ chia sẻ với thiết bị của riêng bạn.",
         "caldavDescription": "Kết nối nhiều tài khoản CalDAV (iCloud, Nextcloud, Radicale, Baikal, v.v.) và chọn lịch để đồng bộ.",
         "caldavAddAccount": "Thêm tài khoản CalDAV",
         "caldavEmptyState": "Chưa có tài khoản CalDAV nào được kết nối. Thêm tài khoản đầu tiên để bắt đầu.",
@@ -4132,6 +4147,7 @@
             "ring": {
                 "label": "Vòng chu kỳ",
                 "cycleDay": "Ngày chu kỳ {{day}}",
+                "dayBadge": "Ngày {{day}}",
                 "of": "trong số {{total}}"
             },
             "phase": {
@@ -4148,13 +4164,23 @@
                 "nextPeriod": "Kỳ kinh tiếp theo",
                 "fertileWindow": "Cửa sổ dễ thụ thai",
                 "ovulation": "Rụng trứng",
+                "ovulationConfirmed": "Đã xác nhận rụng trứng",
                 "avgCycle": "Độ dài chu kỳ TB",
                 "avgPeriod": "Độ dài kỳ kinh TB",
-                "regularity": "Độ đều đặn",
+                "cycleVariation": "Biến động chu kỳ",
                 "regular": "Đều đặn",
                 "irregular": "Không đều",
                 "notEnoughData": "Chưa đủ dữ liệu",
                 "noPrediction": "Ghi một kỳ kinh để có dự đoán."
+            },
+            "stats": {
+                "source": {
+                    "history": "Dựa trên {{count}} chu kỳ gần nhất của bạn",
+                    "history_one": "Dựa trên chu kỳ gần nhất của bạn",
+                    "insufficientHistory": "Hiện đang dùng giá trị mặc định - hãy ghi thêm {{count}} chu kỳ để có dự đoán cá nhân hóa",
+                    "insufficientHistory_one": "Hiện đang dùng giá trị mặc định - hãy ghi thêm {{count}} chu kỳ để có dự đoán cá nhân hóa",
+                    "default": "Giả định mặc định (chưa có lịch sử được ghi)"
+                }
             },
             "unit": {
                 "days": "{{value}} ngày"
@@ -4196,6 +4222,27 @@
                 "empty": "Chưa ghi kỳ kinh nào.",
                 "cycleLength": "Chu kỳ {{value}} ngày"
             },
+            "trends": {
+                "title": "Xu hướng",
+                "date": "Ngày",
+                "cycleLength": "Độ dài chu kỳ",
+                "symptomFrequency": "Tần suất triệu chứng",
+                "severity": "Mức độ",
+                "severityTrend": "Xu hướng mức độ",
+                "cyclePattern": "Mẫu hình theo ngày chu kỳ",
+                "cyclePatternSentence": "Bạn đã ghi {{symptom}} trong {{phase}} ở {{occurred}} trên {{total}} chu kỳ gần đây.",
+                "cyclePatternDaysBefore": "{{symptom}} thường xuất hiện {{days}} ngày trước kỳ kinh của bạn.",
+                "cyclePatternNone": "{{symptom}} không lặp lại trong {{total}} chu kỳ gần nhất của bạn.",
+                "typical": "Điển hình",
+                "atypical": "Không điển hình",
+                "typicalRangeLabel": "Phạm vi điển hình: {{min}}-{{max}} ngày",
+                "likelihoodTitle": "Mẫu hình triệu chứng",
+                "likelihoodCaption": "Chọn một triệu chứng để xem nó thường xuất hiện vào những ngày nào, dựa trên lịch sử của bạn.",
+                "likelyToday": "{{symptom}} thường xuất hiện quanh ngày này trong chu kỳ của bạn.",
+                "symptomTracked": "Đã ghi",
+                "symptomPredicted": "Thường xuất hiện ở đây",
+                "phaseOther": "Khác"
+            },
             "flow": {
                 "label": "Lượng máu",
                 "none": "Không",
@@ -4215,7 +4262,30 @@
                 "fatigue": "Mệt mỏi",
                 "nausea": "Buồn nôn",
                 "cravings": "Thèm ăn",
-                "insomnia": "Mất ngủ"
+                "insomnia": "Mất ngủ",
+                "constipation": "Táo bón",
+                "diarrhea": "Tiêu chảy",
+                "jointPain": "Đau khớp",
+                "dizziness": "Chóng mặt",
+                "hotFlashes": "Bốc hỏa",
+                "swelling": "Giữ nước",
+                "libidoChange": "Thay đổi ham muốn",
+                "dischargeChange": "Thay đổi dịch tiết",
+                "appetiteChange": "Thay đổi khẩu vị",
+                "concentrationDifficulty": "Khó tập trung"
+            },
+            "intensity": {
+                "mild": "Nhẹ",
+                "moderate": "Vừa",
+                "severe": "Nặng"
+            },
+            "bbt": {
+                "label": "Nhiệt độ cơ bản",
+                "placeholder": "vd. 36,50",
+                "unitLabel": "Đơn vị",
+                "celsius": "°C",
+                "fahrenheit": "°F",
+                "hint": "Không bắt buộc. Với các phép đo thường xuyên, nhiệt độ tăng có thể xác nhận rụng trứng trong chu kỳ hiện tại."
             },
             "mood": {
                 "label": "Tâm trạng",
@@ -4249,6 +4319,13 @@
             "export": {
                 "csv": "Xuất ra CSV"
             },
+            "ics": {
+                "calendarName": "Chu kỳ Yuvomi",
+                "periodSummary": "Kỳ kinh",
+                "predictedPeriodSummary": "Kỳ kinh dự đoán",
+                "fertileWindowSummary": "Cửa sổ dễ thụ thai (dự đoán)",
+                "ovulationSummary": "Rụng trứng (dự đoán)"
+            },
             "settings": {
                 "open": "Cài đặt",
                 "title": "Cài đặt chu kỳ",
@@ -4257,6 +4334,11 @@
                 "lutealLength": "Độ dài giai đoạn hoàng thể",
                 "trackFertility": "Hiển thị cửa sổ dễ thụ thai",
                 "autoHint": "Để trống = tự động tính từ lịch sử của bạn.",
+                "remindPeriodDaysBefore": "Nhắc nhở kỳ kinh",
+                "remindOff": "Tắt",
+                "remindSameDay": "Vào đúng ngày",
+                "remindPeriodDaysBeforeHint": "Thông báo trước khi kỳ kinh tiếp theo dự đoán bắt đầu.",
+                "remindLogDaily": "Nhắc tôi ghi chép hằng ngày",
                 "defaultVisibility": "Chế độ hiển thị mặc định cho mục mới",
                 "defaultVisibilityHint": "Áp dụng cho kỳ kinh và nhật ký hằng ngày mới ghi. Có thể thay đổi cho từng mục.",
                 "applyToAll": "Áp dụng cho tất cả mục",

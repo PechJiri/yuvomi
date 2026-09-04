@@ -16,7 +16,7 @@ import { tokenAllows } from '../scopes.js';
 const log    = createLogger('Reminders');
 const router = express.Router();
 
-const VALID_ENTITY_TYPES = ['task', 'event', 'subscription', 'inventory_item', 'inventory_tracked_date', 'pantry_item'];
+const VALID_ENTITY_TYPES = ['task', 'event', 'subscription', 'inventory_item', 'inventory_tracked_date', 'pantry_item', 'cycle_period', 'cycle_log_nudge'];
 
 /**
  * Nach jedem Schreibvorgang an den Erinnerungen eines Termins: die Zugewiesenen
@@ -60,10 +60,18 @@ function syncEventFanout(entityType, entityId, userId) {
  * nicht Bequemlichkeit, sondern der Unterschied zwischen "hält bis du es
  * änderst" und "ist in sechzig Sekunden weg" (Entscheidung 2026-08-26).
  *
+ * `cycle_period` und `cycle_log_nudge` gehören aus einem verwandten, aber
+ * eigenen Grund dazu: server/services/cycle-reminders.js stellt ihre Zeile bei
+ * jedem Lauf neu her, und `entity_id` zeigt auf einen Anker
+ * (`cycle_reminder_anchors`), den ein Aufrufer von außen gar nicht bilden
+ * könnte - ein vorhergesagter Periodenbeginn und "heute noch nicht geloggt"
+ * sind beide keine gespeicherte Zeile, an die man von Hand eine Erinnerung
+ * hängen könnte.
+ *
  * Die LESEWEGE (GET) kennen alle Typen weiter: der Erinnerungs-Toast muss eine
  * abgeleitete Meldung anzeigen und wegwischen können.
  */
-const DERIVED_ENTITY_TYPES = ['pantry_item'];
+const DERIVED_ENTITY_TYPES = ['pantry_item', 'cycle_period', 'cycle_log_nudge'];
 
 /* DIESER ROUTER IST EINE MISCHSTELLE, UND SEIN PFAD SAGT DAS NICHT.
  *
@@ -95,6 +103,8 @@ const ORIGIN_MODULE = Object.freeze({
   inventory_item:         'inventory',
   inventory_tracked_date: 'inventory',
   pantry_item:            'pantry',
+  cycle_period:           'health',
+  cycle_log_nudge:        'health',
 });
 
 /**
@@ -157,6 +167,8 @@ router.get('/pending', (req, res) => {
             WHERE d.id = r.entity_id
           )
           WHEN 'pantry_item' THEN (SELECT name FROM pantry_items WHERE id = r.entity_id)
+          WHEN 'cycle_period' THEN (SELECT anchor_date FROM cycle_reminder_anchors WHERE id = r.entity_id)
+          WHEN 'cycle_log_nudge' THEN (SELECT anchor_date FROM cycle_reminder_anchors WHERE id = r.entity_id)
         END AS entity_title
       FROM reminders r
       WHERE r.created_by  = ?

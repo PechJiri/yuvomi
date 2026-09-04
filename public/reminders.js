@@ -169,6 +169,8 @@ const REMINDER_ORIGINS = {
   inventory_item:         { accent: 'var(--module-inventory)', icon: 'package',      labelKey: 'nav.inventory' },
   inventory_tracked_date: { accent: 'var(--module-inventory)', icon: 'package',      labelKey: 'nav.inventory' },
   pantry_item:            { accent: 'var(--module-pantry)',    icon: 'archive',      labelKey: 'nav.pantry' },
+  cycle_period:           { accent: 'var(--module-health)',    icon: 'droplet',      labelKey: 'health.cycle.title' },
+  cycle_log_nudge:        { accent: 'var(--module-health)',    icon: 'droplet',      labelKey: 'health.cycle.title' },
 };
 
 function createOriginSeal(entityType) {
@@ -230,6 +232,20 @@ function processReminders(reminders) {
 }
 
 /**
+ * Bei cycle_period/cycle_log_nudge ist entity_title das rohe anchor_date, kein
+ * Name - "Zyklus" mit einem nackten Datum sagt nicht, ob die Periode erwartet
+ * wird oder der heutige Tag noch nicht geloggt ist. Gleiche Korrektur wie
+ * server/services/notifications.js#cycleBody für den Push-Body, hier mit der
+ * Locale des Empfängers statt der Haushaltssprache, weil der Client sie kennt.
+ * @returns {string|null} null für jede andere Erinnerungsart - Aufrufer fällt dann auf entity_title zurück.
+ */
+function cycleReminderBody(reminder) {
+  if (reminder.entity_type === 'cycle_log_nudge') return t('health.cycle.settings.remindLogDaily');
+  if (reminder.entity_type === 'cycle_period') return `${t('health.cycle.status.nextPeriod')} - ${reminder.entity_title}`;
+  return null;
+}
+
+/**
  * Zeigt einen persistenten Toast für eine Erinnerung mit Verwerfen-Button.
  * @param {{ id: number, entity_type: string, entity_title: string }} reminder
  * @returns {boolean} ob der Toast tatsächlich angehängt wurde
@@ -258,7 +274,7 @@ function showReminderToast(reminder) {
   titleEl.textContent = t('reminders.toastTitle');
 
   const bodyEl = document.createElement('span');
-  bodyEl.textContent = reminder.entity_title || '';
+  bodyEl.textContent = cycleReminderBody(reminder) ?? reminder.entity_title ?? '';
 
   // KEIN DOPPELPUNKT MEHR ZWISCHEN BEIDEN. Er stammt aus einer einzeiligen
   // Fassung („Erinnerung: Zahnarzttermin"); der Textblock ist längst eine
