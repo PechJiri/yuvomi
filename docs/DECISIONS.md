@@ -290,3 +290,74 @@ The shared labels in the interface, the read adapters per module, and the regist
 module has moved; new modules take the canonical set from the start. A fourth stored
 vocabulary, a migration that rewrites `family` or `shared`, or a module-local label set would
 each be this decision undone.
+
+---
+
+## 6. One model, not two
+
+**Two threads describing the same arithmetic get one model, and a view of that model lives
+where the model lives.** A fixed weekly timetable and a rotating shift rota are one feature
+with two cycle lengths. A screen that shows either of them belongs to the module that owns the
+rows, not to the page people happen to open most often.
+
+The first half was settled on 24 August 2026, in #786 against #749. Benoit had asked for a
+weekly timetable with a Week A and a Week B; @mclgoerg had proposed a shift planner with an
+Early-Early-Late-Late-Night-Night-Off-Off rotation. They are the same thing: a "Week A / Week
+B" timetable is a 14-day cycle anchored to a date, the rota an 8-day one. Building the
+timetable separately would have meant writing the same cycle arithmetic a second time six
+months later. One module went in, named `schedule` rather than `shifts`, so that the timetable
+case would not be a guest in its own module.
+
+A week after Schedule shipped, #1018 arrived from @matthiasNX: a module of its own,
+`timetables`, with its own tables and a `week_type IN ('all','A','B')` column. The PR carried
+its own proof. `week_type` had no anchor anywhere, so nothing in the module could answer "is
+this week A or B?" - the user picked it from a dropdown, which is a label rather than a
+recurrence. Every entry then stored its own subject, times and colour, which forced a
+`POST /copy` endpoint that Schedule does not need, because a second pattern there points at the
+same shift types. What was genuinely new in it - room, instructor, period number, and more than
+one block per cycle day - was a change to the existing tables, and that is the shape being
+built in #1022.
+
+The same thread reached the rule a third time the following day, and that is the part worth
+keeping. @mclgoerg asked, before building, where a side-by-side timetable overview should live:
+a mode inside the calendar's week view, or a tab in Schedule. The answer came from the data
+rather than from the traffic. Every schedule entry carries a `user_id` - `resolveEntries()`
+stamps it on both the override and the pattern branch - so a lane per person is something the
+rows already are. Holidays, events and tasks carry no person at all, and the calendar's week
+view puts all three into one all-day cell per day, with a single column count shared by three
+grid rows. Splitting a day column into person lanes would have meant answering "whose holiday
+is Christmas?", a question the schema does not ask. The overview became a Schedule tab.
+
+The calendar side of this had already been answered, from the other direction and for other
+data. #670 asks for a multi-column family calendar, one column per member, and the reply on 24
+August said that organising by person first and time second is a genuinely different layout
+rather than a variant of week view, which is why it cannot be a switch on the existing one.
+That request is open and welcome; it is about calendar events, which do carry assignments per
+member. What this entry rules out is not a person-first view, but putting one module's data
+into another module's page to get one.
+
+### Where the rule lives
+
+- **The model:** migration 165 in `server/db.js` - `schedule_patterns` with `anchor_date` and
+  `cycle_length`, `schedule_pattern_days` for the ordered cycle, `schedule_overrides` for a
+  single day. Described under "Schedule" in [SPEC.md](SPEC.md).
+- **The arithmetic, once:** `cyclePosition()` and `resolveEntries()` in
+  `server/services/schedule.js`, covered by `npm run test:schedule`. There is exactly one
+  implementation of cycle-position-from-anchor-date in the tree.
+- **Computed on read, never materialised:** `GET /schedule/entries` resolves patterns and
+  overrides per request and writes nothing. The calendar renders the result as a layer it can
+  switch off; it does not own the rows.
+- **The same move elsewhere:** cycle reminders (migration 177) anchor to
+  `cycle_reminder_anchors` for a stable reminder id, but reuse `predictCycle()` from
+  `public/utils/health-cycle.js` rather than keeping a second copy of the prediction maths.
+
+### What counts as undoing it
+
+A module that stores its own weekly or rotating pattern instead of a Schedule pattern. A
+`week_type`, `week_parity` or similar column anywhere: it is a cycle length under another name,
+and without an anchor it cannot say which week is which. Materialising a pattern into rows,
+which trades one pattern row plus its overrides for roughly seven hundred rows per person per
+two years, and makes every edit a reconciliation. And placing an editor or a comparison view
+for schedule data inside the calendar because that is where people look first: the calendar
+renders schedule entries as a layer, it does not host them. A person-first view of the
+calendar's own events is a different question, asked in #670 and still open.
