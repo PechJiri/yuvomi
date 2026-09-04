@@ -939,6 +939,9 @@
         "filtersDisplay": "显示",
         "agendaDayEmpty": "没有安排"
     },
+    "noteCategories": {
+        "permissionLabel": "管理家庭笔记分类"
+    },
     "notes": {
         "title": "便签板",
         "newNote": "新建便签",

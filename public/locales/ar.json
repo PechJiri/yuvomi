@@ -939,6 +939,9 @@
         "filtersDisplay": "العرض",
         "agendaDayEmpty": "لا شيء مُخطط"
     },
+    "noteCategories": {
+        "permissionLabel": "إدارة فئات ملاحظات الأسرة"
+    },
     "notes": {
         "title": "لوحة الملاحظات",
         "newNote": "ملاحظة جديدة",

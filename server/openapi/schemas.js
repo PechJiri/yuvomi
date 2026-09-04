@@ -29,8 +29,6 @@ export const schemas = {
             scope: { type: 'string', enum: ['personal', 'household'] },
             owner_user_id: { type: ['integer', 'null'] },
             sort_order: { type: 'integer' },
-            key: { type: 'string', description: 'String form of id for the shared category-manager component.' },
-            type: { type: 'string', enum: ['personal', 'household'], description: 'Alias of scope for the shared category-manager component.' },
           },
         },
         Note: {

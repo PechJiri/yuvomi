@@ -14,6 +14,7 @@ import {
   categoryNameKey,
   hydrateNotesWithCategories,
   listVisibleCategories,
+  NoteCategoryInputError,
   pruneCategoryFromDashboardConfigs,
   replaceEditableAssignments,
   validateCategoryName,
@@ -40,8 +41,6 @@ function categoryPayload(category) {
     scope: category.scope,
     owner_user_id: category.owner_user_id,
     sort_order: category.sort_order,
-    key: String(category.id),
-    type: category.scope,
   };
 }
 
@@ -50,7 +49,7 @@ function oneWithCategories(note, req) {
 }
 
 function categoryInputError(error) {
-  return /category|categories/i.test(error?.message || '');
+  return error instanceof NoteCategoryInputError;
 }
 
 function categoryDatabaseConflict(error) {
@@ -96,9 +95,7 @@ router.get('/categories', (req, res) => {
 router.post('/categories', (req, res) => {
   try {
     const name = validateCategoryName(req.body?.name);
-    const requestedScope = Object.prototype.hasOwnProperty.call(req.body || {}, 'scope')
-      ? req.body.scope
-      : req.body?.type;
+    const requestedScope = req.body?.scope;
     const scope = requestedScope === undefined ? 'personal' : requestedScope;
     if (!['personal', 'household'].includes(scope)) {
       return res.status(400).json({ error: 'Invalid category scope.', code: 400 });
@@ -233,10 +230,8 @@ router.post('/', (req, res) => {
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     const database = db.get();
-    database.exec('BEGIN');
-    let result;
-    try {
-      result = database.prepare(`
+    const create = database.transaction(() => {
+      const result = database.prepare(`
         INSERT INTO notes (content, title, color, pinned, created_by)
         VALUES (?, ?, ?, ?, ?)
       `).run(vContent.value, vTitle.value, vColor.value, pinned ? 1 : 0, actorId(req));
@@ -247,11 +242,9 @@ router.post('/', (req, res) => {
           userId: actorId(req),
         });
       }
-      database.exec('COMMIT');
-    } catch (error) {
-      database.exec('ROLLBACK');
-      throw error;
-    }
+      return result;
+    });
+    const result = create();
 
     const note = db.get().prepare(`
       SELECT n.*, u.display_name AS creator_name, u.avatar_color AS creator_color, u.avatar_data AS creator_avatar
@@ -291,8 +284,7 @@ router.put('/:id', (req, res) => {
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     const database = db.get();
-    database.exec('BEGIN');
-    try {
+    const update = database.transaction(() => {
       database.prepare(`
       UPDATE notes
       SET content = COALESCE(?, content),
@@ -314,11 +306,8 @@ router.put('/:id', (req, res) => {
           userId: actorId(req),
         });
       }
-      database.exec('COMMIT');
-    } catch (error) {
-      database.exec('ROLLBACK');
-      throw error;
-    }
+    });
+    update();
 
     const updated = db.get().prepare(`
       SELECT n.*, u.display_name AS creator_name, u.avatar_color AS creator_color, u.avatar_data AS creator_avatar

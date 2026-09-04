@@ -939,6 +939,9 @@
         "filtersDisplay": "Görünüm",
         "agendaDayEmpty": "Planlanmış bir şey yok"
     },
+    "noteCategories": {
+        "permissionLabel": "Ev notu kategorilerini yönet"
+    },
     "notes": {
         "title": "Notlar",
         "newNote": "Yeni Not",

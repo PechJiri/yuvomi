@@ -951,6 +951,9 @@
         "filtersDisplay": "Pagpapakita",
         "agendaDayEmpty": "Walang nakaplano"
     },
+    "noteCategories": {
+        "permissionLabel": "Pamahalaan ang mga kategorya ng tala ng sambahayan"
+    },
     "notes": {
         "title": "Board",
         "newNote": "Bagong Tala",

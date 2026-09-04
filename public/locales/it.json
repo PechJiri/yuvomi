@@ -939,6 +939,9 @@
         "filtersDisplay": "Visualizzazione",
         "agendaDayEmpty": "Niente in programma"
     },
+    "noteCategories": {
+        "permissionLabel": "Gestisci le categorie delle note di casa"
+    },
     "notes": {
         "title": "Bacheca",
         "newNote": "Nuova nota",

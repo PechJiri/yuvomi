@@ -73,6 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never got the group. It has it now, in both views, with the same label the task form uses, and a
   chosen category shows in the chip row and in the remembered filter sets like every other axis.
 
+- **Notes can be organized with multiple personal or household categories.** Every member manages
+  their own private category catalog, while household categories are shared and may be managed by
+  admins or members who receive the dedicated permission. Notes may remain uncategorized. The
+  Notes API now exposes category management, ordering and assignment through one canonical
+  `scope` field, and the permission catalog includes the household-category capability.
+
 ### Changed
 
 - **Two promises that existed only in threads are written where people look.** The contributing

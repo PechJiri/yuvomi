@@ -939,6 +939,9 @@
         "filtersDisplay": "Megjelenítés",
         "agendaDayEmpty": "Semmi sincs tervezve"
     },
+    "noteCategories": {
+        "permissionLabel": "Háztartási jegyzetkategóriák kezelése"
+    },
     "notes": {
         "title": "Tábla",
         "newNote": "Új jegyzet",

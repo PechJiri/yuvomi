@@ -63,6 +63,8 @@ test('Kategorien: persönlich ist frei, Haushaltskatalog standardmäßig Admin-o
   assert.equal(personal.status, 201);
   assert.equal(personal.body.data.scope, 'personal');
   assert.equal('name_key' in personal.body.data, false);
+  assert.equal('key' in personal.body.data, false);
+  assert.equal('type' in personal.body.data, false);
 
   const forbidden = await call('POST', '/categories', { name: 'Familie', scope: 'household' });
   assert.equal(forbidden.status, 403);
@@ -72,6 +74,32 @@ test('Kategorien: persönlich ist frei, Haushaltskatalog standardmäßig Admin-o
   assert.equal(otherView.status, 200);
   assert.deepEqual(otherView.body.data, []);
   actor = { id: U, role: 'member' };
+});
+
+test('Kategorien: nur scope wählt den Katalog, type ist kein API-Alias', async () => {
+  const response = await call('POST', '/categories', { name: 'Kein Type-Alias', type: 'household' });
+
+  assert.equal(response.status, 201);
+  assert.equal(response.body.data.scope, 'personal');
+});
+
+test('Kategorien: interne Datenbankfehler werden nicht als Eingabefehler offengelegt', async () => {
+  db.exec(`
+    CREATE TRIGGER test_note_category_storage_failure
+    BEFORE INSERT ON note_categories
+    BEGIN
+      SELECT RAISE(ABORT, 'category storage failure');
+    END
+  `);
+  try {
+    const response = await call('POST', '/categories', { name: 'Fehler' });
+
+    assert.equal(response.status, 500);
+    assert.equal(response.body.error, 'Internal server error.');
+    assert.doesNotMatch(response.body.error, /category storage failure/);
+  } finally {
+    db.exec('DROP TRIGGER test_note_category_storage_failure');
+  }
 });
 
 test('Kategorien: individuelles Recht erlaubt Haushaltsverwaltung', async () => {

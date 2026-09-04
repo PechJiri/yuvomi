@@ -939,6 +939,9 @@
         "filtersDisplay": "Відображення",
         "agendaDayEmpty": "Нічого не заплановано"
     },
+    "noteCategories": {
+        "permissionLabel": "Керувати сімейними категоріями нотаток"
+    },
     "notes": {
         "title": "Нотатки",
         "newNote": "Нова нотатка",

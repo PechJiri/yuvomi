@@ -4,12 +4,20 @@
  *        haushaltsweite Kategorien an einer zentralen Stelle erzwingen.
  */
 
+export class NoteCategoryInputError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.name = 'NoteCategoryInputError';
+    this.status = status;
+  }
+}
+
 function normalizedIds(value) {
-  if (!Array.isArray(value)) throw new Error('category_ids must be an array');
-  if (value.length > 50) throw new Error('Too many categories');
+  if (!Array.isArray(value)) throw new NoteCategoryInputError('category_ids must be an array');
+  if (value.length > 50) throw new NoteCategoryInputError('Too many categories');
   const ids = value.map((id) => Number(id));
   if (ids.some((id) => !Number.isInteger(id) || id <= 0)) {
-    throw new Error('Invalid category id');
+    throw new NoteCategoryInputError('Invalid category id');
   }
   return [...new Set(ids)];
 }
@@ -87,10 +95,10 @@ export function replaceEditableAssignments(database, {
       FROM note_categories
       WHERE id IN (${placeholders})
     `).all(...ids);
-    if (categories.length !== ids.length) throw new Error('Category is not available');
+    if (categories.length !== ids.length) throw new NoteCategoryInputError('Category is not available');
     for (const category of categories) {
       if (category.scope === 'personal' && Number(category.owner_user_id) !== Number(userId)) {
-        throw new Error('Category is not available');
+        throw new NoteCategoryInputError('Category is not available');
       }
     }
   }
@@ -125,9 +133,11 @@ export function replaceEditableAssignments(database, {
 }
 
 export function validateCategoryName(value) {
-  if (typeof value !== 'string') throw new Error('Category name is required');
+  if (typeof value !== 'string') throw new NoteCategoryInputError('Category name is required');
   const name = value.trim();
-  if (!name || name.length > 80) throw new Error('Category name must contain 1 to 80 characters');
+  if (!name || name.length > 80) {
+    throw new NoteCategoryInputError('Category name must contain 1 to 80 characters');
+  }
   return name;
 }
 

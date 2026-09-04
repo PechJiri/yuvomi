@@ -939,6 +939,9 @@
         "filtersDisplay": "Display",
         "agendaDayEmpty": "Nothing planned"
     },
+    "noteCategories": {
+        "permissionLabel": "Manage household note categories"
+    },
     "notes": {
         "title": "Board",
         "newNote": "New Note",

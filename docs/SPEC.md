@@ -1058,6 +1058,40 @@ hand.
 | pinned | INTEGER | 0/1 |
 | created_by | INTEGER | FK → Users, NOT NULL |
 
+#### Note Categories (migration v176)
+
+The catalog starts empty. A personal category belongs to one user and is visible only to that
+user; a household category is visible to everyone. Every member may manage their own personal
+catalog. Managing the household catalog requires admin access or the
+`notes_manage_household_categories` capability. Category responses use `id` as their identifier
+and `scope` (`personal` or `household`) as the single catalog discriminator.
+
+| Column | Type | Constraint |
+|--------|------|-----------|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT |
+| name | TEXT | NOT NULL, trimmed length 1 to 80 |
+| name_key | TEXT | NOT NULL, normalized uniqueness key |
+| scope | TEXT | NOT NULL, `personal` \| `household` |
+| owner_user_id | INTEGER | FK → Users (CASCADE), required only for `personal` |
+| created_by | INTEGER | FK → Users (SET NULL), audit metadata |
+| sort_order | INTEGER | NOT NULL DEFAULT 0 |
+| created_at / updated_at | TEXT | ISO 8601 |
+
+#### Note Category Assignments (migration v176)
+
+A note may have any number of categories or none. Household assignments are visible to all
+members; a personal assignment is visible only to that category's owner. Deleting a category
+removes its assignments but never deletes the note.
+
+| Column | Type | Constraint |
+|--------|------|-----------|
+| note_id | INTEGER | NOT NULL, FK → Notes (CASCADE) |
+| category_id | INTEGER | NOT NULL, FK → Note Categories (CASCADE) |
+| assigned_by | INTEGER | FK → Users (SET NULL), audit metadata |
+| created_at | TEXT | ISO 8601 |
+
+Primary key: `(note_id, category_id)`.
+
 ### Contacts
 | Column | Type | Constraint |
 |--------|------|-----------|
