@@ -9,7 +9,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createLogger } from './logger.js';
 import * as db from './db.js';
 import { router as authRouter, sessionMiddleware, requireAuth, requireAdmin, isPasswordLoginEnabled } from './auth.js';
@@ -77,7 +77,7 @@ import scheduleRouter from './routes/schedule.js';
 import { moduleForPath, requiredAccess, tokenAllows } from './scopes.js';
 import { moduleAccessVerdict, MODULE_ACCESS_DENIED, MODULE_ACCESS_READ_ONLY } from './permissions.js';
 import { BODY_LIMIT, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from './utils/upload-limit.js';
-import { buildServiceWorkerResponse } from './utils/service-worker.js';
+import { createServiceWorkerResponseLoader } from './utils/service-worker.js';
 
 const log     = createLogger('Server');
 const logSync = createLogger('Sync');
@@ -91,20 +91,10 @@ const SERVICE_WORKER_OPTIONS = {
   appVersion: APP_VERSION,
   buildRevision: process.env.APP_BUILD_REVISION,
 };
-let serviceWorkerMtimeMs;
-let serviceWorkerResponse;
-
-function getServiceWorkerResponse() {
-  const mtimeMs = statSync(SERVICE_WORKER_PATH).mtimeMs;
-  if (serviceWorkerMtimeMs !== mtimeMs) {
-    serviceWorkerResponse = buildServiceWorkerResponse(
-      readFileSync(SERVICE_WORKER_PATH, 'utf-8'),
-      SERVICE_WORKER_OPTIONS,
-    );
-    serviceWorkerMtimeMs = mtimeMs;
-  }
-  return serviceWorkerResponse;
-}
+const getServiceWorkerResponse = createServiceWorkerResponseLoader(
+  SERVICE_WORKER_PATH,
+  SERVICE_WORKER_OPTIONS,
+);
 
 // Das prüft die Build-Revision schon beim Start und liefert in der Entwicklung
 // nach einer sw.js-Änderung dennoch die neue Quelle ohne manuellen Neustart.

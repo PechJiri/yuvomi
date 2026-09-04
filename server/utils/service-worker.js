@@ -3,6 +3,8 @@
  * Zweck: Eine deployment-spezifische, scriptsichere Cache-Revision in sw.js einsetzen.
  */
 
+import { readFileSync, statSync } from 'node:fs';
+
 const BUILD_REVISION_TOKEN = '__YUVOMI_BUILD_REVISION__';
 const SAFE_BUILD_REVISION = /^[A-Za-z0-9._-]{1,80}$/;
 
@@ -24,5 +26,22 @@ export function buildServiceWorkerResponse(source, { appVersion, buildRevision }
     cacheControl: 'no-store, max-age=0',
     cdnCacheControl: 'no-store',
     cloudflareCdnCacheControl: 'no-store',
+  };
+}
+
+export function createServiceWorkerResponseLoader(sourcePath, options) {
+  let cachedMtimeMs;
+  let cachedResponse;
+
+  return function loadServiceWorkerResponse() {
+    const mtimeMs = statSync(sourcePath).mtimeMs;
+    if (cachedMtimeMs !== mtimeMs) {
+      cachedResponse = buildServiceWorkerResponse(
+        readFileSync(sourcePath, 'utf8'),
+        options,
+      );
+      cachedMtimeMs = mtimeMs;
+    }
+    return cachedResponse;
   };
 }

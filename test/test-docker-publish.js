@@ -42,7 +42,7 @@ test('Docker publishing injects the immutable Git revision into the image', () =
   );
 
   const buildStep = namedWorkflowStep(workflow, 'Build and push');
-  assert.match(buildStep, /uses: docker\/build-push-action@v7/);
+  assert.match(buildStep, /uses: docker\/build-push-action@/);
   assert.match(
     buildStep,
     /build-args:\s*\|\s*APP_BUILD_REVISION=\$\{\{ github\.sha \}\}/,

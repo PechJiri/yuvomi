@@ -4,7 +4,9 @@
  * Run: node --test test/test-service-worker-build-revision.js
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 const serviceWorkerModule = await import('../server/utils/service-worker.js');
@@ -72,4 +74,31 @@ test('falls back to the app version when APP_BUILD_REVISION is blank after trimm
   );
 
   assert.equal(response.body, "globalThis.cacheRevision = '2.59.0';");
+});
+
+test('reloads an edited service worker source from an isolated file', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'yuvomi-service-worker-'));
+  const sourcePath = join(directory, 'sw.js');
+
+  try {
+    writeFileSync(sourcePath, "globalThis.cacheRevision = '__YUVOMI_BUILD_REVISION__';\n");
+    const load = serviceWorkerModule.createServiceWorkerResponseLoader(sourcePath, {
+      appVersion: '2.59.0',
+      buildRevision: 'acceptance-route-test',
+    });
+
+    assert.equal(
+      load().body,
+      "globalThis.cacheRevision = 'acceptance-route-test';\n",
+    );
+
+    writeFileSync(
+      sourcePath,
+      "globalThis.cacheRevision = '__YUVOMI_BUILD_REVISION__';\n// edited\n",
+    );
+
+    assert.match(load().body, /\/\/ edited/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
