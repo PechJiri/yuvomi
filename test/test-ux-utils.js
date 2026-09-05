@@ -229,6 +229,55 @@ test('scheduleUndoableDelete: ohne Undo läuft der Delete nach dem Fenster', asy
   assert.equal(keepaliveFlag, false, 'der reguläre Commit läuft ohne keepalive');
 });
 
+test('scheduleUndoableDelete: pagehide-Fehler kann den optimistischen Zustand einmalig zurücksetzen', async () => {
+  const previousWindow = global.window;
+  const listeners = new Map();
+  let capturedUndo = null;
+  global.window = {
+    matchMedia: () => ({ matches: false }),
+    addEventListener: (type, handler) => { listeners.set(type, handler); },
+    yuvomi: {
+      showToast: (_message, _type, _duration, undo) => { capturedUndo = undo; },
+    },
+  };
+
+  try {
+    const moduleUrl = new URL('../public/utils/ux.js', import.meta.url);
+    moduleUrl.searchParams.set('pagehide-folder-test', String(Date.now()));
+    const { scheduleUndoableDelete: freshSchedule } = await import(moduleUrl);
+    const failure = new Error('keepalive failed');
+    let restoreCount = 0;
+    let restoredError = null;
+    let resolveRestored;
+    const restored = new Promise((resolve) => { resolveRestored = resolve; });
+
+    freshSchedule({
+      message: 'Gelöscht',
+      duration: 10_000,
+      restoreOnKeepaliveError: true,
+      commit: async ({ keepalive }) => {
+        assert.equal(keepalive, true);
+        throw failure;
+      },
+      restore: (err) => {
+        restoreCount += 1;
+        restoredError = err;
+        resolveRestored();
+      },
+    });
+
+    assert.ok(listeners.get('pagehide'), 'der pagehide-Flush muss registriert sein');
+    listeners.get('pagehide')();
+    await restored;
+    capturedUndo?.();
+
+    assert.equal(restoreCount, 1, 'pagehide und ein späterer Undo-Klick dürfen nicht doppelt restoren');
+    assert.equal(restoredError, failure);
+  } finally {
+    global.window = previousWindow;
+  }
+});
+
 test('scheduleUndoableDelete ist das einzige Undo-Löschmuster', () => {
   const ux = readFileSync(new URL('../public/utils/ux.js', import.meta.url), 'utf8');
   assert.ok(

@@ -14,6 +14,7 @@ const {
   beginOptimisticFolderDelete,
   createLatestResponseApplier,
   delayedFolderDeleteErrorToast,
+  handleFolderDeleteFailure,
   scheduleFolderDeleteWithUndo,
 } = undoModule;
 
@@ -82,6 +83,39 @@ test('a delayed content conflict becomes a warning toast instead of a reopened d
       type: 'warning',
     },
   );
+});
+
+test('delayed content conflict shows exactly one warning and never reopens the impact dialog', async () => {
+  const toasts = [];
+  let refreshes = 0;
+  await handleFolderDeleteFailure({
+    err: { status: 409, data: { reason: 'FOLDER_CONTENT_CHANGED' } },
+    delayed: true,
+    translate: (key) => `translated:${key}`,
+    showToast: (...args) => { toasts.push(args); },
+    refreshImpact: async () => { refreshes += 1; },
+  });
+
+  assert.deepEqual(toasts, [[
+    'translated:documents.folderDeleteContentsChangedBeforeCommitToast',
+    'warning',
+  ]]);
+  assert.equal(refreshes, 0);
+});
+
+test('immediate content conflict refreshes the impact dialog without a delayed warning', async () => {
+  const toasts = [];
+  let refreshes = 0;
+  await handleFolderDeleteFailure({
+    err: { status: 409, data: { reason: 'FOLDER_CONTENT_CHANGED' } },
+    delayed: false,
+    translate: (key) => key,
+    showToast: (...args) => { toasts.push(args); },
+    refreshImpact: async () => { refreshes += 1; },
+  });
+
+  assert.equal(refreshes, 1);
+  assert.deepEqual(toasts, []);
 });
 
 test('two pending deletes restore in canonical order in both Undo permutations', () => {
@@ -246,10 +280,53 @@ test('pagehide commit forwards keepalive without touching an inactive view', asy
     render: () => {},
   });
 
+  assert.equal(scheduled.restoreOnKeepaliveError, true);
   await scheduled.commit({ keepalive: true });
   assert.equal(receivedKeepalive, true);
   assert.equal(applies, 0);
 });
+
+for (const [label, result] of [
+  ['storage failure', {
+    folder_deleted: false,
+    contents_changed: false,
+    failed_documents: [{ id: 10, failure_stage: 'storage' }],
+  }],
+  ['database failure', {
+    folder_deleted: false,
+    contents_changed: false,
+    failed_documents: [{ id: 10, failure_stage: 'database' }],
+  }],
+  ['concurrent content change', {
+    folder_deleted: false,
+    contents_changed: true,
+    failed_documents: [{ id: 11, failure_stage: 'concurrency' }],
+  }],
+]) {
+  test(`inactive view reconciles a partial folder deletion after ${label}`, async () => {
+    const state = makeState();
+    let scheduled;
+    let applied = null;
+    scheduleFolderDeleteWithUndo({
+      state,
+      folderIds: new Set([1]),
+      message: 'Deleted',
+      schedule: (options) => { scheduled = options; },
+      requestDelete: async () => result,
+      isViewActive: () => false,
+      applyResult: async (response, context) => { applied = { response, context }; },
+      handleError: async () => {},
+      render: () => {},
+    });
+
+    await scheduled.commit({ keepalive: false });
+
+    assert.deepEqual(applied, {
+      response: result,
+      context: { viewActive: false, keepalive: false },
+    });
+  });
+}
 
 test('a refresh failure after server success reports separately and never restores deleted data', async () => {
   const state = makeState();

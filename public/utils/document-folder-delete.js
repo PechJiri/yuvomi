@@ -39,6 +39,34 @@ export function delayedFolderDeleteErrorToast(err) {
   return null;
 }
 
+/**
+ * Handle both immediate and delayed folder-delete failures through one
+ * executable decision point. An immediate content conflict refreshes the
+ * impact dialog; a delayed conflict only reports that nothing was deleted.
+ */
+export async function handleFolderDeleteFailure({
+  err,
+  delayed = false,
+  translate,
+  showToast,
+  refreshImpact,
+}) {
+  if (err?.status === 409 && err.data?.reason === 'FOLDER_CONTENT_CHANGED') {
+    if (delayed) {
+      const feedback = delayedFolderDeleteErrorToast(err);
+      showToast?.(translate(feedback.key), feedback.type);
+    } else {
+      await refreshImpact();
+    }
+    return;
+  }
+  if (err?.status === 409 && err.data?.reason === 'FOLDER_DELETE_IN_PROGRESS') {
+    showToast?.(translate('documents.folderDeleteInProgressToast'), 'warning');
+    return;
+  }
+  showToast?.(err?.data?.error ?? translate('common.unknownError'), 'danger');
+}
+
 function pendingState(state) {
   let pending = pendingByState.get(state);
   if (!pending) {
@@ -181,9 +209,14 @@ export function scheduleFolderDeleteWithUndo({
     commit: async ({ keepalive }) => {
       const result = await requestDelete({ keepalive });
       transition.commit();
-      if (keepalive || !isViewActive()) return;
+      const viewActive = isViewActive();
+      // A 207 response may mean that some documents were deleted while the
+      // folder itself remains. Reconcile that mixed server state even after
+      // navigation or pagehide; restoring the optimistic snapshot would
+      // resurrect documents that no longer exist.
+      if (result?.folder_deleted !== false && (keepalive || !viewActive)) return;
       try {
-        await applyResult(result);
+        await applyResult(result, { viewActive, keepalive });
       } catch (err) {
         await handleApplyError(err);
       }
@@ -193,6 +226,7 @@ export function scheduleFolderDeleteWithUndo({
       if (isViewActive()) render();
       if (err) void handleError(err);
     },
+    restoreOnKeepaliveError: true,
   });
   return transition;
 }

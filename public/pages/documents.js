@@ -34,7 +34,7 @@ import {
 import {
   applyPendingFolderDeleteOverlay,
   createLatestResponseApplier,
-  delayedFolderDeleteErrorToast,
+  handleFolderDeleteFailure,
   scheduleFolderDeleteWithUndo,
 } from '/utils/document-folder-delete.js';
 
@@ -1176,10 +1176,13 @@ async function deleteFolder(folder) {
         commitFolderDeletion(folder, impact, choice, { keepalive })
       ),
       isViewActive: () => Boolean(_container?.isConnected),
-      applyResult: (result) => (
-        applyFolderDeleteResult(result, choice, selectedSubtree, { showSuccess: false })
+      applyResult: (result, { viewActive }) => (
+        applyFolderDeleteResult(result, choice, selectedSubtree, {
+          showSuccess: false,
+          renderView: viewActive,
+        })
       ),
-      handleError: (err) => handleDelayedFolderDeleteError(err, folder),
+      handleError: (err) => handleFolderDeleteError(err, folder, { delayed: true }),
       // The server deletion has already succeeded at this point. A failed
       // refresh must not restore records that no longer exist server-side.
       handleApplyError: (err) => {
@@ -1215,7 +1218,12 @@ async function commitFolderDeletion(folder, impact, choice, { keepalive = false 
   return response.data;
 }
 
-async function applyFolderDeleteResult(result, choice, selectedSubtree, { showSuccess = true } = {}) {
+async function applyFolderDeleteResult(
+  result,
+  choice,
+  selectedSubtree,
+  { showSuccess = true, renderView = true } = {},
+) {
   const hasNonConcurrencyFailure = result.failed_documents
     ?.some((failure) => failure.failure_stage !== 'concurrency');
   if (result.folder_deleted === false && result.contents_changed && hasNonConcurrencyFailure) {
@@ -1236,28 +1244,17 @@ async function applyFolderDeleteResult(result, choice, selectedSubtree, { showSu
   }
   if (result.folder_deleted !== false && selectedSubtree.has(Number(state.folderId))) state.folderId = '';
   await Promise.all([loadFolders(), loadDocuments()]);
-  renderAll();
+  if (renderView) renderAll();
 }
 
-async function handleFolderDeleteError(err, folder) {
-  if (err?.status === 409 && err.data?.reason === 'FOLDER_CONTENT_CHANGED') {
-    await deleteFolder(folder);
-    return;
-  }
-  if (err?.status === 409 && err.data?.reason === 'FOLDER_DELETE_IN_PROGRESS') {
-    window.yuvomi?.showToast(t('documents.folderDeleteInProgressToast'), 'warning');
-    return;
-  }
-  window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
-}
-
-function handleDelayedFolderDeleteError(err, folder) {
-  const feedback = delayedFolderDeleteErrorToast(err);
-  if (feedback) {
-    window.yuvomi?.showToast(t(feedback.key), feedback.type);
-    return;
-  }
-  void handleFolderDeleteError(err, folder);
+async function handleFolderDeleteError(err, folder, { delayed = false } = {}) {
+  await handleFolderDeleteFailure({
+    err,
+    delayed,
+    translate: t,
+    showToast: (...args) => window.yuvomi?.showToast(...args),
+    refreshImpact: () => deleteFolder(folder),
+  });
 }
 
 // `showSize` aus, wenn die Ansicht die Größe bereits in einer eigenen Spalte

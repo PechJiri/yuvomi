@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   data changes made during that window, including the folder tree's expanded state. Leaving the
   page safely flushes the pending delete. If that delayed request fails, the folder returns and the
   error is reported even after the user has left Documents; a changed folder shows a warning
-  instead of reopening the deletion dialog after the delay.
+  instead of reopening the deletion dialog after the delay. Partial server results are reconciled
+  even after navigation, and a failed page-exit request restores the optimistic state if the
+  browser later revives the page from its cache.
 
 - **Deleting a document folder can now either keep its documents unfiled or delete the confirmed
   subtree together with its documents.** The dialog previews exact folder and document counts and
