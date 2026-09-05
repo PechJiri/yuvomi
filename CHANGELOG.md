@@ -12,7 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Destructive folder deletion can now be undone for five seconds.** The folder subtree and its
   currently visible documents disappear immediately, while the server operation waits behind the
   standard Undo toast. Undo restores only the affected entries and preserves other navigation or
-  data changes made during that window. Leaving the page safely flushes the pending delete.
+  data changes made during that window, including the folder tree's expanded state. Leaving the
+  page safely flushes the pending delete. If that delayed request fails, the folder returns and the
+  error is reported even after the user has left Documents; a changed folder shows a warning
+  instead of reopening the deletion dialog after the delay.
 
 - **Deleting a document folder can now either keep its documents unfiled or delete the confirmed
   subtree together with its documents.** The dialog previews exact folder and document counts and

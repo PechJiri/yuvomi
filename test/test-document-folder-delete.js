@@ -13,6 +13,7 @@ const {
   applyPendingFolderDeleteOverlay,
   beginOptimisticFolderDelete,
   createLatestResponseApplier,
+  delayedFolderDeleteErrorToast,
   scheduleFolderDeleteWithUndo,
 } = undoModule;
 
@@ -56,6 +57,31 @@ test('Undo restores only removed data and preserves explicit navigation and sele
   assert.deepEqual([...state.selected], [], 'Undo must not recreate an explicitly cleared selection');
   assert.deepEqual([...state.expanded], [], 'Undo must not recreate explicitly cleared expansion');
   assert.equal(state.folderId, '', 'Undo must not navigate away from an explicit All view');
+});
+
+test('pending deletion preserves expansion state that render persists across reloads', () => {
+  const state = makeState();
+  const transition = beginOptimisticFolderDelete(state, new Set([1]));
+
+  assert.deepEqual(
+    [...state.expanded],
+    [1, 2, 3],
+    'hiding a pending subtree must not persist it as collapsed',
+  );
+
+  transition.restore();
+  assert.deepEqual([...state.expanded], [1, 2, 3]);
+});
+
+test('a delayed content conflict becomes a warning toast instead of a reopened dialog', () => {
+  assert.equal(typeof delayedFolderDeleteErrorToast, 'function');
+  assert.deepEqual(
+    delayedFolderDeleteErrorToast({ status: 409, data: { reason: 'FOLDER_CONTENT_CHANGED' } }),
+    {
+      key: 'documents.folderDeleteContentsChangedBeforeCommitToast',
+      type: 'warning',
+    },
+  );
 });
 
 test('two pending deletes restore in canonical order in both Undo permutations', () => {
@@ -270,4 +296,30 @@ test('failed delayed commit restores state and delegates the error', async () =>
   scheduled.restore(failure);
   assert.deepEqual(state.folders.map(({ id }) => id), [1, 2, 3]);
   assert.equal(handled, failure);
+});
+
+test('failed delayed commit reports globally after the Documents view is left', async () => {
+  const state = makeState();
+  let scheduled;
+  const failure = new Error('offline');
+  let handled = null;
+  let renders = 0;
+  scheduleFolderDeleteWithUndo({
+    state,
+    folderIds: new Set([1]),
+    message: 'Deleted',
+    schedule: (options) => { scheduled = options; },
+    requestDelete: async () => { throw failure; },
+    isViewActive: () => false,
+    applyResult: async () => {},
+    handleError: (error) => { handled = error; },
+    render: () => { renders += 1; },
+  });
+
+  await assert.rejects(() => scheduled.commit({ keepalive: false }), failure);
+  scheduled.restore(failure);
+
+  assert.deepEqual(state.folders.map(({ id }) => id), [1, 2, 3]);
+  assert.equal(renders, 1, 'an inactive Documents view must not be rendered during restore');
+  assert.equal(handled, failure, 'the global error notification must still run');
 });

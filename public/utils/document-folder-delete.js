@@ -28,6 +28,17 @@ export function createLatestResponseApplier() {
   };
 }
 
+/** Map delayed folder-delete conflicts to view-independent UI feedback. */
+export function delayedFolderDeleteErrorToast(err) {
+  if (err?.status === 409 && err.data?.reason === 'FOLDER_CONTENT_CHANGED') {
+    return {
+      key: 'documents.folderDeleteContentsChangedBeforeCommitToast',
+      type: 'warning',
+    };
+  }
+  return null;
+}
+
 function pendingState(state) {
   let pending = pendingByState.get(state);
   if (!pending) {
@@ -93,7 +104,6 @@ export function applyPendingFolderDeleteOverlay(
   state.folders = state.folders.filter(({ id }) => !ids.has(Number(id)));
   state.allDocuments = state.allDocuments.filter(({ id }) => !hiddenDocuments.has(Number(id)));
   state.selected = new Set([...state.selected].filter((id) => !hiddenDocuments.has(Number(id))));
-  state.expanded = new Set([...state.expanded].filter((id) => !ids.has(Number(id))));
   if (ids.has(Number(state.folderId))) state.folderId = '';
 }
 
@@ -180,8 +190,7 @@ export function scheduleFolderDeleteWithUndo({
     },
     restore: (err) => {
       if (!transition.restore()) return;
-      if (!isViewActive()) return;
-      render();
+      if (isViewActive()) render();
       if (err) void handleError(err);
     },
   });

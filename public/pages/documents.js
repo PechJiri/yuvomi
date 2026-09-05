@@ -34,6 +34,7 @@ import {
 import {
   applyPendingFolderDeleteOverlay,
   createLatestResponseApplier,
+  delayedFolderDeleteErrorToast,
   scheduleFolderDeleteWithUndo,
 } from '/utils/document-folder-delete.js';
 
@@ -1178,7 +1179,7 @@ async function deleteFolder(folder) {
       applyResult: (result) => (
         applyFolderDeleteResult(result, choice, selectedSubtree, { showSuccess: false })
       ),
-      handleError: (err) => handleFolderDeleteError(err, folder),
+      handleError: (err) => handleDelayedFolderDeleteError(err, folder),
       // The server deletion has already succeeded at this point. A failed
       // refresh must not restore records that no longer exist server-side.
       handleApplyError: (err) => {
@@ -1239,9 +1240,6 @@ async function applyFolderDeleteResult(result, choice, selectedSubtree, { showSu
 }
 
 async function handleFolderDeleteError(err, folder) {
-  // A stale preview is safe to refresh. An active destructive operation is a
-  // different conflict: reopening the same dialog would only loop until its
-  // lock is released, so explain that state instead.
   if (err?.status === 409 && err.data?.reason === 'FOLDER_CONTENT_CHANGED') {
     await deleteFolder(folder);
     return;
@@ -1251,6 +1249,15 @@ async function handleFolderDeleteError(err, folder) {
     return;
   }
   window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
+}
+
+function handleDelayedFolderDeleteError(err, folder) {
+  const feedback = delayedFolderDeleteErrorToast(err);
+  if (feedback) {
+    window.yuvomi?.showToast(t(feedback.key), feedback.type);
+    return;
+  }
+  void handleFolderDeleteError(err, folder);
 }
 
 // `showSize` aus, wenn die Ansicht die Größe bereits in einer eigenen Spalte
