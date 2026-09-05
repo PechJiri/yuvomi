@@ -328,6 +328,40 @@ for (const [label, result] of [
   });
 }
 
+test('pagehide reconciles a partial result without rendering the detached view', async () => {
+  const state = makeState();
+  const result = {
+    folder_deleted: false,
+    contents_changed: true,
+    failed_documents: [{ id: 10, failure_stage: 'concurrency' }],
+  };
+  let scheduled;
+  let applied = null;
+  let renders = 0;
+  scheduleFolderDeleteWithUndo({
+    state,
+    folderIds: new Set([1]),
+    message: 'Deleted',
+    schedule: (options) => { scheduled = options; },
+    requestDelete: async ({ keepalive }) => {
+      assert.equal(keepalive, true);
+      return result;
+    },
+    isViewActive: () => false,
+    applyResult: async (response, context) => { applied = { response, context }; },
+    handleError: async () => {},
+    render: () => { renders += 1; },
+  });
+
+  await scheduled.commit({ keepalive: true });
+
+  assert.deepEqual(applied, {
+    response: result,
+    context: { viewActive: false, keepalive: true },
+  });
+  assert.equal(renders, 1, 'only the initial optimistic render may touch the active view');
+});
+
 test('a refresh failure after server success reports separately and never restores deleted data', async () => {
   const state = makeState();
   let scheduled;
