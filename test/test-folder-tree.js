@@ -13,11 +13,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const folderTree = await import('../public/utils/folder-tree.js');
 const {
   MAX_FOLDER_DEPTH, subtreeIds, folderPath, subtreeHeight,
   folderMoveIssue, buildFolderTree, flattenFolderTree,
-} = folderTree;
+} = await import('../public/utils/folder-tree.js');
 
 /** Kurzschreibweise: `f(1, 'Wohnung')`, `f(2, 'Miete', 1)`. */
 const f = (id, name, parent_id = null) => ({ id, name, parent_id });
