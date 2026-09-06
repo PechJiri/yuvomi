@@ -15618,6 +15618,7 @@ test('die Scroll-Klasse der Symbolauswahl-CSS trifft einen wirklich erzeugten Wr
       `.${wrapperClass} traegt kein "${prop}" - ohne das gibt der Wrapper seine Hoehe `
       + 'nicht an .icon-picker__results weiter, das Raster scrollt dann nicht.');
   }
+});
 
 /**
  * Das Seitenmenue am Desktop hat einen greifbaren Scrollbalken (#970).
