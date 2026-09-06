@@ -211,6 +211,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Calendar deletions no longer reappear while their five-second Undo action is pending.**
+  Moving between months, weeks or days now reapplies pending removals over each freshly loaded
+  range. Undo restores the latest server row exactly once instead of duplicating it, and a completed
+  delete reloads the visible range so an older in-flight response cannot bring the event back.
+  Calendar loads now share one ordering guard, including quick out-and-back navigation, and
+  concurrent deletes of one series reach the server in user-action order. This covers one event,
+  one recurring occurrence, this-and-following, and whole-series deletion.
+- **Authorized caregivers can now correct a cared-for person's medication log entries** (#999).
+  The log row now follows the same explicit care grant as recording, taking and skipping a dose;
+  other family members still see it read-only, and scheduled entries keep their existing
+  pending-instead-of-delete rule.
+- **Mobile Week no longer silently drops timed events on its boundary day** (#1006). Mobile Week
+  renders a 3-day window centered on the cursor, but the calendar only loaded and indexed the fixed
+  7-day desktop week; whenever that 3-day window crossed the week boundary, the neighboring day's
+  timed events were fetched but then clamped out of the day index, while calendar tasks (loaded
+  separately) and Agenda (which reloads a 31-day range) kept showing normally - the mismatch read as
+  an inconsistent Sunday. The loaded range now covers the union of the desktop week and the mobile
+  window whenever they diverge; Month, Day and Agenda are unaffected.
 - **The calendar's person filter and "assigned to me" filter now also apply to Schedule
   entries** (#1018). Both filters already narrowed events and tasks to the chosen people; Schedule's
   shifts ignored them and kept showing every household member's entries regardless of who was
