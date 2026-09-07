@@ -24,6 +24,39 @@ function makeState() {
   };
 }
 
+function makeMovedLinkedState(suffix = '') {
+  return {
+    events: [
+      {
+        id: 7,
+        series_id: 7,
+        recurrence_id: '2027-05-01',
+        title: `May${suffix}`,
+        start_datetime: '2027-05-01T18:00:00',
+      },
+      {
+        id: 7,
+        series_id: 7,
+        recurrence_id: '2027-07-01',
+        title: `July${suffix}`,
+        start_datetime: '2027-07-01T18:00:00',
+      },
+      {
+        id: 99,
+        series_id: 7,
+        recurrence_id: '2027-06-01',
+        title: `Moved June child${suffix}`,
+        start_datetime: '2027-08-02T18:00:00',
+      },
+      {
+        id: 8,
+        title: `Independent${suffix}`,
+        start_datetime: '2027-06-15T09:00:00',
+      },
+    ],
+  };
+}
+
 const calendarPageSource = readFileSync(
   new URL('../public/pages/calendar.js', import.meta.url),
   'utf8',
@@ -56,6 +89,54 @@ test('whole-event transition hides every expanded occurrence and Undo restores c
     'January',
     'February',
     'Independent',
+  ]);
+});
+
+test('whole-series delete from a moved child overlays every series row across reload and Undo', () => {
+  const state = makeMovedLinkedState();
+  const transition = beginOptimisticCalendarDelete(state, {
+    eventId: 99,
+    seriesId: 7,
+    scope: 'all',
+  });
+
+  assert.deepEqual(state.events.map(({ title }) => title), ['Independent']);
+
+  state.events = makeMovedLinkedState(' fresh').events;
+  applyPendingCalendarDeleteOverlay(state, { freshEvents: true });
+  assert.deepEqual(state.events.map(({ title }) => title), ['Independent fresh']);
+
+  assert.equal(transition.restore(), true);
+  assert.deepEqual(state.events.map(({ title }) => title), [
+    'May fresh',
+    'July fresh',
+    'Moved June child fresh',
+    'Independent fresh',
+  ]);
+});
+
+test('following delete from a moved child overlays by original slot across reload and Undo', () => {
+  const state = makeMovedLinkedState();
+  const transition = beginOptimisticCalendarDelete(state, {
+    eventId: 99,
+    seriesId: 7,
+    scope: 'following',
+    occurrenceDate: '2027-08-02',
+    recurrenceId: '2027-06-01',
+  });
+
+  assert.deepEqual(state.events.map(({ title }) => title), ['May', 'Independent']);
+
+  state.events = makeMovedLinkedState(' fresh').events;
+  applyPendingCalendarDeleteOverlay(state, { freshEvents: true });
+  assert.deepEqual(state.events.map(({ title }) => title), ['May fresh', 'Independent fresh']);
+
+  assert.equal(transition.restore(), true);
+  assert.deepEqual(state.events.map(({ title }) => title), [
+    'May fresh',
+    'July fresh',
+    'Moved June child fresh',
+    'Independent fresh',
   ]);
 });
 
@@ -438,7 +519,7 @@ test('calendar page guards the complete range and wires every delete scope', () 
 test('linked delete keeps the Undo overlay on the displayed row while committing original identity', () => {
   const following = functionSource('deleteThisAndFollowing', 'deleteSingleOccurrence');
   assert.match(following, /eventId: event\.id/);
-  assert.match(following, /occurrenceDate: event\.start_datetime\.slice\(0, 10\)/);
+  assert.match(following, /recurrenceId: event\.recurrence_id/);
   assert.doesNotMatch(following, /truncateRuleBefore|recurrence_rule:\s*newRule/);
 
   const single = functionSource('deleteSingleOccurrence');

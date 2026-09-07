@@ -5031,7 +5031,7 @@ async function deleteThisAndFollowing(event) {
       eventId: event.id,
       seriesId: event.series_id,
       scope: 'following',
-      occurrenceDate: event.start_datetime.slice(0, 10),
+      recurrenceId: event.recurrence_id,
     },
     message: t('calendar.deletedToast'),
     schedule: scheduleUndoableDelete,
