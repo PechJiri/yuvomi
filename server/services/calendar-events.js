@@ -52,9 +52,16 @@ export function loadEventExceptions(d, eventIds) {
  * @param {string}   to      YYYY-MM-DD
  * @param {Map<number, Set<string>>?} exceptionsByEvent  event.id → Set ausgenommener
  *        Instanz-Daten (YYYY-MM-DD); diese Vorkommen werden übersprungen (EXDATE, #489)
+ * @param {{includeRecurrenceIdentity?: boolean}} [options]
  * @returns {object[]}  Expandiertes, sortiertes Array
  */
-export function expandRecurringEvents(events, from, to, exceptionsByEvent = null) {
+export function expandRecurringEvents(
+  events,
+  from,
+  to,
+  exceptionsByEvent = null,
+  { includeRecurrenceIdentity = false } = {},
+) {
   const result = [];
 
   for (const event of events) {
@@ -166,6 +173,7 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
           ...event,
           start_datetime:       newStart,
           end_datetime:         newEnd,
+          ...(includeRecurrenceIdentity ? { recurrence_identity: currentDate } : {}),
           is_recurring_instance: currentDate !== event.start_datetime.slice(0, 10) ? 1 : 0,
           // "IST DAS DER ERSTE TERMIN DER SERIE?" IST NICHT "WEICHT ER VOM
           // GESPEICHERTEN DATUM AB?" - seit ein Start auf der Regel liegen darf,

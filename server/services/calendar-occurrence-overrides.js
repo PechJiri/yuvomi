@@ -6,6 +6,7 @@
  */
 
 import { visibilityWhere } from './visibility.js';
+import { expandRecurringEvents } from './calendar-events.js';
 
 export const OVERRIDE_FIELDS = Object.freeze([
   'title',
@@ -38,6 +39,13 @@ function invalidOverrideFields(message) {
   return new CalendarOccurrenceError(message, {
     status: 400,
     code: 'invalid_override_fields',
+  });
+}
+
+function invalidRecurrenceIdentity(message, { status = 400 } = {}) {
+  return new CalendarOccurrenceError(message, {
+    status,
+    code: 'invalid_recurrence_id',
   });
 }
 
@@ -97,6 +105,152 @@ export function recurrenceIdFor(row) {
     return row.recurrence_identity;
   }
   return typeof row.start_datetime === 'string' ? row.start_datetime.slice(0, 10) : null;
+}
+
+function isDateKey(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+/**
+ * Expands one original recurrence slot without applying the master's EXDATEs.
+ * The displayed child start is deliberately irrelevant to this lookup.
+ */
+export function baseOccurrenceFor(master, recurrenceId) {
+  if (!master?.recurrence_rule || !isDateKey(recurrenceId)) {
+    throw invalidRecurrenceIdentity('recurrence_id must identify a recurring series date.');
+  }
+
+  const occurrences = expandRecurringEvents(
+    [master],
+    recurrenceId,
+    recurrenceId,
+    new Map(),
+    { includeRecurrenceIdentity: true },
+  );
+  const occurrence = occurrences.find((candidate) => candidate.recurrence_identity === recurrenceId);
+  if (!occurrence) {
+    throw invalidRecurrenceIdentity('recurrence_id is not an occurrence of this series.');
+  }
+  return occurrence;
+}
+
+const OVERRIDE_PROPERTIES = Object.freeze({
+  title: ['title'],
+  description: ['description'],
+  start_datetime: ['start_datetime'],
+  end_datetime: ['end_datetime'],
+  all_day: ['all_day'],
+  location: ['location'],
+  color: ['color'],
+  icon: ['icon'],
+  assignments: [
+    'assigned_to', 'assigned_name', 'assigned_color', 'assigned_users_json', 'assigned_users',
+  ],
+  visibility: ['visibility'],
+  countdown: ['countdown'],
+  attachment: [
+    'attachment_name', 'attachment_mime', 'attachment_size', 'attachment_data',
+    'attachment_document_id', 'attachment_preview_url', 'attachment_download_url',
+  ],
+  reminders: [],
+});
+
+function copyMarkedProperties(target, child, fields) {
+  for (const field of fields) {
+    for (const property of OVERRIDE_PROPERTIES[field]) {
+      if (Object.hasOwn(child, property)) target[property] = child[property];
+    }
+  }
+}
+
+/**
+ * Composes one linked replacement from its current series defaults and the
+ * child's explicit override markers.
+ */
+export function resolveOccurrence(database, child, master = null) {
+  if (!isLinkedOccurrence(child)) {
+    throw invalidRecurrenceIdentity('The event is not a linked occurrence override.');
+  }
+
+  const parentId = Number(child.recurrence_parent_id);
+  const parent = master ?? database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(parentId);
+  if (!parent) {
+    throw invalidRecurrenceIdentity('The recurrence parent does not exist.', { status: 404 });
+  }
+  if (Number(parent.id) !== parentId) {
+    throw invalidRecurrenceIdentity('The recurrence parent does not match the linked occurrence.');
+  }
+
+  const fields = parseOverrideFields(child.overridden_fields);
+  const base = baseOccurrenceFor(parent, child.recurrence_id);
+  const resolved = {
+    ...base,
+    id: child.id,
+    recurrence_parent_id: parentId,
+    recurrence_id: child.recurrence_id,
+    recurrence_identity: child.recurrence_id,
+    overridden_fields: child.overridden_fields,
+  };
+  copyMarkedProperties(resolved, child, fields);
+
+  const ownsAssignments = fields.includes('assignments');
+  const ownsAttachment = fields.includes('attachment');
+  const ownsReminders = fields.includes('reminders');
+  return {
+    ...resolved,
+    series_id: Number(parent.id),
+    recurrence_id: child.recurrence_id,
+    is_occurrence_override: true,
+    is_recurring_instance: 1,
+    assignment_owner_id: ownsAssignments ? Number(child.id) : Number(parent.id),
+    attachment_owner_id: ownsAttachment ? Number(child.id) : Number(parent.id),
+    reminder_owner_id: ownsReminders ? Number(child.id) : Number(parent.id),
+    reminder_anchor_start: ownsReminders ? resolved.start_datetime : parent.start_datetime,
+  };
+}
+
+/** Resolves a mixed row set while loading every referenced parent once. */
+export function resolveEventRows(database, rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const parentIds = [...new Set(rows
+    .filter(isLinkedOccurrence)
+    .map((row) => Number(row.recurrence_parent_id)))];
+  if (parentIds.length === 0) return rows;
+
+  const placeholders = parentIds.map(() => '?').join(',');
+  const masters = database.prepare(
+    `SELECT * FROM calendar_events WHERE id IN (${placeholders})`
+  ).all(...parentIds);
+  const mastersById = new Map(masters.map((master) => [Number(master.id), master]));
+  return rows.map((row) => isLinkedOccurrence(row)
+    ? resolveOccurrence(database, row, mastersById.get(Number(row.recurrence_parent_id)))
+    : row);
+}
+
+/** Loads linked replacements by series owner and their displayed overlap. */
+export function loadLinkedOverrides(database, parentIds, from = null, to = null) {
+  const ids = [...new Set((parentIds ?? [])
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return [];
+
+  const where = [`recurrence_parent_id IN (${ids.map(() => '?').join(',')})`];
+  const params = [...ids];
+  if (from) {
+    where.push('DATE(COALESCE(end_datetime, start_datetime)) >= DATE(?)');
+    params.push(from);
+  }
+  if (to) {
+    where.push('DATE(start_datetime) <= DATE(?)');
+    params.push(to);
+  }
+  return database.prepare(`
+    SELECT * FROM calendar_events
+    WHERE ${where.join('\n      AND ')}
+    ORDER BY start_datetime ASC, id ASC
+  `).all(...params);
 }
 
 function hasColumn(database, table, column) {

@@ -9,14 +9,20 @@ import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import {
+  baseOccurrenceFor,
   CalendarOccurrenceError,
   isEligibleLocalSeries,
   isLinkedOccurrence,
+  loadLinkedOverrides,
   OVERRIDE_FIELDS,
   parseOverrideFields,
   recurrenceIdFor,
+  resolveEventRows,
+  resolveOccurrence,
   seriesIdFor,
 } from '../server/services/calendar-occurrence-overrides.js';
+import { expandRecurringEvents } from '../server/services/calendar-events.js';
+import { serializeEvent } from '../server/routes/calendar/helpers.js';
 
 function createDatabase() {
   const database = new DatabaseSync(':memory:');
@@ -85,6 +91,82 @@ function insertEvent(database, values = {}) {
 
 function insertSeries(database, values = {}) {
   return insertEvent(database, { recurrence_rule: 'FREQ=MONTHLY', ...values });
+}
+
+function series(values = {}) {
+  return {
+    id: 10,
+    title: 'Series title',
+    description: 'Series description',
+    start_datetime: '2026-10-01T09:00',
+    end_datetime: '2026-10-01T10:00',
+    all_day: 0,
+    location: 'Series location',
+    color: '#123456',
+    icon: 'calendar',
+    assigned_to: 1,
+    assigned_name: 'Admin',
+    assigned_color: '#007AFF',
+    assigned_users_json: '[{"id":1,"display_name":"Admin","color":"#007AFF","avatar_data":null}]',
+    created_by: 1,
+    external_calendar_id: null,
+    external_source: 'local',
+    recurrence_rule: 'FREQ=DAILY',
+    subscription_id: null,
+    calendar_ref_id: null,
+    external_object_url: null,
+    target_google_calendar_id: null,
+    target_caldav_account_id: null,
+    target_caldav_calendar_url: null,
+    target_outlook_account_id: null,
+    target_outlook_calendar_id: null,
+    visibility: 'all',
+    countdown: 0,
+    attachment_name: 'series.txt',
+    attachment_mime: 'text/plain',
+    attachment_size: 12,
+    attachment_data: null,
+    attachment_document_id: 100,
+    tzid: null,
+    ...values,
+  };
+}
+
+function child(values = {}) {
+  return {
+    id: 20,
+    title: 'Child title',
+    description: 'Stale child description',
+    start_datetime: '2026-10-02T09:00',
+    end_datetime: '2026-10-02T10:00',
+    all_day: 0,
+    location: 'Stale child location',
+    color: '#abcdef',
+    icon: 'tooth',
+    assigned_to: 2,
+    assigned_name: 'Member',
+    assigned_color: '#ff0000',
+    assigned_users_json: '[{"id":2,"display_name":"Member","color":"#ff0000","avatar_data":null}]',
+    visibility: 'private',
+    countdown: 1,
+    attachment_name: 'child.txt',
+    attachment_mime: 'text/plain',
+    attachment_size: 5,
+    attachment_data: null,
+    attachment_document_id: 200,
+    recurrence_parent_id: 10,
+    recurrence_id: '2026-10-02',
+    overridden_fields: '["title"]',
+    ...values,
+  };
+}
+
+function assertInvalidIdentity(master, recurrenceId) {
+  assert.throws(() => baseOccurrenceFor(master, recurrenceId), (error) =>
+    error instanceof CalendarOccurrenceError
+    && error.status === 400
+    && error.code === 'invalid_recurrence_id'
+  );
 }
 
 test('migration 190 links one replacement to one original series slot', () => {
@@ -248,4 +330,322 @@ test('Outlook auto-sync eligibility follows visible event ownership and assignme
 
   database.prepare('UPDATE outlook_accounts SET needs_reauth = 1 WHERE id = 20').run();
   assert.deepEqual(isEligibleLocalSeries(database, publicEvent, 1, true), { eligible: true, reason: null });
+});
+
+test('daily recurrence identity resolves the exact timed occurrence', () => {
+  const base = baseOccurrenceFor(series(), '2026-10-04');
+
+  assert.equal(base.recurrence_identity, '2026-10-04');
+  assert.equal(base.start_datetime, '2026-10-04T09:00');
+  assert.equal(base.end_datetime, '2026-10-04T10:00');
+});
+
+test('weekly BYDAY recurrence identity rejects a weekday outside the rule', () => {
+  const master = series({
+    start_datetime: '2026-10-01T09:00',
+    end_datetime: '2026-10-01T10:00',
+    recurrence_rule: 'FREQ=WEEKLY;BYDAY=MO,WE',
+  });
+
+  assert.equal(baseOccurrenceFor(master, '2026-10-05').start_datetime, '2026-10-05T09:00');
+  assertInvalidIdentity(master, '2026-10-06');
+});
+
+test('monthly fixed-day recurrence identity follows the anchored day', () => {
+  const master = series({
+    start_datetime: '2026-01-31T09:00',
+    end_datetime: '2026-01-31T10:00',
+    recurrence_rule: 'FREQ=MONTHLY',
+  });
+
+  assert.equal(baseOccurrenceFor(master, '2026-02-28').start_datetime, '2026-02-28T09:00');
+});
+
+test('monthly last-day recurrence identity resolves the calendar month end', () => {
+  const master = series({
+    start_datetime: '2026-09-30T09:00',
+    end_datetime: '2026-09-30T10:00',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  });
+
+  assert.equal(baseOccurrenceFor(master, '2026-10-31').start_datetime, '2026-10-31T09:00');
+  assertInvalidIdentity(master, '2026-10-30');
+});
+
+test('yearly recurrence identity retains its leap-day anchor', () => {
+  const master = series({
+    start_datetime: '2024-02-29T09:00',
+    end_datetime: '2024-02-29T10:00',
+    recurrence_rule: 'FREQ=YEARLY',
+  });
+
+  assert.equal(baseOccurrenceFor(master, '2025-02-28').start_datetime, '2025-02-28T09:00');
+  assert.equal(baseOccurrenceFor(master, '2028-02-29').start_datetime, '2028-02-29T09:00');
+});
+
+test('COUNT recurrence identity rejects a slot after the final occurrence', () => {
+  const master = series({ recurrence_rule: 'FREQ=DAILY;COUNT=2' });
+
+  assert.equal(baseOccurrenceFor(master, '2026-10-02').start_datetime, '2026-10-02T09:00');
+  assertInvalidIdentity(master, '2026-10-03');
+});
+
+test('UNTIL recurrence identity includes its boundary and rejects later slots', () => {
+  const master = series({ recurrence_rule: 'FREQ=DAILY;UNTIL=20261003' });
+
+  assert.equal(baseOccurrenceFor(master, '2026-10-03').start_datetime, '2026-10-03T09:00');
+  assertInvalidIdentity(master, '2026-10-04');
+});
+
+test('all-day recurrence identity preserves the date-only duration', () => {
+  const master = series({
+    start_datetime: '2026-10-01',
+    end_datetime: '2026-10-03',
+    all_day: 1,
+  });
+  const base = baseOccurrenceFor(master, '2026-10-04');
+
+  assert.equal(base.start_datetime, '2026-10-04');
+  assert.equal(base.end_datetime, '2026-10-06');
+});
+
+test('TZID recurrence identity preserves wall time across DST', () => {
+  const master = series({
+    start_datetime: '2026-03-28T08:00:00Z',
+    end_datetime: '2026-03-28T09:00:00Z',
+    recurrence_rule: 'FREQ=DAILY',
+    tzid: 'Europe/Berlin',
+  });
+  const base = baseOccurrenceFor(master, '2026-03-29');
+
+  assert.equal(base.start_datetime, '2026-03-29T07:00:00Z');
+  assert.equal(base.end_datetime, '2026-03-29T08:00:00Z');
+});
+
+test('recurrence identity rejects malformed, pre-series, and non-series slots', () => {
+  assertInvalidIdentity(series(), '2026-02-30');
+  assertInvalidIdentity(series(), '2026-09-30');
+  assertInvalidIdentity(series({ recurrence_rule: null }), '2026-10-01');
+});
+
+test('a moved replacement resolves from its original recurrence identity', () => {
+  const database = createDatabase();
+  const master = series({
+    start_datetime: '2026-09-30T09:00',
+    end_datetime: '2026-09-30T10:00',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  });
+  const resolved = resolveOccurrence(database, child({
+    recurrence_id: '2026-10-31',
+    start_datetime: '2026-11-02T11:00',
+    overridden_fields: '["start_datetime"]',
+  }), master);
+
+  assert.equal(resolved.id, 20);
+  assert.equal(resolved.series_id, 10);
+  assert.equal(resolved.recurrence_id, '2026-10-31');
+  assert.equal(resolved.start_datetime, '2026-11-02T11:00');
+  assert.equal(resolved.end_datetime, '2026-10-31T10:00');
+  assert.equal(resolved.recurrence_rule, 'FREQ=MONTHLY;BYMONTHDAY=-1');
+  assert.equal(resolved.external_source, 'local');
+  assert.equal(resolved.is_occurrence_override, true);
+  assert.equal(resolved.is_recurring_instance, 1);
+});
+
+test('resolved occurrence fields inherit unless their closed marker overrides them', () => {
+  const database = createDatabase();
+  const master = series({
+    title: 'Current series title',
+    description: 'Current series description',
+    start_datetime: '2026-10-01T09:00',
+    end_datetime: '2026-10-01T10:00',
+    location: 'Current series location',
+    visibility: 'all',
+    countdown: 0,
+  });
+  const resolved = resolveOccurrence(database, child({
+    title: 'Occurrence title',
+    description: 'Old child description',
+    start_datetime: '2026-10-02T11:00',
+    end_datetime: '2026-10-02T12:00',
+    location: 'Old child location',
+    visibility: 'private',
+    countdown: 1,
+    overridden_fields: '["title","start_datetime","assignments","attachment","reminders"]',
+  }), master);
+
+  assert.equal(resolved.title, 'Occurrence title');
+  assert.equal(resolved.description, 'Current series description');
+  assert.equal(resolved.start_datetime, '2026-10-02T11:00');
+  assert.equal(resolved.end_datetime, '2026-10-02T10:00');
+  assert.equal(resolved.location, 'Current series location');
+  assert.equal(resolved.visibility, 'all');
+  assert.equal(resolved.countdown, 0);
+  assert.equal(resolved.assigned_to, 2);
+  assert.equal(resolved.assigned_users_json, child().assigned_users_json);
+  assert.equal(resolved.attachment_document_id, 200);
+  assert.equal(resolved.assignment_owner_id, 20);
+  assert.equal(resolved.attachment_owner_id, 20);
+  assert.equal(resolved.reminder_owner_id, 20);
+  assert.equal(resolved.reminder_anchor_start, '2026-10-02T11:00');
+});
+
+test('resolved occurrence owners and temporal fields inherit from the series', () => {
+  const database = createDatabase();
+  const master = series();
+  const resolved = resolveOccurrence(database, child({ overridden_fields: '["title"]' }), master);
+
+  assert.equal(resolved.start_datetime, '2026-10-02T09:00');
+  assert.equal(resolved.end_datetime, '2026-10-02T10:00');
+  assert.equal(resolved.assigned_to, 1);
+  assert.equal(resolved.assigned_users_json, master.assigned_users_json);
+  assert.equal(resolved.attachment_document_id, 100);
+  assert.equal(resolved.assignment_owner_id, 10);
+  assert.equal(resolved.attachment_owner_id, 10);
+  assert.equal(resolved.reminder_owner_id, 10);
+  assert.equal(resolved.reminder_anchor_start, '2026-10-01T09:00');
+});
+
+test('resolveOccurrence loads its master and resolveEventRows handles multiple parents', () => {
+  const database = createDatabase();
+  const firstParent = Number(insertSeries(database, {
+    title: 'First series',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  const secondParent = Number(insertSeries(database, {
+    title: 'Second series',
+    start_datetime: '2026-10-05T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  const firstChild = Number(insertEvent(database, {
+    title: 'First override',
+    start_datetime: '2026-10-02T09:00:00',
+    recurrence_parent_id: firstParent,
+    recurrence_id: '2026-10-02',
+    overridden_fields: '["title"]',
+  }));
+  const secondChild = Number(insertEvent(database, {
+    title: 'Second override',
+    start_datetime: '2026-10-06T09:00:00',
+    recurrence_parent_id: secondParent,
+    recurrence_id: '2026-10-06',
+    overridden_fields: '["title"]',
+  }));
+  const rows = database.prepare('SELECT * FROM calendar_events WHERE id IN (?, ?) ORDER BY id').all(firstChild, secondChild);
+  const legacy = { id: 999, title: 'Unrelated row' };
+  const resolved = resolveEventRows(database, [...rows, legacy]);
+
+  assert.deepEqual(resolved.map((row) => row.series_id ?? row.id), [firstParent, secondParent, 999]);
+  assert.deepEqual(resolved.map((row) => row.title), ['First override', 'Second override', 'Unrelated row']);
+  assert.strictEqual(resolved[2], legacy);
+  assert.equal(resolveOccurrence(database, rows[0]).series_id, firstParent);
+});
+
+test('loadLinkedOverrides loads multiple parents by displayed overlap range', () => {
+  const database = createDatabase();
+  const firstParent = Number(insertSeries(database));
+  const secondParent = Number(insertSeries(database, { start_datetime: '2026-10-05T09:00:00' }));
+  const moved = Number(insertEvent(database, {
+    start_datetime: '2026-11-02T11:00:00',
+    recurrence_parent_id: firstParent,
+    recurrence_id: '2026-10-31',
+    overridden_fields: '["start_datetime"]',
+  }));
+  const overlapping = Number(insertEvent(database, {
+    start_datetime: '2026-10-31',
+    end_datetime: '2026-11-02',
+    recurrence_parent_id: secondParent,
+    recurrence_id: '2026-10-31',
+    overridden_fields: '["end_datetime"]',
+  }));
+  insertEvent(database, {
+    start_datetime: '2026-12-01T09:00:00',
+    recurrence_parent_id: firstParent,
+    recurrence_id: '2026-12-01',
+    overridden_fields: '["title"]',
+  });
+
+  assert.deepEqual(
+    loadLinkedOverrides(database, [firstParent, secondParent], '2026-11-01', '2026-11-30').map((row) => Number(row.id)),
+    [overlapping, moved],
+  );
+  assert.deepEqual(
+    loadLinkedOverrides(database, [firstParent], '2026-11-01', '2026-11-30').map((row) => Number(row.id)),
+    [moved],
+  );
+  assert.equal(loadLinkedOverrides(database, []).length, 0);
+  assert.equal(loadLinkedOverrides(database, [firstParent]).length, 2);
+});
+
+test('serializeEvent appends recurrence metadata and owner identities', () => {
+  const database = createDatabase();
+  const parentId = Number(insertSeries(database, { title: 'Serialized series' }));
+  const master = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(parentId);
+  const childRow = child({ recurrence_parent_id: parentId, recurrence_id: '2026-10-31' });
+  const resolved = resolveOccurrence(database, childRow, master);
+  const serialized = serializeEvent(resolved, { database, actorId: 1, isAdmin: false });
+
+  assert.equal(serialized.series_id, parentId);
+  assert.equal(serialized.recurrence_id, '2026-10-31');
+  assert.equal(serialized.is_occurrence_override, true);
+  assert.equal(serialized.can_override_occurrence, true);
+  assert.equal(serialized.assignment_owner_id, parentId);
+  assert.equal(serialized.attachment_owner_id, parentId);
+  assert.equal(serialized.reminder_owner_id, parentId);
+  assert.equal(serialized.reminder_anchor_start, master.start_datetime);
+  for (const internal of ['recurrence_parent_id', 'recurrence_identity', 'overridden_fields']) {
+    assert.equal(Object.hasOwn(serialized, internal), false, `${internal} must stay internal`);
+  }
+});
+
+test('serializeEvent exposes capability for a series without changing legacy row shape', () => {
+  const database = createDatabase();
+  const masterId = Number(insertSeries(database));
+  const master = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(masterId);
+  const serializedMaster = serializeEvent(master, { database, actorId: 1, isAdmin: false });
+  const serializedUnauthorized = serializeEvent(master, { database, actorId: 2, isAdmin: false });
+  const legacy = {
+    id: 99,
+    title: 'Standalone',
+    recurrence_parent_id: null,
+    recurrence_id: null,
+    overridden_fields: null,
+  };
+  const serializedLegacy = serializeEvent(legacy, { database, actorId: 1, isAdmin: false });
+
+  assert.deepEqual({
+    series_id: serializedMaster.series_id,
+    recurrence_id: serializedMaster.recurrence_id,
+    is_occurrence_override: serializedMaster.is_occurrence_override,
+    can_override_occurrence: serializedMaster.can_override_occurrence,
+    assignment_owner_id: serializedMaster.assignment_owner_id,
+    attachment_owner_id: serializedMaster.attachment_owner_id,
+    reminder_owner_id: serializedMaster.reminder_owner_id,
+    reminder_anchor_start: serializedMaster.reminder_anchor_start,
+  }, {
+    series_id: masterId,
+    recurrence_id: '2026-10-31',
+    is_occurrence_override: false,
+    can_override_occurrence: true,
+    assignment_owner_id: masterId,
+    attachment_owner_id: masterId,
+    reminder_owner_id: masterId,
+    reminder_anchor_start: '2026-10-31T09:00:00',
+  });
+  assert.equal(serializedUnauthorized.can_override_occurrence, false);
+  for (const key of [
+    'recurrence_parent_id', 'recurrence_id', 'overridden_fields', 'series_id',
+    'is_occurrence_override', 'can_override_occurrence', 'assignment_owner_id',
+    'attachment_owner_id', 'reminder_owner_id', 'reminder_anchor_start',
+  ]) {
+    assert.equal(Object.hasOwn(serializedLegacy, key), false, `${key} must not change a standalone event shape`);
+  }
+});
+
+test('base occurrence identity opt-in does not change legacy expansion rows', () => {
+  const master = series();
+  const legacyExpanded = expandRecurringEvents([master], '2026-10-02', '2026-10-02');
+
+  assert.equal(Object.hasOwn(legacyExpanded[0], 'recurrence_identity'), false);
 });

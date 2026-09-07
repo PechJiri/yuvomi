@@ -11,6 +11,9 @@ import { contentMatchesMime } from '../../utils/file-signature.js';
 import {
   fanOutEventReminders, dropInheritedEventReminders, eventAuthorId,
 } from '../../services/event-reminder-fanout.js';
+import {
+  isEligibleLocalSeries, isLinkedOccurrence, parseOverrideFields, recurrenceIdFor, seriesIdFor,
+} from '../../services/calendar-occurrence-overrides.js';
 
 export const VALID_SOURCES  = ['local', 'google', 'apple', 'ics'];
 // Ein Termin-Anhang ist ein Upload wie jeder andere und teilt deshalb die
@@ -261,7 +264,55 @@ export function setEventAssignments(d, eventId, userIds) {
   );
 }
 
-export function serializeEvent(event) {
+function recurrenceMetadata(event, context) {
+  const linked = event.is_occurrence_override === true || isLinkedOccurrence(event);
+  const recurring = linked || Boolean(event.recurrence_rule);
+  const hasResolvedMetadata = event.series_id != null || event.assignment_owner_id != null;
+  if (!recurring || (!context && !hasResolvedMetadata)) return null;
+
+  const seriesId = Number(event.series_id ?? seriesIdFor(event));
+  let master = context?.master ?? null;
+  if (!master && linked && context?.database) {
+    master = context.database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(seriesId);
+  }
+  if (!master && !linked) master = event;
+
+  let canOverride = Boolean(event.can_override_occurrence);
+  if (context?.database && master) {
+    canOverride = isEligibleLocalSeries(
+      context.database,
+      master,
+      context.actorId ?? null,
+      context.isAdmin === true,
+    ).eligible;
+  }
+
+  let fields = [];
+  if (linked && typeof event.overridden_fields === 'string') {
+    fields = parseOverrideFields(event.overridden_fields);
+  }
+  const assignmentOwnerId = event.assignment_owner_id
+    ?? (fields.includes('assignments') ? Number(event.id) : seriesId);
+  const attachmentOwnerId = event.attachment_owner_id
+    ?? (fields.includes('attachment') ? Number(event.id) : seriesId);
+  const reminderOwnerId = event.reminder_owner_id
+    ?? (fields.includes('reminders') ? Number(event.id) : seriesId);
+  const reminderAnchorStart = event.reminder_anchor_start
+    ?? (fields.includes('reminders') ? event.start_datetime : master?.start_datetime ?? event.start_datetime);
+
+  return {
+    series_id: seriesId,
+    recurrence_id: event.recurrence_id ?? recurrenceIdFor(event),
+    is_occurrence_override: linked,
+    can_override_occurrence: canOverride,
+    assignment_owner_id: Number(assignmentOwnerId),
+    attachment_owner_id: Number(attachmentOwnerId),
+    reminder_owner_id: Number(reminderOwnerId),
+    reminder_anchor_start: reminderAnchorStart,
+  };
+}
+
+export function serializeEvent(event, context = null) {
   if (!event) return event;
   const assigned_users = event.assigned_users_json ? JSON.parse(event.assigned_users_json) : [];
   // birthday_name/birthday_date stammen aus dem LEFT JOIN auf birthdays und sind
@@ -274,9 +325,14 @@ export function serializeEvent(event) {
     birthday_date,
     birthday_event_kind,
     name_day,
+    recurrence_parent_id,
+    recurrence_id,
+    recurrence_identity,
+    overridden_fields,
     ...rest
   } = event;
   const documentId = event.attachment_document_id ?? null;
+  const metadata = recurrenceMetadata(event, context);
   return {
     ...rest,
     ...(birthday_name ? {
@@ -295,6 +351,7 @@ export function serializeEvent(event) {
       ? `/api/v1/documents/${documentId}/download`
       : null,
     housekeeping_visit_id: event.housekeeping_visit_id ?? null,
+    ...(metadata ?? {}),
   };
 }
 
