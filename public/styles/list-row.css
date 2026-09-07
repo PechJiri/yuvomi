@@ -83,12 +83,13 @@
 }
 
 /* Duenner, getoenter Scrollbalken (#1039) - dieselbe Rezeptur wie
- * `.budget-list` (budget.css), hierher verschoben statt dupliziert: dieser
- * Scroller ist der geteilte Container von Einkauf, Vorrat und Rezepten. Ohne
- * das zeigte jede Plattform mit klassischem (nicht Overlay-)Scrollbalken einen
- * vollen System-Balken neben der Liste, unter Windows/Firefox/Chromium
- * dauerhaft sichtbar statt nur beim Scrollen - der Balken gehoerte damit
- * sichtbar dem Betriebssystem, nicht der App.
+ * `.budget-list` (budget.css), hierher als zweite, angepasste Kopie
+ * uebernommen (budget.css blieb unveraendert - keine gemeinsame Basis):
+ * dieser Scroller ist der geteilte Container von Einkauf, Vorrat und
+ * Rezepten. Ohne das zeigte jede Plattform mit klassischem (nicht
+ * Overlay-)Scrollbalken einen vollen System-Balken neben der Liste, unter
+ * Windows/Firefox/Chromium dauerhaft sichtbar statt nur beim Scrollen - der
+ * Balken gehoerte damit sichtbar dem Betriebssystem, nicht der App.
  *
  * `--module-accent` faerbt je Modul verschieden, `--tint-hint` ist die fuer
  * Scrollbar-Daumen dokumentierte Toenungsstufe (tokens.css, Abschnitt 6b). */
