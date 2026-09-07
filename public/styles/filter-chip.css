@@ -6,9 +6,9 @@
  * Dokumente (.documents-filter-chip) drei nahezu identische Chips nebeneinander.
  * Tasks und Dokumente teilen sich jetzt diese Datei. Kontakte behalten ihren
  * eigenen Selektor (eigene Zeilen-Geometrie), fahren aber seit dem HIG-Rollout
- * denselben Aktiv-Zustand: 18 % Fläche / 50 % Kante / 70 % Tinte. Ihre frühere
- * deckende Füllung las sich wie ein aktives Segment, und die gefüllte Kapsel
- * gehört seit Runde 1 den Segmenten.
+ * denselben Aktiv-Zustand: --tint-state Fläche / --tint-hint Kante / --tint-ink
+ * Tinte. Ihre frühere deckende Füllung las sich wie ein aktives Segment, und
+ * die gefüllte Kapsel gehört seit Runde 1 den Segmenten.
  *
  * Reihenfolge-Hinweis: global NACH glass.css eingebunden, damit die bestehende
  * Tasks-Darstellung unverändert bleibt.
@@ -45,11 +45,19 @@
  * der Kontrast allein an der Akzent-Helligkeit (tasks 3.60:1, notes 3.57:1).
  * Füllung und Rahmen bleiben unberührt, der Chip behält seine Modulfarbe.
  *
- * Die Werte (18 % Fläche, 50 % Kante) standen bis zum HIG-Rollout in einem
- * @supports-Zwilling, der zusätzlich blur-xs und einen Specular-Inset auflegte
- * - Glas auf einem INHALTS-Element und damit gegen die Glas-ist-Chrome-Regel.
- * Weil jeder Browser mit backdrop-filter ohnehin diesen Zweig sah, sind seine
- * Farbwerte hier der Bestand; nur Blur und Specular sind weg. */
+ * Die Werte standen bis zum HIG-Rollout als rohe Zahlen (18 % Fläche, 50 %
+ * Kante) in einem @supports-Zwilling, der zusätzlich blur-xs und einen
+ * Specular-Inset auflegte - Glas auf einem INHALTS-Element und damit gegen die
+ * Glas-ist-Chrome-Regel. Weil jeder Browser mit backdrop-filter ohnehin diesen
+ * Zweig sah, wurden seine Farbwerte hier der Bestand; nur Blur und Specular
+ * sind weg.
+ *
+ * Seit c788ce01 nennt der Chip statt der Zahlen die BENANNTEN Stufen der
+ * Tönungsskala (tokens.css, Abschnitt 6b), und das war nicht nur eine
+ * Umbenennung: Kante und Tinte trafen ihre Stufe punktgenau (--tint-hint 50 %,
+ * --tint-ink 70 %), die FLÄCHE hat sich dabei bewegt - --tint-state ist 12 %,
+ * nicht die 18 %, die hier bis 2026-09-07 standen. Wer eine Zahl braucht,
+ * liest sie in tokens.css; hier steht sie absichtlich nicht mehr. */
 .filter-chip--active {
   background-color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-state), transparent);
   border-color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-hint), transparent);
@@ -58,8 +66,8 @@
 
 /* Dichtere Variante für Filterzeilen mit vielen Chips (Dokumente). Das Touch-Maß
  * hängt an (hover: none) statt an der Viewport-Breite: ein Tablet im Hochformat
- * (768–1023px) ist Touch und bekam über eine reine max-width-Regel sonst
- * 32px-Chips — unter dem 44pt-Minimum. */
+ * (768-1023px) ist Touch und bekam über eine reine max-width-Regel sonst
+ * 32px-Chips - unter dem 44pt-Minimum. */
 .filter-chip--sm {
   min-height: var(--target-md);
 }
@@ -118,7 +126,7 @@
  * Scroll-Affordanz für horizontal scrollende Leisten (Audit F-06)
  *
  * Geteilte Konvention: wireScrollFade (utils/ux.js) setzt has-fade-start/-end,
- * solange links/rechts Inhalt verborgen liegt — der weiche Anriss ersetzt den
+ * solange links/rechts Inhalt verborgen liegt - der weiche Anriss ersetzt den
  * bewusst versteckten Scrollbalken (Chip-Zeilen, Tab-Leisten, Personen-Chips).
  * Vertikale Sonderfälle (Sidebar) überschreiben die Maske spezifischer.
  *
