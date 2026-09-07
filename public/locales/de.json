@@ -915,6 +915,7 @@
         "toggleHolidays": "Feiertage",
         "toggleSchool": "Schulferien",
         "toggleBirthdays": "Geburtstage",
+        "toggleMonthTitles": "Termintitel",
         "assignedToMe": "Mir zugewiesen",
         "deleteRecurringTitle": "Serientermin löschen",
         "recurringEvent": "Wiederkehrender Termin",
