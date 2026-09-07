@@ -199,6 +199,7 @@ function listUpcomingEvents(db, actorId, args) {
   return getUpcomingEvents(db, {
     userId: actorId,
     limit,
+    windowDays: null,
     fromToday: true,
   }).map((event) => ({
     id: event.id,

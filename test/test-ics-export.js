@@ -300,6 +300,73 @@ test('buildFeed: TZID-Override teilt Master-UID und zonengleichen Slot mit EXDAT
   assert(!child.includes('RRULE:'), 'Replacement darf keine RRULE tragen: ' + child);
 });
 
+test('buildFeed: TZID-Override nutzt bei positivem Mitternachtsversatz den Basis-Instant', () => {
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,tzid,created_by)
+    VALUES ('OverrideTokyoMaster','2026-01-06T23:00:00Z','2026-01-07T00:00:00Z',0,'local','FREQ=DAILY;COUNT=4','Asia/Tokyo',?)
+  `).run(u1).lastInsertRowid;
+  d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,tzid,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('OverrideTokyoMoved','2026-06-30T02:00:00Z','2026-06-30T03:00:00Z',0,'local','Asia/Tokyo',?,?,?,?)
+  `).run(u1, masterId, '2026-01-07', JSON.stringify(['title', 'start_datetime', 'end_datetime']));
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-01-07')`).run(masterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  const master = eventBlock(ics, 'OverrideTokyoMaster');
+  const child = eventBlock(ics, 'OverrideTokyoMoved');
+  assert(master?.includes('EXDATE;TZID=Asia/Tokyo:20260108T080000'), 'EXDATE muss den lokalen Basis-Instant nutzen: ' + master);
+  assert(child?.includes('RECURRENCE-ID;TZID=Asia/Tokyo:20260108T080000'), 'RECURRENCE-ID muss den lokalen Basis-Instant nutzen: ' + child);
+});
+
+test('buildFeed: TZID-Override nutzt bei negativem Mitternachtsversatz den DST-Basis-Instant', () => {
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,tzid,created_by)
+    VALUES ('OverrideLosAngelesMaster','2026-03-08T01:30:00Z','2026-03-08T02:30:00Z',0,'local','FREQ=DAILY;COUNT=4','America/Los_Angeles',?)
+  `).run(u1).lastInsertRowid;
+  d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,tzid,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('OverrideLosAngelesMoved','2026-07-01T19:00:00Z','2026-07-01T20:00:00Z',0,'local','America/Los_Angeles',?,?,?,?)
+  `).run(u1, masterId, '2026-03-09', JSON.stringify(['title', 'start_datetime', 'end_datetime']));
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-03-09')`).run(masterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  const master = eventBlock(ics, 'OverrideLosAngelesMaster');
+  const child = eventBlock(ics, 'OverrideLosAngelesMoved');
+  assert(master?.includes('EXDATE;TZID=America/Los_Angeles:20260308T183000'), 'EXDATE muss den DST-korrigierten Basis-Instant nutzen: ' + master);
+  assert(child?.includes('RECURRENCE-ID;TZID=America/Los_Angeles:20260308T183000'), 'RECURRENCE-ID muss den DST-korrigierten Basis-Instant nutzen: ' + child);
+});
+
+test('buildFeed: verschobener Ersatz behält seinen abgelaufenen Master im Feed', () => {
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,created_by)
+    VALUES ('ExpiredOverrideMaster','2025-01-01','2025-01-01',1,'local','FREQ=DAILY;UNTIL=20250102',?)
+  `).run(u1).lastInsertRowid;
+  d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('ExpiredOverrideMoved','2026-06-20','2026-06-20',1,'local',?,?,?,?)
+  `).run(u1, masterId, '2025-01-02', JSON.stringify(['title', 'start_datetime', 'end_datetime']));
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2025-01-02')`).run(masterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  const master = eventBlock(ics, 'ExpiredOverrideMaster');
+  const child = eventBlock(ics, 'ExpiredOverrideMoved');
+  assert(master, 'referenzierter abgelaufener Master fehlt: ' + ics);
+  assert(master.includes(`UID:event-${masterId}@yuvomi`), 'Master-UID fehlt: ' + master);
+  assert(master.includes('RRULE:FREQ=DAILY;UNTIL=20250102'), 'Master-RRULE fehlt: ' + master);
+  assert(master.includes('EXDATE;VALUE=DATE:20250102'), 'Master-EXDATE fehlt: ' + master);
+  assert(child?.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss die Master-UID nutzen: ' + child);
+  assert(child.includes('RECURRENCE-ID;VALUE=DATE:20250102'), 'Replacement-Slot fehlt: ' + child);
+});
+
 test('buildFeed: wiederkehrendes Event mit abgelaufenem UNTIL (Vergangenheit) wird ausgeschlossen', () => {
   d2.prepare(`INSERT INTO calendar_events (title,start_datetime,all_day,external_source,recurrence_rule,created_by) VALUES ('AlteSerie','2019-01-07T07:00:00Z',0,'local','FREQ=WEEKLY;BYDAY=MO;UNTIL=20200101T000000Z',?)`).run(u1);
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);

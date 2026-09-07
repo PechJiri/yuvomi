@@ -10,6 +10,7 @@ import { visibilityWhere } from './visibility.js';
 import {
   expandRecurringEvents, loadEventExceptions, resolveProjectedEventRows,
 } from './calendar-events.js';
+import { visibilityWhere } from './visibility.js';
 
 export const SEARCH_LIMIT = 5;
 
@@ -156,7 +157,9 @@ export function runSearch(database, q, userId, { hiddenModules = null } = {}) {
   // Abos). Ohne beides fand jedes Mitglied Titel und Datum fremder PRIVATER
   // Termine ueber ein Stichwort. Es sind dieselben zwei Klauseln wie in
   // routes/calendar/read.js, damit globale und Kalender-Suche fuers gleiche
-  // Stichwort dieselben Treffer liefern - das war der Sinn von #471.
+  // Stichwort dieselben Treffer liefern - das war der Sinn von #471. Beide
+  // Filter müssen vor ORDER/LIMIT greifen, damit verborgene Treffer sichtbare
+  // nicht aus dem Ergebnisfenster verdrängen.
   if (allows('events')) {
     const eventRows = resolveEventSearchRows(database, database.prepare(`
       SELECT e.*

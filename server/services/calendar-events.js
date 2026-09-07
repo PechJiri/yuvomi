@@ -252,7 +252,8 @@ export function expandAndResolveEventRows(database, rows, from, to) {
  * @param {object}  opts
  * @param {number?} opts.userId      Aktueller User (für ICS-Sichtbarkeit)
  * @param {number}  opts.limit       Maximale Anzahl Termine (default 5)
- * @param {number}  opts.windowDays  Vorausschau-Fenster in Tagen (default 90)
+ * @param {number|null} opts.windowDays  Vorausschau-Fenster in Tagen (default 90),
+ *        null = alle gespeicherten zukünftigen Termine
  * @param {boolean} opts.fromToday   true = ab Tagesbeginn (Dashboard); false = ab jetzt (default)
  * @param {number?} opts.assignedTo  Nur Termine, die dieser Person zugewiesen sind (#814)
  * @param {boolean} opts.includeBirthdays  false = Geburtstagstermine aussortieren (#927)
@@ -273,7 +274,7 @@ export function getUpcomingEvents(d, {
     ? new Date(localToUTC(`${nowDate}T00:00:00`, tz)).getTime()
     : now.getTime();
   // Fenster: heute bis +windowDays voraus (für Wiederholungs-Expansion)
-  const future  = shiftDateKey(nowDate, windowDays);
+  const future = windowDays === null ? '9999-12-31' : shiftDateKey(nowDate, windowDays);
   // Untere SQL-Grenze einen Tag früher als das Ergebnisfenster (#824): `DATE()`
   // liest einen Instant als UTC-Kalendertag, und westlich von UTC liegt ein
   // Abendtermin von heute dort schon auf morgen - er fiele aus einer Grenze

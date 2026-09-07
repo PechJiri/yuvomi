@@ -10,6 +10,7 @@ import { householdTimeZone, isValidTimeZone } from '../utils/timezone.js';
 import { formatWall, vtimezoneFor } from '../utils/vtimezone.js';
 import { rruleLine } from './recurrence.js';
 import { resolveProjectedEventRows } from './calendar-events.js';
+import { baseOccurrenceFor, isLinkedOccurrence } from './calendar-occurrence-overrides.js';
 
 function escapeICSText(s) {
   if (s == null) return '';
@@ -143,8 +144,8 @@ function usesFeedZone(ev) {
 function recurrenceSlotProp(prop, master, dateKey, feedZone) {
   if (master.all_day) return `${prop};VALUE=DATE:${formatDate(dateKey)}`;
   if (usesTzid(master)) {
-    const wallSuffix = formatWall(master.start_datetime, master.tzid).slice(8);
-    return `${prop};TZID=${master.tzid}:${formatDate(dateKey)}${wallSuffix}`;
+    const baseOccurrence = baseOccurrenceFor(master, dateKey);
+    return `${prop};TZID=${master.tzid}:${formatWall(baseOccurrence.start_datetime, master.tzid)}`;
   }
   const timeSuffix = master.start_datetime.slice(10);
   return stampProp(prop, dateKey + timeSuffix, feedZone);
@@ -245,8 +246,12 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
     )
     ORDER BY e.start_datetime ASC
   `).all(userId, windowStart);
+  const referencedMasterIds = new Set(queriedRows
+    .filter(isLinkedOccurrence)
+    .map((event) => Number(event.recurrence_parent_id)));
   const rows = queriedRows
-    .filter(ev => !isRecurrenceExpired(ev.recurrence_rule, windowStart));
+    .filter((event) => !isRecurrenceExpired(event.recurrence_rule, windowStart)
+      || referencedMasterIds.has(Number(event.id)));
 
   // Instanz-Ausnahmen (EXDATE, #489) für die wiederkehrenden Events des Feeds laden.
   const recurringIds = rows.filter(ev => ev.recurrence_rule).map(ev => ev.id);

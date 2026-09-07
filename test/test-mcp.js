@@ -341,6 +341,20 @@ test('tools/call list_upcoming_events: enthält das neue Event', async () => {
   assert.ok(events.some((e) => e.title === 'Zahnarzt'));
 });
 
+test('tools/call list_upcoming_events: bleibt ab heute ohne 90-Tage-Obergrenze', async () => {
+  const beyondDashboardWindow = new Date();
+  beyondDashboardWindow.setUTCDate(beyondDashboardWindow.getUTCDate() + 120);
+  const dateKey = beyondDashboardWindow.toISOString().slice(0, 10);
+  const id = db.prepare(`
+    INSERT INTO calendar_events
+      (title, start_datetime, end_datetime, all_day, created_by, external_source, visibility)
+    VALUES ('MCP langfristig', ?, ?, 0, ?, 'local', 'all')
+  `).run(`${dateKey}T09:00:00`, `${dateKey}T10:00:00`, uid).lastInsertRowid;
+
+  const events = parseContent(await toolCall('list_upcoming_events', { limit: 100 }));
+  assert.ok(events.some((event) => Number(event.id) === Number(id)), 'Termin nach 120 Tagen fehlt');
+});
+
 test('tools/call list_upcoming_events reuses linked occurrence resolution', async () => {
   const dateKey = (days) => {
     const date = new Date();
