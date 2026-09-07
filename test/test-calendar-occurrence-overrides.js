@@ -26,7 +26,9 @@ import {
   upsertOccurrenceOverride,
   updateSeriesWithOverrides,
 } from '../server/services/calendar-occurrence-overrides.js';
-import { expandRecurringEvents } from '../server/services/calendar-events.js';
+import {
+  expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
+} from '../server/services/calendar-events.js';
 import { serializeEvent } from '../server/routes/calendar/helpers.js';
 
 function createDatabase() {
@@ -1258,6 +1260,37 @@ test('following edit preserves timezone and the remaining unchanged COUNT', () =
   const oldRows = expandRecurringEvents([oldMaster], '2026-10-01', '2026-11-10', new Map());
   const newRows = expandRecurringEvents([successor], '2026-10-01', '2026-11-10', new Map());
   assert.equal(oldRows.length + newRows.length, 5);
+});
+
+test('following edit preserves COUNT beyond the default expansion limit', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Long finite series',
+    start_datetime: '2026-01-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY;COUNT=1500',
+  }));
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2028-09-27',
+    actorId: 1,
+    changes: { recurrence_rule: 'FREQ=DAILY;COUNT=1500' },
+  });
+  const oldMaster = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(seriesId);
+  const successor = database.prepare('SELECT * FROM calendar_events WHERE id = ?')
+    .get(result.series.id);
+
+  assert.equal(successor.recurrence_rule, 'FREQ=DAILY;COUNT=500');
+  const expansionOptions = { maxIterations: MAX_EXPANSION_ITERATIONS };
+  const oldRows = expandRecurringEvents(
+    [oldMaster], '2026-01-01', '2030-12-31', new Map(), expansionOptions,
+  );
+  const newRows = expandRecurringEvents(
+    [successor], '2026-01-01', '2030-12-31', new Map(), expansionOptions,
+  );
+  assert.equal(oldRows.length, 1000);
+  assert.equal(newRows.length, 500);
+  assert.equal(oldRows.length + newRows.length, 1500);
 });
 
 test('following edit honors an explicitly changed successor COUNT', () => {

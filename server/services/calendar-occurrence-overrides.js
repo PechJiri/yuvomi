@@ -794,10 +794,17 @@ function remainingCountRule(master, recurrenceId) {
     master.start_datetime.slice(0, 10),
     recurrenceId,
     new Map(),
-    { includeRecurrenceIdentity: true },
+    {
+      includeRecurrenceIdentity: true,
+      maxIterations: exactLookupIterationLimit(master, recurrenceId),
+    },
   );
   const selectedIndex = occurrences.findIndex((row) => row.recurrence_identity === recurrenceId);
-  if (selectedIndex < 0) return master.recurrence_rule;
+  if (selectedIndex < 0) {
+    throw invalidRecurrenceIdentity(
+      'The validated recurrence_id could not be indexed within the bounded series reach.',
+    );
+  }
   return String(master.recurrence_rule).replace(/COUNT=\d+/i, `COUNT=${count - selectedIndex}`);
 }
 
