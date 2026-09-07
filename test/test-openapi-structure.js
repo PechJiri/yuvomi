@@ -103,3 +103,37 @@ test('kein Pfad-Parameter mit Namens-Bedeutung ist als Zahl deklariert', () => {
   assert.deepEqual(offenders, [],
     `Diese Pfad-Parameter tragen einen Namen, sind aber als integer deklariert:\n${offenders.join('\n')}`);
 });
+
+test('calendar occurrence conflicts and split successes have exact schemas', () => {
+  const spec = buildOpenApiSpec({}, 'test');
+  const conflictRef = '#/components/schemas/CalendarOverrideOrphanConflict';
+  const eventRef = '#/components/schemas/CalendarEventResponse';
+  const genericPut = spec.paths['/api/v1/calendar/{id}'].put;
+  const followingPut = spec.paths[
+    '/api/v1/calendar/{seriesId}/occurrences/{recurrenceId}/following'
+  ].put;
+
+  assert.equal(
+    genericPut.responses[409].content['application/json'].schema.$ref,
+    conflictRef,
+  );
+  assert.equal(
+    followingPut.responses[409].content['application/json'].schema.$ref,
+    conflictRef,
+  );
+  for (const status of [200, 201]) {
+    assert.equal(
+      followingPut.responses[status].content['application/json'].schema.$ref,
+      eventRef,
+    );
+  }
+  assert.deepEqual(spec.components.schemas.CalendarOverrideOrphanConflict.required, [
+    'error', 'code', 'conflict', 'orphaned_override_count',
+  ]);
+  assert.deepEqual(spec.components.schemas.CalendarOverrideOrphanConflict.properties, {
+    error: { type: 'string' },
+    code: { type: 'integer', const: 409 },
+    conflict: { type: 'string', const: 'calendar_override_orphans' },
+    orphaned_override_count: { type: 'integer', minimum: 0 },
+  });
+});

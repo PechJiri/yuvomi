@@ -17,6 +17,7 @@ import {
 } from '../../services/document-storage.js';
 import { queueEventDeletion, markEventOutbound, flushOutbound } from '../../services/calendar-outbound.js';
 import {
+  assertSuccessorHasOccurrence,
   baseOccurrenceFor,
   CalendarOccurrenceError,
   deleteOccurrence,
@@ -261,6 +262,48 @@ function loadVisibleEvent(id, req) {
   `).get(id, me, me);
 }
 
+function sendCalendarOccurrenceError(res, error) {
+  return res.status(error.status).json({
+    error: error.message,
+    code: error.status,
+    ...(error.conflict ? { conflict: error.conflict } : { reason: error.code }),
+    ...(error.orphanedOverrideCount !== undefined
+      ? { orphaned_override_count: error.orphanedOverrideCount }
+      : {}),
+  });
+}
+
+function rejectLinkedOccurrenceResource(res, event, req) {
+  if (event.recurrence_parent_id == null) return false;
+  const parent = loadVisibleEvent(Number(event.recurrence_parent_id), req);
+  if (!parent) {
+    sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+      'Calendar series not found.',
+      { status: 404, code: 'calendar_series_not_found' },
+    ));
+    return true;
+  }
+  const eligibility = isEligibleLocalSeries(
+    db.get(),
+    parent,
+    getUserId(req),
+    isAdminUser(req),
+  );
+  if (!eligibility.eligible) {
+    const unauthorized = eligibility.reason === 'not_authorized';
+    sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+      unauthorized ? 'Not authorized.' : 'This calendar series cannot use occurrence overrides.',
+      { status: unauthorized ? 403 : 400, code: eligibility.reason },
+    ));
+    return true;
+  }
+  sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+    'Use the occurrence endpoint to modify a linked recurring occurrence.',
+    { status: 400, code: 'calendar_occurrence_route_required' },
+  ));
+  return true;
+}
+
 // --------------------------------------------------------
 // PUT /api/v1/calendar/:id
 // Termin vollständig aktualisieren.
@@ -273,6 +316,7 @@ router.put('/:id', async (req, res) => {
     const id    = parseInt(req.params.id, 10);
     const event = loadVisibleEvent(id, req);
     if (!event) return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
+    if (rejectLinkedOccurrenceResource(res, event, req)) return;
 
     const checks = [];
     if (req.body.title          !== undefined) checks.push(str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }));
@@ -310,8 +354,8 @@ router.put('/:id', async (req, res) => {
     const errors = collectErrors(checks);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     if (req.body.confirmed_orphan_count !== undefined
-        && (!Number.isInteger(Number(req.body.confirmed_orphan_count))
-          || Number(req.body.confirmed_orphan_count) < 0)) {
+        && (!Number.isInteger(req.body.confirmed_orphan_count)
+          || req.body.confirmed_orphan_count < 0)) {
       return res.status(400).json({
         error: 'confirmed_orphan_count must be a non-negative integer.',
         code: 400,
@@ -571,7 +615,25 @@ router.put('/:id', async (req, res) => {
     const linkedOverrideCount = db.get().prepare(`
       SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?
     `).get(id).count;
-    if (linkedOverrideCount > 0) {
+    const occurrenceBoundaryTouched = Boolean(event.recurrence_rule) && [
+      'start_datetime',
+      'recurrence_rule',
+      'target_google_calendar_id',
+      'target_caldav_account_id',
+      'target_caldav_calendar_url',
+      'target_outlook_account_id',
+      'target_outlook_calendar_id',
+    ].some((field) => Object.hasOwn(req.body, field));
+    const canUseOccurrenceTransaction = occurrenceBoundaryTouched
+      && isEligibleLocalSeries(
+        db.get(),
+        event,
+        getUserId(req),
+        isAdminUser(req),
+      ).eligible;
+    if (linkedOverrideCount > 0
+        || Object.hasOwn(req.body, 'confirmed_orphan_count')
+        || canUseOccurrenceTransaction) {
       const seriesChanges = {};
       if (title !== undefined) seriesChanges.title = title?.trim() || null;
       if (description !== undefined) seriesChanges.description = description || null;
@@ -638,14 +700,7 @@ router.put('/:id', async (req, res) => {
     }
   } catch (err) {
     if (err instanceof CalendarOccurrenceError && !stagedUpload) {
-      return res.status(err.status).json({
-        error: err.message,
-        code: err.status,
-        ...(err.conflict ? { conflict: err.conflict } : {}),
-        ...(err.orphanedOverrideCount !== undefined
-          ? { orphaned_override_count: err.orphanedOverrideCount }
-          : {}),
-      });
+      return sendCalendarOccurrenceError(res, err);
     }
     if (err instanceof StorageError && !stagedUpload) {
       log.error('PUT /:id storage error:', err);
@@ -664,16 +719,7 @@ router.put('/:id', async (req, res) => {
         );
       }
     }
-    if (err instanceof CalendarOccurrenceError) {
-      return res.status(err.status).json({
-        error: err.message,
-        code: err.status,
-        ...(err.conflict ? { conflict: err.conflict } : {}),
-        ...(err.orphanedOverrideCount !== undefined
-          ? { orphaned_override_count: err.orphanedOverrideCount }
-          : {}),
-      });
-    }
+    if (err instanceof CalendarOccurrenceError) return sendCalendarOccurrenceError(res, err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });
   }
 });
@@ -688,21 +734,20 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
     const seriesId = parseInt(req.params.seriesId, 10);
     const actorId = getUserId(req);
     const isAdmin = isAdminUser(req);
-    const master = Number.isInteger(seriesId)
-      ? db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(seriesId)
-      : null;
+    const master = Number.isInteger(seriesId) ? loadVisibleEvent(seriesId, req) : null;
     if (!master) {
-      return res.status(404).json({ error: 'Calendar series not found.', code: 'calendar_series_not_found' });
+      return sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+        'Calendar series not found.',
+        { status: 404, code: 'calendar_series_not_found' },
+      ));
     }
     const eligibility = isEligibleLocalSeries(db.get(), master, actorId, isAdmin);
     if (!eligibility.eligible) {
       const unauthorized = eligibility.reason === 'not_authorized';
-      return res.status(unauthorized ? 403 : 400).json({
-        error: unauthorized
-          ? 'Not authorized.'
-          : 'This calendar series cannot use occurrence overrides.',
-        code: eligibility.reason,
-      });
+      return sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+        unauthorized ? 'Not authorized.' : 'This calendar series cannot use occurrence overrides.',
+        { status: unauthorized ? 403 : 400, code: eligibility.reason },
+      ));
     }
     baseOccurrenceFor(master, req.params.recurrenceId);
 
@@ -809,7 +854,7 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
     });
   } catch (err) {
     if (err instanceof CalendarOccurrenceError && !stagedUpload) {
-      return res.status(err.status).json({ error: err.message, code: err.code });
+      return sendCalendarOccurrenceError(res, err);
     }
     if (err instanceof StorageError && !stagedUpload) {
       log.error('PUT occurrence storage error:', err);
@@ -828,9 +873,7 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
         );
       }
     }
-    if (err instanceof CalendarOccurrenceError) {
-      return res.status(err.status).json({ error: err.message, code: err.code });
-    }
+    if (err instanceof CalendarOccurrenceError) return sendCalendarOccurrenceError(res, err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });
   }
 });
@@ -841,23 +884,22 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     const seriesId = parseInt(req.params.seriesId, 10);
     const actorId = getUserId(req);
     const isAdmin = isAdminUser(req);
-    const master = Number.isInteger(seriesId)
-      ? db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(seriesId)
-      : null;
+    const master = Number.isInteger(seriesId) ? loadVisibleEvent(seriesId, req) : null;
     if (!master) {
-      return res.status(404).json({ error: 'Calendar series not found.', code: 'calendar_series_not_found' });
+      return sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+        'Calendar series not found.',
+        { status: 404, code: 'calendar_series_not_found' },
+      ));
     }
     const eligibility = isEligibleLocalSeries(db.get(), master, actorId, isAdmin);
     if (!eligibility.eligible) {
       const unauthorized = eligibility.reason === 'not_authorized';
-      return res.status(unauthorized ? 403 : 400).json({
-        error: unauthorized
-          ? 'Not authorized.'
-          : 'This calendar series cannot use occurrence overrides.',
-        code: eligibility.reason,
-      });
+      return sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+        unauthorized ? 'Not authorized.' : 'This calendar series cannot use occurrence overrides.',
+        { status: unauthorized ? 403 : 400, code: eligibility.reason },
+      ));
     }
-    baseOccurrenceFor(master, req.params.recurrenceId);
+    const selectedBase = baseOccurrenceFor(master, req.params.recurrenceId);
 
     const checks = [];
     if (req.body.title !== undefined) checks.push(str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }));
@@ -876,6 +918,14 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     if (req.body.remove_attachment !== undefined && typeof req.body.remove_attachment !== 'boolean') {
       return res.status(400).json({ error: 'remove_attachment: muss ein Boolean sein.', code: 400 });
     }
+    if (req.body.confirmed_orphan_count !== undefined
+        && (!Number.isInteger(req.body.confirmed_orphan_count)
+          || req.body.confirmed_orphan_count < 0)) {
+      return res.status(400).json({
+        error: 'confirmed_orphan_count must be a non-negative integer.',
+        code: 400,
+      });
+    }
     if (req.body.reminder_offsets !== undefined
         && (!Array.isArray(req.body.reminder_offsets)
           || req.body.reminder_offsets.length > 5
@@ -886,6 +936,14 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
         code: 400,
       });
     }
+
+    assertSuccessorHasOccurrence({
+      ...master,
+      start_datetime: req.body.start_datetime ?? selectedBase.start_datetime,
+      recurrence_rule: Object.hasOwn(req.body, 'recurrence_rule')
+        ? req.body.recurrence_rule
+        : master.recurrence_rule,
+    });
 
     const replacementRequested = typeof req.body.attachment_data === 'string'
       && req.body.attachment_data.trim() !== '';
@@ -948,6 +1006,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       reminderOffsets: req.body.reminder_offsets === undefined
         ? undefined
         : [...new Set(req.body.reminder_offsets.map(Number))],
+      confirmedOrphanCount: req.body.confirmed_orphan_count,
     });
     res.status(result.wholeSeries ? 200 : 201).json({
       data: serializeEvent(result.series, {
@@ -958,7 +1017,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     });
   } catch (err) {
     if (err instanceof CalendarOccurrenceError && !stagedUpload) {
-      return res.status(err.status).json({ error: err.message, code: err.code });
+      return sendCalendarOccurrenceError(res, err);
     }
     if (err instanceof StorageError && !stagedUpload) {
       return sendStorageError(res, err, 'Calendar attachment storage upload failed.');
@@ -975,26 +1034,29 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
         );
       }
     }
-    if (err instanceof CalendarOccurrenceError) {
-      return res.status(err.status).json({ error: err.message, code: err.code });
-    }
+    if (err instanceof CalendarOccurrenceError) return sendCalendarOccurrenceError(res, err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });
   }
 });
 
 router.delete('/:seriesId/occurrences/:recurrenceId', (req, res) => {
   try {
+    const seriesId = parseInt(req.params.seriesId, 10);
+    if (!Number.isInteger(seriesId) || !loadVisibleEvent(seriesId, req)) {
+      return sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+        'Calendar series not found.',
+        { status: 404, code: 'calendar_series_not_found' },
+      ));
+    }
     deleteOccurrence(db.get(), {
-      seriesId: req.params.seriesId,
+      seriesId,
       recurrenceId: req.params.recurrenceId,
       actorId: getUserId(req),
       isAdmin: isAdminUser(req),
     });
     res.status(204).end();
   } catch (err) {
-    if (err instanceof CalendarOccurrenceError) {
-      return res.status(err.status).json({ error: err.message, code: err.code });
-    }
+    if (err instanceof CalendarOccurrenceError) return sendCalendarOccurrenceError(res, err);
     log.error('DELETE occurrence failed:', err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });
   }
@@ -1002,17 +1064,22 @@ router.delete('/:seriesId/occurrences/:recurrenceId', (req, res) => {
 
 router.delete('/:seriesId/occurrences/:recurrenceId/following', (req, res) => {
   try {
+    const seriesId = parseInt(req.params.seriesId, 10);
+    if (!Number.isInteger(seriesId) || !loadVisibleEvent(seriesId, req)) {
+      return sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
+        'Calendar series not found.',
+        { status: 404, code: 'calendar_series_not_found' },
+      ));
+    }
     truncateSeries(db.get(), {
-      seriesId: req.params.seriesId,
+      seriesId,
       recurrenceId: req.params.recurrenceId,
       actorId: getUserId(req),
       isAdmin: isAdminUser(req),
     });
     res.status(204).end();
   } catch (err) {
-    if (err instanceof CalendarOccurrenceError) {
-      return res.status(err.status).json({ error: err.message, code: err.code });
-    }
+    if (err instanceof CalendarOccurrenceError) return sendCalendarOccurrenceError(res, err);
     log.error('DELETE occurrence following failed:', err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });
   }
@@ -1107,6 +1174,7 @@ router.delete('/:id', (req, res) => {
     const id    = parseInt(req.params.id, 10);
     const event = loadVisibleEvent(id, req);
     if (!event) return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
+    if (rejectLinkedOccurrenceResource(res, event, req)) return;
     const queued = queueEventDeletion(event);
 
     const result = db.get().transaction(() => {

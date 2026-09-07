@@ -182,7 +182,10 @@ export function calendarPaths() {
         description: 'Truncates the original series before the selected original slot, creates a successor series, and reparents later linked replacements and deletion exceptions atomically.',
         requestBody: jsonBody(null),
         responses: {
-          200: { description: 'First occurrence updated as the whole series' },
+          200: {
+            description: 'First occurrence updated as the whole series',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarEventResponse' } } },
+          },
           201: {
             description: 'Successor calendar series created',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarEventResponse' } } },
@@ -191,6 +194,10 @@ export function calendarPaths() {
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
           404: { description: 'Calendar series not found' },
+          409: {
+            description: 'Linked occurrence replacements require exact-count orphan confirmation',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarOverrideOrphanConflict' } } },
+          },
           500: { $ref: '#/components/responses/InternalServerError' },
         },
       }),
@@ -243,7 +250,10 @@ export function calendarPaths() {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           404: { description: 'Calendar event not found' },
-          409: { description: 'Linked occurrence replacements require exact-count orphan confirmation' },
+          409: {
+            description: 'Linked occurrence replacements require exact-count orphan confirmation',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarOverrideOrphanConflict' } } },
+          },
           500: { $ref: '#/components/responses/InternalServerError' },
         },
       }),

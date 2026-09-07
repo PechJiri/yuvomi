@@ -17,7 +17,18 @@ export const schemas = {
           properties: {
             error: { type: 'string' },
             code: { type: 'integer' },
+            reason: { type: 'string' },
             storage_code: { $ref: '#/components/schemas/DocumentStorageErrorCode' },
+          },
+        },
+        CalendarOverrideOrphanConflict: {
+          type: 'object',
+          required: ['error', 'code', 'conflict', 'orphaned_override_count'],
+          properties: {
+            error: { type: 'string' },
+            code: { type: 'integer', const: 409 },
+            conflict: { type: 'string', const: 'calendar_override_orphans' },
+            orphaned_override_count: { type: 'integer', minimum: 0 },
           },
         },
         NoteCategory: {

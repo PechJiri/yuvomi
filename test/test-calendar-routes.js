@@ -975,6 +975,116 @@ test('PUT /:seriesId/occurrences/:recurrenceId authorizes creator and admin only
   ).get(seriesId).count, 1);
 });
 
+test('generic child-id PUT and DELETE cannot bypass occurrence ownership or metadata', async () => {
+  for (const method of ['PUT', 'DELETE']) {
+    for (const [label, requestActor, expectedStatus, expectedReason] of [
+      ['creator', MARIA, 400, 'calendar_occurrence_route_required'],
+      ['admin', ADMIN, 400, 'calendar_occurrence_route_required'],
+      ['visible non-owner', TOM, 403, 'not_authorized'],
+    ]) {
+      const seriesId = insertEvent({
+        title: `Direct child ${method} ${label}`,
+        start_datetime: '2046-01-10T09:00:00',
+        recurrence_rule: 'FREQ=DAILY',
+        created_by: MARIA.id,
+      });
+      const created = await call('PUT', `/${seriesId}/occurrences/2046-01-11`, {
+        actor: MARIA,
+        body: { title: 'Owned occurrence title' },
+      });
+      assert.equal(created.status, 200);
+      const childId = Number(created.body.data.id);
+
+      const response = await call(method, `/${childId}`, {
+        actor: requestActor,
+        body: method === 'PUT' ? { title: 'Bypass attempt' } : undefined,
+      });
+      assert.equal(response.status, expectedStatus, `${method} ${label}`);
+      assert.equal(response.body.code, expectedStatus, `${method} ${label}`);
+      assert.equal(response.body.reason, expectedReason, `${method} ${label}`);
+      assert.deepEqual({ ...db.prepare(`
+        SELECT title, recurrence_parent_id, recurrence_id, overridden_fields
+        FROM calendar_events WHERE id = ?
+      `).get(childId) }, {
+        title: 'Owned occurrence title',
+        recurrence_parent_id: seriesId,
+        recurrence_id: '2046-01-11',
+        overridden_fields: '["title"]',
+      });
+      assert.equal(db.prepare(`
+        SELECT COUNT(*) AS count FROM calendar_event_exceptions
+        WHERE event_id = ? AND exception_date = '2046-01-11'
+      `).get(seriesId).count, 1);
+    }
+  }
+});
+
+test('all occurrence operations hide invisible series before ownership checks', async () => {
+  const operations = [
+    ['only PUT', 'PUT', (id) => `/${id}/occurrences/2046-01-21`, { title: 'Visible edit' }, 200],
+    ['only DELETE', 'DELETE', (id) => `/${id}/occurrences/2046-01-21`, undefined, 204],
+    ['following PUT', 'PUT', (id) => `/${id}/occurrences/2046-01-21/following`, {
+      title: 'Visible split', recurrence_rule: 'FREQ=DAILY',
+    }, 201],
+    ['following DELETE', 'DELETE', (id) => `/${id}/occurrences/2046-01-21/following`, undefined, 204],
+  ];
+
+  for (const [label, method, route, body, successStatus] of operations) {
+    const missing = await call(method, route(99999999), {
+      actor: MARIA,
+      body,
+    });
+    assert.equal(missing.status, 404, `${label} missing`);
+    assert.equal(missing.body.code, 404, `${label} missing code`);
+
+    for (const hiddenActor of [MARIA, ADMIN]) {
+      const hiddenId = insertEvent({
+        title: `${label} hidden`,
+        start_datetime: '2046-01-20T09:00:00',
+        recurrence_rule: 'FREQ=DAILY',
+        created_by: TOM.id,
+        visibility: 'private',
+      });
+      const hidden = await call(method, route(hiddenId), { actor: hiddenActor, body });
+      assert.equal(hidden.status, 404, `${label} hidden from ${hiddenActor.role}`);
+      assert.equal(hidden.body.code, 404, `${label} hidden code`);
+    }
+
+    const assignedId = insertEvent({
+      title: `${label} assigned`,
+      start_datetime: '2046-01-20T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+      created_by: TOM.id,
+      visibility: 'assignees',
+    });
+    assignEvent(assignedId, MARIA.id);
+    const assigned = await call(method, route(assignedId), { actor: MARIA, body });
+    assert.equal(assigned.status, 403, `${label} visible assignee`);
+    assert.equal(assigned.body.code, 403, `${label} assignee code`);
+    assert.equal(assigned.body.reason, 'not_authorized', `${label} assignee reason`);
+
+    const creatorId = insertEvent({
+      title: `${label} creator`,
+      start_datetime: '2046-01-20T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+      created_by: MARIA.id,
+      visibility: 'private',
+    });
+    const creator = await call(method, route(creatorId), { actor: MARIA, body });
+    assert.equal(creator.status, successStatus, `${label} creator`);
+
+    const adminId = insertEvent({
+      title: `${label} admin`,
+      start_datetime: '2046-01-20T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+      created_by: MARIA.id,
+      visibility: 'all',
+    });
+    const admin = await call(method, route(adminId), { actor: ADMIN, body });
+    assert.equal(admin.status, successStatus, `${label} admin`);
+  }
+});
+
 test('occurrence PUT distinguishes missing, ineligible and invalid original slots', async () => {
   const missing = await call('PUT', '/9999999/occurrences/2046-02-01', {
     body: { title: 'Missing' },
@@ -990,7 +1100,8 @@ test('occurrence PUT distinguishes missing, ineligible and invalid original slot
     body: { title: 'Not a Tuesday series' },
   });
   assert.equal(invalid.status, 400);
-  assert.equal(invalid.body.code, 'invalid_recurrence_id');
+  assert.equal(invalid.body.code, 400);
+  assert.equal(invalid.body.reason, 'invalid_recurrence_id');
 
   const subscriptionId = db.prepare(`
     INSERT INTO ics_subscriptions (name, url, color, created_by, shared)
@@ -1054,7 +1165,8 @@ test('occurrence PUT distinguishes missing, ineligible and invalid original slot
     });
     if (typeof cleanup === 'function') cleanup();
     assert.equal(response.status, 400, label);
-    assert.equal(response.body.code, 'ineligible_series', label);
+    assert.equal(response.body.code, 400, label);
+    assert.equal(response.body.reason, 'ineligible_series', label);
     assert.equal(db.prepare(
       'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
     ).get(seriesId).count, 0, label);
@@ -1174,6 +1286,49 @@ test('following conflict removes a staged attachment before returning 409', asyn
   }
 });
 
+test('following rejects an empty successor before attachment persistence', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yuvomi-empty-successor-'));
+  const previousEnabled = process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+  const previousPath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = 'true';
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = dir;
+  const seriesId = insertEvent({
+    title: 'Empty successor source',
+    start_datetime: '2026-01-15T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+
+  try {
+    const response = await call('PUT', `/${seriesId}/occurrences/2026-01-16/following`, {
+      body: {
+        recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20260120',
+        attachment_name: 'must-not-persist.txt',
+        attachment_data: `data:text/plain;base64,${Buffer.from('no successor').toString('base64')}`,
+      },
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, 400);
+    assert.equal(response.body.reason, 'empty_successor_series');
+    assert.equal(db.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+      .get(seriesId).recurrence_rule, 'FREQ=DAILY');
+    assert.equal(db.prepare(`
+      SELECT COUNT(*) AS count FROM family_documents
+      WHERE original_name = 'must-not-persist.txt'
+    `).get().count, 0);
+    const entries = await fs.readdir(dir, { withFileTypes: true, recursive: true });
+    assert.equal(entries.filter((entry) => entry.isFile()).length, 0);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+    else process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = previousEnabled;
+    if (previousPath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousPath;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('occurrence PUT owns changed assignments reminders and attachment', async () => {
   const seriesId = insertEvent({
     title: 'Owned route fields',
@@ -1223,6 +1378,44 @@ test('occurrence PUT owns changed assignments reminders and attachment', async (
     { remind_at: '2046-04-02T08:00:00', created_by: MARIA.id },
     { remind_at: '2046-04-02T08:00:00', created_by: TOM.id },
   ]);
+});
+
+test('occurrence and split responses preserve assignment primary order and projections', async () => {
+  db.prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run('#FF9500', TOM.id);
+  const cases = [
+    ['occurrence', (seriesId) => `/${seriesId}/occurrences/2046-04-11`, 200],
+    ['split', (seriesId) => `/${seriesId}/occurrences/2046-04-11/following`, 201],
+  ];
+  for (const [label, route, status] of cases) {
+    const seriesId = insertEvent({
+      title: `${label} assignment response`,
+      start_datetime: '2046-04-10T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+      created_by: MARIA.id,
+      assigned_to: MARIA.id,
+    });
+    assignEvent(seriesId, MARIA.id);
+    const response = await call('PUT', route(seriesId), {
+      actor: MARIA,
+      body: {
+        title: `${label} assigned`,
+        assigned_to: [TOM.id, MARIA.id],
+        ...(label === 'split' ? { recurrence_rule: 'FREQ=DAILY' } : {}),
+      },
+    });
+    assert.equal(response.status, status, label);
+    assert.equal(response.body.data.assigned_to, TOM.id, `${label} primary`);
+    assert.equal(response.body.data.assigned_name, 'Tom', `${label} primary name`);
+    assert.equal(response.body.data.assigned_color, '#FF9500', `${label} primary color`);
+    assert.deepEqual(response.body.data.assigned_users.map((user) => ({
+      id: user.id,
+      display_name: user.display_name,
+      color: user.color,
+    })), [
+      { id: MARIA.id, display_name: 'Maria', color: '#34C759' },
+      { id: TOM.id, display_name: 'Tom', color: '#FF9500' },
+    ], `${label} full assignment projection`);
+  }
 });
 
 test('DELETE occurrence scopes keep only-this suppression and truncate following state', async () => {
@@ -1378,6 +1571,76 @@ test('whole-series rule update requires the exact orphan count and detaches conf
     SELECT exception_date FROM calendar_event_exceptions
     WHERE event_id = ? ORDER BY exception_date
   `).all(seriesId).map((row) => row.exception_date), ['2046-10-08']);
+});
+
+test('whole-series stale orphan confirmation is rejected after the count reaches zero', async () => {
+  const seriesId = insertEvent({
+    title: 'Zero orphan retry',
+    start_datetime: '2046-10-10T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-10-11`, {
+    body: { title: 'Temporary override' },
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-10-11`, {
+    body: { title: 'Zero orphan retry' },
+  });
+
+  const response = await call('PUT', `/${seriesId}`, {
+    body: {
+      recurrence_rule: 'FREQ=WEEKLY;BYDAY=WE',
+      confirmed_orphan_count: 1,
+    },
+  });
+  assert.deepEqual(response, {
+    status: 409,
+    body: {
+      error: 'Edited occurrences no longer fit this recurrence rule.',
+      code: 409,
+      conflict: 'calendar_override_orphans',
+      orphaned_override_count: 0,
+    },
+  });
+  assert.equal(db.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+    .get(seriesId).recurrence_rule, 'FREQ=DAILY');
+});
+
+test('first-slot following update returns and accepts the exact orphan confirmation', async () => {
+  const seriesId = insertEvent({
+    title: 'First following confirmation',
+    start_datetime: '2046-10-16T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-10-17`, {
+    body: { title: 'Child to detach' },
+  });
+  const route = `/${seriesId}/occurrences/2046-10-16/following`;
+  const body = { recurrence_rule: 'FREQ=WEEKLY;BYDAY=TU' };
+
+  const first = await call('PUT', route, { body });
+  assert.deepEqual(first, {
+    status: 409,
+    body: {
+      error: 'Edited occurrences no longer fit this recurrence rule.',
+      code: 409,
+      conflict: 'calendar_override_orphans',
+      orphaned_override_count: 1,
+    },
+  });
+  const invalid = await call('PUT', route, {
+    body: { ...body, confirmed_orphan_count: '1' },
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.body.code, 400);
+
+  const confirmed = await call('PUT', route, {
+    body: { ...body, confirmed_orphan_count: 1 },
+  });
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.body.data.recurrence_rule, body.recurrence_rule);
+  assert.equal(db.prepare(`
+    SELECT recurrence_parent_id FROM calendar_events WHERE title = 'Child to detach'
+  `).get().recurrence_parent_id, null);
 });
 
 test('whole-series outbound transition confirms detachment before setting the target', async () => {

@@ -6,12 +6,14 @@
  */
 
 import { visibilityWhere } from './visibility.js';
+import { hasAnyOccurrence, parseRRule } from './recurrence.js';
 import {
   ASSIGNED_USERS_SQL, expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
 } from './calendar-events.js';
 import {
   dropInheritedEventReminders, eventAuthorId, fanOutEventReminders,
 } from './event-reminder-fanout.js';
+import { utcToWall } from '../utils/timezone.js';
 
 export const OVERRIDE_FIELDS = Object.freeze([
   'title',
@@ -426,11 +428,14 @@ function sameScalar(left, right) {
   return (left ?? null) === (right ?? null);
 }
 
-function canonicalIds(values) {
+function orderedIds(values) {
   return [...new Set((values ?? [])
     .map(Number)
-    .filter((value) => Number.isInteger(value) && value > 0))]
-    .sort((left, right) => left - right);
+    .filter((value) => Number.isInteger(value) && value > 0))];
+}
+
+function canonicalIds(values) {
+  return orderedIds(values).sort((left, right) => left - right);
 }
 
 function canonicalOffsets(values) {
@@ -446,6 +451,23 @@ function assignmentIds(database, eventId) {
     WHERE event_id = ?
     ORDER BY user_id
   `).all(eventId).map((row) => Number(row.user_id));
+}
+
+function assignmentPrimary(row, ids) {
+  const stored = Number(row?.assigned_to);
+  return ids.includes(stored) ? stored : (ids[0] ?? null);
+}
+
+function loadProjectedEvent(database, eventId) {
+  return database.prepare(`
+    SELECT e.*,
+           u_assigned.display_name AS assigned_name,
+           u_assigned.avatar_color AS assigned_color,
+           ${ASSIGNED_USERS_SQL}
+    FROM calendar_events e
+    LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
+    WHERE e.id = ?
+  `).get(eventId);
 }
 
 function sameNumberSet(left, right) {
@@ -575,9 +597,17 @@ export function upsertOccurrenceOverride(database, {
     const currentAssignments = existingFields.includes('assignments')
       ? canonicalIds(assignmentIds(database, existing.id))
       : baseAssignments;
+    const requestedAssignments = assignments === undefined ? undefined : orderedIds(assignments);
     const effectiveAssignments = assignments === undefined
       ? currentAssignments
-      : canonicalIds(assignments);
+      : requestedAssignments;
+    const basePrimary = assignmentPrimary(master, baseAssignments);
+    const currentPrimary = existingFields.includes('assignments')
+      ? assignmentPrimary(existing, currentAssignments)
+      : basePrimary;
+    const effectivePrimary = requestedAssignments === undefined
+      ? currentPrimary
+      : requestedAssignments[0] ?? null;
 
     const baseAttachment = attachmentValues(master);
     const currentAttachment = existingFields.includes('attachment')
@@ -601,7 +631,10 @@ export function upsertOccurrenceOverride(database, {
     const scalarDifferences = new Set(SCALAR_OVERRIDE_FIELDS.filter((field) =>
       !sameScalar(materialized[field], base[field])
     ));
-    const assignmentsDiffer = !sameNumberSet(effectiveAssignments, baseAssignments);
+    const assignmentsDiffer = !sameNumberSet(
+      canonicalIds(effectiveAssignments),
+      baseAssignments,
+    ) || effectivePrimary !== basePrimary;
     const attachmentDiffers = !sameAttachment(effectiveAttachment, baseAttachment);
     const remindersDiffer = !sameNumberSet(effectiveReminderOffsets, baseReminderOffsets);
     const fields = OVERRIDE_FIELDS.filter((field) =>
@@ -643,7 +676,7 @@ export function upsertOccurrenceOverride(database, {
         materialized.location ?? null,
         materialized.color ?? null,
         materialized.icon ?? 'calendar',
-        assignmentsDiffer ? (effectiveAssignments[0] ?? null) : (materialized.assigned_to ?? null),
+        assignmentsDiffer ? effectivePrimary : (materialized.assigned_to ?? null),
         materialized.visibility ?? 'all',
         materialized.countdown ? 1 : 0,
         effectiveAttachment.attachment_name,
@@ -675,7 +708,7 @@ export function upsertOccurrenceOverride(database, {
         materialized.location ?? null,
         materialized.color ?? null,
         materialized.icon ?? 'calendar',
-        assignmentsDiffer ? (effectiveAssignments[0] ?? null) : (materialized.assigned_to ?? null),
+        assignmentsDiffer ? effectivePrimary : (materialized.assigned_to ?? null),
         master.created_by,
         materialized.visibility ?? 'all',
         materialized.countdown ? 1 : 0,
@@ -708,7 +741,7 @@ export function upsertOccurrenceOverride(database, {
       INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date)
       VALUES (?, ?)
     `).run(master.id, recurrenceId);
-    const child = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(childId);
+    const child = loadProjectedEvent(database, childId);
     if (attachmentDiffers) {
       syncOwnedAttachmentAccess(
         database,
@@ -734,6 +767,38 @@ function previousDateKey(dateKey) {
   const date = new Date(`${dateKey}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
+}
+
+function recurrenceIsEmptyAtAnchor(source) {
+  const start = String(source.start_datetime ?? '');
+  const wall = source.tzid ? utcToWall(start, source.tzid) : null;
+  const utcDiffersFromLocal = Boolean(source.tzid)
+    && !(wall && wall.date === start.slice(0, 10));
+  return !hasAnyOccurrence(start, source.recurrence_rule, { utcDiffersFromLocal });
+}
+
+export function assertSuccessorHasOccurrence(source) {
+  if (recurrenceIsEmptyAtAnchor(source)) {
+    throw new CalendarOccurrenceError(
+      'The successor recurrence rule has no occurrence on or after its start date.',
+      { status: 400, code: 'empty_successor_series' },
+    );
+  }
+}
+
+function remainingCountRule(master, recurrenceId) {
+  const count = parseRRule(master.recurrence_rule)?.count ?? null;
+  if (count === null) return master.recurrence_rule;
+  const occurrences = expandRecurringEvents(
+    [master],
+    master.start_datetime.slice(0, 10),
+    recurrenceId,
+    new Map(),
+    { includeRecurrenceIdentity: true },
+  );
+  const selectedIndex = occurrences.findIndex((row) => row.recurrence_identity === recurrenceId);
+  if (selectedIndex < 0) return master.recurrence_rule;
+  return String(master.recurrence_rule).replace(/COUNT=\d+/i, `COUNT=${count - selectedIndex}`);
 }
 
 function truncateRuleBefore(rule, recurrenceId) {
@@ -825,8 +890,8 @@ function insertSeriesRow(database, source) {
       title, description, start_datetime, end_datetime, all_day, location,
       color, icon, assigned_to, created_by, external_source, recurrence_rule,
       visibility, countdown, attachment_name, attachment_mime, attachment_size,
-      attachment_data, attachment_document_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, ?, ?)
+      attachment_data, attachment_document_id, tzid
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     source.title,
     source.description ?? null,
@@ -846,6 +911,7 @@ function insertSeriesRow(database, source) {
     source.attachment_size ?? null,
     source.attachment_data ?? null,
     source.attachment_document_id ?? null,
+    source.tzid ?? null,
   ).lastInsertRowid);
 }
 
@@ -858,7 +924,10 @@ function refreshReparentedChild(database, child, oldResolved, successor, success
   try {
     newBase = baseOccurrenceFor(successor, child.recurrence_id);
   } catch {
-    return false;
+    throw new CalendarOccurrenceError(
+      'A linked occurrence cannot belong to the successor recurrence rule.',
+      { status: 400, code: 'invalid_successor_override' },
+    );
   }
   const oldFields = parseOverrideFields(child.overridden_fields);
   const values = { ...newBase };
@@ -961,6 +1030,7 @@ export function splitSeries(database, {
   attachment,
   createAttachment,
   reminderOffsets: requestedReminderOffsets,
+  confirmedOrphanCount,
 }) {
   const initialMaster = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
   const initialSelected = baseOccurrenceFor(initialMaster, recurrenceId);
@@ -974,6 +1044,7 @@ export function splitSeries(database, {
       attachment,
       createAttachment,
       reminderOffsets: requestedReminderOffsets,
+      confirmedOrphanCount,
     });
     return { series: result.series, wholeSeries: true };
   }
@@ -995,20 +1066,53 @@ export function splitSeries(database, {
       if (Object.hasOwn(changes, field)) successorValues[field] = normalizeScalar(field, changes[field]);
     }
     successorValues.recurrence_rule = Object.hasOwn(changes, 'recurrence_rule')
+      && changes.recurrence_rule !== master.recurrence_rule
       ? changes.recurrence_rule
-      : master.recurrence_rule;
+      : remainingCountRule(master, recurrenceId);
     successorValues.recurrence_parent_id = null;
     successorValues.recurrence_id = null;
     successorValues.overridden_fields = null;
     successorValues.created_by = master.created_by;
 
+    assertSuccessorHasOccurrence(successorValues);
+    for (const child of children) {
+      if (selectedChild && Number(child.id) === Number(selectedChild.id)) continue;
+      try {
+        baseOccurrenceFor(successorValues, child.recurrence_id);
+      } catch {
+        throw new CalendarOccurrenceError(
+          'A linked occurrence cannot belong to the successor recurrence rule.',
+          { status: 400, code: 'invalid_successor_override' },
+        );
+      }
+    }
+    const futureExceptions = database.prepare(`
+      SELECT exception_date FROM calendar_event_exceptions
+      WHERE event_id = ? AND exception_date >= ?
+      ORDER BY exception_date
+    `).all(master.id, recurrenceId);
+    const transferableExceptions = futureExceptions.filter((exception) => {
+      if (exception.exception_date === recurrenceId) return false;
+      try {
+        baseOccurrenceFor(successorValues, exception.exception_date);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+
     const selectedFields = selectedChild ? parseOverrideFields(selectedChild.overridden_fields) : [];
-    const successorAssignments = assignments === undefined
+    const requestedAssignments = assignments === undefined ? undefined : orderedIds(assignments);
+    const successorAssignments = requestedAssignments === undefined
       ? selectedFields.includes('assignments')
         ? canonicalIds(assignmentIds(database, selectedChild.id))
         : canonicalIds(assignmentIds(database, master.id))
-      : canonicalIds(assignments);
-    successorValues.assigned_to = successorAssignments[0] ?? null;
+      : requestedAssignments;
+    successorValues.assigned_to = requestedAssignments === undefined
+      ? selectedFields.includes('assignments')
+        ? assignmentPrimary(selectedChild, successorAssignments)
+        : assignmentPrimary(master, successorAssignments)
+      : requestedAssignments[0] ?? null;
     const createdAttachment = typeof createAttachment === 'function'
       ? createAttachment()
       : attachment;
@@ -1031,11 +1135,13 @@ export function splitSeries(database, {
     replaceAssignments(database, successorId, successorAssignments);
     replaceReminders(database, successorId, actorId, successorValues.start_datetime, successorOffsets);
     if (actorId === master.created_by) fanOutEventReminders(database, successorId, actorId);
-    database.prepare(`
+    const insertException = database.prepare(`
       INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date)
-      SELECT ?, exception_date FROM calendar_event_exceptions
-      WHERE event_id = ? AND exception_date >= ?
-    `).run(successorId, master.id, recurrenceId);
+      VALUES (?, ?)
+    `);
+    for (const exception of transferableExceptions) {
+      insertException.run(successorId, exception.exception_date);
+    }
     database.prepare(`
       DELETE FROM calendar_event_exceptions
       WHERE event_id = ? AND exception_date >= ?
@@ -1071,7 +1177,7 @@ export function splitSeries(database, {
       );
     }
     return {
-      series: database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(successorId),
+      series: loadProjectedEvent(database, successorId),
       wholeSeries: false,
     };
   });
@@ -1127,27 +1233,38 @@ function materializeDetachedChild(database, child, master) {
   }
   if (!fields.includes('reminders')) {
     const rows = database.prepare(`
-      SELECT remind_at, dismissed, created_by, assigned_from
+      SELECT remind_at, dismissed
       FROM reminders
       WHERE entity_type = 'event' AND entity_id = ?
-    `).all(master.id);
-    deleteEventReminders(database, [child.id]);
+        AND created_by = ? AND assigned_from IS NULL
+    `).all(master.id, master.created_by);
+    database.prepare(`
+      DELETE FROM reminders
+      WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NOT NULL
+    `).run(child.id);
     const shift = wallTimeMs(resolved.start_datetime) - wallTimeMs(master.start_datetime);
     const insert = database.prepare(`
-      INSERT INTO reminders (
-        entity_type, entity_id, remind_at, dismissed, created_by, assigned_from
-      ) VALUES ('event', ?, ?, ?, ?, ?)
+      INSERT INTO reminders (entity_type, entity_id, remind_at, dismissed, created_by)
+      VALUES ('event', ?, ?, ?, ?)
     `);
-    for (const row of rows) {
-      const shifted = new Date(wallTimeMs(row.remind_at) + shift).toISOString();
-      insert.run(
-        child.id,
-        /Z$/.test(String(row.remind_at)) ? shifted : shifted.slice(0, 19),
-        row.dismissed,
-        row.created_by,
-        row.assigned_from ?? null,
-      );
+    const ownsTemplate = database.prepare(`
+      SELECT 1 FROM reminders
+      WHERE entity_type = 'event' AND entity_id = ?
+        AND created_by = ? AND assigned_from IS NULL
+      LIMIT 1
+    `).get(child.id, master.created_by);
+    if (!ownsTemplate) {
+      for (const row of rows) {
+        const shifted = new Date(wallTimeMs(row.remind_at) + shift).toISOString();
+        insert.run(
+          child.id,
+          /Z$/.test(String(row.remind_at)) ? shifted : shifted.slice(0, 19),
+          row.dismissed,
+          master.created_by,
+        );
+      }
     }
+    fanOutEventReminders(database, child.id, master.created_by);
   }
   database.prepare(`
     UPDATE calendar_events
@@ -1282,7 +1399,9 @@ export function updateSeriesWithOverrides(database, {
     ]));
     const detachAll = !hasOutboundTarget(current) && hasOutboundTarget(proposed);
     const orphans = classifyOrphans(children, proposed, detachAll);
-    if (orphans.length > 0 && Number(confirmedOrphanCount) !== orphans.length) {
+    const confirmationSupplied = confirmedOrphanCount !== undefined;
+    if ((orphans.length > 0 || confirmationSupplied)
+        && confirmedOrphanCount !== orphans.length) {
       throw orphanConflict(orphans.length);
     }
 
@@ -1290,7 +1409,7 @@ export function updateSeriesWithOverrides(database, {
     if (typeof applyUpdate === 'function') applyUpdate(database, current);
     else applySeriesChanges(database, master.id, changes);
     if (assignments !== undefined) {
-      const userIds = canonicalIds(assignments);
+      const userIds = orderedIds(assignments);
       database.prepare('UPDATE calendar_events SET assigned_to = ? WHERE id = ?')
         .run(userIds[0] ?? null, master.id);
       replaceAssignments(database, master.id, userIds);
@@ -1357,7 +1476,7 @@ export function updateSeriesWithOverrides(database, {
     }
 
     return {
-      series: updated,
+      series: loadProjectedEvent(database, master.id),
       orphanedOverrideCount: orphans.length,
     };
   });
