@@ -11,8 +11,11 @@ import {
   householdTimeZone, localToUTC, shiftDateKey, storedToInstantMs, todayKey, utcToWall,
 } from '../utils/timezone.js';
 
+const DEFAULT_EXPANSION_ITERATIONS = 1000;
+export const MAX_EXPANSION_ITERATIONS = 100000;
+
 // Zugewiesene Personen eines Events als JSON-Array (Multi-Assignment).
-const ASSIGNED_USERS_SQL = `(
+export const ASSIGNED_USERS_SQL = `(
   SELECT json_group_array(json_object(
     'id', u.id, 'display_name', u.display_name, 'color', u.avatar_color,
     'avatar_data', u.avatar_data
@@ -52,7 +55,7 @@ export function loadEventExceptions(d, eventIds) {
  * @param {string}   to      YYYY-MM-DD
  * @param {Map<number, Set<string>>?} exceptionsByEvent  event.id → Set ausgenommener
  *        Instanz-Daten (YYYY-MM-DD); diese Vorkommen werden übersprungen (EXDATE, #489)
- * @param {{includeRecurrenceIdentity?: boolean}} [options]
+ * @param {{includeRecurrenceIdentity?: boolean, maxIterations?: number}} [options]
  * @returns {object[]}  Expandiertes, sortiertes Array
  */
 export function expandRecurringEvents(
@@ -60,9 +63,12 @@ export function expandRecurringEvents(
   from,
   to,
   exceptionsByEvent = null,
-  { includeRecurrenceIdentity = false } = {},
+  { includeRecurrenceIdentity = false, maxIterations = DEFAULT_EXPANSION_ITERATIONS } = {},
 ) {
   const result = [];
+  const iterationLimit = Number.isInteger(maxIterations) && maxIterations > 0
+    ? Math.min(maxIterations, MAX_EXPANSION_ITERATIONS)
+    : DEFAULT_EXPANSION_ITERATIONS;
 
   for (const event of events) {
     if (!event.recurrence_rule) {
@@ -98,7 +104,6 @@ export function expandRecurringEvents(
     const seriesStart = event.start_datetime.slice(0, 10);
     let currentDate = seriesStart; // YYYY-MM-DD
     let iterations  = 0;
-    const MAX_ITER  = 1000; // Sicherheitsgrenze
     const exceptions = exceptionsByEvent?.get(event.id) ?? null; // ausgenommene Instanz-Daten (#489)
     // COUNT=N begrenzt die Serie auf N Vorkommen ab DTSTART. Gezählt wird über
     // die Instanzen der Serie (nicht das Anzeigefenster) und VOR EXDATE-Entfernung
@@ -106,7 +111,7 @@ export function expandRecurringEvents(
     const maxCount   = parseRRule(event.recurrence_rule)?.count ?? null;
     let   occurrence = 0;
 
-    while (currentDate <= to && iterations < MAX_ITER) {
+    while (currentDate <= to && iterations < iterationLimit) {
       iterations++;
 
       // BYDAY-FILTER VOR DEM ZAEHLEN, EXDATE DANACH - die beiden sehen gleich

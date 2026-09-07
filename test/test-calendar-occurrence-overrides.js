@@ -65,11 +65,11 @@ function createDatabase() {
 function insertEvent(database, values = {}) {
   return database.prepare(`
     INSERT INTO calendar_events (
-      title, start_datetime, end_datetime, created_by, recurrence_rule,
+      title, start_datetime, end_datetime, assigned_to, created_by, recurrence_rule,
       recurrence_parent_id, recurrence_id, overridden_fields, external_source,
       external_calendar_id, visibility
     ) VALUES (
-      @title, @start_datetime, @end_datetime, @created_by, @recurrence_rule,
+      @title, @start_datetime, @end_datetime, @assigned_to, @created_by, @recurrence_rule,
       @recurrence_parent_id, @recurrence_id, @overridden_fields, @external_source,
       @external_calendar_id, @visibility
     )
@@ -77,6 +77,7 @@ function insertEvent(database, values = {}) {
     title: 'Event',
     start_datetime: '2026-10-31T09:00:00',
     end_datetime: null,
+    assigned_to: null,
     created_by: 1,
     recurrence_rule: null,
     recurrence_parent_id: null,
@@ -340,6 +341,32 @@ test('daily recurrence identity resolves the exact timed occurrence', () => {
   assert.equal(base.end_datetime, '2026-10-04T10:00');
 });
 
+test('daily recurrence identity reaches a valid slot after one thousand occurrences', () => {
+  const master = series({
+    start_datetime: '2026-01-01T09:00',
+    end_datetime: '2026-01-01T10:00',
+  });
+  assert.equal(expandRecurringEvents([master], '2028-09-28', '2028-09-28').length, 0);
+  const base = baseOccurrenceFor(master, '2028-09-28');
+
+  assert.equal(base.recurrence_identity, '2028-09-28');
+  assert.equal(base.start_datetime, '2028-09-28T09:00');
+  assert.equal(base.end_datetime, '2028-09-28T10:00');
+});
+
+test('weekly BYDAY interval identity reaches a bounded long-running slot', () => {
+  const master = series({
+    start_datetime: '2020-01-06T09:00',
+    end_datetime: '2020-01-06T10:00',
+    recurrence_rule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE',
+  });
+  const base = baseOccurrenceFor(master, '2039-12-12');
+
+  assert.equal(base.recurrence_identity, '2039-12-12');
+  assert.equal(base.start_datetime, '2039-12-12T09:00');
+  assert.equal(base.end_datetime, '2039-12-12T10:00');
+});
+
 test('weekly BYDAY recurrence identity rejects a weekday outside the rule', () => {
   const master = series({
     start_datetime: '2026-10-01T09:00',
@@ -540,6 +567,43 @@ test('resolveOccurrence loads its master and resolveEventRows handles multiple p
   assert.deepEqual(resolved.map((row) => row.title), ['First override', 'Second override', 'Unrelated row']);
   assert.strictEqual(resolved[2], legacy);
   assert.equal(resolveOccurrence(database, rows[0]).series_id, firstParent);
+});
+
+test('single and batch resolution inherit real parent assignment presentation', () => {
+  const database = createDatabase();
+  const parentId = Number(insertSeries(database, {
+    assigned_to: 2,
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(parentId, 2);
+  const childId = Number(insertEvent(database, {
+    assigned_to: 1,
+    recurrence_parent_id: parentId,
+    recurrence_id: '2026-10-02',
+    overridden_fields: '["title"]',
+  }));
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(childId, 1);
+  const childRow = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(childId);
+  const unprojectedParent = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(parentId);
+
+  for (const resolved of [
+    resolveOccurrence(database, childRow),
+    resolveOccurrence(database, childRow, unprojectedParent),
+    resolveEventRows(database, [childRow])[0],
+  ]) {
+    const serialized = serializeEvent(resolved, { database, actorId: 1, isAdmin: false });
+    assert.equal(serialized.assigned_to, 2);
+    assert.equal(serialized.assigned_name, 'Member');
+    assert.equal(serialized.assigned_color, '#007AFF');
+    assert.deepEqual(serialized.assigned_users, [{
+      id: 2,
+      display_name: 'Member',
+      color: '#007AFF',
+      avatar_data: null,
+    }]);
+    assert.equal(serialized.assignment_owner_id, parentId);
+  }
 });
 
 test('loadLinkedOverrides loads multiple parents by displayed overlap range', () => {

@@ -6,7 +6,9 @@
  */
 
 import { visibilityWhere } from './visibility.js';
-import { expandRecurringEvents } from './calendar-events.js';
+import {
+  ASSIGNED_USERS_SQL, expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
+} from './calendar-events.js';
 
 export const OVERRIDE_FIELDS = Object.freeze([
   'title',
@@ -113,6 +115,14 @@ function isDateKey(value) {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+function exactLookupIterationLimit(master, recurrenceId) {
+  const start = new Date(`${master.start_datetime.slice(0, 10)}T00:00:00Z`).getTime();
+  const requested = new Date(`${recurrenceId}T00:00:00Z`).getTime();
+  if (!Number.isFinite(start) || requested < start) return 1;
+  const calendarDays = Math.floor((requested - start) / 86400000);
+  return Math.min(calendarDays + 2, MAX_EXPANSION_ITERATIONS);
+}
+
 /**
  * Expands one original recurrence slot without applying the master's EXDATEs.
  * The displayed child start is deliberately irrelevant to this lookup.
@@ -127,7 +137,10 @@ export function baseOccurrenceFor(master, recurrenceId) {
     recurrenceId,
     recurrenceId,
     new Map(),
-    { includeRecurrenceIdentity: true },
+    {
+      includeRecurrenceIdentity: true,
+      maxIterations: exactLookupIterationLimit(master, recurrenceId),
+    },
   );
   const occurrence = occurrences.find((candidate) => candidate.recurrence_identity === recurrenceId);
   if (!occurrence) {
@@ -165,6 +178,20 @@ function copyMarkedProperties(target, child, fields) {
   }
 }
 
+function loadOccurrenceMasters(database, parentIds) {
+  if (parentIds.length === 0) return [];
+  const placeholders = parentIds.map(() => '?').join(',');
+  return database.prepare(`
+    SELECT e.*,
+           u_assigned.display_name AS assigned_name,
+           u_assigned.avatar_color AS assigned_color,
+           ${ASSIGNED_USERS_SQL}
+    FROM calendar_events e
+    LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
+    WHERE e.id IN (${placeholders})
+  `).all(...parentIds);
+}
+
 /**
  * Composes one linked replacement from its current series defaults and the
  * child's explicit override markers.
@@ -175,7 +202,14 @@ export function resolveOccurrence(database, child, master = null) {
   }
 
   const parentId = Number(child.recurrence_parent_id);
-  const parent = master ?? database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(parentId);
+  if (master && Number(master.id) !== parentId) {
+    throw invalidRecurrenceIdentity('The recurrence parent does not match the linked occurrence.');
+  }
+  const hasAssignmentProjection = master
+    && Object.hasOwn(master, 'assigned_name')
+    && Object.hasOwn(master, 'assigned_color')
+    && Object.hasOwn(master, 'assigned_users_json');
+  const parent = hasAssignmentProjection ? master : loadOccurrenceMasters(database, [parentId])[0];
   if (!parent) {
     throw invalidRecurrenceIdentity('The recurrence parent does not exist.', { status: 404 });
   }
@@ -219,10 +253,7 @@ export function resolveEventRows(database, rows) {
     .map((row) => Number(row.recurrence_parent_id)))];
   if (parentIds.length === 0) return rows;
 
-  const placeholders = parentIds.map(() => '?').join(',');
-  const masters = database.prepare(
-    `SELECT * FROM calendar_events WHERE id IN (${placeholders})`
-  ).all(...parentIds);
+  const masters = loadOccurrenceMasters(database, parentIds);
   const mastersById = new Map(masters.map((master) => [Number(master.id), master]));
   return rows.map((row) => isLinkedOccurrence(row)
     ? resolveOccurrence(database, row, mastersById.get(Number(row.recurrence_parent_id)))
