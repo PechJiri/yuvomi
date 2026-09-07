@@ -201,6 +201,14 @@ components:
     backgroundColor: "{colors.fill-well}"
     rounded: "{rounded.md}"
     padding: "12px"
+  # Der Daumen des eigenen Scrollbalkens (#970/#1039). Die 10px sind die SPUR;
+  # schmaler wirkt der Daumen ueber die transparente Border, nicht ueber eine
+  # kleinere Breite - die Treffflaeche bleibt. Die Seitenleiste mischt statt
+  # --module-accent gegen --color-border (sie gehoert keinem Modul).
+  scroller-thumb:
+    backgroundColor: "color-mix(in srgb, var(--module-accent) var(--tint-hint), transparent)"
+    rounded: "{rounded.full}"
+    size: "10px Spur, Daumen per 3px transparenter Border + background-clip: padding-box"
   input:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.label}"
@@ -1865,6 +1873,78 @@ vom Router): der Kopf ist die eine Komponente, die alle Module teilen, und ein O
 jedes Modul selbst setzen muesste, fehlt beim naechsten. Die Titelgroesse gehoert der
 Canonical-Page-Head-Rolle in typography.css, der Umbruch layout.css.
 
+### Der getoente Scrollbalken (#970, #1039)
+
+**Ein Scroller, dessen Balken das Betriebssystem zeichnet, gehoert sichtbar dem System und
+nicht der App.** Auf Plattformen mit klassischem, Platz nehmendem Balken stand neben jeder
+getoenten Liste ein voller System-Balken, unter Windows/Firefox/Chromium dauerhaft sichtbar
+statt nur beim Scrollen. Die Antwort ist kein Verstecken, sondern ein eigener, duenner
+Balken aus Tokens.
+
+**Die Rezeptur sind vier Deklarationen, und sie steht zweimal da, weil zwei Engines sie
+verschieden lesen.** Firefox nimmt `scrollbar-width: thin` plus `scrollbar-color` direkt am
+Scroller; WebKit und Chromium brauchen die Pseudo-Element-Fassung: `::-webkit-scrollbar` mit
+`width: 10px`, ein transparenter Track, und der Daumen als
+`color-mix(in srgb, var(--module-accent) var(--tint-hint), transparent)` mit
+`border-radius: var(--radius-full)`. Der Daumen traegt eine **3px transparente Border mit
+`background-clip: padding-box`** - so wirkt er schmaler als die 10px-Spur, ohne dass die
+Treffflaeche schrumpft. `--tint-hint` ist nicht frei gewaehlt: tokens.css fuehrt die Stufe
+ausdruecklich fuer „Kante, Linie, Scrollbar-Daumen".
+
+**Der Balken ist nicht der Fade, und keiner ersetzt den anderen.** Der Fade am
+Scrollport-Ende beantwortet „ist da noch mehr?" (Audit F-01, sonst waren Budget, Gesundheit
+und Einstellungen auf 800er-Laptops unauffindbar). Der Balken beantwortet „wo bin ich, und
+womit ziehe ich?". Ein Anriss ist eine Andeutung, kein Griff. Am Telefon ist der Unterschied
+gleichgueltig, weil dort die Geste zieht; am Desktop mit Maus IST der Balken das
+Bedienelement. Die Regel haengt deshalb an der BREITE, nicht am Vorkommen einer Zeile:
+`scrollbar-width: none` bleibt am Telefon richtig.
+
+**Der Anlass war eine Ruecknahme, keine Neuerung** (#970). Bis v2.64.1 stand
+`scrollbar-width: none` samt verstecktem `::-webkit-scrollbar` am Seitenmenue ausgerechnet
+in `@media (min-width: 1024px)` - also genau dort, wo mit der Maus gezogen wird und keine
+Wischgeste einspringt, und der Fade darunter galt als Ersatz. Er beantwortete eine andere
+Frage.
+
+**Drei Traeger, drei angepasste Kopien - es gibt keine gemeinsame Basis, und das ist
+benannt, nicht uebersehen:**
+
+- `.budget-list` samt `.budget-loans__list` und den beiden Tab-Panels (budget.css) ist das
+  Vorbild und stand vor der Regel da; seit #904 scrollt das Budget-Panel selbst und gehoerte
+  deshalb in dieselbe Gruppe.
+- `.list-scroller` (list-row.css, seit #1039) ist der geteilte Scroller von Einkauf, Vorrat
+  und Rezepten - eine Regel, drei Module. budget.css blieb dabei unveraendert.
+- `.nav-sidebar__items` (layout.css, seit #970) mischt gegen `--color-border` statt gegen
+  `--module-accent`: **die Seitenleiste gehoert keinem Modul und darf nicht die Farbe des
+  gerade offenen annehmen.**
+
+**Zwei Abweichungen teilen die Kopien nicht, und beide stehen hier ungeglaettet.** Erstens
+gibt es den Hover-Zustand nur an `.list-scroller`
+(`calc(var(--tint-hint) + var(--tint-state))`, gerechnet auf zwei bestehenden Stufen statt
+auf einer neuen Zahl): eine reine `--tint-hint`-Kante traegt laut tokens.css nie allein, ein
+Zustand auf ihr braucht denselben Bezug. Budget und Seitenleiste haben ihn nicht. Zweitens
+nennt `scrollbar-color` in Budget und Listen-Scroller den `--module-accent` in VOLLER
+Saettigung, waehrend der WebKit-Daumen daneben auf `--tint-hint` mischt - Firefox zeichnet
+den Daumen dort also kraeftiger als Chromium. Das steht in beiden Dateien zeichengleich, ist
+damit die Rezeptur und kein Ausrutscher; die Seitenleiste ist die einzige, die beide Seiten
+gleich toent.
+
+**Offen, und bewusst nicht behauptet:** die `mask-image`-Fades liegen auf DEMSELBEN Element
+wie der Balken, und eine Maske erfasst die Elementbox samt Scrollbalken. Auf Plattformen mit
+klassischem, Platz nehmendem Balken verblasst sein unterstes Stueck deshalb im Fade-Bereich.
+Die BEDIENUNG bleibt, weil eine Maske die Deckkraft aendert und nicht das Hit-Testing -
+nachmessen liess es sich hier nicht, macOS zeichnet Overlay-Balken, die dabei gar nicht
+erscheinen. Wenn es stoert, ist der Weg nicht `scrollbar-width: none` zurueck, sondern der
+Fade von der Maske auf ein ueberlagertes Gradient-Pseudoelement; dann liegt er ueber dem
+Inhalt statt ueber der Box.
+
+Pruefebene: **Struktur**, zwei Guards. `Seitenmenue: der Scrollbalken ist am Desktop
+sichtbar (#970)` (test-frontend-audit.js) misst den Zustand IN der Desktop-Query statt das
+Vorkommen einer Zeichenfolge in der Datei, verbietet dort `scrollbar-width: none` und das
+versteckte Pseudo-Element und besteht auf `scrollbar-color` aus Tokens statt als Literal.
+`Der Listen-Scroller traegt einen duennen, getoenten Scrollbalken (#1039)`
+(test-shopping.js) haelt beide Engine-Fassungen und den Hover fest. Das Vorbild in
+budget.css hat keinen - der Guard haengt an der Kopie, nicht am Original.
+
 ### Wischbedienung (Signature Component)
 Listenzeilen tragen ihre Aktionen auf Touch in zwei Wischrichtungen; auf Zeigergeraeten
 bleiben die sichtbaren Knoepfe, denn dort gibt es keine Geste. Die Panels hinter der Karte
@@ -2453,3 +2533,7 @@ Angabe braeuchte einen zweiten Timer, nur damit sie sich selbst aktuell haelt.
 - **Don't** einen Wert der Distanz-Skala als Einzelzahl hinschreiben; die Wand-Flaeche fuehrt
   ihre Skala an einer Stelle, und was aus zwei Metern lesbar sein muss, haengt an `vmin` (die
   Uhr an `vw`), nie an `vh`.
+- **Don't** einen Scrollbalken dort verstecken, wo mit der Maus gezogen wird: ein
+  `scrollbar-width: none` gehoert ans Telefon, wo die Geste zieht, nie in eine
+  Desktop-Query. Der Fade darunter ist kein Ersatz - er sagt, DASS mehr da ist, der Balken
+  sagt, WO man ist, und laesst einen hin (siehe „Der getoente Scrollbalken").
