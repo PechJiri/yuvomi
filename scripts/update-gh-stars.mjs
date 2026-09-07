@@ -2,10 +2,14 @@
 // Fetches the current GitHub star count and writes it into every element with a
 // [data-gh-stars] attribute in docs/index.html and docs/install.html.
 //
-// This runs at build/release time (locally or in CI) — NOT in the visitor's
-// browser. The landing page therefore makes no request to api.github.com when
-// someone opens it, so no visitor data is transmitted to a third country (USA).
+// This runs at release time, by hand - NOT in the visitor's browser. The landing
+// page therefore makes no request to api.github.com when someone opens it, so no
+// visitor data is transmitted to a third country (USA).
 // See docs/datenschutz.html and docs/legal-audit/clean/F-003-github-api-call-fix.md.
+//
+// Step 5 of docs/RELEASING.md calls it and stages BOTH files it writes. A weekly
+// workflow used to do this until 7 September 2026; it was dropped because a push
+// from Actions cannot satisfy the status checks main requires.
 //
 // Usage: node scripts/update-gh-stars.mjs
 

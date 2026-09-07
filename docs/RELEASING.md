@@ -51,14 +51,23 @@ the last tag is an interface release.
    ```
 
    Historical `(vX.Y.Z)` markers inside `docs/SPEC.md` stay as they are.
-5. **Umbrel store notes.** Fill `.github/umbrel-release-notes.md` and move its
+5. **Star count on the landing pages.** `node scripts/update-gh-stars.mjs`, then stage
+   `docs/index.html` and `docs/install.html` if it changed anything. Both carry the number in
+   `[data-gh-stars]` elements and the script writes both - staging only `index.html` leaves
+   `install.html` behind at the old count. It is embedded here, at release time, on purpose: the
+   page never calls `api.github.com` from a visitor's browser, so opening it transmits no visitor
+   data to a third country (`docs/datenschutz.html`). A weekly workflow did this until 7 September
+   2026. It was removed because `main` requires status checks that a push from Actions cannot
+   bring: the push was rejected, and the count silently stopped moving after 24 August.
+
+6. **Umbrel store notes.** Fill `.github/umbrel-release-notes.md` and move its
    `<!-- version: X.Y.Z -->` marker. The publish workflow takes the text verbatim and aborts if the
    marker does not match the release, which is deliberate: a stale note describes an update a
    household is not getting. The rules for the text are in the head of the file.
-6. **Cadence.** `npm run check:release-cadence`. Red is an answer, not an obstacle: wait for
+7. **Cadence.** `npm run check:release-cadence`. Red is an answer, not an obstacle: wait for
    Tuesday, take the interface change out, or - for a security or data-loss fix that cannot be
    separated from `main` - pass `--hotfix "<reason>"`; the reason is mandatory and printed.
-7. **Handrail, interface releases only.** If the diff since the last tag touches the interface
+8. **Handrail, interface releases only.** If the diff since the last tag touches the interface
    paths above, run the browser suite once, and read its exit code from a file rather than a
    pipe (`| tail` reports the status of `tail`):
 
@@ -66,15 +75,15 @@ the last tag is an interface release.
    npm run test:document-guards > /tmp/dg.log 2>&1; echo $?
    ```
 
-8. **The whole chain.** `npm test`, green. A green single suite is not evidence; the guards that
+9. **The whole chain.** `npm test`, green. A green single suite is not evidence; the guards that
    went red in the past (`test:sw-precache`, `test:document-folder-keys`, `test:changelog`) were
    never in anyone's "relevant" list.
-9. **Commit, fetch, tag, push - in that order.** `git commit -m "chore: release vX.Y.Z"` with
-   `CHANGELOG.md`, `package.json`, `package-lock.json`, `public/sw.js`, the docs from step 4 and
-   the Umbrel notes staged by name (never `git add -A`). Then `git fetch origin` **before**
-   `git tag vX.Y.Z`: the fetch brings in a tag somebody else may have set for the same version,
-   and the tag command fails before anything is pushed. Then `git push && git push --tags`.
-10. **GitHub release.** Write the new changelog block to a file and pass it with `--notes-file`;
+10. **Commit, fetch, tag, push - in that order.** `git commit -m "chore: release vX.Y.Z"` with
+    `CHANGELOG.md`, `package.json`, `package-lock.json`, `public/sw.js`, the docs from steps 4 and 5 and
+    the Umbrel notes staged by name (never `git add -A`). Then `git fetch origin` **before**
+    `git tag vX.Y.Z`: the fetch brings in a tag somebody else may have set for the same version,
+    and the tag command fails before anything is pushed. Then `git push && git push --tags`.
+11. **GitHub release.** Write the new changelog block to a file and pass it with `--notes-file`;
     a failed shell substitution yields an empty string that `gh` accepts without a word:
 
     ```bash
@@ -83,7 +92,7 @@ the last tag is an interface release.
     ```
 
     Read the body back. A successful `create` reports the URL either way.
-11. **Downstream.** `gh run list --workflow=docker-publish.yml --limit 1` must show success (a
+12. **Downstream.** `gh run list --workflow=docker-publish.yml --limit 1` must show success (a
     failed image build silently stalls TrueNAS too). Then look the Umbrel PR up rather than
     assuming a number - the workflow renames the open PR if there is one and opens a new one only
     once the previous one was merged:
