@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The shopping list is more compact and its categories now fold away.** Rows resolve to 48px
+  on touch instead of 64px, category groups sit closer together, and each category header is now
+  a disclosure button that remembers its collapsed state per household member and per list. A
+  deep link to a highlighted item now expands its category first if it was collapsed. The
+  "checked" action pill (move to Pantry / delete checked) now shows for five seconds after a check
+  instead of staying up permanently, stays open while hovered or focused, and never appears for
+  items that were already checked when the list loaded. These are Shopping-only changes; the
+  shared `.list-scroller` styling that comes with them - a thin, module-tinted scrollbar in place
+  of the platform default - is visible in Shopping, Pantry, and Recipes as well, since those
+  modules use the same scroll container.
+
 - **Destructive folder deletion can now be undone for five seconds.** The folder subtree and its
   currently visible documents disappear immediately, while the server operation waits behind the
   standard Undo toast. Undo restores only the affected entries and preserves other navigation or
