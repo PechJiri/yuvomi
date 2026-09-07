@@ -1,4 +1,4 @@
-import { op, jsonBody, idParam } from '../helpers.js';
+import { op, jsonBody, idParam, stringPathParam } from '../helpers.js';
 
 export function calendarPaths() {
   return {
@@ -128,6 +128,91 @@ export function calendarPaths() {
     '/api/v1/calendar/outlook/status': {
       get: op({ summary: 'Get Outlook push status', tag: 'Calendar' }),
     },
+    '/api/v1/calendar/{seriesId}/occurrences/{recurrenceId}': {
+      put: op({
+        summary: 'Update one recurring calendar occurrence',
+        tag: 'Calendar',
+        params: [
+          idParam('seriesId', 'Recurring series ID'),
+          stringPathParam('recurrenceId', 'Original occurrence date in YYYY-MM-DD format'),
+        ],
+        stateChanging: true,
+        description: 'Creates or updates a linked replacement for one original slot of an eligible local-only series. Scalar fields, assignments, attachments, and `reminder_offsets` are compared with the expanded series defaults. Saving no actual difference restores the normal series occurrence.',
+        requestBody: jsonBody(null),
+        responses: {
+          200: {
+            description: 'Resolved calendar occurrence',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarEventResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'Calendar series not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+      delete: op({
+        summary: 'Delete one recurring calendar occurrence',
+        tag: 'Calendar',
+        params: [
+          idParam('seriesId', 'Recurring series ID'),
+          stringPathParam('recurrenceId', 'Original occurrence date in YYYY-MM-DD format'),
+        ],
+        stateChanging: true,
+        description: 'Deletes a linked replacement when present and keeps an EXDATE on the master so the original slot remains suppressed.',
+        responses: {
+          204: { description: 'Occurrence deleted' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'Calendar series not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/calendar/{seriesId}/occurrences/{recurrenceId}/following': {
+      put: op({
+        summary: 'Split a recurring calendar series',
+        tag: 'Calendar',
+        params: [
+          idParam('seriesId', 'Recurring series ID'),
+          stringPathParam('recurrenceId', 'Original occurrence date in YYYY-MM-DD format'),
+        ],
+        stateChanging: true,
+        description: 'Truncates the original series before the selected original slot, creates a successor series, and reparents later linked replacements and deletion exceptions atomically.',
+        requestBody: jsonBody(null),
+        responses: {
+          200: { description: 'First occurrence updated as the whole series' },
+          201: {
+            description: 'Successor calendar series created',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarEventResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'Calendar series not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+      delete: op({
+        summary: 'Delete this and following recurring occurrences',
+        tag: 'Calendar',
+        params: [
+          idParam('seriesId', 'Recurring series ID'),
+          stringPathParam('recurrenceId', 'Original occurrence date in YYYY-MM-DD format'),
+        ],
+        stateChanging: true,
+        description: 'Truncates immediately before the selected original slot and removes later linked replacements and deletion exceptions in one transaction. Selecting the first slot deletes the whole series.',
+        responses: {
+          204: { description: 'Selected and following occurrences deleted' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'Calendar series not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
     '/api/v1/calendar/{id}': {
       get: op({
         summary: 'Get calendar event',
@@ -148,7 +233,7 @@ export function calendarPaths() {
         tag: 'Calendar',
         params: [idParam()],
         stateChanging: true,
-        description: 'Supports document-storage attachments. Omit attachment fields to preserve the current attachment, send new `attachment_data` to create and link a document, or set `remove_attachment` to true to unlink it without deleting the library document. Legacy events may still return `attachment_data`. Changing a mirrored field (title, description, location, color, all-day, start/end, recurrence) of an event synced to Google pushes the change there, and switching `target_google_calendar_id` moves it to the other Google calendar. The remote call runs after the response and is retried by the next sync run if it fails.',
+        description: 'Supports document-storage attachments. Omit attachment fields to preserve the current attachment, send new `attachment_data` to create and link a document, or set `remove_attachment` to true to unlink it without deleting the library document. Legacy events may still return `attachment_data`. A recurrence-rule or anchor change that would orphan linked replacements returns 409 with `calendar_override_orphans` and the exact `orphaned_override_count`; retry with the same value in `confirmed_orphan_count` to preserve those replacements as standalone events. The same confirmation is required before assigning an outbound target to a series with linked replacements. Changing a mirrored field (title, description, location, color, all-day, start/end, recurrence) of an event synced to Google pushes the change there, and switching `target_google_calendar_id` moves it to the other Google calendar. The remote call runs after the response and is retried by the next sync run if it fails.',
         requestBody: jsonBody(null),
         responses: {
           200: {
@@ -158,6 +243,7 @@ export function calendarPaths() {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           404: { description: 'Calendar event not found' },
+          409: { description: 'Linked occurrence replacements require exact-count orphan confirmation' },
           500: { $ref: '#/components/responses/InternalServerError' },
         },
       }),
