@@ -27,7 +27,7 @@ import {
   updateSeriesWithOverrides,
 } from '../server/services/calendar-occurrence-overrides.js';
 import {
-  expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
+  expandAndResolveEventRows, expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
 } from '../server/services/calendar-events.js';
 import { serializeEvent } from '../server/routes/calendar/helpers.js';
 
@@ -676,6 +676,55 @@ test('loadLinkedOverrides loads multiple parents by displayed overlap range', ()
   );
   assert.equal(loadLinkedOverrides(database, []).length, 0);
   assert.equal(loadLinkedOverrides(database, [firstParent]).length, 2);
+});
+
+test('shared range reader replaces an EXDATE slot with its moved linked occurrence', () => {
+  const database = createDatabase();
+  const parentId = Number(insertSeries(database, {
+    title: 'Current series title',
+    description: 'Current inherited description',
+    start_datetime: '2026-10-31T09:00:00',
+    end_datetime: '2026-10-31T10:00:00',
+    recurrence_rule: 'FREQ=DAILY;COUNT=3',
+  }));
+  const childId = Number(insertEvent(database, {
+    title: 'Moved override',
+    description: 'Stale materialized description',
+    start_datetime: '2026-11-04T11:00:00',
+    end_datetime: '2026-11-04T12:00:00',
+    recurrence_parent_id: parentId,
+    recurrence_id: '2026-10-31',
+    overridden_fields: '["title","start_datetime","end_datetime","attachment","reminders"]',
+  }));
+  database.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date)
+    VALUES (?, '2026-10-31')
+  `).run(parentId);
+
+  const masters = database.prepare(`
+    SELECT * FROM calendar_events
+    WHERE recurrence_rule IS NOT NULL AND DATE(start_datetime) <= '2026-11-05'
+  `).all();
+  const movedChildren = loadLinkedOverrides(database, [parentId], '2026-11-01', '2026-11-05');
+  const rows = expandAndResolveEventRows(
+    database,
+    [...masters, ...movedChildren],
+    '2026-11-01',
+    '2026-11-05',
+  );
+  const moved = rows.find((row) => Number(row.id) === childId);
+
+  assert.ok(moved, 'the displayed-range child must be present');
+  assert.equal(moved.title, 'Moved override');
+  assert.equal(moved.description, 'Current inherited description');
+  assert.equal(moved.start_datetime, '2026-11-04T11:00:00');
+  assert.equal(moved.series_id, parentId);
+  assert.equal(moved.recurrence_id, '2026-10-31');
+  assert.equal(moved.attachment_owner_id, childId);
+  assert.equal(moved.reminder_owner_id, childId);
+  assert.equal(rows.some((row) => Number(row.id) === parentId
+    && row.recurrence_identity === '2026-10-31'), false,
+  'the master EXDATE must suppress the original slot');
 });
 
 test('serializeEvent appends recurrence metadata and owner identities', () => {

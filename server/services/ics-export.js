@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { householdTimeZone, isValidTimeZone } from '../utils/timezone.js';
 import { formatWall, vtimezoneFor } from '../utils/vtimezone.js';
 import { rruleLine } from './recurrence.js';
+import { resolveProjectedEventRows } from './calendar-events.js';
 
 function escapeICSText(s) {
   if (s == null) return '';
@@ -136,10 +137,34 @@ function usesFeedZone(ev) {
     !!(ev.end_datetime && !hasExplicitOffset(ev.end_datetime));
 }
 
-function buildVEvent(ev, dtstamp, showAssignees = false, feedZone = null) {
+// EXDATE and RECURRENCE-ID identify the same original recurrence slot. Keeping
+// their notation in one formatter prevents a moved replacement from using a
+// date-only, floating or TZID form different from the master's RRULE set.
+function recurrenceSlotProp(prop, master, dateKey, feedZone) {
+  if (master.all_day) return `${prop};VALUE=DATE:${formatDate(dateKey)}`;
+  if (usesTzid(master)) {
+    const wallSuffix = formatWall(master.start_datetime, master.tzid).slice(8);
+    return `${prop};TZID=${master.tzid}:${formatDate(dateKey)}${wallSuffix}`;
+  }
+  const timeSuffix = master.start_datetime.slice(10);
+  return stampProp(prop, dateKey + timeSuffix, feedZone);
+}
+
+function buildVEvent(
+  ev,
+  dtstamp,
+  showAssignees = false,
+  feedZone = null,
+  recurrenceMaster = null,
+) {
   const lines = ['BEGIN:VEVENT'];
-  lines.push(`UID:event-${ev.id}@yuvomi`);
+  lines.push(`UID:event-${recurrenceMaster?.id ?? ev.id}@yuvomi`);
   lines.push(`DTSTAMP:${dtstamp}`);
+  if (recurrenceMaster) {
+    lines.push(recurrenceSlotProp(
+      'RECURRENCE-ID', recurrenceMaster, ev.recurrence_id, feedZone
+    ));
+  }
   if (ev.all_day) {
     lines.push(`DTSTART;VALUE=DATE:${formatDate(ev.start_datetime)}`);
     // DTEND ist exklusiv: Yuvomi speichert das letzte sichtbare Datum → +1 Tag.
@@ -171,24 +196,13 @@ function buildVEvent(ev, dtstamp, showAssignees = false, feedZone = null) {
   // rruleLine statt Handarbeit: eine eingelesene Serie bringt ihr `RRULE:` schon
   // mit, ein blindes Praefix erzeugte `RRULE:RRULE:FREQ=...` und liess strikte
   // Abonnenten das ganze Event verwerfen (#761).
-  if (ev.recurrence_rule) lines.push(rruleLine(ev.recurrence_rule));
+  if (ev.recurrence_rule && !recurrenceMaster) lines.push(rruleLine(ev.recurrence_rule));
   // Einzeln ausgenommene Vorkommen (EXDATE, #489). Zeit-Teil = Master-Startzeit,
   // damit die EXDATE-Instanz exakt auf ein RRULE-Vorkommen trifft.
-  if (ev.recurrence_rule && Array.isArray(ev.exception_dates) && ev.exception_dates.length) {
-    // Bei TZID-Serien die lokale Wanduhrzeit des Masters als Zeit-Teil nutzen, damit
-    // die EXDATE-Instanz zonengleich auf ein RRULE-Vorkommen trifft (#549).
-    const wallSuffix = usesTzid(ev) ? formatWall(ev.start_datetime, ev.tzid).slice(8) : null; // 'T072500'
-    const timeSuffix = ev.all_day ? '' : ev.start_datetime.slice(10); // 'T18:00' / 'T18:00:00Z' / ''
+  if (!recurrenceMaster && ev.recurrence_rule
+      && Array.isArray(ev.exception_dates) && ev.exception_dates.length) {
     for (const exDate of ev.exception_dates) {
-      if (ev.all_day) {
-        lines.push(`EXDATE;VALUE=DATE:${formatDate(exDate)}`);
-      } else if (usesTzid(ev)) {
-        lines.push(`EXDATE;TZID=${ev.tzid}:${formatDate(exDate)}${wallSuffix}`);
-      } else {
-        // Gleiche Verankerung wie DTSTART - eine floating EXDATE träfe sonst nicht
-        // mehr auf ihr zonengebundenes Vorkommen (#818).
-        lines.push(stampProp('EXDATE', exDate + timeSuffix, feedZone));
-      }
+      lines.push(recurrenceSlotProp('EXDATE', ev, exDate, feedZone));
     }
   }
   lines.push('END:VEVENT');
@@ -216,9 +230,8 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
               ORDER BY u.display_name
            )) AS assignee_names_json` : '';
 
-  const rows = conn.prepare(`
-    SELECT id, title, description, start_datetime, end_datetime, all_day,
-           location, recurrence_rule, tzid${assigneeSelect}
+  const queriedRows = conn.prepare(`
+    SELECT e.*${assigneeSelect}
     FROM calendar_events e
     WHERE (
       e.external_source <> 'ics'
@@ -231,7 +244,8 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
       OR DATE(e.start_datetime) >= ?
     )
     ORDER BY e.start_datetime ASC
-  `).all(userId, windowStart)
+  `).all(userId, windowStart);
+  const rows = queriedRows
     .filter(ev => !isRecurrenceExpired(ev.recurrence_rule, windowStart));
 
   // Instanz-Ausnahmen (EXDATE, #489) für die wiederkehrenden Events des Feeds laden.
@@ -247,6 +261,39 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
       byEvent.get(r.event_id).push(r.exception_date);
     }
     for (const ev of rows) ev.exception_dates = byEvent.get(ev.id) || [];
+  }
+
+  const resolvedRows = resolveProjectedEventRows(conn, rows);
+  // Keep recurrence context even when an old master itself falls outside the
+  // rolling feed window but one of its moved replacements is displayed now.
+  const mastersById = new Map(queriedRows
+    .filter((event) => event.recurrence_rule)
+    .map((event) => [Number(event.id), event]));
+
+  // Resolution owns assignment inheritance; the title suffix is an export-only
+  // projection, so hydrate it once from the resolved assignment owner IDs.
+  if (showAssignees && resolvedRows.length) {
+    const ownerIds = [...new Set(resolvedRows
+      .map((event) => Number(event.assignment_owner_id ?? event.id))
+      .filter((id) => Number.isInteger(id) && id > 0))];
+    if (ownerIds.length) {
+      const nameRows = conn.prepare(`
+        SELECT ea.event_id, u.display_name
+        FROM event_assignments ea
+        JOIN users u ON u.id = ea.user_id
+        WHERE ea.event_id IN (${ownerIds.map(() => '?').join(',')})
+        ORDER BY ea.event_id, u.display_name
+      `).all(...ownerIds);
+      const namesByOwner = new Map();
+      for (const row of nameRows) {
+        if (!namesByOwner.has(row.event_id)) namesByOwner.set(row.event_id, []);
+        namesByOwner.get(row.event_id).push(row.display_name);
+      }
+      for (const event of resolvedRows) {
+        const ownerId = Number(event.assignment_owner_id ?? event.id);
+        event.assignee_names_json = JSON.stringify(namesByOwner.get(ownerId) ?? []);
+      }
+    }
   }
 
   const dtstamp = formatUTC(now.toISOString());
@@ -265,11 +312,16 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
   // Je referenzierter Zone genau ein VTIMEZONE (RFC 5545: vor den VEVENTs), damit
   // Abonnenten die TZID-Serien auflösen können (#549) und die an der Haushaltszone
   // verankerten Termine (#818).
-  const usedZones = new Set(rows.filter(usesTzid).map((ev) => ev.tzid));
-  if (feedZone && rows.some(usesFeedZone)) usedZones.add(feedZone);
+  const usedZones = new Set(resolvedRows.filter(usesTzid).map((ev) => ev.tzid));
+  if (feedZone && resolvedRows.some(usesFeedZone)) usedZones.add(feedZone);
   const tzYear = now.getUTCFullYear();
   for (const tzid of usedZones) out.push(...vtimezoneFor(tzid, tzYear).map(foldLine));
-  for (const ev of rows) out.push(...buildVEvent(ev, dtstamp, showAssignees, feedZone));
+  for (const ev of resolvedRows) {
+    const recurrenceMaster = ev.is_occurrence_override
+      ? mastersById.get(Number(ev.series_id))
+      : null;
+    out.push(...buildVEvent(ev, dtstamp, showAssignees, feedZone, recurrenceMaster));
+  }
   out.push('END:VCALENDAR');
   return out.join('\r\n') + '\r\n';
 }

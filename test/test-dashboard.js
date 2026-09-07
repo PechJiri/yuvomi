@@ -1274,7 +1274,10 @@ cdb.exec(`
     recurrence_rule TEXT,
     subscription_id INTEGER REFERENCES ics_subscriptions(id) ON DELETE CASCADE,
     calendar_ref_id INTEGER REFERENCES external_calendars(id) ON DELETE SET NULL,
-    visibility TEXT NOT NULL DEFAULT 'all'
+    visibility TEXT NOT NULL DEFAULT 'all',
+    recurrence_parent_id INTEGER REFERENCES calendar_events(id) ON DELETE CASCADE,
+    recurrence_id TEXT,
+    overridden_fields TEXT
   );
   CREATE TABLE event_assignments (
     event_id INTEGER NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
@@ -1435,6 +1438,63 @@ test('getUpcomingEvents: Event ohne Assignments hat leeres assigned_users_json A
   const users = JSON.parse(mm.assigned_users_json ?? '[]');
   assert(Array.isArray(users) && users.length === 0,
     'Event ohne Zuweisung hat leeres assigned_users_json Array');
+});
+
+test('getUpcomingEvents resolves a moved linked occurrence with inherited projections and owners', () => {
+  const dateKey = (days) => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return localDateKey(date);
+  };
+  const originalDate = dateKey(4);
+  const movedDate = dateKey(7);
+  const masterId = Number(insertEvent({
+    title: 'Upcoming master',
+    description: 'Current upcoming description',
+    start_datetime: `${originalDate}T09:00:00`,
+    end_datetime: `${originalDate}T10:00:00`,
+    recurrence_rule: 'FREQ=DAILY;COUNT=4',
+    assigned_to: cuTheo,
+    created_by: cuTheo,
+  }));
+  cdb.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)')
+    .run(masterId, cuTheo);
+  const childId = Number(insertEvent({
+    title: 'Upcoming linked override',
+    description: 'Stale upcoming description',
+    start_datetime: `${movedDate}T11:00:00`,
+    end_datetime: `${movedDate}T12:00:00`,
+    assigned_to: cuSofia,
+    created_by: cuTheo,
+    visibility: 'assignees',
+    recurrence_parent_id: masterId,
+    recurrence_id: originalDate,
+    overridden_fields: '["title","start_datetime","end_datetime","assignments","visibility","attachment","reminders"]',
+  }));
+  cdb.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)')
+    .run(childId, cuSofia);
+  cdb.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date)
+    VALUES (?, ?)
+  `).run(masterId, originalDate);
+
+  const events = getUpcomingEvents(cdb, {
+    userId: cuSofia,
+    limit: 20,
+    fromToday: true,
+  });
+  const linked = events.find((event) => Number(event.id) === childId);
+
+  assert(linked, 'the moved linked occurrence must be loaded by displayed date');
+  assert(linked.description === 'Current upcoming description', 'unmarked description must inherit');
+  assert(linked.start_datetime === `${movedDate}T11:00:00`, 'moved start must stay resolved');
+  assert(linked.series_id === masterId, 'series identity must point to the master');
+  assert(linked.recurrence_id === originalDate, 'recurrence identity must stay on the original slot');
+  assert(linked.assignment_owner_id === childId, 'assignment owner must stay on the child');
+  assert(linked.attachment_owner_id === childId, 'attachment owner must stay on the child');
+  assert(linked.reminder_owner_id === childId, 'reminder owner must stay on the child');
+  assert(!events.some((event) => Number(event.id) === masterId
+    && event.recurrence_identity === originalDate), 'the original EXDATE slot must stay suppressed');
 });
 
 test('getUpcomingEvents: private ICS-Termine fremder User werden ausgeblendet', () => {

@@ -7,10 +7,12 @@ import { createLogger } from '../../logger.js';
 import express from 'express';
 import * as db from '../../db.js';
 import { DATE_RE } from '../../middleware/validate.js';
-import { expandRecurringEvents, getUpcomingEvents, loadEventExceptions } from '../../services/calendar-events.js';
-import { buildMatchQuery } from '../../services/search.js';
+import { expandAndResolveEventRows, getUpcomingEvents } from '../../services/calendar-events.js';
+import { buildMatchQuery, resolveEventSearchRows } from '../../services/search.js';
 import { visibilityWhere } from '../../services/visibility.js';
-import { VALID_SOURCES, ASSIGNED_USERS_SQL, getUserId, serializeEvent } from './helpers.js';
+import {
+  VALID_SOURCES, ASSIGNED_USERS_SQL, getUserId, isAdminUser, serializeEvent,
+} from './helpers.js';
 import { shiftDateKey, todayKey } from '../../utils/timezone.js';
 
 const log = createLogger('Calendar');
@@ -92,10 +94,15 @@ router.get('/', (req, res) => {
 
     sql += ' ORDER BY e.start_datetime ASC, e.all_day DESC';
 
-    const rawEvents  = db.get().prepare(sql).all(...params);
-    const recurringIds = rawEvents.filter((e) => e.recurrence_rule).map((e) => e.id);
-    const exceptions   = loadEventExceptions(db.get(), recurringIds);
-    const events    = expandRecurringEvents(rawEvents, from, to, exceptions).map(serializeEvent);
+    const database = db.get();
+    const rawEvents = database.prepare(sql).all(...params);
+    const serialization = {
+      database,
+      actorId: getUserId(req),
+      isAdmin: isAdminUser(req),
+    };
+    const events = expandAndResolveEventRows(database, rawEvents, from, to)
+      .map((event) => serializeEvent(event, serialization));
     res.json({ data: events, from, to });
   } catch (err) {
     log.error('', err);
@@ -112,8 +119,13 @@ router.get('/', (req, res) => {
 router.get('/upcoming', (req, res) => {
   try {
     const limit    = Math.min(parseInt(req.query.limit, 10) || 5, 20);
-    const expanded = getUpcomingEvents(db.get(), { userId: getUserId(req), limit })
-      .map(serializeEvent);
+    const database = db.get();
+    const expanded = getUpcomingEvents(database, { userId: getUserId(req), limit })
+      .map((event) => serializeEvent(event, {
+        database,
+        actorId: getUserId(req),
+        isAdmin: isAdminUser(req),
+      }));
 
     res.json({ data: expanded });
   } catch (err) {
@@ -194,18 +206,17 @@ router.get('/search', (req, res) => {
     // 2-Jahres-Fenster: fängt auch Serien, deren nächste Instanz mehr als ein Jahr
     // voraus liegt (z. B. mehrjährige Intervalle). Findet sich keine, bleibt der Master.
     const future = shiftDateKey(today, 730);
-    const searchExceptions = loadEventExceptions(
-      db.get(), rows.filter((r) => r.recurrence_rule).map((r) => r.id)
-    );
-    const resolved = rows.map((row) => {
-      if (!row.recurrence_rule) return row;
-      return expandRecurringEvents([row], today, future, searchExceptions)[0] || row;
-    });
-    // Nach der Auflösung neu chronologisch sortieren, damit die Frontend-Gruppierung
-    // die tatsächlichen (nicht die Master-)Daten in Reihenfolge zeigt.
-    resolved.sort((a, b) => String(a.start_datetime).localeCompare(String(b.start_datetime)));
+    const database = db.get();
+    const resolved = resolveEventSearchRows(database, rows, today, future);
 
-    res.json({ data: resolved.map(serializeEvent), total });
+    res.json({
+      data: resolved.map((event) => serializeEvent(event, {
+        database,
+        actorId: userId,
+        isAdmin: isAdminUser(req),
+      })),
+      total,
+    });
   } catch (err) {
     log.error('', err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });

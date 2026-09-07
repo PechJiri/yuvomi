@@ -6,6 +6,7 @@
  */
 
 import { nextOccurrence, parseRRule, matchesRRuleByday } from './recurrence.js';
+import { resolveEventRows } from './calendar-occurrence-overrides.js';
 import { visibilityWhere } from './visibility.js';
 import {
   householdTimeZone, localToUTC, shiftDateKey, storedToInstantMs, todayKey, utcToWall,
@@ -204,6 +205,41 @@ export function expandRecurringEvents(
   return result.sort((a, b) => a.start_datetime.localeCompare(b.start_datetime));
 }
 
+/**
+ * Applies authoritative linked resolution while retaining reader-specific
+ * projection columns (creator/calendar labels, birthday metadata, and similar)
+ * that are not part of the persisted occurrence merge model. Resolved model
+ * fields always win over the raw row, so stale materialized values cannot leak.
+ */
+export function resolveProjectedEventRows(database, rows) {
+  const sourceById = new Map(rows.map((row) => [Number(row.id), row]));
+  return resolveEventRows(database, rows).map((resolved) => {
+    if (!resolved.is_occurrence_override) return resolved;
+    const source = sourceById.get(Number(resolved.id));
+    return source ? { ...source, ...resolved } : resolved;
+  });
+}
+
+/**
+ * Expands series rows once, suppresses their original EXDATE slots, and then
+ * composes persisted linked replacements from the current master defaults.
+ * Callers remain responsible for applying their own SQL visibility/source
+ * filters before handing rows to this shared read contract.
+ */
+export function expandAndResolveEventRows(database, rows, from, to) {
+  const recurringIds = rows.filter((event) => event.recurrence_rule).map((event) => event.id);
+  const exceptions = loadEventExceptions(database, recurringIds);
+  const expanded = expandRecurringEvents(
+    rows,
+    from,
+    to,
+    exceptions,
+    { includeRecurrenceIdentity: true },
+  );
+  return resolveProjectedEventRows(database, expanded)
+    .sort((a, b) => String(a.start_datetime).localeCompare(String(b.start_datetime)));
+}
+
 // --------------------------------------------------------
 // Anstehende Termine ab jetzt (für Dashboard-Widget & Kalender-Upcoming).
 // Berücksichtigt Wiederholungen, indem das Master-Event innerhalb eines
@@ -280,10 +316,7 @@ export function getUpcomingEvents(d, {
     ORDER BY e.start_datetime ASC
   `).all(sqlFrom, future, future, userId, userId, userId);
 
-  const recurringIds = rawEvents.filter((e) => e.recurrence_rule).map((e) => e.id);
-  const exceptions   = loadEventExceptions(d, recurringIds);
-
-  return expandRecurringEvents(rawEvents, sqlFrom, future, exceptions)
+  return expandAndResolveEventRows(d, rawEvents, sqlFrom, future)
     .filter((e) => {
       // Verglichen werden ZEITPUNKTE, nicht Strings. In start_datetime liegen
       // zwei Formen nebeneinander - zonenlose Wanduhrzeit (lokal angelegt) und

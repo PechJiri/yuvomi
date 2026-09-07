@@ -92,18 +92,27 @@ async function call(method, route, { actor: a = ADMIN, body } = {}) {
 let seq = 0;
 function insertEvent(fields = {}) {
   const f = {
-    title: `EV-${++seq}`, start_datetime: '2035-03-10T09:00', end_datetime: null,
+    title: `EV-${++seq}`, description: null,
+    start_datetime: '2035-03-10T09:00', end_datetime: null,
     created_by: 1, color: '#007AFF', icon: 'calendar', visibility: 'all',
     external_source: 'local', all_day: 0, recurrence_rule: null,
     subscription_id: null, calendar_ref_id: null, user_modified: 0,
+    assigned_to: null, countdown: 0,
+    attachment_name: null, attachment_mime: null, attachment_size: null,
+    attachment_data: null, recurrence_parent_id: null, recurrence_id: null,
+    overridden_fields: null,
     ...fields,
   };
   const r = db.prepare(`
     INSERT INTO calendar_events
-      (title, start_datetime, end_datetime, created_by, color, icon, visibility,
-       external_source, all_day, recurrence_rule, subscription_id, calendar_ref_id, user_modified)
-    VALUES (@title,@start_datetime,@end_datetime,@created_by,@color,@icon,@visibility,
-       @external_source,@all_day,@recurrence_rule,@subscription_id,@calendar_ref_id,@user_modified)
+      (title, description, start_datetime, end_datetime, created_by, color, icon, visibility,
+       external_source, all_day, recurrence_rule, subscription_id, calendar_ref_id, user_modified,
+       assigned_to, countdown, attachment_name, attachment_mime, attachment_size,
+       attachment_data, recurrence_parent_id, recurrence_id, overridden_fields)
+    VALUES (@title,@description,@start_datetime,@end_datetime,@created_by,@color,@icon,@visibility,
+       @external_source,@all_day,@recurrence_rule,@subscription_id,@calendar_ref_id,@user_modified,
+       @assigned_to,@countdown,@attachment_name,@attachment_mime,@attachment_size,
+       @attachment_data,@recurrence_parent_id,@recurrence_id,@overridden_fields)
   `).run(f);
   return r.lastInsertRowid;
 }
@@ -228,6 +237,88 @@ test('GET /search — wiederkehrender Treffer wird auf kommende Instanz aufgelö
   assert.match(resolved, /-04-15T18:00/, 'bleibt im jährlichen 15.-April-Raster');
   assert.notEqual(resolved.slice(0, 4), '2015', 'nicht mehr der Serienstart, sondern eine kommende Instanz');
   assert.ok(parseInt(resolved.slice(0, 4), 10) > 2015, 'aufgelöstes Jahr liegt nach dem Serienstart');
+});
+
+test('range, upcoming, calendar search and detail share linked occurrence resolution', async () => {
+  const dateKey = (days) => {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  };
+  const originalDate = dateKey(5);
+  const movedDate = dateKey(8);
+  const masterId = Number(insertEvent({
+    title: 'Reader master title',
+    description: 'Old inherited description',
+    start_datetime: `${originalDate}T09:00:00`,
+    end_datetime: `${originalDate}T10:00:00`,
+    recurrence_rule: 'FREQ=DAILY;COUNT=4',
+    assigned_to: MARIA.id,
+  }));
+  assignEvent(masterId, MARIA.id);
+  const childId = Number(insertEvent({
+    title: 'Reader override Qzxreader',
+    description: 'Stale child description',
+    start_datetime: `${movedDate}T11:00:00`,
+    end_datetime: `${movedDate}T12:00:00`,
+    assigned_to: TOM.id,
+    visibility: 'assignees',
+    countdown: 1,
+    attachment_name: 'occurrence.txt',
+    attachment_mime: 'text/plain',
+    attachment_size: 4,
+    attachment_data: Buffer.from('move').toString('base64'),
+    recurrence_parent_id: masterId,
+    recurrence_id: originalDate,
+    overridden_fields: '["title","start_datetime","end_datetime","assignments","visibility","countdown","attachment","reminders"]',
+  }));
+  assignEvent(childId, TOM.id);
+  db.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date)
+    VALUES (?, ?)
+  `).run(masterId, originalDate);
+  db.prepare('UPDATE calendar_events SET description = ? WHERE id = ?')
+    .run('Current inherited description', masterId);
+
+  const assertResolved = (event, source) => {
+    assert.ok(event, `${source}: moved child missing`);
+    assert.equal(event.id, childId, `${source}: concrete child identity`);
+    assert.equal(event.title, 'Reader override Qzxreader', `${source}: overridden title`);
+    assert.equal(event.description, 'Current inherited description', `${source}: inherited description`);
+    assert.equal(event.start_datetime, `${movedDate}T11:00:00`, `${source}: moved start`);
+    assert.equal(event.series_id, masterId, `${source}: series identity`);
+    assert.equal(event.recurrence_id, originalDate, `${source}: original slot identity`);
+    assert.equal(event.is_occurrence_override, true, `${source}: override marker`);
+    assert.equal(event.assignment_owner_id, childId, `${source}: assignment owner`);
+    assert.equal(event.attachment_owner_id, childId, `${source}: attachment owner`);
+    assert.equal(event.reminder_owner_id, childId, `${source}: reminder owner`);
+    assert.equal(event.reminder_anchor_start, `${movedDate}T11:00:00`, `${source}: reminder anchor`);
+    assert.deepEqual(event.assigned_users.map((user) => Number(user.id)), [TOM.id], `${source}: assignment projection`);
+    assert.equal(event.attachment_data, 'data:text/plain;base64,bW92ZQ==', `${source}: attachment projection`);
+  };
+
+  const range = await call('GET', `/?from=${originalDate}&to=${movedDate}`, { actor: TOM });
+  assert.equal(range.status, 200);
+  const rangeChild = range.body.data.find((event) => event.id === childId);
+  assertResolved(rangeChild, 'range');
+  assert.equal(rangeChild.creator_name, 'Admin', 'range: creator projection');
+  assert.equal(range.body.data.some((event) => event.id === masterId
+    && event.recurrence_id === originalDate), false, 'range: original EXDATE slot stays suppressed');
+
+  const upcoming = await call('GET', '/upcoming?limit=20', { actor: TOM });
+  assert.equal(upcoming.status, 200);
+  assertResolved(upcoming.body.data.find((event) => event.id === childId), 'upcoming');
+
+  const search = await call('GET', '/search?q=Qzxreader', { actor: TOM });
+  assert.equal(search.status, 200);
+  assert.equal(search.body.total, 1);
+  assertResolved(search.body.data[0], 'calendar search');
+  assert.equal(search.body.data[0].creator_name, 'Admin', 'calendar search: creator projection');
+
+  const detail = await call('GET', `/${childId}`, { actor: TOM });
+  assert.equal(detail.status, 200);
+  assertResolved(detail.body.data, 'detail');
+  assert.equal(detail.body.data.creator_name, 'Admin', 'detail: creator projection');
 });
 
 // ════════════════════════════════════════════════════════════════════════════════

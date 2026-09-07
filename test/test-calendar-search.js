@@ -9,7 +9,7 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
-import { buildMatchQuery } from '../server/services/search.js';
+import { buildMatchQuery, resolveEventSearchRows } from '../server/services/search.js';
 
 let passed = 0;
 let failed = 0;
@@ -28,6 +28,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 );`);
 db.exec(MIGRATIONS_SQL[1]);
 db.exec(MIGRATIONS_SQL[44]); // FTS5-Index + Event-Trigger (nur Titel/Beschreibung)
+db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
+db.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides
 
 console.log('\n[Calendar-Search-Test] FTS über Titel/Beschreibung/Ort (#471)\n');
 
@@ -120,6 +122,44 @@ test('DELETE entfernt den Termin aus dem Index (ad-Trigger)', () => {
 test('leere/kurze Query liefert keine Treffer', () => {
   assert(search('').length === 0, 'leere Query sollte nichts liefern');
   assert(buildMatchQuery('') === null, 'buildMatchQuery leer → null');
+});
+
+test('Kalender-Suche löst einen verschobenen FTS-Treffer gegen den aktuellen Master auf', () => {
+  const masterId = db.prepare(`
+    INSERT INTO calendar_events
+      (title, description, start_datetime, end_datetime, all_day, recurrence_rule, created_by)
+    VALUES ('Search master', 'Current inherited search text', '2030-06-01T09:00:00',
+            '2030-06-01T10:00:00', 0, 'FREQ=DAILY;COUNT=3', ?)
+  `).run(uid).lastInsertRowid;
+  const childId = db.prepare(`
+    INSERT INTO calendar_events
+      (title, description, start_datetime, end_datetime, all_day, recurrence_parent_id,
+       recurrence_id, overridden_fields, created_by)
+    VALUES ('Search override Qzxcalendar', 'Stale inherited search text',
+            '2030-06-10T11:00:00', '2030-06-10T12:00:00', 1, ?, '2030-06-01',
+            '["title","start_datetime","end_datetime"]', ?)
+  `).run(masterId, uid).lastInsertRowid;
+  db.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date)
+    VALUES (?, '2030-06-01')
+  `).run(masterId);
+
+  const match = buildMatchQuery('Qzxcalendar');
+  const rows = db.prepare(`
+    SELECT e.*
+    FROM search_index s
+    JOIN calendar_events e ON e.id = s.entity_id
+    WHERE s.entity = 'event' AND s.search_index MATCH ?
+  `).all(match);
+  const result = resolveEventSearchRows(db, rows, '2030-06-01', '2032-06-01');
+
+  assert(result.length === 1, `erwartet 1 Treffer, erhielt ${result.length}`);
+  assert(result[0].id === Number(childId), 'konkrete Child-ID fehlt');
+  assert(result[0].description === 'Current inherited search text', 'Beschreibung muss vom Master erben');
+  assert(result[0].all_day === 0, 'unmarkiertes all_day muss vom Master erben');
+  assert(result[0].start_datetime === '2030-06-10T11:00:00', 'verschobener Start fehlt');
+  assert(result[0].series_id === Number(masterId), 'Serien-ID fehlt');
+  assert(result[0].recurrence_id === '2030-06-01', 'Original-Slot fehlt');
 });
 
 console.log(`\n[Calendar-Search-Test] ${passed} bestanden, ${failed} fehlgeschlagen\n`);

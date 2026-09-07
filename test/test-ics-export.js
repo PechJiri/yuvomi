@@ -60,7 +60,8 @@ d2.exec('PRAGMA foreign_keys = ON;');
 d2.exec(`CREATE TABLE users (
   id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
   display_name TEXT NOT NULL, password_hash TEXT NOT NULL,
-  avatar_color TEXT NOT NULL DEFAULT '#007AFF', role TEXT NOT NULL DEFAULT 'member',
+  avatar_color TEXT NOT NULL DEFAULT '#007AFF', avatar_data BLOB,
+  role TEXT NOT NULL DEFAULT 'member',
   created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '');`);
 d2.exec(MIGRATIONS_SQL[10]);
 d2.exec(MIGRATIONS_SQL[11]);
@@ -68,6 +69,7 @@ d2.exec(MIGRATIONS_SQL[61]);
 d2.exec(MIGRATIONS_SQL[80]);
 d2.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions (EXDATE, #489)
 d2.exec(MIGRATIONS_SQL[97]); // calendar_events.tzid (DST-Export, #549)
+d2.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides
 d2.exec(`CREATE TABLE IF NOT EXISTS event_assignments (
   event_id INTEGER NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
   user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -80,6 +82,11 @@ const NOW = new Date('2026-06-22T00:00:00Z');
 // Die Haushaltszone wird explizit übergeben statt aus serverTimeZone() gelesen: die
 // CI läuft unter UTC, dort fiele der ganze TZID-Pfad (#818) ungetestet durch.
 const FEED_TZ = 'Europe/Madrid';
+
+function eventBlock(ics, summary) {
+  return (ics.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) || [])
+    .find((block) => block.includes(`SUMMARY:${summary}\r\n`));
+}
 
 test('escapeICSText maskiert Sonderzeichen', () => {
   assert(escapeICSText('a,b;c\\d\ne') === 'a\\,b\\;c\\\\d\\ne', escapeICSText('a,b;c\\d\ne'));
@@ -208,6 +215,89 @@ test('buildFeed: EXDATE mit VALUE=DATE für Ganztags-Serie (#489)', () => {
   d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-03-09')`).run(id);
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);
   assert(ics.includes('EXDATE;VALUE=DATE:20260309'), 'EXDATE (Ganztags) fehlt: ' + ics);
+});
+
+test('buildFeed: Ganztags-Override nutzt Master-UID und denselben VALUE=DATE-Slot wie EXDATE', () => {
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,created_by)
+    VALUES ('OverrideDayMaster','2026-08-01','2026-08-01',1,'local','FREQ=DAILY;COUNT=4',?)
+  `).run(u1).lastInsertRowid;
+  const childId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('OverrideDayMoved','2026-08-05','2026-08-05',1,'local',?,?,?,?)
+  `).run(u1, masterId, '2026-08-02', JSON.stringify(['title', 'start_datetime', 'end_datetime'])).lastInsertRowid;
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-08-02')`).run(masterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  const master = eventBlock(ics, 'OverrideDayMaster');
+  const child = eventBlock(ics, 'OverrideDayMoved');
+  assert(master, 'Master-VEVENT fehlt: ' + ics);
+  assert(child, 'Replacement-VEVENT fehlt: ' + ics);
+  assert(master.includes(`UID:event-${masterId}@yuvomi`), 'Master-UID falsch: ' + master);
+  assert(master.includes('RRULE:FREQ=DAILY;COUNT=4'), 'Master-RRULE fehlt: ' + master);
+  assert(master.includes('EXDATE;VALUE=DATE:20260802'), 'Master-EXDATE falsch: ' + master);
+  assert(child.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss Master-UID nutzen: ' + child);
+  assert(!child.includes(`UID:event-${childId}@yuvomi`), 'Replacement darf keine Child-UID nutzen: ' + child);
+  assert(child.includes('RECURRENCE-ID;VALUE=DATE:20260802'), 'RECURRENCE-ID passt nicht zum EXDATE-Slot: ' + child);
+  assert(child.includes('DTSTART;VALUE=DATE:20260805'), 'verschobenes DTSTART fehlt: ' + child);
+  assert(!child.includes('RRULE:'), 'Replacement darf keine RRULE tragen: ' + child);
+});
+
+test('buildFeed: naiver Override teilt Master-UID und Feed-Zonen-Slot mit EXDATE', () => {
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,created_by)
+    VALUES ('OverrideFloatingMaster','2026-09-01T09:30','2026-09-01T10:30',0,'local','FREQ=DAILY;COUNT=4',?)
+  `).run(u1).lastInsertRowid;
+  const childId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('OverrideFloatingMoved','2026-09-05T11:00','2026-09-05T12:00',0,'local',?,?,?,?)
+  `).run(u1, masterId, '2026-09-02', JSON.stringify(['title', 'start_datetime', 'end_datetime'])).lastInsertRowid;
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-09-02')`).run(masterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  const master = eventBlock(ics, 'OverrideFloatingMaster');
+  const child = eventBlock(ics, 'OverrideFloatingMoved');
+  assert(master?.includes('EXDATE;TZID=Europe/Madrid:20260902T093000'), 'Master-EXDATE falsch: ' + master);
+  assert(child, 'Replacement-VEVENT fehlt: ' + ics);
+  assert(child.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss Master-UID nutzen: ' + child);
+  assert(!child.includes(`UID:event-${childId}@yuvomi`), 'Replacement darf keine Child-UID nutzen: ' + child);
+  assert(child.includes('RECURRENCE-ID;TZID=Europe/Madrid:20260902T093000'), 'RECURRENCE-ID passt nicht zum Feed-Zonen-Slot: ' + child);
+  assert(child.includes('DTSTART;TZID=Europe/Madrid:20260905T110000'), 'verschobenes DTSTART falsch: ' + child);
+  assert(child.includes('DTEND;TZID=Europe/Madrid:20260905T120000'), 'verschobenes DTEND falsch: ' + child);
+  assert(!child.includes('RRULE:'), 'Replacement darf keine RRULE tragen: ' + child);
+});
+
+test('buildFeed: TZID-Override teilt Master-UID und zonengleichen Slot mit EXDATE', () => {
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,tzid,created_by)
+    VALUES ('OverrideTzidMaster','2026-10-24T08:00:00Z','2026-10-24T09:00:00Z',0,'local','FREQ=DAILY;COUNT=4','Europe/Berlin',?)
+  `).run(u1).lastInsertRowid;
+  const childId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,tzid,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('OverrideTzidMoved','2026-10-27T09:00:00Z','2026-10-27T10:00:00Z',0,'local','Europe/Berlin',?,?,?,?)
+  `).run(u1, masterId, '2026-10-25', JSON.stringify(['title', 'start_datetime', 'end_datetime'])).lastInsertRowid;
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-10-25')`).run(masterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  const master = eventBlock(ics, 'OverrideTzidMaster');
+  const child = eventBlock(ics, 'OverrideTzidMoved');
+  assert(master?.includes('EXDATE;TZID=Europe/Berlin:20261025T100000'), 'Master-EXDATE falsch: ' + master);
+  assert(child, 'Replacement-VEVENT fehlt: ' + ics);
+  assert(child.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss Master-UID nutzen: ' + child);
+  assert(!child.includes(`UID:event-${childId}@yuvomi`), 'Replacement darf keine Child-UID nutzen: ' + child);
+  assert(child.includes('RECURRENCE-ID;TZID=Europe/Berlin:20261025T100000'), 'RECURRENCE-ID passt nicht zum TZID-Slot: ' + child);
+  assert(child.includes('DTSTART;TZID=Europe/Berlin:20261027T100000'), 'verschobenes DTSTART falsch: ' + child);
+  assert(child.includes('DTEND;TZID=Europe/Berlin:20261027T110000'), 'verschobenes DTEND falsch: ' + child);
+  assert(!child.includes('RRULE:'), 'Replacement darf keine RRULE tragen: ' + child);
 });
 
 test('buildFeed: wiederkehrendes Event mit abgelaufenem UNTIL (Vergangenheit) wird ausgeschlossen', () => {

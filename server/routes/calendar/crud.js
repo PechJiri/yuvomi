@@ -9,6 +9,7 @@ import * as db from '../../db.js';
 import { str, color, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
 import { normalizeVisibility, visibilityWhere } from '../../services/visibility.js';
 import { hasAnyOccurrence } from '../../services/recurrence.js';
+import { resolveProjectedEventRows } from '../../services/calendar-events.js';
 import { utcToWall } from '../../utils/timezone.js';
 import {
   StorageError,
@@ -82,7 +83,13 @@ router.get('/:id', (req, res) => {
     `).get(id, getUserId(req), getUserId(req));
 
     if (!event) return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
-    res.json({ data: serializeEvent(event) });
+    const database = db.get();
+    const resolved = resolveProjectedEventRows(database, [event])[0];
+    res.json({ data: serializeEvent(resolved, {
+      database,
+      actorId: getUserId(req),
+      isAdmin: isAdminUser(req),
+    }) });
   } catch (err) {
     log.error('', err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });

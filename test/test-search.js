@@ -27,6 +27,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 db.exec(MIGRATIONS_SQL[1]);
 // Migration 44: FTS5 index + sync triggers. Must apply cleanly.
 db.exec(MIGRATIONS_SQL[44]);
+db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
+db.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides
 // Migration 65: health tables (medications, health_activities) the search reads from.
 db.exec(MIGRATIONS_SQL[65]);
 // Migration 66: FTS triggers + backfill for medications and health activities.
@@ -130,6 +132,36 @@ test('Suche deckt alle Entitäten ab', () => {
   assert(r.notes.some((n) => n.content.includes('cake')), 'Notiz gefunden');
   assert(r.contacts.some((c) => c.title === 'Cake Bakery'), 'Kontakt gefunden');
   assert(r.events.some((e) => e.title === 'Cake tasting'), 'Termin gefunden');
+});
+
+test('globale Suche liefert den aufgelösten verschobenen Termin mit Originalidentität', () => {
+  const masterId = db.prepare(`
+    INSERT INTO calendar_events
+      (title, description, start_datetime, end_datetime, all_day, recurrence_rule, created_by)
+    VALUES ('Global master', 'Current global description', '2030-07-01T09:00:00',
+            '2030-07-01T10:00:00', 0, 'FREQ=DAILY;COUNT=3', ?)
+  `).run(uid).lastInsertRowid;
+  const childId = db.prepare(`
+    INSERT INTO calendar_events
+      (title, description, start_datetime, end_datetime, all_day, recurrence_parent_id,
+       recurrence_id, overridden_fields, created_by)
+    VALUES ('Global override Qzxglobal', 'Stale global description',
+            '2030-07-10T11:00:00', '2030-07-10T12:00:00', 1, ?, '2030-07-01',
+            '["title","start_datetime","end_datetime"]', ?)
+  `).run(masterId, uid).lastInsertRowid;
+  db.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date)
+    VALUES (?, '2030-07-01')
+  `).run(masterId);
+
+  const result = runSearch(db, 'Qzxglobal', uid).events;
+  assert(result.length === 1, 'genau ein Treffer erwartet');
+  assert(result[0].id === Number(childId), 'Child-ID fehlt');
+  assert(result[0].all_day === 0, 'nicht überschriebenes all_day muss vom Master kommen');
+  assert(result[0].start_datetime === '2030-07-10T11:00:00', 'verschobener Start fehlt');
+  assert(result[0].series_id === Number(masterId), 'series_id fehlt');
+  assert(result[0].recurrence_id === '2030-07-01', 'originale recurrence_id fehlt');
+  assert(result[0].is_occurrence_override === true, 'Override-Kennzeichen fehlt');
 });
 
 test('Präfix-Treffer funktionieren (Teilwort)', () => {
