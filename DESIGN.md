@@ -165,6 +165,22 @@ components:
     backgroundColor: "var(--seg-active-bg)"
     textColor: "color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary))"
     rounded: "{rounded.full}"
+  # Die ANDERE Haelfte von „eine Behandlung pro Kontrolltyp" (siehe „Chips"): der
+  # aktive Filter-Chip ist eine getoente FLAECHE, ausdruecklich NICHT die
+  # gefuellte Segment-Pille darueber. Drei Stufen derselben Farbe, alle drei aus
+  # der Toenungsskala: --tint-state als Grund, --tint-hint als Kante (hier nicht
+  # als Feld fuehrbar, das Vokabular kennt kein borderColor - sie steht an
+  # .filter-chip--active), --tint-ink als Tinte. Inaktiv traegt das Label Sekundaertext, die Farbe
+  # erscheint erst mit der Aktivierung (Beschluss 2026-08-17, umgesetzt
+  # 2026-08-27; die dauerhaft getoente Schrift las sich als „Filter ist an").
+  # Die Zahl hinter einer Stufe steht in tokens.css Abschnitt 6b, nirgends
+  # sonst - der Chip nennt seit c788ce01 (2026-08-08) nur noch die Stufe.
+  chip:
+    backgroundColor: "color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-state), transparent)"
+    textColor: "color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary))"
+    rounded: "{rounded.full}"
+    padding: "4px 12px (--space-1 / --space-3), Kante 1.5px"
+    height: "48px (--target-lg); --sm-Variante 40px, auf (hover: none) 44px"
   card:
     backgroundColor: "{colors.surface}"
     rounded: "{rounded.md}"
