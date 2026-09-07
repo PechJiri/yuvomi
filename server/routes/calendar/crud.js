@@ -9,7 +9,7 @@ import * as db from '../../db.js';
 import { str, color, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
 import { normalizeVisibility, visibilityWhere } from '../../services/visibility.js';
 import { hasAnyOccurrence } from '../../services/recurrence.js';
-import { resolveProjectedEventRows } from '../../services/calendar-events.js';
+import { resolveProjectedEventRows } from '../../services/calendar-event-reader.js';
 import { utcToWall } from '../../utils/timezone.js';
 import {
   StorageError,

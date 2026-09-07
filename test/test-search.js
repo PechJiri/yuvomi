@@ -5,7 +5,7 @@
  * Ausführen: node --experimental-sqlite test/test-search.js
  */
 
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import { runSearch, buildMatchQuery } from '../server/services/search.js';
 
@@ -28,6 +28,7 @@ db.exec(MIGRATIONS_SQL[1]);
 // Migration 44: FTS5 index + sync triggers. Must apply cleanly.
 db.exec(MIGRATIONS_SQL[44]);
 db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
+db.exec(MIGRATIONS_SQL[27]); // legacy calendar attachment body
 db.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides
 // Migration 65: health tables (medications, health_activities) the search reads from.
 db.exec(MIGRATIONS_SQL[65]);
@@ -182,6 +183,41 @@ test('globale Suche liefert den aufgelösten verschobenen Termin mit Originalide
   assert(result[0].series_id === Number(masterId), 'series_id fehlt');
   assert(result[0].recurrence_id === '2030-07-01', 'originale recurrence_id fehlt');
   assert(result[0].is_occurrence_override === true, 'Override-Kennzeichen fehlt');
+});
+
+test('globale Suche löst große Anhänge auf, ohne attachment_data zu lesen', () => {
+  const largeAttachment = 'A'.repeat(1024 * 1024);
+  const masterId = db.prepare(`
+    INSERT INTO calendar_events
+      (title, start_datetime, end_datetime, recurrence_rule, created_by, attachment_data)
+    VALUES ('Attachment master', '2030-08-01T09:00:00', '2030-08-01T10:00:00',
+            'FREQ=DAILY;COUNT=2', ?, ?)
+  `).run(uid, largeAttachment).lastInsertRowid;
+  const childId = db.prepare(`
+    INSERT INTO calendar_events
+      (title, start_datetime, end_datetime, recurrence_parent_id, recurrence_id,
+       overridden_fields, created_by, attachment_data)
+    VALUES ('Qzxlargeattachment override', '2030-08-05T11:00:00', '2030-08-05T12:00:00',
+            ?, '2030-08-01', '["title","start_datetime","end_datetime"]', ?, ?)
+  `).run(masterId, uid, largeAttachment).lastInsertRowid;
+
+  const attachmentReads = [];
+  db.setAuthorizer((action, table, column) => {
+    if (action === sqliteConstants.SQLITE_READ
+        && table === 'calendar_events' && column === 'attachment_data') {
+      attachmentReads.push(`${table}.${column}`);
+    }
+    return sqliteConstants.SQLITE_OK;
+  });
+  let result;
+  try {
+    result = runSearch(db, 'Qzxlargeattachment', uid).events;
+  } finally {
+    db.setAuthorizer(null);
+  }
+
+  assert(result.some((event) => Number(event.id) === Number(childId)), 'linked Treffer fehlt');
+  assert(attachmentReads.length === 0, `attachment_data wurde gelesen: ${attachmentReads.join(', ')}`);
 });
 
 test('Präfix-Treffer funktionieren (Teilwort)', () => {

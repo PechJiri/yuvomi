@@ -37,7 +37,8 @@
  */
 
 import { hasAnyOccurrence, nextOccurrenceAfter, seriesStartFor } from './recurrence.js';
-import { loadEventExceptions, resolveProjectedEventRows } from './calendar-events.js';
+import { loadEventExceptions } from './calendar-events.js';
+import { eventProjectionSql, resolveProjectedEventRows } from './calendar-event-reader.js';
 import { visibilityWhere } from './visibility.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
 // Dieselbe Rangfolge wie im Kalender und auf der Uebersicht - eine Regel, eine
@@ -297,13 +298,7 @@ function eventCountdowns(d, userId, todayKey, graceDays) {
   // sich innerhalb eines Requests nicht.
   const tz = householdTimeZone(d);
   const rows = d.prepare(`
-    SELECT e.*,
-           -- tzid gehoert zur Frage "welcher Kalendertag ist das?": ohne die
-           -- Spalte kann nextEventDate die Zonenruecknahme nicht treffen und
-           -- verschweigt Termine, die der Kalender zeigt. (Keine Backticks in
-           -- diesem Kommentar - er steht in einem Template-Literal.)
-           e.tzid,
-           e.assigned_to,
+    SELECT ${eventProjectionSql(d)},
            -- Die geliehene Farbe braucht dieselben drei Quellen wie im Kalender
            -- (#891). Hier reicht EINE Person statt des ganzen Avatar-Stacks: die
            -- Kachel zeigt eine Kante, keine Personenliste.
@@ -334,7 +329,7 @@ function eventCountdowns(d, userId, todayKey, graceDays) {
     d,
     rows.filter((e) => e.recurrence_rule).map((e) => e.id),
   );
-  const resolvedRows = resolveProjectedEventRows(d, rows);
+  const resolvedRows = resolveProjectedEventRows(d, rows, { lightweight: true });
 
   const out = [];
   for (const row of resolvedRows) {

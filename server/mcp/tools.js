@@ -29,7 +29,7 @@ import { moduleAccessVerdict, MODULE_ACCESS_ALLOW } from '../permissions.js';
 import { toLocalDateKey } from '../../public/utils/date.js';
 import { taskScopeNeedsToday, taskScopeWhere } from '../services/task-scope.js';
 import { visibilityWhere } from '../services/visibility.js';
-import { getUpcomingEvents } from '../services/calendar-events.js';
+import { getUpcomingEvents } from '../services/calendar-event-reader.js';
 import { loadTagsFor, normalizeTags, setTags, tagKey } from '../utils/task-tags.js';
 
 const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));

@@ -13,7 +13,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import { handleMcpRequest, LATEST_PROTOCOL_VERSION } from '../server/mcp/protocol.js';
 import { callTool, TOOL_DEFINITIONS } from '../server/mcp/tools.js';
@@ -30,6 +30,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
   applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );`);
 db.exec(MIGRATIONS_SQL[1]);
+db.exec(MIGRATIONS_SQL[27]);  // legacy calendar attachment body
 db.exec(MIGRATIONS_SQL[2]);   // sync_config for the shared calendar reader
 db.exec(MIGRATIONS_SQL[10]);  // ics_subscriptions used by calendar visibility
 db.exec(`
@@ -353,6 +354,37 @@ test('tools/call list_upcoming_events: bleibt ab heute ohne 90-Tage-Obergrenze',
 
   const events = parseContent(await toolCall('list_upcoming_events', { limit: 100 }));
   assert.ok(events.some((event) => Number(event.id) === Number(id)), 'Termin nach 120 Tagen fehlt');
+});
+
+test('tools/call list_upcoming_events liest keine großen attachment_data-Bodies', async () => {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + 5);
+  const dateKey = date.toISOString().slice(0, 10);
+  const id = db.prepare(`
+    INSERT INTO calendar_events
+      (title, start_datetime, end_datetime, all_day, created_by, external_source,
+       visibility, attachment_data)
+    VALUES ('MCP großer Anhang', ?, ?, 0, ?, 'local', 'all', ?)
+  `).run(`${dateKey}T13:00:00`, `${dateKey}T14:00:00`, uid, 'A'.repeat(1024 * 1024))
+    .lastInsertRowid;
+
+  const attachmentReads = [];
+  db.setAuthorizer((action, table, column) => {
+    if (action === sqliteConstants.SQLITE_READ
+        && table === 'calendar_events' && column === 'attachment_data') {
+      attachmentReads.push(`${table}.${column}`);
+    }
+    return sqliteConstants.SQLITE_OK;
+  });
+  let events;
+  try {
+    events = parseContent(await toolCall('list_upcoming_events', { limit: 100 }));
+  } finally {
+    db.setAuthorizer(null);
+  }
+
+  assert.ok(events.some((event) => Number(event.id) === Number(id)), 'Termin fehlt');
+  assert.equal(attachmentReads.length, 0, `attachment_data wurde gelesen: ${attachmentReads.join(', ')}`);
 });
 
 test('tools/call list_upcoming_events reuses linked occurrence resolution', async () => {

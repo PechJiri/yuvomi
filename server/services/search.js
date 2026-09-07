@@ -8,8 +8,9 @@
 import { visibilityWhere } from './visibility.js';
 
 import {
-  expandRecurringEvents, loadEventExceptions, resolveProjectedEventRows,
+  expandRecurringEvents, loadEventExceptions,
 } from './calendar-events.js';
+import { eventProjectionSql, resolveProjectedEventRows } from './calendar-event-reader.js';
 import { visibilityWhere } from './visibility.js';
 
 export const SEARCH_LIMIT = 5;
@@ -92,7 +93,7 @@ export function emptySearchResults() {
  * represented by their first occurrence in that window, preserving the
  * calendar-search behavior without expanding one FTS hit into many results.
  */
-export function resolveEventSearchRows(database, rows, from = null, to = null) {
+export function resolveEventSearchRows(database, rows, from = null, to = null, options = {}) {
   const recurringIds = rows.filter((row) => row.recurrence_rule).map((row) => row.id);
   const exceptions = loadEventExceptions(database, recurringIds);
   const displayRows = rows.map((row) => {
@@ -105,7 +106,7 @@ export function resolveEventSearchRows(database, rows, from = null, to = null) {
       { includeRecurrenceIdentity: true },
     )[0] || row;
   });
-  return resolveProjectedEventRows(database, displayRows)
+  return resolveProjectedEventRows(database, displayRows, options)
     .sort((a, b) => String(a.start_datetime).localeCompare(String(b.start_datetime)));
 }
 
@@ -162,7 +163,7 @@ export function runSearch(database, q, userId, { hiddenModules = null } = {}) {
   // nicht aus dem Ergebnisfenster verdrängen.
   if (allows('events')) {
     const eventRows = resolveEventSearchRows(database, database.prepare(`
-      SELECT e.*
+      SELECT ${eventProjectionSql(database)}
       FROM search_index s
       JOIN calendar_events e ON e.id = s.entity_id
       WHERE s.entity = 'event' AND s.search_index MATCH @match
@@ -175,10 +176,10 @@ export function runSearch(database, q, userId, { hiddenModules = null } = {}) {
         AND ${visibilityWhere('e', 'event_assignments', 'event_id', '@userId')}
       ORDER BY e.start_datetime ASC
       LIMIT @limit
-    `).all({ match, userId, limit }));
-    // Preserve the compact global-search payload. Full rows are required only
-    // internally for linked resolution; attachment bodies and sync metadata do
-    // not belong in this result bucket.
+    `).all({ match, userId, limit }), null, null, { lightweight: true });
+    // Preserve the compact global-search payload. The resolver-capable
+    // projection supplies linked inheritance without loading attachment bodies
+    // or unrelated sync metadata into this result bucket.
     results.events = eventRows.map((event) => ({
       id: event.id,
       title: event.title,

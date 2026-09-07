@@ -415,6 +415,56 @@ test('ein verschobener linked override zählt am neuen Tag mit Originalidentitä
     && item.date === '2026-08-19'), false, 'original EXDATE slot must stay suppressed');
 });
 
+test('Countdown-Abfragen laden keine großen attachment_data-Bodies', () => {
+  reset();
+  const masterId = seedEvent({
+    title: 'Countdown attachment master',
+    start: '2026-08-18',
+    rule: 'FREQ=DAILY;COUNT=3',
+  });
+  const childId = seedEvent({
+    title: 'Countdown attachment moved',
+    start: '2026-08-22',
+  });
+  const largeAttachment = 'A'.repeat(1024 * 1024);
+  get().prepare(`
+    UPDATE calendar_events
+    SET attachment_data = ?, recurrence_parent_id = ?, recurrence_id = '2026-08-19',
+        overridden_fields = '["title","start_datetime"]'
+    WHERE id = ?
+  `).run(largeAttachment, masterId, childId);
+  get().prepare('UPDATE calendar_events SET attachment_data = ? WHERE id = ?')
+    .run(largeAttachment, masterId);
+  get().prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date)
+    VALUES (?, '2026-08-19')
+  `).run(masterId);
+
+  const database = get();
+  const originalPrepare = database.prepare.bind(database);
+  const statements = [];
+  database.prepare = (sql) => {
+    statements.push(String(sql));
+    return originalPrepare(sql);
+  };
+  let items;
+  try {
+    items = getCountdowns(database, {
+      userId: ALICE,
+      todayKey: '2026-08-17',
+      limit: 20,
+    }).items;
+  } finally {
+    delete database.prepare;
+  }
+
+  assert.ok(items.some((item) => Number(item.id) === Number(childId)), 'linked Countdown fehlt');
+  const calendarReads = statements.filter((sql) => /FROM\s+calendar_events/i.test(sql));
+  assert.ok(calendarReads.length > 0, 'keine Kalenderabfrage aufgezeichnet');
+  assert.ok(calendarReads.every((sql) => !/\be\.\*|\battachment_data\b/i.test(sql)),
+    `Attachment-Body in kompakter Kalenderabfrage: ${calendarReads.join('\n---\n')}`);
+});
+
 test('Sichtbarkeit gilt auch hier: fremde private Einträge zählen für niemanden sonst herunter', () => {
   reset();
   seedEvent({ title: 'Alices Termin', start: '2026-08-20', createdBy: ALICE, visibility: 'private' });

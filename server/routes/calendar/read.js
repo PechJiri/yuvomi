@@ -7,7 +7,9 @@ import { createLogger } from '../../logger.js';
 import express from 'express';
 import * as db from '../../db.js';
 import { DATE_RE } from '../../middleware/validate.js';
-import { expandAndResolveEventRows, getUpcomingEvents } from '../../services/calendar-events.js';
+import {
+  expandAndResolveEventRows, getUpcomingEvents, hydrateEventAttachmentBodies,
+} from '../../services/calendar-event-reader.js';
 import { buildMatchQuery, resolveEventSearchRows } from '../../services/search.js';
 import { visibilityWhere } from '../../services/visibility.js';
 import {
@@ -120,7 +122,10 @@ router.get('/upcoming', (req, res) => {
   try {
     const limit    = Math.min(parseInt(req.query.limit, 10) || 5, 20);
     const database = db.get();
-    const expanded = getUpcomingEvents(database, { userId: getUserId(req), limit })
+    const expanded = hydrateEventAttachmentBodies(
+      database,
+      getUpcomingEvents(database, { userId: getUserId(req), limit }),
+    )
       .map((event) => serializeEvent(event, {
         database,
         actorId: getUserId(req),

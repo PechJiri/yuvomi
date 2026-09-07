@@ -259,15 +259,19 @@ export function resolveOccurrence(database, child, master = null) {
   };
 }
 
-/** Resolves a mixed row set while loading every referenced parent once. */
-export function resolveEventRows(database, rows) {
+/**
+ * Resolves a mixed row set while loading every referenced parent once.
+ * Reader orchestration may supply a projection-aware loader; the authoritative
+ * merge and recurrence model remain here regardless of row shape.
+ */
+export function resolveEventRows(database, rows, { loadMasters = loadOccurrenceMasters } = {}) {
   if (!Array.isArray(rows) || rows.length === 0) return [];
   const parentIds = [...new Set(rows
     .filter(isLinkedOccurrence)
     .map((row) => Number(row.recurrence_parent_id)))];
   if (parentIds.length === 0) return rows;
 
-  const masters = loadOccurrenceMasters(database, parentIds);
+  const masters = loadMasters(database, parentIds);
   const mastersById = new Map(masters.map((master) => [Number(master.id), master]));
   return rows.map((row) => isLinkedOccurrence(row)
     ? resolveOccurrence(database, row, mastersById.get(Number(row.recurrence_parent_id)))

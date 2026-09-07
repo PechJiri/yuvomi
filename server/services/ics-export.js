@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { householdTimeZone, isValidTimeZone } from '../utils/timezone.js';
 import { formatWall, vtimezoneFor } from '../utils/vtimezone.js';
 import { rruleLine } from './recurrence.js';
-import { resolveProjectedEventRows } from './calendar-events.js';
+import { resolveProjectedEventRows } from './calendar-event-reader.js';
 import { baseOccurrenceFor, isLinkedOccurrence } from './calendar-occurrence-overrides.js';
 
 function escapeICSText(s) {

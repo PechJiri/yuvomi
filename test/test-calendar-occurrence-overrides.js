@@ -5,6 +5,7 @@
  * occurrence-route tests will use, rather than importing the app database.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
@@ -27,9 +28,29 @@ import {
   updateSeriesWithOverrides,
 } from '../server/services/calendar-occurrence-overrides.js';
 import {
-  expandAndResolveEventRows, expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
+  expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
 } from '../server/services/calendar-events.js';
+import { expandAndResolveEventRows } from '../server/services/calendar-event-reader.js';
 import { serializeEvent } from '../server/routes/calendar/helpers.js';
+
+test('calendar expansion stays independent from occurrence reader orchestration', () => {
+  const source = readFileSync(
+    new URL('../server/services/calendar-events.js', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(source, /calendar-occurrence-overrides\.js/);
+});
+
+test('calendar expansion, resolution and reader orchestration import concurrently', async () => {
+  const [expansion, resolution, reader] = await Promise.all([
+    import('../server/services/calendar-events.js?reader-boundary-smoke'),
+    import('../server/services/calendar-occurrence-overrides.js?reader-boundary-smoke'),
+    import('../server/services/calendar-event-reader.js?reader-boundary-smoke'),
+  ]);
+  assert.equal(typeof expansion.expandRecurringEvents, 'function');
+  assert.equal(typeof resolution.resolveEventRows, 'function');
+  assert.equal(typeof reader.expandAndResolveEventRows, 'function');
+});
 
 function createDatabase() {
   const database = new DatabaseSync(':memory:');

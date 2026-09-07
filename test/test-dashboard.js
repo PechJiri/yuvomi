@@ -7,7 +7,7 @@
 process.env.DB_PATH = ':memory:';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import * as nodeAssert from 'node:assert/strict';
@@ -21,7 +21,7 @@ import { withoutBlockComments } from './source-text.js';
 // oben, sodass db.js eine echte yuvomi.db im Repo anlegen würde
 // (`test:db-isolation` wacht darüber).
 const { hydrateBirthday, syncBirthdayArtifacts } = await import('../server/services/birthdays.js');
-const { getUpcomingEvents } = await import('../server/services/calendar-events.js');
+const { getUpcomingEvents } = await import('../server/services/calendar-event-reader.js');
 
 register('./test-browser-loader.mjs', import.meta.url);
 
@@ -1277,7 +1277,8 @@ cdb.exec(`
     visibility TEXT NOT NULL DEFAULT 'all',
     recurrence_parent_id INTEGER REFERENCES calendar_events(id) ON DELETE CASCADE,
     recurrence_id TEXT,
-    overridden_fields TEXT
+    overridden_fields TEXT,
+    attachment_data TEXT
   );
   CREATE TABLE event_assignments (
     event_id INTEGER NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
@@ -1495,6 +1496,33 @@ test('getUpcomingEvents resolves a moved linked occurrence with inherited projec
   assert(linked.reminder_owner_id === childId, 'reminder owner must stay on the child');
   assert(!events.some((event) => Number(event.id) === masterId
     && event.recurrence_identity === originalDate), 'the original EXDATE slot must stay suppressed');
+});
+
+test('getUpcomingEvents liest keine großen attachment_data-Bodies', () => {
+  const eventId = insertEvent({
+    title: 'Upcoming large attachment',
+    start_datetime: isoIn(5 * DAY),
+    created_by: cuTheo,
+    attachment_data: 'A'.repeat(1024 * 1024),
+  });
+  const attachmentReads = [];
+  cdb.setAuthorizer((action, table, column) => {
+    if (action === sqliteConstants.SQLITE_READ
+        && table === 'calendar_events' && column === 'attachment_data') {
+      attachmentReads.push(`${table}.${column}`);
+    }
+    return sqliteConstants.SQLITE_OK;
+  });
+  let events;
+  try {
+    events = getUpcomingEvents(cdb, { userId: cuTheo, limit: 100 });
+  } finally {
+    cdb.setAuthorizer(null);
+  }
+
+  assert(events.some((event) => Number(event.id) === Number(eventId)), 'Termin fehlt');
+  assert(attachmentReads.length === 0,
+    `attachment_data wurde gelesen: ${attachmentReads.join(', ')}`);
 });
 
 test('getUpcomingEvents: private ICS-Termine fremder User werden ausgeblendet', () => {
