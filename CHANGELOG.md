@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of reopening the deletion dialog after the delay. Partial server results are reconciled
   even after navigation, and a failed page-exit request restores the optimistic state if the
   browser later revives the page from its cache.
+- **The month view on a phone can now show event titles instead of coloured dots.** Below 640px
+  every entry in a month cell was reduced to a 10px dot - a reliable "something is happening"
+  signal, but one that makes reading the month itself a day-by-day affair. A new "Event titles"
+  switch under Display in the calendar's filter sheet keeps the same chips and shrinks them to
+  10px single-line rows with an ellipsis, up to four per day followed by the existing "+N".
+
+  The dots stay the default: their contrast recipe is measured, and an update should not rebuild
+  every household's month view unasked. The switch is per device (localStorage, next to the
+  schedule display mode), because the question it answers - does a title fit on this screen - is
+  the device's, and the same person reads the same calendar on a monitor in the evening. It
+  appears only below 640px, where there is a second reading to choose from. Colour, contrast and the
+  tap target are unchanged: the titles inherit the tinted surface the wider month view already
+  uses, and a tap anywhere in the cell still opens the day.
 
 - **Deleting a document folder can now either keep its documents unfiled or delete the confirmed
   subtree together with its documents.** The dialog previews exact folder and document counts and
@@ -244,6 +257,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Recurring calendar events are easier to recognise before opening them.** A small, accessible
+  repeat icon now precedes their title in month, week, day and agenda views. For a monthly series
+  on the last day of the month, the form now names both the entered start date and the first actual
+  occurrence; if the start is already a month end, it confirms that date instead. The date is
+  supplied explicitly by the calendar form and follows its active timed or all-day field. Imported
+  rules with additional filters, and rules ending before that first occurrence, keep the generic
+  explanation instead of promising a date that may not exist. Tasks keep their separate due-date
+  explanation, and recurrence storage and sync behaviour are unchanged.
+
 - **Security reports now come with response times, and a security fix ships as a patch release cut from the last tag.** SECURITY.md commits to an acknowledgment within 7 days, a classification within 14 and, for a confirmed high-severity finding, a fix within 30 days; every published advisory gets a CVE and names the reporter and the fixed version. The fix travels on its own branch off the last tag, so an installation updating for it gets nothing else - the interface work waiting on `main` for its Tuesday stays there. The procedure, including the ordinary release, is now public in `docs/RELEASING.md`, so that the "if the maintainer stops" clause in CONTRIBUTING comes with the instructions a fork would need.
 
 - **The container image is signed, and carries its provenance and an SBOM.** Every image the publish workflow builds is signed with cosign under the workflow's own identity, by digest, for both `ghcr.io/ulsklyc/yuvomi` and the legacy `oikos` mirror; a build provenance attestation and an SBOM travel inside the image index. The installation guide shows the one command that checks an image came from a release tag of this repository. Tags published before this carry no signature.
@@ -269,7 +291,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   delete reloads the visible range so an older in-flight response cannot bring the event back.
   Calendar loads now share one ordering guard, including quick out-and-back navigation, and
   concurrent deletes of one series reach the server in user-action order. This covers one event,
-  one recurring occurrence, this-and-following, and whole-series deletion.
+  one recurring occurrence, this-and-following, and whole-series deletion. A failed range load
+  also clears schedule warnings from the previous range instead of leaving stale warnings visible.
 - **Authorized caregivers can now correct a cared-for person's medication log entries** (#999).
   The log row now follows the same explicit care grant as recording, taking and skipping a dose;
   other family members still see it read-only, and scheduled entries keep their existing
