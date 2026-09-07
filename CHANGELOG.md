@@ -62,6 +62,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deleting fourteen rows one at a time to adjust a two-week range. An opt-in dashboard widget shows
   who has a shift or is free today, off by default like the module itself.
 
+- **A shift type can carry its own icon, and the module gained an overtime warning with print
+  support, a personal calendar feed, and opt-in shift-start reminders.** The same icon picker used
+  elsewhere in the app now applies to shift types too, shown on shift-type cards, override rows, the
+  dashboard widget, and the Today list. A configurable weekly-hours target flags overtime with a
+  warning-styled metric card on the Statistics tab and adds a Print action. A personal, read-only ICS
+  feed (Settings → Personal → Feed subscriptions) lets a member subscribe to their own resolved
+  schedule from any calendar app, alongside the existing household calendar and inventory-deadline
+  feeds already there. An opt-in push reminder can fire a configurable number of minutes before a
+  shift starts, tracked by a small rolling 7-day sync rather than a stored row per occurrence, since a
+  pattern-derived shift doesn't otherwise have one to hang a reminder off of.
+
+- **A member can now be on-call alongside a regular shift, and shift planning consolidates into one
+  tab.** "Extra shifts" stack additively next to whatever a pattern or override already resolves for
+  a day - unlike the primary slot, any number can be added per person per day, useful for on-call
+  duty layered on top of a scheduled shift. The former Overrides tab is gone: Patterns, Overrides, and
+  Extra shifts now live together under a renamed "Planning" tab, and one create dialog reaches all
+  three through a single Pattern/Override/Extra picker. A cycle day can also carry more than one shift
+  type now (several class periods in a row, not just one work shift) - the day editor grows add/remove
+  rows instead of a single dropdown.
+
+- **Which shift-type quick-start templates appear is now a household preference.** An admin can hide
+  the Work, School, or University quick-start button from Settings → Modules → Module options, for a
+  household that only ever uses one of them. Hiding a template only removes its button; shift types
+  already created from it stay exactly as they are.
+
+- **Shift types can now carry custom fields, defined once and reused across as many shift types as
+  want them** (e.g. a "Room" field shared by every school-period shift type, or a "Client" field on a
+  work shift type) - deliberately not fixed columns like a timetable app's `room`/`instructor`, which
+  would be nonsensical on a work shift with no room or instructor at all. A new "Custom fields"
+  section on the Schedule module's Shift types tab manages the registry itself (create, rename,
+  delete - any member may add one, only its creator or an admin may change or remove it). Each shift
+  type's own card gains a second, collapsed section for attaching any number of these fields,
+  reordering them (drag or keyboard up/down buttons), and choosing whether each one's value shows on
+  the calendar overlay - hidden entirely for a shift type with none attached, so a household that
+  never touches this stays looking exactly as it did before. A pattern day, an override, or an extra
+  shift using a shift type with attached fields can now record its own value for each one - the
+  cycle-day editor and both the override and extra-shift create/edit modals grow a field-input block
+  right after their shift-type picker, appearing only for a type that actually has fields and rebuilt
+  whenever the picked type changes. Filling in a room for one Monday and a different one the next
+  works exactly like giving them different notes already did. A field only reaches the calendar
+  overlay, the Today card, and the subscribed ICS feed if it's explicitly flagged to show there - a
+  field can be filled in and stay purely informational (visible in the editors, nowhere else) if
+  that's all it's meant to be. "Room: 204" now shows up right alongside the shift name wherever a
+  resolved entry is already summarized.
+
+- **A new Overview tab compares several household members' schedules side by side, one column per
+  person, for a whole week or a single day.** Answers the same request as the "Timetables" proposal
+  (three kids on the same school schedule, one glance instead of three) without a second data model:
+  the picker offers only real household members (never staff or split-expense guests), lanes stay in
+  a fixed left-to-right order regardless of who has entries that day, an overnight shift continues
+  into the next visible day instead of vanishing at midnight, and the household's school/public
+  holidays show as a banner above the grid since a holiday belongs to no one person.
 - **A person can now have an optional name day beside their birthday.** The advanced section of the
   birthday form stores a month and day without inventing a year; leaving it empty keeps the existing
   behaviour. A saved name day becomes its own yearly entry in the birthday calendar layer, uses the
@@ -252,6 +304,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   separately) and Agenda (which reloads a 31-day range) kept showing normally - the mismatch read as
   an inconsistent Sunday. The loaded range now covers the union of the desktop week and the mobile
   window whenever they diverge; Month, Day and Agenda are unaffected.
+- **The calendar's person filter and "assigned to me" filter now also apply to Schedule
+  entries** (#1018). Found by @matthiasNX while testing this module against his own timetable
+  work, which he then withdrew in favour of it. Both filters already narrowed events and tasks
+  to the chosen people; Schedule's
+  shifts ignored them and kept showing every household member's entries regardless of who was
+  selected, which read as the filter silently not working for a module that has a single, well-defined
+  owner per entry. Month, week and day views are affected equally, since all three read from the same
+  function.
 
 - **A same-version deployment now invalidates the installed PWA shell.** The served service worker
   receives a build-specific revision, so acceptance builds and rebuilt images no longer reuse an

@@ -1078,6 +1078,23 @@ test('sameColor vergleicht Hex-Werte ohne Ruecksicht auf Schreibweise', () => {
   assert(sameColor(undefined, undefined) === false, 'undefined auch nicht');
 });
 
+// Additiv zu Muster/Override, nie ein Ersatz (server/routes/schedule-extras.js)
+// - die Ueberlagerung rendert schon ein Chip je Eintrag (kein Dedup-Risiko,
+// siehe die Untersuchung dazu), aber ohne diese Kennzeichnung waere Bereitschaft
+// neben einer regulaeren Schicht optisch nicht von einem zweiten Haupttermin
+// zu unterscheiden.
+test('ein Extra-Eintrag traegt eine eigene Kennzeichnung im Kalender-Chip und in seinem Titel, ein primaerer Eintrag nicht', () => {
+  const { renderScheduleChip, scheduleEntryTitle } = calendarHelpers;
+  const type = { name: 'Fruehschicht', short_code: 'F', color: '#6C3AED', start_time: '06:00', end_time: '14:00' };
+  const primary = { user_id: 1, source: 'override', shift_type: type };
+  const extra = { user_id: 1, source: 'extra', shift_type: type };
+
+  assert(!renderScheduleChip(primary).includes('schedule-entry__extra-badge'), 'ein primaerer Eintrag bekommt kein Extra-Abzeichen');
+  assert(renderScheduleChip(extra).includes('schedule-entry__extra-badge'), 'ein Extra bekommt sein Abzeichen im Chip');
+  assert(!scheduleEntryTitle(primary).includes('extraBadgeLabel'), 'der Titel eines primaeren Eintrags nennt das Extra-Etikett nicht');
+  assert(scheduleEntryTitle(extra).includes('extraBadgeLabel'), 'der Titel eines Extras nennt es beim Namen, auch ohne sichtbares Abzeichen (Tooltip fuer die enge Monatszelle)');
+});
+
 // --------------------------------------------------------
 // nextOccurrence: MONTHLY ueber kurze Monate
 //
@@ -1349,6 +1366,45 @@ test('matchesRRuleByday filtert nicht, wo UTC- und Ortsdatum auseinanderfallen',
   assert(matchesRRuleByday('2026-02-01', R) === false, 'ohne Zonenhinweis wird gefiltert');
   assert(matchesRRuleByday('2026-02-01', R, { utcDiffersFromLocal: true }) === true,
     'mit Zonenhinweis nicht - lieber ein Vorkommen zu viel als eines lautlos verloren');
+});
+
+test('scheduleEntriesOnDay() respektiert den Personenfilter und den "Mir zugewiesen"-Filter wie Termine/Aufgaben (#1018)', () => {
+  const { scheduleEntriesOnDay, state } = calendarHelpers;
+  const savedEntries = state.scheduleEntries;
+  const savedLayer = state.layerSchedule;
+  const savedPeople = state.people;
+  const savedAssignedToMe = state.assignedToMe;
+  const savedCurrentUserId = state.currentUserId;
+  try {
+    state.layerSchedule = true;
+    state.scheduleEntries = [
+      { date_key: '2026-09-10', shift_type: { name: 'Fruehschicht' }, user_id: 1 },
+      { date_key: '2026-09-10', shift_type: { name: 'Spaetschicht' }, user_id: 2 },
+    ];
+
+    state.people = new Set();
+    state.assignedToMe = false;
+    assert(scheduleEntriesOnDay('2026-09-10').length === 2,
+      'ohne aktiven Filter zeigt der Kalender beide Personen');
+
+    state.people = new Set([1]);
+    assert(scheduleEntriesOnDay('2026-09-10').length === 1
+      && scheduleEntriesOnDay('2026-09-10')[0].user_id === 1,
+      'Personenfilter auf Person 1 muss Person 2s Schicht ausblenden - vorher zeigte der Schichtplan trotz aktivem Filter alle Personen');
+
+    state.people = new Set();
+    state.assignedToMe = true;
+    state.currentUserId = 2;
+    assert(scheduleEntriesOnDay('2026-09-10').length === 1
+      && scheduleEntriesOnDay('2026-09-10')[0].user_id === 2,
+      '"Mir zugewiesen" muss auch fuer den Schichtplan gelten, nicht nur fuer Termine/Aufgaben');
+  } finally {
+    state.scheduleEntries = savedEntries;
+    state.layerSchedule = savedLayer;
+    state.people = savedPeople;
+    state.assignedToMe = savedAssignedToMe;
+    state.currentUserId = savedCurrentUserId;
+  }
 });
 
 test('getWeekRange: Desktop bleibt beim reinen 7-Tage-Raster (#1006)', () => {
