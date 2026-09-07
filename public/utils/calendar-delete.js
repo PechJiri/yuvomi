@@ -206,7 +206,7 @@ export function scheduleCalendarDeleteWithUndo({
   render,
 }) {
   const transition = beginOptimisticCalendarDelete(state, deleteScope);
-  const write = reserveSeriesWrite(state, deleteScope.eventId);
+  const write = reserveSeriesWrite(state, deleteScope.seriesId ?? deleteScope.eventId);
   render();
   schedule({
     message,

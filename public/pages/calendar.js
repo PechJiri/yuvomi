@@ -15,8 +15,15 @@ import { esc, fmtLocation } from '/utils/html.js';
 import { shiftEndDateKey, isEndBeforeStart, weekStartIndex, weekdayOrder,
          monthPeriodKeys, startOfLocalWeekKey, addLocalDays, defaultDateInPeriod,
          isWeekendKey } from '/utils/date.js';
-import { truncateRuleBefore, shiftSeriesStart, shiftEndForStart, followingMeansWholeSeries,
-         isLocalRecurringSeries, isExternalRecurringSeries } from '/utils/recurrence-scope.js';
+import {
+  calendarOccurrenceDeleteTarget,
+  calendarOccurrenceMutationTarget,
+  isExternalRecurringSeries,
+  isLocalRecurringSeries,
+  requestCalendarOccurrenceMutation,
+  shiftEndForStart,
+  shiftSeriesStart,
+} from '/utils/recurrence-scope.js';
 import { getReadableTextColor } from '/utils/color.js';
 import { resolveEventColor } from '/utils/event-color.js';
 import { refresh as refreshReminders } from '/reminders.js';
@@ -3353,6 +3360,9 @@ export const __test = {
   eventIconName,
   eventIconHtml,
   sameColor,
+  canonicalReminderOffsets,
+  reminderOffsetFromEvent,
+  reminderOwnerId,
   EVENT_COLORS,
   renderScheduleChip,
   scheduleEntryTitle,
@@ -3548,7 +3558,7 @@ async function openEventDetail(ev, anchor = null) {
   // stumm. Jetzt läuft der Aufruf neben dem Öffnen her und die Zeile kommt
   // nach. Die Sync-Ziele braucht nur das Formular, die lädt erst dessen mount().
   let reminders = [];
-  const remindersReady = loadReminderForEvent(ev.id).then((r) => { reminders = r; });
+  const remindersReady = loadReminderForEvent(reminderOwnerId(ev)).then((r) => { reminders = r; });
 
   const actions = [{
     id: 'detail-delete',
@@ -3636,6 +3646,10 @@ async function loadReminderForEvent(eventId) {
   }
 }
 
+function reminderOwnerId(event) {
+  return Number(event?.reminder_owner_id ?? event?.id);
+}
+
 // Obergrenze für mehrere Erinnerungen je Termin — muss mit dem Server-Cap
 // (MAX_REMINDERS_PER_ENTITY in server/routes/reminders.js) übereinstimmen.
 const MAX_CALENDAR_REMINDERS = 5;
@@ -3653,9 +3667,10 @@ const REMINDER_OFFSETS = () => [
 ];
 
 function reminderOffsetFromEvent(event, reminder) {
-  if (!reminder || !event?.start_datetime) return '';
+  const anchor = event?.reminder_anchor_start ?? event?.start_datetime;
+  if (!reminder || !anchor) return '';
   const remindMs = parseRemindAtAsUtc(reminder.remind_at).getTime();
-  const startMs  = new Date(reminderStartValue(event.start_datetime)).getTime();
+  const startMs  = new Date(reminderStartValue(anchor)).getTime();
   const diffMin  = Math.round((startMs - remindMs) / 60000);
   const opts = [0, 15, 60, 1440, 2880, 10080, 20160];
   const match = opts.find((o) => o === diffMin);
@@ -3664,9 +3679,10 @@ function reminderOffsetFromEvent(event, reminder) {
 
 function customReminderFromEvent(event, reminder) {
   const fallback = { amount: 1, unit: 'days' };
-  if (!reminder || !event?.start_datetime) return fallback;
+  const anchor = event?.reminder_anchor_start ?? event?.start_datetime;
+  if (!reminder || !anchor) return fallback;
   const diffMin = Math.max(0, Math.round(
-    (new Date(reminderStartValue(event.start_datetime)).getTime() - parseRemindAtAsUtc(reminder.remind_at).getTime()) / 60000
+    (new Date(reminderStartValue(anchor)).getTime() - parseRemindAtAsUtc(reminder.remind_at).getTime()) / 60000
   ));
   if (diffMin % 10080 === 0 && diffMin >= 10080) return { amount: diffMin / 10080, unit: 'weeks' };
   if (diffMin % 1440 === 0 && diffMin >= 1440) return { amount: diffMin / 1440, unit: 'days' };
@@ -3684,6 +3700,38 @@ function customReminderMinutes(amount, unit) {
 
 function reminderStartValue(startDatetime) {
   return startDatetime?.includes('T') ? startDatetime : `${startDatetime}T09:00`;
+}
+
+function canonicalReminderOffsets(rows, enabled = true) {
+  if (!enabled) return [];
+  const offsets = [];
+  for (const row of rows) {
+    if (row.offset == null || row.offset === '') continue;
+    const offset = row.offset === 'custom'
+      ? customReminderMinutes(row.amount, row.unit)
+      : Number(row.offset);
+    if (!Number.isInteger(offset) || offset < 0 || offsets.includes(offset)) continue;
+    offsets.push(offset);
+    if (offsets.length === MAX_CALENDAR_REMINDERS) break;
+  }
+  return offsets;
+}
+
+function reminderOffsetsFromForm(overlay) {
+  const enabled = overlay.querySelector('#modal-reminder-toggle')?.checked === true;
+  const rows = [...(overlay.querySelector('#modal-reminder-rows')
+    ?.querySelectorAll('[data-reminder-row]') ?? [])].map((row) => ({
+    offset: row.querySelector('.js-reminder-offset')?.value,
+    amount: row.querySelector('.js-reminder-custom-amount')?.value,
+    unit: row.querySelector('.js-reminder-custom-unit')?.value,
+  }));
+  return canonicalReminderOffsets(rows, enabled);
+}
+
+function reminderTimesFromOffsets(offsets, anchorStart) {
+  const startMs = new Date(reminderStartValue(anchorStart)).getTime();
+  return offsets.map((offset) =>
+    new Date(startMs - offset * 60000).toISOString().slice(0, 19));
 }
 
 /**
@@ -4522,6 +4570,13 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
     </div>`;
 }
 
+function confirmCalendarOverrideOrphans(count) {
+  return confirmModal(t('calendar.overrideOrphanConfirmTitle', { count }), {
+    detail: t('calendar.overrideOrphanConfirmDetail'),
+    confirmLabel: t('calendar.overrideOrphanConfirmAction'),
+  });
+}
+
 async function saveEvent(overlay, mode, event, existingReminder = null, attachmentState = null) {
   const eventId = event?.id;
   const saveBtn = overlay.querySelector('#modal-save');
@@ -4665,7 +4720,9 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
       body.remove_attachment = true;
     }
 
+    const reminderOffsets = reminderOffsetsFromForm(overlay);
     let savedEventId = eventId;
+    let remindersHandledAtomically = false;
     // Start, an dem die Erinnerungs-Offsets ausgerichtet werden. Für „ganze Serie"
     // wird das auf den (evtl. verschobenen) Master-Start umgestellt (#532).
     let reminderBaseStart = start_datetime;
@@ -4678,81 +4735,74 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
       state.events.push(res.data);
       savedEventId = res.data?.id;
     } else {
-      // Scope-Auswahl greift nur für rein lokale Serien (#532); sonst normaler
-      // Master-Update wie bisher (Einzeltermine, externe Serien).
-      const scope = isLocalRecurringSeries(event)
+      const localRecurring = isLocalRecurringSeries(event);
+      const scope = localRecurring
         ? getRecurringScope(overlay, 'modal-edit')
         : 'series';
-      const occDate = event?.start_datetime?.slice(0, 10);
-      // Am Anfang der Serie wird der Master aktualisiert statt geschnitten -
-      // warum das nicht an `is_recurring_instance` allein haengt, steht bei der
-      // Funktion.
-      const truncated = scope === 'following' && !followingMeansWholeSeries(event)
-        ? truncateRuleBefore(event.recurrence_rule, occDate)
-        : null;
-
-      if (scope === 'this') {
-        // Nur dieses Vorkommen: losgelösten Einzeltermin anlegen + Master-EXDATE.
-        const res = await api.post('/calendar', { ...body, recurrence_rule: null });
-        await api.post(`/calendar/${eventId}/exceptions`, { date: occDate });
+      if (localRecurring && (scope === 'this' || scope === 'following')) {
+        const target = calendarOccurrenceMutationTarget(event, scope);
+        const res = await requestCalendarOccurrenceMutation({
+          api,
+          event,
+          scope,
+          body,
+          reminderOffsets,
+          confirmCount: confirmCalendarOverrideOrphans,
+        });
+        if (!res) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = t('common.save');
+          return;
+        }
         savedEventId = res.data?.id;
-        reloadAfter = true;
-      } else if (truncated) {
-        // Dieser und folgende: Master per UNTIL kürzen, neue Serie ab hier anlegen.
-        // body trägt die (ggf. bearbeitete) recurrence_rule als Fortsetzungsregel.
-        await api.put(`/calendar/${eventId}`, { recurrence_rule: truncated });
-        const res = await api.post('/calendar', body);
-        savedEventId = res.data?.id;
+        remindersHandledAtomically = target.carriesReminderOffsets;
         reloadAfter = true;
       } else {
-        // Ganze Serie (auch „folgende" beim ersten Vorkommen): Master aktualisieren.
-        // Bei lokalen Serien den DTSTART erhalten, indem die im Modal sichtbare
-        // Instanz-Verschiebung auf den Master-Start übertragen wird.
         let seriesBody = body;
-        if (isLocalRecurringSeries(event)) {
-          const master  = (await api.get(`/calendar/${eventId}`)).data;
+        let savePath = `/calendar/${eventId}`;
+        if (localRecurring) {
+          const target = calendarOccurrenceMutationTarget(event, 'series');
+          const master  = (await api.get(target.path)).data;
           const allDay  = !!body.all_day;
           const newStart = shiftSeriesStart(master.start_datetime, event.start_datetime, start_datetime, allDay);
           const newEnd   = shiftEndForStart(newStart, start_datetime, end_datetime, allDay);
           seriesBody = { ...body, start_datetime: newStart, end_datetime: newEnd };
+          savePath = target.path;
           reminderBaseStart = newStart;
           reloadAfter = true;
         }
-        const res = await api.put(`/calendar/${eventId}`, seriesBody);
+        const res = localRecurring
+          ? await requestCalendarOccurrenceMutation({
+              api,
+              event,
+              scope: 'series',
+              body: seriesBody,
+              confirmCount: confirmCalendarOverrideOrphans,
+            })
+          : await api.put(savePath, seriesBody);
+        if (!res) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = t('common.save');
+          return;
+        }
+        savedEventId = res.data?.id;
         const idx = state.events.findIndex((e) => e.id === eventId);
         if (idx !== -1) state.events[idx] = res.data;
       }
     }
 
-    // Erinnerungen speichern oder löschen (mehrere je Termin möglich, #436).
-    if (savedEventId) {
-      const reminderOn = overlay.querySelector('#modal-reminder-toggle')?.checked;
-      const rowsEl     = overlay.querySelector('#modal-reminder-rows');
-      const startMs    = new Date(reminderStartValue(reminderBaseStart)).getTime();
-      let remindAts = [];
-
-      if (reminderOn && rowsEl) {
-        for (const row of rowsEl.querySelectorAll('[data-reminder-row]')) {
-          const offsetVal = row.querySelector('.js-reminder-offset')?.value;
-          if (offsetVal == null || offsetVal === '') continue;
-          const offsetMinutes = offsetVal === 'custom'
-            ? customReminderMinutes(
-                row.querySelector('.js-reminder-custom-amount')?.value,
-                row.querySelector('.js-reminder-custom-unit')?.value
-              )
-            : parseInt(offsetVal, 10);
-          remindAts.push(new Date(startMs - offsetMinutes * 60000).toISOString().slice(0, 19));
-        }
-        remindAts = [...new Set(remindAts)].slice(0, MAX_CALENDAR_REMINDERS);
-      }
-
+    // Einzeltermine und ganze Serien behalten ihren etablierten Reminder-Pfad.
+    // Occurrence- und Split-Endpunkte schreiben die Offsets in derselben
+    // Transaktion wie Ersatzzeile, EXDATE und Reparenting.
+    if (savedEventId && !remindersHandledAtomically) {
+      const remindAts = reminderTimesFromOffsets(reminderOffsets, reminderBaseStart);
       if (remindAts.length) {
         await api.put(`/reminders?entity_type=event&entity_id=${savedEventId}`, { remind_ats: remindAts });
       } else {
         await api.delete(`/reminders?entity_type=event&entity_id=${savedEventId}`).catch(() => {});
       }
-      refreshReminders();
     }
+    if (savedEventId) refreshReminders();
 
     if (reloadAfter) {
       await reloadCalendarEventsOnly();
@@ -4771,15 +4821,23 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
   }
 }
 
-async function deleteEvent(id) {
+async function deleteEvent(event) {
+  const target = event?.series_id
+    ? calendarOccurrenceDeleteTarget(event, 'series')
+    : { method: 'delete', path: `/calendar/${event.id}` };
+  const reminderEntityId = event?.series_id ?? event.id;
   scheduleCalendarDeleteWithUndo({
     state,
-    deleteScope: { eventId: id, scope: 'all' },
+    deleteScope: {
+      eventId: event.id,
+      seriesId: event?.series_id ?? event.id,
+      scope: 'all',
+    },
     message: t('calendar.deletedToast'),
     schedule: scheduleUndoableDelete,
     requestDelete: async ({ keepalive }) => {
-      await api.delete(`/calendar/${id}`, { keepalive });
-      api.delete(`/reminders?entity_type=event&entity_id=${id}`, { keepalive }).catch(() => {});
+      await api.delete(target.path, { keepalive });
+      api.delete(`/reminders?entity_type=event&entity_id=${reminderEntityId}`, { keepalive }).catch(() => {});
       if (!keepalive) refreshReminders();
     },
     isViewActive: () => Boolean(_container?.isConnected),
@@ -4912,15 +4970,15 @@ function confirmExternalSeriesDelete(event) {
 
 async function requestDeleteEvent(event) {
   if (isExternalRecurringSeries(event)) {
-    if (await confirmExternalSeriesDelete(event)) await deleteEvent(event.id);
+    if (await confirmExternalSeriesDelete(event)) await deleteEvent(event);
     return;
   }
   if (!isLocalRecurringSeries(event)) {
-    await deleteEvent(event.id);
+    await deleteEvent(event);
     return;
   }
   const choice = await recurringDeleteChoice(event);
-  if (choice === 'series') await deleteEvent(event.id);
+  if (choice === 'series') await deleteEvent(event);
   else if (choice === 'following') await deleteThisAndFollowing(event);
   else if (choice === 'this') await deleteSingleOccurrence(event);
   // null → abgebrochen, nichts tun
@@ -4966,27 +5024,18 @@ function recurringDeleteChoice(event) {
  * das erste der Serie, verschwindet sie ganz. Optimistisch + Undo.
  */
 async function deleteThisAndFollowing(event) {
-  // Am Anfang der Serie ist "dieser und folgende" die ganze Serie - warum das
-  // nicht an `is_recurring_instance` allein haengt, steht bei der Funktion.
-  if (followingMeansWholeSeries(event)) {
-    await deleteEvent(event.id);
-    return;
-  }
-  const fromKey = event.start_datetime.slice(0, 10);
-  const newRule = truncateRuleBefore(event.recurrence_rule, fromKey);
-  if (!newRule) { await deleteEvent(event.id); return; }
-
+  const target = calendarOccurrenceDeleteTarget(event, 'following');
   scheduleCalendarDeleteWithUndo({
     state,
-    deleteScope: { eventId: event.id, scope: 'following', occurrenceDate: fromKey },
+    deleteScope: {
+      eventId: event.id,
+      seriesId: event.series_id,
+      scope: 'following',
+      occurrenceDate: event.start_datetime.slice(0, 10),
+    },
     message: t('calendar.deletedToast'),
     schedule: scheduleUndoableDelete,
-    requestDelete: async ({ keepalive }) => {
-      await api.put(`/calendar/${event.id}`, { recurrence_rule: newRule }, { keepalive });
-      // The former client-side loop patched recurrence_rule on the remaining
-      // expanded rows. The authoritative range reload below now obtains the
-      // truncated rule from the server instead of guessing that response.
-    },
+    requestDelete: ({ keepalive }) => api.delete(target.path, { keepalive }),
     isViewActive: () => Boolean(_container?.isConnected),
     reloadEvents: reloadCalendarRangeAfterDelete,
     handleError: (err) => window.yuvomi?.showToast(
@@ -5002,15 +5051,18 @@ async function deleteThisAndFollowing(event) {
  * Entfernung und Undo-Toast wie beim regulären Löschen.
  */
 async function deleteSingleOccurrence(event) {
-  const date = event.start_datetime.slice(0, 10);
+  const target = calendarOccurrenceDeleteTarget(event, 'this');
   scheduleCalendarDeleteWithUndo({
     state,
-    deleteScope: { eventId: event.id, scope: 'this', occurrenceDate: date },
+    deleteScope: {
+      eventId: event.id,
+      seriesId: event.series_id,
+      scope: 'this',
+      occurrenceDate: event.start_datetime.slice(0, 10),
+    },
     message: t('calendar.deletedToast'),
     schedule: scheduleUndoableDelete,
-    requestDelete: ({ keepalive }) => (
-      api.post(`/calendar/${event.id}/exceptions`, { date }, { keepalive })
-    ),
+    requestDelete: ({ keepalive }) => api.delete(target.path, { keepalive }),
     isViewActive: () => Boolean(_container?.isConnected),
     reloadEvents: reloadCalendarRangeAfterDelete,
     handleError: (err) => window.yuvomi?.showToast(

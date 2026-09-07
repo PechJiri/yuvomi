@@ -416,20 +416,35 @@ test('calendar page guards the complete range and wires every delete scope', () 
   const whole = functionSource('deleteEvent', 'renderRecurringScopeChooser');
   assert.match(whole, /scheduleCalendarDeleteWithUndo/);
   assert.match(whole, /scope: 'all'/);
-  assert.match(whole, /api\.delete\(`\/calendar\/\$\{id\}`/);
+  assert.match(whole, /calendarOccurrenceDeleteTarget/);
+  assert.match(whole, /api\.delete\(target\.path, \{ keepalive \}\)/);
   assert.match(whole, /reloadEvents: reloadCalendarRangeAfterDelete/);
 
   const following = functionSource('deleteThisAndFollowing', 'deleteSingleOccurrence');
   assert.match(following, /scheduleCalendarDeleteWithUndo/);
   assert.match(following, /scope: 'following'/);
-  assert.match(following, /api\.put\(`\/calendar\/\$\{event\.id\}`/);
+  assert.match(following, /calendarOccurrenceDeleteTarget\(event, 'following'\)/);
+  assert.match(following, /api\.delete\(target\.path, \{ keepalive \}\)/);
   assert.match(following, /reloadEvents: reloadCalendarRangeAfterDelete/);
 
   const single = functionSource('deleteSingleOccurrence');
   assert.match(single, /scheduleCalendarDeleteWithUndo/);
   assert.match(single, /scope: 'this'/);
-  assert.match(single, /api\.post\(`\/calendar\/\$\{event\.id\}\/exceptions`/);
+  assert.match(single, /calendarOccurrenceDeleteTarget\(event, 'this'\)/);
+  assert.match(single, /api\.delete\(target\.path, \{ keepalive \}\)/);
   assert.match(single, /reloadEvents: reloadCalendarRangeAfterDelete/);
+});
+
+test('linked delete keeps the Undo overlay on the displayed row while committing original identity', () => {
+  const following = functionSource('deleteThisAndFollowing', 'deleteSingleOccurrence');
+  assert.match(following, /eventId: event\.id/);
+  assert.match(following, /occurrenceDate: event\.start_datetime\.slice\(0, 10\)/);
+  assert.doesNotMatch(following, /truncateRuleBefore|recurrence_rule:\s*newRule/);
+
+  const single = functionSource('deleteSingleOccurrence');
+  assert.match(single, /eventId: event\.id/);
+  assert.match(single, /occurrenceDate: event\.start_datetime\.slice\(0, 10\)/);
+  assert.doesNotMatch(single, /\/exceptions|\{ date \}/);
 });
 
 test('latest response applier ignores an obsolete request failure', async () => {
@@ -623,6 +638,62 @@ test('following deletes for one series reach the server in initiation order', as
 
   assert.deepEqual(requestOrder, ['June started', 'May started']);
   assert.equal(serverRule, 'until April');
+});
+
+test('linked child and master deletes share series ordering without changing overlay identity', async () => {
+  const state = {
+    events: [
+      {
+        id: 99,
+        series_id: 7,
+        title: 'Moved child',
+        start_datetime: '2027-06-02T18:00:00',
+      },
+      { id: 7, title: 'Later master occurrence', start_datetime: '2027-07-01T18:00:00' },
+    ],
+  };
+  let childScheduled;
+  let masterScheduled;
+  let releaseChild;
+  const requestOrder = [];
+  const common = {
+    state,
+    message: 'Deleted',
+    isViewActive: () => false,
+    reloadEvents: async () => {},
+    handleError: () => {},
+    render: () => {},
+  };
+
+  scheduleCalendarDeleteWithUndo({
+    ...common,
+    deleteScope: {
+      eventId: 99,
+      seriesId: 7,
+      scope: 'this',
+      occurrenceDate: '2027-06-02',
+    },
+    schedule: (options) => { childScheduled = options; },
+    requestDelete: async () => {
+      requestOrder.push('child started');
+      await new Promise((resolve) => { releaseChild = resolve; });
+    },
+  });
+  scheduleCalendarDeleteWithUndo({
+    ...common,
+    deleteScope: { eventId: 7, seriesId: 7, scope: 'all' },
+    schedule: (options) => { masterScheduled = options; },
+    requestDelete: async () => { requestOrder.push('master started'); },
+  });
+
+  assert.deepEqual(state.events, [], 'each overlay still matches its concrete displayed row');
+  const childCommit = childScheduled.commit({ keepalive: false });
+  const masterCommit = masterScheduled.commit({ keepalive: false });
+  await Promise.resolve();
+  assert.deepEqual(requestOrder, ['child started']);
+  releaseChild();
+  await Promise.all([childCommit, masterCommit]);
+  assert.deepEqual(requestOrder, ['child started', 'master started']);
 });
 
 test('Undo releases a reserved series write so the next deletion can commit', async () => {
