@@ -97,6 +97,21 @@ test('the image carries provenance and an SBOM, and is signed by digest under bo
   const permissions = workflow.slice(workflow.indexOf('\npermissions:'), workflow.indexOf('\nenv:'));
   assert.match(permissions, /^\s+id-token: write$/m, 'keyless signing needs the OIDC token');
   assert.match(workflow, /uses: sigstore\/cosign-installer@[0-9a-f]{40} # v/);
+
+  // DIE COSIGN-VERSION WIRD GEPINNT, NICHT GEERBT. Ohne `cosign-release` nimmt die
+  // Action ihren Default, und der wandert mit IHRER Hauptversion: Installer v3.10.1
+  // bringt cosign v2.6.1, v4.1.2 braechte v3.0.6 - und cosign 3 legt
+  // Container-Signaturen als OCI-1.1-Referring-Artifact ab statt nach der alten
+  // Tag-Konvention. Ein Dependabot-Bump der Action wuerde dieses Format also still
+  // umstellen: der Build bliebe gruen, brechen wuerde es beim Betreiber, der mit
+  // seiner eigenen cosign-Fassung den Befehl aus installation.md faehrt. Diese
+  // Zusicherung ist der einzige Ort, der den Wechsel zu einer ENTSCHEIDUNG macht.
+  assert.match(
+    workflow,
+    /uses: sigstore\/cosign-installer@[0-9a-f]{40} # v[^\n]*\n\s+with:\n\s+cosign-release: 'v\d+\.\d+\.\d+'/,
+    'der cosign-installer braucht ein explizites cosign-release - sonst erbt die '
+    + 'Signatur ihr Format von der Hauptversion der Action',
+  );
 });
 
 test('the installation guide verifies against this workflow identity', () => {
