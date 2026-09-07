@@ -12,6 +12,7 @@ import { str, MAX_SHORT } from '../middleware/validate.js';
 import { getSupportedLocales, isSupportedLocale, resolveHouseholdLocale } from '../utils/i18n.js';
 import { householdTimeZone, isValidTimeZone } from '../utils/timezone.js';
 import { retitleBirthdayEvents } from '../services/birthdays.js';
+import { DEFAULT_OVERDUE_GRACE_DAYS } from '../services/countdowns.js';
 import { isWidgetId } from '../services/module-capabilities.js';
 // Geteilte isomorphe Util (#620, Allowlist in test/test-layer-boundary.js):
 // dasselbe Kennungsformat, das Event-Modal und Einstellungen verwenden.
@@ -120,6 +121,11 @@ const MAX_CALENDAR_TARGET_LENGTH = 500;
 const DEFAULT_TASK_POINTS = 0;
 const MAX_TASK_POINTS = 10000;
 
+// Obergrenze für die Countdown-Nachfrist in Tagen (#969, haushaltweit). Der
+// Standard selbst kommt aus services/countdowns.js - eine Kopie hier wäre eine
+// zweite Antwort, die von der ersten abweichen könnte (docs/DECISIONS.md #2).
+const MAX_COUNTDOWN_GRACE_DAYS = 90;
+
 // Persistierte Default-Reminder als sortiertes Zahlen-Array lesen (leer = keine).
 function parseDefaultReminders(raw) {
   if (!raw) return [];
@@ -138,6 +144,18 @@ function parseTaskDefaultPoints(raw) {
   const n = Math.trunc(Number(raw));
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_TASK_POINTS;
   return Math.min(n, MAX_TASK_POINTS);
+}
+
+/**
+ * Persistierte Countdown-Nachfrist lesen - anders als parseTaskDefaultPoints
+ * ist hier `0` ein gültiger, bewusst gesetzter Wert ("keine Nachfrist") und
+ * fällt nicht auf den Standard zurück.
+ */
+function parseCountdownGraceDays(raw) {
+  if (raw === null || raw === undefined) return DEFAULT_OVERDUE_GRACE_DAYS;
+  const n = Math.trunc(Number(raw));
+  if (!Number.isInteger(n) || n < 0) return DEFAULT_OVERDUE_GRACE_DAYS;
+  return Math.min(n, MAX_COUNTDOWN_GRACE_DAYS);
 }
 
 const VALID_WEATHER_PROVIDERS = ['open-meteo', 'openweathermap'];
@@ -530,6 +548,7 @@ router.get('/', (req, res) => {
         rewards_require_approval: cfgGet('rewards_require_approval') !== '0',
         tasks_subtasks_expanded: cfgGet('tasks_subtasks_expanded') === '1',
         tasks_default_points: parseTaskDefaultPoints(cfgGet('tasks_default_points')),
+        countdown_grace_days: parseCountdownGraceDays(cfgGet('countdown_grace_days')),
         // Standard-Erinnerungsliste fuer neue Aufgaben (per-user, #695) -
         // dieselbe Form wie calendar_default_target, damit beide Dialoge ihr
         // Ziel gleich benennen.
@@ -567,7 +586,7 @@ router.get('/', (req, res) => {
 
 router.put('/', (req, res) => {
   try {
-    const { visible_meal_types, currency, date_format, time_format, week_start, region, timezone, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, rewards_require_approval, tasks_subtasks_expanded, tasks_default_points, tasks_default_target, schedule_hidden_templates, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
+    const { visible_meal_types, currency, date_format, time_format, week_start, region, timezone, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, rewards_require_approval, tasks_subtasks_expanded, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
 
     if (visible_meal_types !== undefined) {
       if (!Array.isArray(visible_meal_types)) {
@@ -958,6 +977,18 @@ router.put('/', (req, res) => {
       cfgSet('tasks_default_points', String(points));
     }
 
+    // Nachfrist für abgelaufene Countdowns (#969). 0 = keine Nachfrist.
+    if (countdown_grace_days !== undefined) {
+      if (req.authRole !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required.', code: 403 });
+      }
+      const days = Number(countdown_grace_days);
+      if (!Number.isInteger(days) || days < 0 || days > MAX_COUNTDOWN_GRACE_DAYS) {
+        return res.status(400).json({ error: `countdown_grace_days must be an integer between 0 and ${MAX_COUNTDOWN_GRACE_DAYS}`, code: 400 });
+      }
+      cfgSet('countdown_grace_days', String(days));
+    }
+
     // Weather configuration — admin only
     if (
       weather_provider !== undefined ||
@@ -1180,6 +1211,7 @@ router.put('/', (req, res) => {
         rewards_require_approval: cfgGet('rewards_require_approval') !== '0',
         tasks_subtasks_expanded: cfgGet('tasks_subtasks_expanded') === '1',
         tasks_default_points: parseTaskDefaultPoints(cfgGet('tasks_default_points')),
+        countdown_grace_days: parseCountdownGraceDays(cfgGet('countdown_grace_days')),
         // Standard-Erinnerungsliste fuer neue Aufgaben (per-user, #695) -
         // dieselbe Form wie calendar_default_target, damit beide Dialoge ihr
         // Ziel gleich benennen.
