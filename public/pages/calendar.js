@@ -2235,12 +2235,44 @@ function renderScheduleChip(entry, className = 'allday-holiday') {
   const start = type.start_time ? '<small class="schedule-entry__start">' + esc(type.start_time) + '</small>' : '';
   return `<div class="${className} schedule-entry" style="--holi-color:${esc(type.color)}" title="${esc(scheduleEntryTitle(entry))}"><span>${esc(label)}</span>${scheduleEntryExtraBadge(entry)}${start}</div>`;
 }
-function renderScheduleTimeBlock(entry, className) {
+/**
+ * Zeit-Fenster eines Schichtplan-Blocks in Minuten seit Mitternacht - dieselbe
+ * Dauer-Arithmetik wie zuvor inline in renderScheduleTimeBlock() (Mindestlaenge
+ * 30 Min., Ende-vor-Start heisst "geht ueber Mitternacht"), jetzt eigenstaendig,
+ * damit layoutScheduleBlocks() dieselbe Zeitspanne fuer die Ueberlappungs-Logik
+ * kennt wie die Darstellung selbst.
+ */
+function scheduleBlockTimeRange(entry) {
   const type = entry.shift_type;
   const start = timeToMinutes(type.start_time);
   const end = timeToMinutes(type.end_time);
   const duration = Math.max((end > start ? end : 24 * 60) - start, 30);
-  const bounds = className === 'week-event' ? 'left:2px;width:calc(100% - 4px);' : 'left:calc(4px);width:calc(100% - 14px);';
+  return { start, end: start + duration };
+}
+
+/**
+ * Spalten-Position eines gelegten Blocks in CSS umrechnen - dieselbe Formel wie
+ * renderWeekEvent()/renderDayEvent() fuer gewoehnliche Termine, aber mit den
+ * Schichtplan-eigenen Aussenraendern (Woche: 2px beidseitig; Tag: 4px links /
+ * 10px rechts, damit die Stunden-/Jetzt-Linie hinter dem Balken sichtbar bleibt).
+ * Ohne Layout (Fallback) ergibt sich exakt der alte volle Balken (1 von 1 Spalte).
+ */
+function scheduleLaneStyle(layout, gutter) {
+  const cols = layout?.totalCols ?? 1;
+  const idx = layout?.colIndex ?? 0;
+  return {
+    left: `calc(${(idx / cols) * 100}% + ${gutter.left}px)`,
+    width: `calc(${100 / cols}% - ${gutter.total}px)`,
+  };
+}
+
+function renderScheduleTimeBlock(entry, className, layout = null) {
+  const type = entry.shift_type;
+  const start = timeToMinutes(type.start_time);
+  const end = timeToMinutes(type.end_time);
+  const duration = Math.max((end > start ? end : 24 * 60) - start, 30);
+  const gutter = className === 'week-event' ? { left: 2, total: 4 } : { left: 4, total: 14 };
+  const { left, width } = scheduleLaneStyle(layout, gutter);
   // Sichtbar statt nur im title: .schedule-time-block traegt pointer-events:none
   // (es ist eine Hintergrundflaeche, echte Termine malen darueber, siehe die
   // Begruendung an der Klasse in calendar.css) - ein Hover erreicht dieses
@@ -2255,7 +2287,7 @@ function renderScheduleTimeBlock(entry, className) {
   const overlay = scheduleOverlayMeta(entry);
   const time = esc(scheduleTimeLabel(type));
   const timeLine = overlay ? `${time} · ${esc(overlay)}` : time;
-  return `<div class="${className} schedule-time-block" style="top:${hourOffset(start)};height:calc(${hourOffset(duration)} - 4px);${bounds}--ev-color:${esc(type.color)}" title="${esc(scheduleEntryTitle(entry))}"><span class="schedule-time-block__title">${esc(scheduleEntryLabel(entry))}${scheduleEntryExtraBadge(entry)}</span><small class="schedule-time-block__time">${timeLine}</small></div>`;
+  return `<div class="${className} schedule-time-block" style="top:${hourOffset(start)};height:calc(${hourOffset(duration)} - 4px);left:${left};width:${width};--ev-color:${esc(type.color)}" title="${esc(scheduleEntryTitle(entry))}"><span class="schedule-time-block__title">${esc(scheduleEntryLabel(entry))}${scheduleEntryExtraBadge(entry)}</span><small class="schedule-time-block__time">${timeLine}</small></div>`;
 }
 
 // aria-label der Tageszelle: lokalisiertes Datum + (falls vorhanden) Zahl der
@@ -2300,6 +2332,7 @@ function renderWeekView(container) {
   const schedule = days.map((d) => scheduleEntriesOnDay(d));
   const scheduleChips = schedule.map((items) => state.scheduleDisplay === 'compact' ? items : items.filter((entry) => !scheduleHasTimes(entry) || scheduleIsFullDayShift(entry)));
   const scheduleBlocks = schedule.map((items) => state.scheduleDisplay === 'blocks' ? items.filter((entry) => scheduleHasTimes(entry) && !scheduleIsFullDayShift(entry)) : []);
+  const scheduleLayouts = scheduleBlocks.map((items) => layoutScheduleBlocks(items));
 
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
@@ -2351,7 +2384,7 @@ function renderWeekView(container) {
                 ${Array.from({ length: 24 }, (_, h) => `
                   <div class="week-view__hour-line" style="top:${hourOffset(h * 60)};"></div>
                 `).join('')}
-                ${scheduleBlocks[i].map((entry) => renderScheduleTimeBlock(entry, 'week-event')).join('')}
+                ${scheduleBlocks[i].map((entry) => renderScheduleTimeBlock(entry, 'week-event', scheduleLayouts[i].get(entry))).join('')}
                 ${timedEvs[i].map((ev) => renderWeekEvent(ev, layouts[i].get(ev.id))).join('')}
                 ${d === state.today ? `<div class="week-view__now-line" id="now-line" style="top:${hourOffset(nowMinutes())};"></div>` : ''}
               </div>
@@ -2484,35 +2517,49 @@ function timeRangeForEvent(ev) {
   };
 }
 
-function layoutOverlaps(events) {
+// Gruppiert sich ueberlappende Eintraege (per `rangeFn` bestimmt) in Cluster,
+// innerhalb derer sie sich Spalten teilen muessen - unabhaengig von der Frage,
+// WAS ein Eintrag ist (Termin oder Schichtplan-Block). Haelfte-offen: ein
+// Eintrag, der genau dort endet, wo der naechste beginnt, ueberlappt nicht.
+function overlapGroups(items, rangeFn) {
   const groups = [];
-  const sorted = [...events].sort((a, b) => {
-    const aRange = timeRangeForEvent(a);
-    const bRange = timeRangeForEvent(b);
+  const sorted = [...items].sort((a, b) => {
+    const aRange = rangeFn(a);
+    const bRange = rangeFn(b);
     return aRange.start - bRange.start || aRange.end - bRange.end;
   });
 
   let current = [];
   let currentEnd = -1;
-  for (const ev of sorted) {
-    const range = timeRangeForEvent(ev);
+  for (const item of sorted) {
+    const range = rangeFn(item);
     if (!current.length || range.start < currentEnd) {
-      current.push(ev);
+      current.push(item);
       currentEnd = current.length === 1 ? range.end : Math.max(currentEnd, range.end);
     } else {
       groups.push(current);
-      current = [ev];
+      current = [item];
       currentEnd = range.end;
     }
   }
   if (current.length) groups.push(current);
+  return groups;
+}
 
+// Weist jedem Eintrag innerhalb seiner Ueberlappungs-Gruppe eine Spalte zu.
+// `keyFn` bestimmt den Map-Schluessel: Termine haben eine stabile `id`, aber
+// Schichtplan-Eintraege nicht zwingend (Muster-Eintraege tragen nur
+// pattern_id+position) - und zwei Eintraege koennen legitim denselben Schichttyp
+// und dieselbe Zeit an einem Tag teilen (Muster + Extra-Schicht). Deshalb liefert
+// layoutScheduleBlocks() unten das Eintrags-Objekt selbst als Schluessel: jede
+// sichtbare Instanz bekommt ihren eigenen Platz, auch bei inhaltsgleichen Werten.
+function assignLanes(items, rangeFn, keyFn) {
   const layout = new Map();
-  for (const group of groups) {
+  for (const group of overlapGroups(items, rangeFn)) {
     const columns = [];
     const placements = [];
-    for (const ev of group) {
-      const range = timeRangeForEvent(ev);
+    for (const item of group) {
+      const range = rangeFn(item);
       let colIndex = columns.findIndex((end) => end <= range.start);
       if (colIndex === -1) {
         colIndex = columns.length;
@@ -2520,17 +2567,28 @@ function layoutOverlaps(events) {
       } else {
         columns[colIndex] = range.end;
       }
-      placements.push({ ev, colIndex });
+      placements.push({ item, colIndex });
     }
     const totalCols = Math.max(columns.length, 1);
     for (const placement of placements) {
-      layout.set(placement.ev.id, {
+      layout.set(keyFn(placement.item), {
         colIndex: placement.colIndex,
         totalCols,
       });
     }
   }
   return layout;
+}
+
+function layoutOverlaps(events) {
+  return assignLanes(events, timeRangeForEvent, (ev) => ev.id);
+}
+
+// Schichtplan-Gegenstueck zu layoutOverlaps(): gleiche Spalten-Arithmetik, aber
+// ueber scheduleBlockTimeRange() (Zeiten aus shift_type statt aus start/end_datetime)
+// und mit dem Eintrags-Objekt selbst als Schluessel statt einer ID (siehe assignLanes).
+function layoutScheduleBlocks(entries) {
+  return assignLanes(entries, scheduleBlockTimeRange, (entry) => entry);
 }
 
 // --------------------------------------------------------
@@ -2546,6 +2604,7 @@ function renderDayView(container) {
   const schedule = scheduleEntriesOnDay(state.cursor);
   const scheduleChips = state.scheduleDisplay === 'compact' ? schedule : schedule.filter((entry) => !scheduleHasTimes(entry) || scheduleIsFullDayShift(entry));
   const scheduleBlocks = state.scheduleDisplay === 'blocks' ? schedule.filter((entry) => scheduleHasTimes(entry) && !scheduleIsFullDayShift(entry)) : [];
+  const scheduleLayout = layoutScheduleBlocks(scheduleBlocks);
 
   container.replaceChildren();
   // Kein eigener Datums-Header mehr: die Toolbar zeigt exakt dasselbe Datum
@@ -2582,7 +2641,7 @@ function renderDayView(container) {
             ${Array.from({ length: 24 }, (_, h) => `
               <div class="week-view__hour-line" style="top:${hourOffset(h * 60)};"></div>
             `).join('')}
-            ${scheduleBlocks.map((entry) => renderScheduleTimeBlock(entry, 'day-event')).join('')}
+            ${scheduleBlocks.map((entry) => renderScheduleTimeBlock(entry, 'day-event', scheduleLayout.get(entry))).join('')}
             ${timed.map((ev) => renderDayEvent(ev, layout.get(ev.id))).join('')}
             ${dayEvs.length === 0 && schedule.length === 0 ? `<div class="day-view__empty-hint" style="top:calc(${hourOffset(state.cursor === state.today ? nowMinutes() : 9 * 60)} + 16px)">${t('calendar.dayEmptyHint')}</div>` : ''}
           </div>
@@ -3287,6 +3346,12 @@ export const __test = {
   scheduleEntryTitle,
   scheduleEntriesOnDay,
   state,
+  layoutOverlaps,
+  layoutScheduleBlocks,
+  scheduleBlockTimeRange,
+  renderScheduleTimeBlock,
+  renderWeekView,
+  renderDayView,
 };
 
 function renderAgendaEvent(ev, dayStr) {
