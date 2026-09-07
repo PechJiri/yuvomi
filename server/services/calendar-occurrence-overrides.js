@@ -5,6 +5,8 @@
  * every occurrence mutation applies the same ownership and eligibility rules.
  */
 
+import { visibilityWhere } from './visibility.js';
+
 export const OVERRIDE_FIELDS = Object.freeze([
   'title',
   'description',
@@ -116,6 +118,37 @@ function hasGeneratedOwner(database, eventId) {
   return false;
 }
 
+function hasOutlookLink(database, eventId) {
+  if (!hasColumn(database, 'outlook_event_links', 'event_id')) return false;
+  return Boolean(database.prepare(
+    'SELECT 1 FROM outlook_event_links WHERE event_id = ? LIMIT 1'
+  ).get(eventId));
+}
+
+function hasActiveOutlookAutoSyncTarget(database, eventId) {
+  const requiredColumns = [
+    ['outlook_accounts', 'needs_reauth'],
+    ['outlook_accounts', 'auto_sync_calendar_id'],
+    ['outlook_accounts', 'owner_user_id'],
+    ['calendar_events', 'visibility'],
+    ['calendar_events', 'created_by'],
+    ['event_assignments', 'event_id'],
+    ['event_assignments', 'user_id'],
+  ];
+  if (!requiredColumns.every(([table, column]) => hasColumn(database, table, column))) return false;
+
+  return Boolean(database.prepare(`
+    SELECT 1
+    FROM outlook_accounts oa
+    JOIN calendar_events e ON e.id = ? AND e.external_source = 'local'
+    WHERE oa.needs_reauth = 0
+      AND oa.auto_sync_calendar_id IS NOT NULL
+      AND oa.owner_user_id IS NOT NULL
+      AND ${visibilityWhere('e', 'event_assignments', 'event_id', 'oa.owner_user_id')}
+    LIMIT 1
+  `).get(eventId));
+}
+
 /**
  * Determines whether one persisted series may use local occurrence overrides.
  * Classification is evaluated before authorization so callers can report a
@@ -134,7 +167,9 @@ export function isEligibleLocalSeries(database, row, actorId, isAdmin) {
     || row.target_outlook_account_id != null
     || row.target_outlook_calendar_id != null
     || row.recurrence_parent_id != null
-    || hasGeneratedOwner(database, row.id);
+    || hasGeneratedOwner(database, row.id)
+    || hasOutlookLink(database, row.id)
+    || hasActiveOutlookAutoSyncTarget(database, row.id);
 
   if (ineligible) return { eligible: false, reason: 'ineligible_series' };
   if (!isAdmin && row.created_by !== actorId) return { eligible: false, reason: 'not_authorized' };

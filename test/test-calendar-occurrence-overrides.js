@@ -29,6 +29,24 @@ function createDatabase() {
       id INTEGER PRIMARY KEY,
       calendar_event_id INTEGER REFERENCES calendar_events(id) ON DELETE SET NULL
     );
+    CREATE TABLE IF NOT EXISTS event_assignments (
+      event_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      PRIMARY KEY (event_id, user_id)
+    );
+    CREATE TABLE outlook_accounts (
+      id INTEGER PRIMARY KEY,
+      needs_reauth INTEGER NOT NULL DEFAULT 0,
+      auto_sync_calendar_id TEXT,
+      owner_user_id INTEGER
+    );
+    CREATE TABLE outlook_event_links (
+      event_id INTEGER NOT NULL,
+      account_id INTEGER NOT NULL,
+      outlook_calendar_id TEXT NOT NULL,
+      outlook_event_id TEXT NOT NULL,
+      PRIMARY KEY (event_id, account_id)
+    );
   `);
   database.exec(MIGRATIONS_SQL[190]);
   database.prepare(`
@@ -43,11 +61,11 @@ function insertEvent(database, values = {}) {
     INSERT INTO calendar_events (
       title, start_datetime, end_datetime, created_by, recurrence_rule,
       recurrence_parent_id, recurrence_id, overridden_fields, external_source,
-      external_calendar_id
+      external_calendar_id, visibility
     ) VALUES (
       @title, @start_datetime, @end_datetime, @created_by, @recurrence_rule,
       @recurrence_parent_id, @recurrence_id, @overridden_fields, @external_source,
-      @external_calendar_id
+      @external_calendar_id, @visibility
     )
   `).run({
     title: 'Event',
@@ -60,6 +78,7 @@ function insertEvent(database, values = {}) {
     overridden_fields: null,
     external_source: 'local',
     external_calendar_id: null,
+    visibility: 'all',
     ...values,
   }).lastInsertRowid;
 }
@@ -183,4 +202,50 @@ test('local-series eligibility separates authorization from classification', () 
     .run('Generated', '2000-01-01', generatedId, 1);
   const generated = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(generatedId);
   assert.deepEqual(isEligibleLocalSeries(database, generated, 1, true), { eligible: false, reason: 'ineligible_series' });
+});
+
+test('local recurring series with an Outlook push link is ineligible without an explicit target', () => {
+  const database = createDatabase();
+  const eventId = insertSeries(database);
+  const event = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(eventId);
+
+  database.prepare(`
+    INSERT INTO outlook_event_links (event_id, account_id, outlook_calendar_id, outlook_event_id)
+    VALUES (?, ?, ?, ?)
+  `).run(eventId, 77, 'calendar-77', 'outlook-event-77');
+
+  assert.deepEqual(isEligibleLocalSeries(database, event, 1, true), {
+    eligible: false,
+    reason: 'ineligible_series',
+  });
+});
+
+test('Outlook auto-sync eligibility follows visible event ownership and assignments', () => {
+  const database = createDatabase();
+  database.prepare(`
+    INSERT INTO outlook_accounts (id, needs_reauth, auto_sync_calendar_id, owner_user_id)
+    VALUES (20, 0, 'family-calendar', 2)
+  `).run();
+
+  const publicEvent = database.prepare('SELECT * FROM calendar_events WHERE id = ?')
+    .get(insertSeries(database));
+  assert.deepEqual(isEligibleLocalSeries(database, publicEvent, 1, true), {
+    eligible: false,
+    reason: 'ineligible_series',
+  });
+
+  const assignedId = insertSeries(database, { visibility: 'assignees' });
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(assignedId, 2);
+  const assignedEvent = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(assignedId);
+  assert.deepEqual(isEligibleLocalSeries(database, assignedEvent, 1, true), {
+    eligible: false,
+    reason: 'ineligible_series',
+  });
+
+  const privateEvent = database.prepare('SELECT * FROM calendar_events WHERE id = ?')
+    .get(insertSeries(database, { visibility: 'private' }));
+  assert.deepEqual(isEligibleLocalSeries(database, privateEvent, 1, true), { eligible: true, reason: null });
+
+  database.prepare('UPDATE outlook_accounts SET needs_reauth = 1 WHERE id = 20').run();
+  assert.deepEqual(isEligibleLocalSeries(database, publicEvent, 1, true), { eligible: true, reason: null });
 });
