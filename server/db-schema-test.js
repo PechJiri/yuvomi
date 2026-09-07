@@ -1112,6 +1112,21 @@ const MIGRATIONS_SQL = {
         WHERE id = NEW.id;
       END;
     `,
+
+  // SQL for migration v190 (mirrored from db.js MIGRATIONS):
+  // Linked replacements keep their original recurrence slot identity.
+  190: `
+    ALTER TABLE calendar_events ADD COLUMN recurrence_parent_id INTEGER
+      REFERENCES calendar_events(id) ON DELETE CASCADE;
+    ALTER TABLE calendar_events ADD COLUMN recurrence_id TEXT;
+    ALTER TABLE calendar_events ADD COLUMN overridden_fields TEXT;
+    CREATE UNIQUE INDEX idx_calendar_occurrence_override_slot
+      ON calendar_events(recurrence_parent_id, recurrence_id)
+      WHERE recurrence_parent_id IS NOT NULL;
+    CREATE INDEX idx_calendar_occurrence_override_range
+      ON calendar_events(recurrence_parent_id, start_datetime)
+      WHERE recurrence_parent_id IS NOT NULL;
+  `,
 };
 
 export { MIGRATIONS_SQL };

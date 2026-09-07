@@ -7487,6 +7487,22 @@ const MIGRATIONS = [
       CREATE INDEX idx_schedule_custom_field_values_entry ON schedule_custom_field_values(entry_type, entry_id);
     `,
   },
+  {
+    version: 190,
+    description: 'Calendar: linked overrides for local recurring occurrences (#975)',
+    up: `
+      ALTER TABLE calendar_events ADD COLUMN recurrence_parent_id INTEGER
+        REFERENCES calendar_events(id) ON DELETE CASCADE;
+      ALTER TABLE calendar_events ADD COLUMN recurrence_id TEXT;
+      ALTER TABLE calendar_events ADD COLUMN overridden_fields TEXT;
+      CREATE UNIQUE INDEX idx_calendar_occurrence_override_slot
+        ON calendar_events(recurrence_parent_id, recurrence_id)
+        WHERE recurrence_parent_id IS NOT NULL;
+      CREATE INDEX idx_calendar_occurrence_override_range
+        ON calendar_events(recurrence_parent_id, start_datetime)
+        WHERE recurrence_parent_id IS NOT NULL;
+    `,
+  },
 ];
 
 /**
