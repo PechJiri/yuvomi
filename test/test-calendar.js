@@ -1676,6 +1676,98 @@ test('renderScheduleTimeBlock: mit berechnetem Layout bekommt jeder Block seine 
 });
 
 // --------------------------------------------------------
+// Schichtplan-Bloecke ueber die echten Ansichts-Aufrufer (#1045 Review-Runde 1)
+//
+// Die layoutScheduleBlocks()/renderScheduleTimeBlock()-Tests oben beweisen nur,
+// dass der Renderer ein mitgegebenes Layout korrekt umsetzt - jeder von ihnen
+// holt sich das Layout selbst und reicht es direkt weiter. Keiner prueft, dass
+// renderWeekView()/renderDayView() dieses Layout ueberhaupt BERECHNEN und an
+// den Renderer WEITERREICHEN. Faellt genau diese Verbindung weg (z.B.
+// scheduleLayouts[i].get(entry) durch null ersetzt), bleiben alle bisherigen
+// Tests gruen - der urspruengliche Bug (#1043) waere zurueck, obwohl die Suite
+// nichts davon meldet. Diese zwei Tests rufen deshalb die echten Aufrufer auf
+// und lesen die erzeugten left-Werte aus dem gerenderten HTML.
+// --------------------------------------------------------
+
+function fakeDomElement() {
+  return {
+    addEventListener: () => {},
+    getBoundingClientRect: () => ({ height: 1440 }),
+    scrollTop: 0,
+  };
+}
+
+function fakeContainer() {
+  let html = '';
+  return {
+    replaceChildren: () => { html = ''; },
+    insertAdjacentHTML: (_position, chunk) => { html += chunk; },
+    querySelector: () => fakeDomElement(),
+    get html() { return html; },
+  };
+}
+
+function scheduleBlockLefts(html) {
+  return [...html.matchAll(/left:calc\((\d+(?:\.\d+)?)%/g)].map((m) => m[1]);
+}
+
+function withOverlappingScheduleState(extra, fn) {
+  const hadWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const previousWindow = globalThis.window;
+  const previousState = { ...calendarHelpers.state };
+  try {
+    globalThis.window = { matchMedia: () => ({ matches: false }) };
+    Object.assign(calendarHelpers.state, {
+      cursor: '2026-09-07',
+      today: '2026-09-07',
+      weekStart: 1,
+      scheduleDisplay: 'blocks',
+      layerSchedule: true,
+      assignedToMe: false,
+      people: new Set(),
+      events: [],
+      tasks: [],
+      holidays: [],
+      users: [],
+      scheduleEntries: [
+        scheduleEntry({ start: '08:00', end: '12:00', name: 'Schultag Basti' }),
+        scheduleEntry({ start: '08:00', end: '12:45', name: 'Schultag Emma' }),
+      ].map((entry) => ({ ...entry, date_key: '2026-09-07' })),
+      ...extra,
+    });
+    fn();
+  } finally {
+    Object.assign(calendarHelpers.state, previousState);
+    if (hadWindow) globalThis.window = previousWindow;
+    else delete globalThis.window;
+  }
+}
+
+test('renderWeekView: zwei ueberlappende Schichten am selben Tag bekommen unterschiedliche left-Werte (#1045)', () => {
+  withOverlappingScheduleState({}, () => {
+    const container = fakeContainer();
+    calendarHelpers.renderWeekView(container);
+    const lefts = scheduleBlockLefts(container.html);
+    assert(lefts.length === 2, `die Wochenansicht muss beide ueberlappenden Bloecke rendern: ${lefts.length}`);
+    assert(lefts[0] !== lefts[1],
+      `renderWeekView() muss das berechnete Layout an renderScheduleTimeBlock() weiterreichen, sonst liegen `
+      + `beide Bloecke deckungsgleich uebereinander (#1043): ${lefts}`);
+  });
+});
+
+test('renderDayView: zwei ueberlappende Schichten am selben Tag bekommen unterschiedliche left-Werte (#1045)', () => {
+  withOverlappingScheduleState({}, () => {
+    const container = fakeContainer();
+    calendarHelpers.renderDayView(container);
+    const lefts = scheduleBlockLefts(container.html);
+    assert(lefts.length === 2, `die Tagesansicht muss beide ueberlappenden Bloecke rendern: ${lefts.length}`);
+    assert(lefts[0] !== lefts[1],
+      `renderDayView() muss das berechnete Layout an renderScheduleTimeBlock() weiterreichen, sonst liegen `
+      + `beide Bloecke deckungsgleich uebereinander (#1043): ${lefts}`);
+  });
+});
+
+// --------------------------------------------------------
 // Ergebnis
 // --------------------------------------------------------
 console.log(`\n[Calendar-Test] Ergebnis: ${passed} bestanden, ${failed} fehlgeschlagen\n`);
