@@ -2724,7 +2724,10 @@ own data as a link" control in the one place a person already goes to manage the
 
 Medication reminders reuse the existing push/notification-channel layer (no dedicated reminder
 table): `server/services/medication-scheduler.js` turns due schedule slots into `pending` logs and
-fans out via Web Push and the household channels (Gotify, ntfy, webhook, email). Medications (`name`, `dosage_text`) and activities
+fans out via Web Push and the household channels (Gotify, ntfy, webhook, email) to the person the
+medication belongs to and to every caregiver granted for them in `health_care_grants` (D#1041);
+a caregiver's copy carries the person's display name in front of the medication, the person's
+own copy does not. Medications (`name`, `dosage_text`) and activities
 (`type`, `note`) are indexed in the FTS5 `search_index` (migration 66) with the same
 owner-or-`family` visibility scoping applied at query time.
 

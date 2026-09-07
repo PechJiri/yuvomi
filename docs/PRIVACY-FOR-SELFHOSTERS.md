@@ -353,6 +353,12 @@ Konfiguration so, dass du auf einen EU-Provider umstellen könntest.
   tragen den Medikamentennamen im (verschlüsselten) Inhalt. Aus den Metadaten
   allein ist das nicht erkennbar; wer auch das Metadaten-Muster vermeiden
   will, lässt Push für Gesundheits-Erinnerungen aus und nutzt die In-App-Anzeige.
+- **Betreuung:** Hat ein Admin unter Einstellungen → Familie eine Person als
+  Betreuer einer anderen eingetragen (`health_care_grants`), erhält der
+  Betreuer dieselbe Medikamenten-Erinnerung auf seinen Geräten und Kanälen,
+  mit dem Namen der betreuten Person davor. Die Erinnerung folgt damit
+  ausschließlich dieser ausdrücklichen Freigabe, nie einer Familienrolle;
+  ohne Eintrag bleibt sie bei der betroffenen Person.
 - **Haushalts-Kanäle (Gotify, ntfy …):** Diese senden Erinnerungs-Inhalte —
   auch Medikamenten-Erinnerungen — im **Klartext** an den konfigurierten
   Dienst. Bei einem selbst gehosteten Gotify/ntfy im eigenen Netz bleibt alles

@@ -4,6 +4,8 @@
  *        stellt eine Erinnerung über den BESTEHENDEN Push-/Notification-Channel-
  *        Layer zu (Web Push + Gotify/ntfy) — analog zu push-scheduler.js /
  *        notifications.js, ohne Delivery-Logik zu duplizieren.
+ *        Empfänger sind die betroffene Person UND jede Person, die ein Admin
+ *        als Betreuer eingetragen hat (health_care_grants, #584, D#1041).
  * Abhängigkeiten: server/db.js, push.js, notification-channels.js, notifications.js.
  */
 import { createLogger } from '../logger.js';
@@ -60,7 +62,7 @@ async function withTimeout(fn, timeoutMs = PROVIDER_TIMEOUT_MS) {
 /**
  * Verarbeitet fällige Medikamenten-Dosen: legt fehlende pending-Logs an und
  * fan-outet je neuer Dosis eine Erinnerung an Web Push + aktive Kanäle des
- * Medikament-Eigentümers.
+ * Medikament-Eigentümers und seiner Betreuer.
  *
  * @param {Object} [opts]
  * @param {import('better-sqlite3-multiple-ciphers').Database} [opts.database]
@@ -85,11 +87,21 @@ export async function processDueMedications({
   const nowTime = localTime(now);
 
   const schedules = activeDb.prepare(`
-    SELECT s.*, m.user_id AS owner_id, m.name AS med_name
+    SELECT s.*, m.user_id AS owner_id, m.name AS med_name, u.display_name AS owner_name
     FROM medication_schedules s
     JOIN medications m ON m.id = s.medication_id
+    JOIN users u ON u.id = m.user_id
     WHERE s.active = 1 AND m.active = 1
   `).all();
+
+  // Betreuer der betroffenen Person (#584). Das Recht wird je Person von einem
+  // Admin vergeben und ist nie aus einer Rolle abgeleitet - deshalb wird es hier
+  // genauso nachgeschlagen wie beim Eintragen und nicht aus "ist Elternteil"
+  // geraten. Bis D#1041 fragte der Scheduler die Tabelle gar nicht: ein Kind
+  // ohne Geraet bekam die Erinnerung, die Eltern nicht.
+  const caregiversOf = activeDb.prepare(
+    'SELECT caregiver_id FROM health_care_grants WHERE subject_id = ? ORDER BY caregiver_id'
+  );
 
   const findLog = activeDb.prepare(
     'SELECT id FROM medication_logs WHERE medication_id = ? AND schedule_id = ? AND scheduled_at = ?'
@@ -109,7 +121,10 @@ export async function processDueMedications({
     if (findLog.get(s.medication_id, s.id, scheduledAt)) continue; // schon erzeugt
     insertLog.run(s.medication_id, s.id, scheduledAt, 'pending', s.dose_qty ?? null);
     counters.created += 1;
-    newlyDue.push({ ownerId: s.owner_id, medName: s.med_name, medicationId: s.medication_id, scheduledAt });
+    newlyDue.push({
+      ownerId: s.owner_id, ownerName: s.owner_name, medName: s.med_name,
+      medicationId: s.medication_id, scheduledAt,
+    });
   }
 
   // Herkunft im Titel statt des App-Namens - Begruendung bei REMINDER_TITLE_KEYS
@@ -118,33 +133,49 @@ export async function processDueMedications({
   const originTitle = translate(resolveHouseholdLocale(activeDb), 'health.tabs.meds');
 
   for (const dose of newlyDue) {
-    const payload = {
-      title: originTitle || APP_NAME,
-      body: dose.medName || FALLBACK_BODY,
-      url: '/health/meds',
-      tag: `medication-${dose.medicationId}-${dose.scheduledAt}`,
-      priority: 'default',
-    };
+    const medBody = dose.medName || FALLBACK_BODY;
     counters.notified += 1;
 
-    try {
-      const sent = await pushService.sendPushToUser(dose.ownerId, payload);
-      if (sent > 0) counters.sent += 1;
-    } catch (err) {
-      counters.failed += 1;
-      log.error(`Web Push failed for medication ${dose.medicationId}:`, err?.message || err);
+    // Die betroffene Person bekommt ihre Erinnerung wie bisher; jeder Betreuer
+    // dieselbe mit vorangestelltem Namen ("Anna: Ibuprofen"). Der Name steht
+    // nur beim Betreuer: er sagt, UM WEN es geht, und das ist auf dem eigenen
+    // Geraet keine Frage. Eine Person ohne Geraet kostet nichts (kein Abo, kein
+    // Kanal), eine mit Geraet bekommt weiterhin ihre eigene Erinnerung - so
+    // gilt dieselbe Regel fuer das Fuenfjaehrige und das Vierzehnjaehrige.
+    const recipients = [{ userId: dose.ownerId, body: medBody }];
+    for (const { caregiver_id: caregiverId } of caregiversOf.all(dose.ownerId)) {
+      if (caregiverId === dose.ownerId) continue;
+      recipients.push({ userId: caregiverId, body: `${dose.ownerName}: ${medBody}` });
     }
 
-    const channels = store.listEnabledChannelsForUser(dose.ownerId);
-    for (const channel of channels) {
-      const provider = providers[channel.provider];
-      if (!provider) continue;
+    for (const recipient of recipients) {
+      const payload = {
+        title: originTitle || APP_NAME,
+        body: recipient.body,
+        url: '/health/meds',
+        tag: `medication-${dose.medicationId}-${dose.scheduledAt}`,
+        priority: 'default',
+      };
+
       try {
-        await withTimeout((signal) => provider.send({ channel, payload, fetchImpl, signal }));
-        counters.sent += 1;
+        const sent = await pushService.sendPushToUser(recipient.userId, payload);
+        if (sent > 0) counters.sent += 1;
       } catch (err) {
         counters.failed += 1;
-        log.error(`Channel delivery failed for medication ${dose.medicationId}:`, err?.message || err);
+        log.error(`Web Push failed for medication ${dose.medicationId}:`, err?.message || err);
+      }
+
+      const channels = store.listEnabledChannelsForUser(recipient.userId);
+      for (const channel of channels) {
+        const provider = providers[channel.provider];
+        if (!provider) continue;
+        try {
+          await withTimeout((signal) => provider.send({ channel, payload, fetchImpl, signal }));
+          counters.sent += 1;
+        } catch (err) {
+          counters.failed += 1;
+          log.error(`Channel delivery failed for medication ${dose.medicationId}:`, err?.message || err);
+        }
       }
     }
   }

@@ -164,3 +164,82 @@ test('kein Push-Abo: Fan-out zählt nur zugestellte Kanäle', async () => {
   assert.equal(res.notified, 1);
   assert.equal(res.sent, 1); // nur der Gotify-Kanal
 });
+
+// Betreuung (#584) bestimmt den Empfaengerkreis (D#1041): die betroffene Person
+// und jeder eingetragene Betreuer, letzterer mit dem Namen der Person im Rumpf.
+function grantCare(db, subjectId, caregiverId) {
+  db.prepare('INSERT INTO health_care_grants (subject_id, caregiver_id) VALUES (?, ?)').run(subjectId, caregiverId);
+}
+
+function makeRecordingChannelStore() {
+  const asked = [];
+  return {
+    asked,
+    listEnabledChannelsForUser(userId) {
+      asked.push(userId);
+      return [{ id: 100 + userId, provider: 'gotify', name: `Kanal ${userId}` }];
+    },
+  };
+}
+
+test('Betreuer bekommen die Erinnerung mit dem Namen der betreuten Person, die Person selbst ohne', async () => {
+  const db = buildTestDb();
+  const child = seedUser(db, 'anna');
+  const parent = seedUser(db, 'dominik');
+  grantCare(db, child, parent);
+  const med = seedMed(db, child, { name: 'Ibuprofen' });
+  seedSchedule(db, med, { time: '08:00' });
+  const m = makeMocks();
+  m.channelStore = makeRecordingChannelStore();
+
+  const res = await processDueMedications({ database: db, now: MONDAY_0900, ...m });
+
+  assert.equal(res.created, 1);
+  assert.equal(res.notified, 1, 'notified zaehlt Dosen, nicht Empfaenger');
+  assert.equal(res.sent, 4, 'zwei Empfaenger x (Web Push + ein Kanal)');
+
+  assert.deepEqual(
+    m.pushed.map((p) => [p.userId, p.payload.body]),
+    [[child, 'Ibuprofen'], [parent, 'anna: Ibuprofen']],
+  );
+  // Titel, Ziel und Tag sind fuer beide gleich - nur der Rumpf traegt den Namen.
+  assert.equal(m.pushed[0].payload.title, m.pushed[1].payload.title);
+  assert.equal(m.pushed[1].payload.url, '/health/meds');
+  assert.equal(m.pushed[0].payload.tag, m.pushed[1].payload.tag);
+
+  assert.deepEqual(m.channelStore.asked, [child, parent], 'Kanaele je Empfaenger, nicht nur des Eigentuemers');
+  assert.deepEqual(
+    m.channelSent.map((c) => [c.channel.id, c.payload.body]),
+    [[100 + child, 'Ibuprofen'], [100 + parent, 'anna: Ibuprofen']],
+  );
+});
+
+test('eine Betreuung fuer eine ANDERE Person loest keine Erinnerung aus', async () => {
+  const db = buildTestDb();
+  const anna = seedUser(db, 'anna');
+  const ben = seedUser(db, 'ben');
+  const parent = seedUser(db, 'dominik');
+  grantCare(db, ben, parent); // Betreuung gilt Ben, faellig ist Annas Medikament
+  const med = seedMed(db, anna);
+  seedSchedule(db, med, { time: '08:00' });
+  const m = makeMocks();
+
+  await processDueMedications({ database: db, now: MONDAY_0900, ...m });
+
+  assert.deepEqual(m.pushed.map((p) => p.userId), [anna]);
+});
+
+test('ohne Medikamentennamen traegt die Betreuer-Erinnerung Name und Fallback-Rumpf', async () => {
+  const db = buildTestDb();
+  const child = seedUser(db, 'anna');
+  const parent = seedUser(db, 'dominik');
+  grantCare(db, child, parent);
+  const med = seedMed(db, child, { name: '' });
+  seedSchedule(db, med, { time: '08:00' });
+  const m = makeMocks();
+
+  await processDueMedications({ database: db, now: MONDAY_0900, ...m });
+
+  assert.equal(m.pushed[0].payload.body, 'Medication reminder');
+  assert.equal(m.pushed[1].payload.body, 'anna: Medication reminder');
+});
