@@ -11,6 +11,7 @@ import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import {
   baseOccurrenceFor,
   CalendarOccurrenceError,
+  deleteOccurrence,
   isEligibleLocalSeries,
   isLinkedOccurrence,
   loadLinkedOverrides,
@@ -20,6 +21,10 @@ import {
   resolveEventRows,
   resolveOccurrence,
   seriesIdFor,
+  splitSeries,
+  truncateSeries,
+  upsertOccurrenceOverride,
+  updateSeriesWithOverrides,
 } from '../server/services/calendar-occurrence-overrides.js';
 import { expandRecurringEvents } from '../server/services/calendar-events.js';
 import { serializeEvent } from '../server/routes/calendar/helpers.js';
@@ -55,6 +60,32 @@ function createDatabase() {
     );
   `);
   database.exec(MIGRATIONS_SQL[190]);
+  database.exec(`
+    ALTER TABLE calendar_events ADD COLUMN countdown INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE calendar_events ADD COLUMN attachment_name TEXT;
+    ALTER TABLE calendar_events ADD COLUMN attachment_mime TEXT;
+    ALTER TABLE calendar_events ADD COLUMN attachment_size INTEGER;
+    ALTER TABLE calendar_events ADD COLUMN attachment_data TEXT;
+    ALTER TABLE calendar_events ADD COLUMN attachment_document_id INTEGER;
+    ALTER TABLE calendar_events ADD COLUMN calendar_ref_id INTEGER;
+    ALTER TABLE calendar_events ADD COLUMN subscription_id INTEGER;
+    ALTER TABLE calendar_events ADD COLUMN external_object_url TEXT;
+    ALTER TABLE calendar_events ADD COLUMN target_google_calendar_id TEXT;
+    ALTER TABLE calendar_events ADD COLUMN target_caldav_account_id INTEGER;
+    ALTER TABLE calendar_events ADD COLUMN target_caldav_calendar_url TEXT;
+    ALTER TABLE calendar_events ADD COLUMN target_outlook_account_id INTEGER;
+    ALTER TABLE calendar_events ADD COLUMN target_outlook_calendar_id TEXT;
+    ALTER TABLE calendar_events ADD COLUMN tzid TEXT;
+    CREATE TABLE reminders (
+      id INTEGER PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      remind_at TEXT NOT NULL,
+      dismissed INTEGER NOT NULL DEFAULT 0,
+      created_by INTEGER NOT NULL,
+      assigned_from INTEGER
+    );
+  `);
   database.prepare(`
     INSERT INTO users (id, username, display_name, password_hash, role)
     VALUES (1, 'admin', 'Admin', 'x', 'admin'), (2, 'member', 'Member', 'x', 'member')
@@ -65,16 +96,17 @@ function createDatabase() {
 function insertEvent(database, values = {}) {
   return database.prepare(`
     INSERT INTO calendar_events (
-      title, start_datetime, end_datetime, assigned_to, created_by, recurrence_rule,
+      title, description, start_datetime, end_datetime, assigned_to, created_by, recurrence_rule,
       recurrence_parent_id, recurrence_id, overridden_fields, external_source,
       external_calendar_id, visibility
     ) VALUES (
-      @title, @start_datetime, @end_datetime, @assigned_to, @created_by, @recurrence_rule,
+      @title, @description, @start_datetime, @end_datetime, @assigned_to, @created_by, @recurrence_rule,
       @recurrence_parent_id, @recurrence_id, @overridden_fields, @external_source,
       @external_calendar_id, @visibility
     )
   `).run({
     title: 'Event',
+    description: null,
     start_datetime: '2026-10-31T09:00:00',
     end_datetime: null,
     assigned_to: null,
@@ -712,4 +744,746 @@ test('base occurrence identity opt-in does not change legacy expansion rows', ()
   const legacyExpanded = expandRecurringEvents([master], '2026-10-02', '2026-10-02');
 
   assert.equal(Object.hasOwn(legacyExpanded[0], 'recurrence_identity'), false);
+});
+
+test('occurrence upsert is idempotent and stores one child with one EXDATE', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Daily standup',
+    start_datetime: '2026-10-01T09:00:00',
+    end_datetime: '2026-10-01T10:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  const options = {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    isAdmin: false,
+    changes: { title: 'Delayed standup' },
+  };
+
+  upsertOccurrenceOverride(database, options);
+  upsertOccurrenceOverride(database, options);
+
+  const children = database.prepare(`
+    SELECT recurrence_id, overridden_fields, title
+    FROM calendar_events
+    WHERE recurrence_parent_id = ?
+  `).all(seriesId).map((row) => ({ ...row }));
+  assert.deepEqual(children, [{
+    recurrence_id: '2026-10-02',
+    overridden_fields: '["title"]',
+    title: 'Delayed standup',
+  }]);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_event_exceptions
+    WHERE event_id = ? AND exception_date = ?
+  `).get(seriesId, '2026-10-02').count, 1);
+});
+
+test('occurrence child and EXDATE roll back together', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  database.exec(`
+    CREATE TRIGGER fail_occurrence_exception
+    BEFORE INSERT ON calendar_event_exceptions
+    BEGIN SELECT RAISE(ABORT, 'probe'); END;
+  `);
+
+  assert.throws(() => upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    isAdmin: false,
+    changes: { title: 'Must roll back' },
+  }), /probe/);
+
+  assert.equal(database.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
+  ).get(seriesId).count, 0);
+  assert.equal(database.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_event_exceptions WHERE event_id = ?'
+  ).get(seriesId).count, 0);
+});
+
+test('saving no actual difference restores the expanded master occurrence', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Inherited title',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  const options = {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    isAdmin: false,
+  };
+
+  upsertOccurrenceOverride(database, {
+    ...options,
+    changes: { title: 'Temporary title' },
+  });
+  const restored = upsertOccurrenceOverride(database, {
+    ...options,
+    changes: { title: 'Inherited title' },
+  });
+
+  assert.equal(restored.restored, true);
+  assert.equal(restored.event.title, 'Inherited title');
+  assert.equal(database.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
+  ).get(seriesId).count, 0);
+  assert.equal(database.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_event_exceptions WHERE event_id = ?'
+  ).get(seriesId).count, 0);
+});
+
+test('occurrence ownership markers control assignments reminders and attachments', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Owned fields',
+    start_datetime: '2026-10-01T09:00:00',
+    end_datetime: '2026-10-01T10:00:00',
+    assigned_to: 1,
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  database.prepare('UPDATE calendar_events SET attachment_document_id = 100 WHERE id = ?').run(seriesId);
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(seriesId, 1);
+  database.prepare(`
+    INSERT INTO reminders (entity_type, entity_id, remind_at, created_by)
+    VALUES ('event', ?, '2026-09-30T09:00:00', 1)
+  `).run(seriesId);
+
+  const result = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    isAdmin: false,
+    changes: {},
+    assignments: [2],
+    attachment: {
+      attachment_name: 'occurrence.txt',
+      attachment_mime: 'text/plain',
+      attachment_size: 10,
+      attachment_data: null,
+      attachment_document_id: 200,
+    },
+    reminderOffsets: [60],
+  });
+  const childId = Number(result.event.id);
+  const child = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(childId);
+
+  assert.equal(child.overridden_fields, '["assignments","attachment","reminders"]');
+  assert.equal(child.assigned_to, 2);
+  assert.deepEqual(database.prepare(
+    'SELECT user_id FROM event_assignments WHERE event_id = ? ORDER BY user_id'
+  ).all(childId).map((row) => row.user_id), [2]);
+  assert.equal(child.attachment_document_id, 200);
+  assert.deepEqual(database.prepare(`
+    SELECT remind_at, created_by FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+  `).all(childId).map((row) => ({ ...row })), [{
+    remind_at: '2026-10-02T08:00:00',
+    created_by: 1,
+  }, {
+    remind_at: '2026-10-02T08:00:00',
+    created_by: 2,
+  }]);
+  assert.equal(result.event.assignment_owner_id, childId);
+  assert.equal(result.event.attachment_owner_id, childId);
+  assert.equal(result.event.reminder_owner_id, childId);
+});
+
+test('restoring owned fields to series defaults removes child reminder rows', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Restored owned fields',
+    start_datetime: '2026-10-01T09:00:00',
+    assigned_to: 1,
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  database.prepare('UPDATE calendar_events SET attachment_document_id = 100 WHERE id = ?')
+    .run(seriesId);
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1)')
+    .run(seriesId);
+  database.prepare(`
+    INSERT INTO reminders (entity_type, entity_id, remind_at, created_by)
+    VALUES ('event', ?, '2026-09-30T09:00:00', 1)
+  `).run(seriesId);
+  const options = {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+  };
+  const childId = Number(upsertOccurrenceOverride(database, {
+    ...options,
+    assignments: [2],
+    attachment: { attachment_document_id: 200 },
+    reminderOffsets: [60],
+  }).event.id);
+
+  const restored = upsertOccurrenceOverride(database, {
+    ...options,
+    assignments: [1],
+    attachment: { attachment_document_id: 100 },
+    reminderOffsets: [1440],
+  });
+
+  assert.equal(restored.restored, true);
+  assert.equal(database.prepare('SELECT 1 FROM calendar_events WHERE id = ?').get(childId), undefined);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+  `).get(childId).count, 0);
+});
+
+test('occurrence reminder ownership keeps inherited assignment projection and fanout', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Occurrence fanout',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1), (?, 2)')
+    .run(seriesId, seriesId);
+  database.prepare(`
+    INSERT INTO reminders (entity_type, entity_id, remind_at, created_by)
+    VALUES ('event', ?, '2026-10-01T08:30:00', 1)
+  `).run(seriesId);
+
+  const childId = Number(upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    reminderOffsets: [60],
+  }).event.id);
+
+  assert.deepEqual(database.prepare(`
+    SELECT user_id FROM event_assignments WHERE event_id = ? ORDER BY user_id
+  `).all(childId).map((row) => row.user_id), [1, 2]);
+  assert.deepEqual(database.prepare(`
+    SELECT created_by, assigned_from, remind_at FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? ORDER BY created_by
+  `).all(childId).map((row) => ({ ...row })), [
+    { created_by: 1, assigned_from: null, remind_at: '2026-10-02T08:00:00' },
+    { created_by: 2, assigned_from: 1, remind_at: '2026-10-02T08:00:00' },
+  ]);
+});
+
+test('only-this deletion removes a replacement but preserves its EXDATE', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  for (const recurrenceId of ['2026-10-02', '2026-10-03']) {
+    upsertOccurrenceOverride(database, {
+      seriesId,
+      recurrenceId,
+      actorId: 1,
+      changes: { title: `Override ${recurrenceId}` },
+    });
+  }
+
+  deleteOccurrence(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+  });
+
+  assert.deepEqual(database.prepare(`
+    SELECT recurrence_id FROM calendar_events
+    WHERE recurrence_parent_id = ? ORDER BY recurrence_id
+  `).all(seriesId).map((row) => row.recurrence_id), ['2026-10-03']);
+  assert.deepEqual(database.prepare(`
+    SELECT exception_date FROM calendar_event_exceptions
+    WHERE event_id = ? ORDER BY exception_date
+  `).all(seriesId).map((row) => row.exception_date), ['2026-10-02', '2026-10-03']);
+});
+
+test('following deletion truncates later state and delegates the first slot to whole deletion', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  for (const recurrenceId of ['2026-10-02', '2026-10-03']) {
+    upsertOccurrenceOverride(database, {
+      seriesId,
+      recurrenceId,
+      actorId: 1,
+      changes: { title: `Override ${recurrenceId}` },
+    });
+  }
+  database.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date) VALUES (?, ?)
+  `).run(seriesId, '2026-10-04');
+
+  const truncated = truncateSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-03',
+    actorId: 1,
+  });
+
+  assert.equal(truncated.wholeSeries, false);
+  assert.equal(database.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+    .get(seriesId).recurrence_rule, 'FREQ=DAILY;UNTIL=20261002');
+  assert.deepEqual(database.prepare(`
+    SELECT recurrence_id FROM calendar_events
+    WHERE recurrence_parent_id = ? ORDER BY recurrence_id
+  `).all(seriesId).map((row) => row.recurrence_id), ['2026-10-02']);
+  assert.deepEqual(database.prepare(`
+    SELECT exception_date FROM calendar_event_exceptions
+    WHERE event_id = ? ORDER BY exception_date
+  `).all(seriesId).map((row) => row.exception_date), ['2026-10-02']);
+
+  const wholeId = Number(insertSeries(database, {
+    start_datetime: '2026-11-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  upsertOccurrenceOverride(database, {
+    seriesId: wholeId,
+    recurrenceId: '2026-11-02',
+    actorId: 1,
+    changes: { title: 'Cascades with parent' },
+  });
+  const whole = truncateSeries(database, {
+    seriesId: wholeId,
+    recurrenceId: '2026-11-01',
+    actorId: 1,
+  });
+  assert.equal(whole.wholeSeries, true);
+  assert.equal(database.prepare('SELECT 1 FROM calendar_events WHERE id = ?').get(wholeId), undefined);
+});
+
+test('following edit splits, reparents and recomputes replacement markers', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Old title',
+    description: 'Old description',
+    start_datetime: '2026-10-01T09:00:00',
+    end_datetime: '2026-10-01T10:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { title: 'New title' },
+  });
+  upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-03',
+    actorId: 1,
+    changes: { description: 'Third-day note' },
+  });
+  database.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date) VALUES (?, ?)
+  `).run(seriesId, '2026-10-04');
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: {
+      title: 'New title',
+      start_datetime: '2026-10-02T09:00:00',
+      end_datetime: '2026-10-02T10:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+    },
+  });
+  const successorId = Number(result.series.id);
+
+  assert.notEqual(successorId, seriesId);
+  assert.equal(database.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+    .get(seriesId).recurrence_rule, 'FREQ=DAILY;UNTIL=20261001');
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_events
+    WHERE recurrence_parent_id = ? AND recurrence_id = '2026-10-02'
+  `).get(successorId).count, 0, 'the selected replacement became successor defaults');
+  const future = database.prepare(`
+    SELECT title, description, overridden_fields, recurrence_parent_id
+    FROM calendar_events WHERE recurrence_id = '2026-10-03'
+  `).get();
+  assert.equal(Number(future.recurrence_parent_id), successorId);
+  assert.equal(future.title, 'New title');
+  assert.equal(future.description, 'Third-day note');
+  assert.equal(future.overridden_fields, '["description"]');
+  assert.deepEqual(database.prepare(`
+    SELECT exception_date FROM calendar_event_exceptions
+    WHERE event_id = ? ORDER BY exception_date
+  `).all(successorId).map((row) => row.exception_date), ['2026-10-03', '2026-10-04']);
+});
+
+test('following edit absorbs the selected replacement even when its new defaults differ', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Original default',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  const selected = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { title: 'Selected old value' },
+    reminderOffsets: [15],
+  }).event;
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: {
+      title: 'Successor new default',
+      recurrence_rule: 'FREQ=DAILY',
+    },
+    reminderOffsets: [30],
+  });
+  const successorId = Number(result.series.id);
+
+  assert.equal(database.prepare('SELECT title FROM calendar_events WHERE id = ?')
+    .get(successorId).title, 'Successor new default');
+  assert.equal(database.prepare('SELECT 1 FROM calendar_events WHERE id = ?')
+    .get(selected.id), undefined);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_events
+    WHERE recurrence_parent_id = ? AND recurrence_id = '2026-10-02'
+  `).get(successorId).count, 0);
+  assert.deepEqual(database.prepare(`
+    SELECT remind_at FROM reminders WHERE entity_type = 'event' AND entity_id = ?
+  `).all(successorId).map((row) => row.remind_at), ['2026-10-02T08:30:00']);
+});
+
+test('following edit preserves selected and future occurrence-owned attachments and reminders', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Owned split state',
+    start_datetime: '2026-10-01T09:00:00',
+    end_datetime: '2026-10-01T10:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  const selected = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    attachment: {
+      attachment_name: 'selected.txt',
+      attachment_mime: 'text/plain',
+      attachment_size: 8,
+      attachment_data: null,
+      attachment_document_id: 100,
+    },
+    reminderOffsets: [30],
+  }).event;
+  const future = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-03',
+    actorId: 1,
+    attachment: {
+      attachment_name: 'future.txt',
+      attachment_mime: 'text/plain',
+      attachment_size: 6,
+      attachment_data: null,
+      attachment_document_id: 200,
+    },
+    reminderOffsets: [15],
+  }).event;
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { recurrence_rule: 'FREQ=DAILY' },
+  });
+  const successorId = Number(result.series.id);
+
+  assert.equal(database.prepare('SELECT 1 FROM calendar_events WHERE id = ?').get(selected.id), undefined);
+  assert.deepEqual({ ...database.prepare(`
+    SELECT attachment_document_id, attachment_name FROM calendar_events WHERE id = ?
+  `).get(successorId) }, {
+    attachment_document_id: 100,
+    attachment_name: 'selected.txt',
+  });
+  assert.deepEqual(database.prepare(`
+    SELECT remind_at FROM reminders WHERE entity_type = 'event' AND entity_id = ?
+  `).all(successorId).map((row) => row.remind_at), ['2026-10-02T08:30:00']);
+  assert.deepEqual({ ...database.prepare(`
+    SELECT recurrence_parent_id, attachment_document_id, overridden_fields
+    FROM calendar_events WHERE id = ?
+  `).get(future.id) }, {
+    recurrence_parent_id: successorId,
+    attachment_document_id: 200,
+    overridden_fields: '["attachment","reminders"]',
+  });
+  assert.deepEqual(database.prepare(`
+    SELECT remind_at FROM reminders WHERE entity_type = 'event' AND entity_id = ?
+  `).all(future.id).map((row) => row.remind_at), ['2026-10-03T08:45:00']);
+});
+
+test('following edit refreshes future inherited projections and shifts owned reminders', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Projected split state',
+    start_datetime: '2026-10-01T09:00:00',
+    end_datetime: '2026-10-01T10:00:00',
+    assigned_to: 1,
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  database.prepare('UPDATE calendar_events SET attachment_document_id = 100 WHERE id = ?')
+    .run(seriesId);
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1)')
+    .run(seriesId);
+  const future = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-03',
+    actorId: 1,
+    changes: { description: 'Future owned note' },
+    reminderOffsets: [30],
+  }).event;
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: {
+      start_datetime: '2026-10-02T10:00:00',
+      end_datetime: '2026-10-02T11:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+    },
+    assignments: [2],
+    attachment: { attachment_document_id: 200 },
+  });
+  const successorId = Number(result.series.id);
+
+  assert.deepEqual({ ...database.prepare(`
+    SELECT recurrence_parent_id, description, start_datetime, assigned_to,
+           attachment_document_id, overridden_fields
+    FROM calendar_events WHERE id = ?
+  `).get(future.id) }, {
+    recurrence_parent_id: successorId,
+    description: 'Future owned note',
+    start_datetime: '2026-10-03T10:00:00',
+    assigned_to: 2,
+    attachment_document_id: 200,
+    overridden_fields: '["description","reminders"]',
+  });
+  assert.deepEqual(database.prepare(`
+    SELECT user_id FROM event_assignments WHERE event_id = ? ORDER BY user_id
+  `).all(future.id).map((row) => row.user_id), [2]);
+  assert.deepEqual(database.prepare(`
+    SELECT remind_at FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NULL
+  `).all(future.id).map((row) => row.remind_at), ['2026-10-03T09:30:00']);
+});
+
+test('following edit from the first slot applies whole-series owned fields', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'First-slot split',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1)')
+    .run(seriesId);
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-01',
+    actorId: 1,
+    changes: { title: 'Updated whole series' },
+    assignments: [2],
+    attachment: { attachment_document_id: 200 },
+    reminderOffsets: [30],
+  });
+
+  assert.equal(result.wholeSeries, true);
+  assert.equal(Number(result.series.id), seriesId);
+  assert.deepEqual({ ...database.prepare(`
+    SELECT title, assigned_to, attachment_document_id FROM calendar_events WHERE id = ?
+  `).get(seriesId) }, {
+    title: 'Updated whole series',
+    assigned_to: 2,
+    attachment_document_id: 200,
+  });
+  assert.deepEqual(database.prepare(`
+    SELECT user_id FROM event_assignments WHERE event_id = ? ORDER BY user_id
+  `).all(seriesId).map((row) => row.user_id), [2]);
+  assert.deepEqual(database.prepare(`
+    SELECT created_by, assigned_from, remind_at FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? ORDER BY created_by
+  `).all(seriesId).map((row) => ({ ...row })), [
+    { created_by: 1, assigned_from: null, remind_at: '2026-10-01T08:30:00' },
+    { created_by: 2, assigned_from: 1, remind_at: '2026-10-01T08:30:00' },
+  ]);
+});
+
+test('rule changes require an exact orphan count and clean deletion-only exceptions', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  for (const recurrenceId of ['2026-10-02', '2026-10-08']) {
+    upsertOccurrenceOverride(database, {
+      seriesId,
+      recurrenceId,
+      actorId: 1,
+      changes: { title: `Override ${recurrenceId}` },
+    });
+  }
+  database.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date) VALUES (?, ?)
+  `).run(seriesId, '2026-10-04');
+
+  const options = {
+    seriesId,
+    actorId: 1,
+    changes: { recurrence_rule: 'FREQ=WEEKLY;BYDAY=TH' },
+  };
+  for (const confirmedOrphanCount of [undefined, 0]) {
+    assert.throws(() => updateSeriesWithOverrides(database, {
+      ...options,
+      confirmedOrphanCount,
+    }), (error) => error instanceof CalendarOccurrenceError
+      && error.status === 409
+      && error.code === 'calendar_override_orphans'
+      && error.orphanedOverrideCount === 1);
+  }
+
+  const updated = updateSeriesWithOverrides(database, {
+    ...options,
+    confirmedOrphanCount: 1,
+  });
+  assert.equal(updated.orphanedOverrideCount, 1);
+  assert.equal(database.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+    .get(seriesId).recurrence_rule, 'FREQ=WEEKLY;BYDAY=TH');
+  const detached = database.prepare(`
+    SELECT recurrence_parent_id, recurrence_id, overridden_fields
+    FROM calendar_events WHERE title = 'Override 2026-10-02'
+  `).get();
+  assert.deepEqual({ ...detached }, {
+    recurrence_parent_id: null,
+    recurrence_id: null,
+    overridden_fields: null,
+  });
+  assert.equal(database.prepare(`
+    SELECT recurrence_parent_id FROM calendar_events WHERE title = 'Override 2026-10-08'
+  `).get().recurrence_parent_id, seriesId);
+  assert.deepEqual(database.prepare(`
+    SELECT exception_date FROM calendar_event_exceptions
+    WHERE event_id = ? ORDER BY exception_date
+  `).all(seriesId).map((row) => row.exception_date), ['2026-10-08']);
+});
+
+test('outbound target detachment uses the same exact-count confirmation', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  for (const recurrenceId of ['2026-10-02', '2026-10-03']) {
+    upsertOccurrenceOverride(database, {
+      seriesId,
+      recurrenceId,
+      actorId: 1,
+      changes: { title: `Target override ${recurrenceId}` },
+    });
+  }
+  const options = {
+    seriesId,
+    actorId: 1,
+    changes: { target_google_calendar_id: 'family@test' },
+  };
+
+  assert.throws(() => updateSeriesWithOverrides(database, options), (error) =>
+    error instanceof CalendarOccurrenceError
+    && error.status === 409
+    && error.orphanedOverrideCount === 2
+  );
+  assert.equal(database.prepare('SELECT target_google_calendar_id FROM calendar_events WHERE id = ?')
+    .get(seriesId).target_google_calendar_id, null);
+
+  updateSeriesWithOverrides(database, { ...options, confirmedOrphanCount: 2 });
+  assert.equal(database.prepare('SELECT target_google_calendar_id FROM calendar_events WHERE id = ?')
+    .get(seriesId).target_google_calendar_id, 'family@test');
+  assert.equal(database.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
+  ).get(seriesId).count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_events
+    WHERE title LIKE 'Target override %' AND recurrence_parent_id IS NULL
+  `).get().count, 2);
+});
+
+test('whole-series updates refresh inherited child projections and assignments atomically', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Old projected title',
+    start_datetime: '2026-10-01T09:00:00',
+    end_datetime: '2026-10-01T10:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)')
+    .run(seriesId, 1);
+  database.prepare(`
+    INSERT INTO reminders (entity_type, entity_id, remind_at, created_by)
+    VALUES ('event', ?, '2026-10-01T08:00:00', 1)
+  `).run(seriesId);
+  const child = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { description: 'Owned note' },
+    reminderOffsets: [30],
+  }).event;
+
+  updateSeriesWithOverrides(database, {
+    seriesId,
+    actorId: 1,
+    changes: {
+      title: 'New projected title',
+      start_datetime: '2026-10-01T10:00:00',
+      end_datetime: '2026-10-01T11:00:00',
+    },
+    applyUpdate(db) {
+      db.prepare(`
+        UPDATE calendar_events
+        SET title = 'New projected title',
+            start_datetime = '2026-10-01T10:00:00',
+            end_datetime = '2026-10-01T11:00:00',
+            assigned_to = 2
+        WHERE id = ?
+      `).run(seriesId);
+      db.prepare('DELETE FROM event_assignments WHERE event_id = ?').run(seriesId);
+      db.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, 2)').run(seriesId);
+    },
+  });
+
+  const projected = database.prepare(`
+    SELECT title, description, start_datetime, end_datetime, assigned_to, overridden_fields
+    FROM calendar_events WHERE id = ?
+  `).get(child.id);
+  assert.deepEqual({ ...projected }, {
+    title: 'New projected title',
+    description: 'Owned note',
+    start_datetime: '2026-10-02T10:00:00',
+    end_datetime: '2026-10-02T11:00',
+    assigned_to: 2,
+    overridden_fields: '["description","reminders"]',
+  });
+  assert.deepEqual(database.prepare(`
+    SELECT user_id FROM event_assignments WHERE event_id = ? ORDER BY user_id
+  `).all(child.id).map((row) => row.user_id), [2]);
+  assert.deepEqual(database.prepare(`
+    SELECT created_by, assigned_from, remind_at FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? ORDER BY created_by
+  `).all(child.id).map((row) => ({ ...row })), [
+    { created_by: 1, assigned_from: null, remind_at: '2026-10-02T09:30:00' },
+    { created_by: 2, assigned_from: 1, remind_at: '2026-10-02T09:30:00' },
+  ]);
 });

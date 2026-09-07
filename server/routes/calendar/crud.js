@@ -17,6 +17,16 @@ import {
 } from '../../services/document-storage.js';
 import { queueEventDeletion, markEventOutbound, flushOutbound } from '../../services/calendar-outbound.js';
 import {
+  baseOccurrenceFor,
+  CalendarOccurrenceError,
+  deleteOccurrence,
+  isEligibleLocalSeries,
+  splitSeries,
+  truncateSeries,
+  upsertOccurrenceOverride,
+  updateSeriesWithOverrides,
+} from '../../services/calendar-occurrence-overrides.js';
+import {
   ASSIGNED_USERS_SQL,
   getUserId,
   isAdminUser,
@@ -299,6 +309,14 @@ router.put('/:id', async (req, res) => {
     if (vOutlook) checks.push(vOutlook);
     const errors = collectErrors(checks);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+    if (req.body.confirmed_orphan_count !== undefined
+        && (!Number.isInteger(Number(req.body.confirmed_orphan_count))
+          || Number(req.body.confirmed_orphan_count) < 0)) {
+      return res.status(400).json({
+        error: 'confirmed_orphan_count must be a non-negative integer.',
+        code: 400,
+      });
+    }
     const vIcon = req.body.icon !== undefined ? eventIcon(req.body.icon) : event.icon;
     if (!vIcon) return res.status(400).json({ error: 'icon: invalid calendar event icon.', code: 400 });
     if (
@@ -448,7 +466,7 @@ router.put('/:id', async (req, res) => {
     const outlookAccountId = vOutlook ? vOutlook.value.accountId : event.target_outlook_account_id;
     const outlookCalendarId = vOutlook ? vOutlook.value.calendarId : event.target_outlook_calendar_id;
 
-    db.get().transaction(() => {
+    const applyUpdate = () => {
       const documentId = replacementRequested
         ? createAttachmentDocument(
             db.get(),
@@ -548,7 +566,46 @@ router.put('/:id', async (req, res) => {
         id
       );
       setEventAssignments(db.get(), id, userIds);
-    })();
+    };
+
+    const linkedOverrideCount = db.get().prepare(`
+      SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?
+    `).get(id).count;
+    if (linkedOverrideCount > 0) {
+      const seriesChanges = {};
+      if (title !== undefined) seriesChanges.title = title?.trim() || null;
+      if (description !== undefined) seriesChanges.description = description || null;
+      if (start_datetime !== undefined) seriesChanges.start_datetime = start_datetime;
+      if (end_datetime !== undefined) seriesChanges.end_datetime = end_datetime || null;
+      if (all_day !== undefined) seriesChanges.all_day = all_day ? 1 : 0;
+      if (location !== undefined) seriesChanges.location = location || null;
+      if (colorTouched) seriesChanges.color = colorVal ?? null;
+      if (req.body.icon !== undefined) seriesChanges.icon = vIcon;
+      if (recurrence_rule !== undefined) seriesChanges.recurrence_rule = recurrence_rule || null;
+      if (caldavProvided) {
+        seriesChanges.target_caldav_account_id = caldavAccountId;
+        seriesChanges.target_caldav_calendar_url = caldavCalendarUrl;
+      }
+      if (googleProvided) seriesChanges.target_google_calendar_id = googleTargetId;
+      if (outlookProvided) {
+        seriesChanges.target_outlook_account_id = outlookAccountId;
+        seriesChanges.target_outlook_calendar_id = outlookCalendarId;
+      }
+      if (req.body.visibility !== undefined) {
+        seriesChanges.visibility = normalizeVisibility(req.body.visibility, event.visibility);
+      }
+      if (req.body.countdown !== undefined) seriesChanges.countdown = req.body.countdown ? 1 : 0;
+      updateSeriesWithOverrides(db.get(), {
+        seriesId: id,
+        actorId: getUserId(req),
+        isAdmin: isAdminUser(req),
+        changes: seriesChanges,
+        confirmedOrphanCount: req.body.confirmed_orphan_count,
+        applyUpdate,
+      });
+    } else {
+      db.get().transaction(applyUpdate)();
+    }
 
     const updated = db.get().prepare(`
       SELECT e.*,
@@ -580,6 +637,16 @@ router.put('/:id', async (req, res) => {
         .catch((e) => log.warn('Änderung vorgemerkt, Sofortversuch fehlgeschlagen:', e.message));
     }
   } catch (err) {
+    if (err instanceof CalendarOccurrenceError && !stagedUpload) {
+      return res.status(err.status).json({
+        error: err.message,
+        code: err.status,
+        ...(err.conflict ? { conflict: err.conflict } : {}),
+        ...(err.orphanedOverrideCount !== undefined
+          ? { orphaned_override_count: err.orphanedOverrideCount }
+          : {}),
+      });
+    }
     if (err instanceof StorageError && !stagedUpload) {
       log.error('PUT /:id storage error:', err);
       return sendStorageError(res, err, 'Calendar attachment storage upload failed.');
@@ -597,6 +664,356 @@ router.put('/:id', async (req, res) => {
         );
       }
     }
+    if (err instanceof CalendarOccurrenceError) {
+      return res.status(err.status).json({
+        error: err.message,
+        code: err.status,
+        ...(err.conflict ? { conflict: err.conflict } : {}),
+        ...(err.orphanedOverrideCount !== undefined
+          ? { orphaned_override_count: err.orphanedOverrideCount }
+          : {}),
+      });
+    }
+    res.status(500).json({ error: 'Interner Fehler', code: 500 });
+  }
+});
+
+// --------------------------------------------------------
+// PUT /api/v1/calendar/:seriesId/occurrences/:recurrenceId
+// Creates or updates one linked local recurrence replacement atomically.
+// --------------------------------------------------------
+router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
+  let stagedUpload;
+  try {
+    const seriesId = parseInt(req.params.seriesId, 10);
+    const actorId = getUserId(req);
+    const isAdmin = isAdminUser(req);
+    const master = Number.isInteger(seriesId)
+      ? db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(seriesId)
+      : null;
+    if (!master) {
+      return res.status(404).json({ error: 'Calendar series not found.', code: 'calendar_series_not_found' });
+    }
+    const eligibility = isEligibleLocalSeries(db.get(), master, actorId, isAdmin);
+    if (!eligibility.eligible) {
+      const unauthorized = eligibility.reason === 'not_authorized';
+      return res.status(unauthorized ? 403 : 400).json({
+        error: unauthorized
+          ? 'Not authorized.'
+          : 'This calendar series cannot use occurrence overrides.',
+        code: eligibility.reason,
+      });
+    }
+    baseOccurrenceFor(master, req.params.recurrenceId);
+
+    const checks = [];
+    if (req.body.title !== undefined) checks.push(str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }));
+    if (req.body.description !== undefined) checks.push(str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }));
+    if (req.body.start_datetime !== undefined) checks.push(datetime(req.body.start_datetime, 'Startdatum'));
+    if (req.body.end_datetime !== undefined) checks.push(datetime(req.body.end_datetime, 'Enddatum'));
+    if (req.body.color !== undefined) checks.push(color(req.body.color, 'Farbe'));
+    if (req.body.location !== undefined) checks.push(str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }));
+    const errors = collectErrors(checks);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+
+    const vIcon = req.body.icon !== undefined ? eventIcon(req.body.icon) : undefined;
+    if (req.body.icon !== undefined && !vIcon) {
+      return res.status(400).json({ error: 'icon: invalid calendar event icon.', code: 400 });
+    }
+    if (req.body.remove_attachment !== undefined && typeof req.body.remove_attachment !== 'boolean') {
+      return res.status(400).json({ error: 'remove_attachment: muss ein Boolean sein.', code: 400 });
+    }
+    if (req.body.reminder_offsets !== undefined
+        && (!Array.isArray(req.body.reminder_offsets)
+          || req.body.reminder_offsets.length > 5
+          || req.body.reminder_offsets.some((value) =>
+            !Number.isInteger(Number(value)) || Number(value) < 0))) {
+      return res.status(400).json({
+        error: 'reminder_offsets must be an array of at most 5 non-negative integers.',
+        code: 400,
+      });
+    }
+
+    const attachmentDataProvided = Object.hasOwn(req.body, 'attachment_data');
+    const replacementRequested = typeof req.body.attachment_data === 'string'
+      && req.body.attachment_data.trim() !== '';
+    const removalRequested = req.body.remove_attachment === true
+      || (attachmentDataProvided && req.body.attachment_data === null);
+    if (replacementRequested && removalRequested) {
+      return res.status(400).json({
+        error: 'attachment_data und remove_attachment widersprechen sich.',
+        code: 400,
+      });
+    }
+    const parsedAttachment = replacementRequested
+      ? parseAttachment(req.body.attachment_data)
+      : null;
+    if (parsedAttachment?.buffer) {
+      stagedUpload = await stageDocumentUpload({
+        buffer: parsedAttachment.buffer,
+        mime: parsedAttachment.mime,
+        category: 'other',
+        originalName: req.body.attachment_name || 'Attachment',
+      });
+    }
+
+    const changes = {};
+    for (const field of [
+      'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
+      'location', 'color', 'visibility', 'countdown',
+    ]) {
+      if (Object.hasOwn(req.body, field)) changes[field] = req.body[field];
+    }
+    if (Object.hasOwn(req.body, 'visibility')) {
+      changes.visibility = normalizeVisibility(req.body.visibility, master.visibility);
+    }
+    if (vIcon !== undefined) changes.icon = vIcon;
+
+    const result = upsertOccurrenceOverride(db.get(), {
+      seriesId,
+      recurrenceId: req.params.recurrenceId,
+      actorId,
+      isAdmin,
+      changes,
+      assignments: req.body.assigned_to === undefined
+        ? undefined
+        : parseAssignedTo(req.body.assigned_to),
+      attachment: removalRequested ? null : undefined,
+      createAttachment: replacementRequested
+        ? () => ({
+            attachment_name: req.body.attachment_name || 'Attachment',
+            attachment_mime: parsedAttachment.mime,
+            attachment_size: parsedAttachment.size,
+            attachment_data: null,
+            attachment_document_id: createAttachmentDocument(
+              db.get(),
+              parsedAttachment,
+              stagedUpload,
+              req.body,
+              master.created_by,
+            ),
+          })
+        : undefined,
+      reminderOffsets: req.body.reminder_offsets === undefined
+        ? undefined
+        : [...new Set(req.body.reminder_offsets.map(Number))],
+    });
+
+    res.json({
+      data: serializeEvent(result.event, {
+        database: db.get(),
+        actorId,
+        isAdmin,
+        master,
+      }),
+    });
+  } catch (err) {
+    if (err instanceof CalendarOccurrenceError && !stagedUpload) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    if (err instanceof StorageError && !stagedUpload) {
+      log.error('PUT occurrence storage error:', err);
+      return sendStorageError(res, err, 'Calendar attachment storage upload failed.');
+    }
+    log.error('PUT occurrence failed:', err);
+    if (stagedUpload) {
+      try {
+        await cleanupStagedUpload(stagedUpload);
+      } catch (cleanupError) {
+        log.error('PUT occurrence cleanup error after database failure:', cleanupError);
+        return sendStorageError(
+          res,
+          cleanupError,
+          'Calendar attachment storage cleanup failed.',
+        );
+      }
+    }
+    if (err instanceof CalendarOccurrenceError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: 'Interner Fehler', code: 500 });
+  }
+});
+
+router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) => {
+  let stagedUpload;
+  try {
+    const seriesId = parseInt(req.params.seriesId, 10);
+    const actorId = getUserId(req);
+    const isAdmin = isAdminUser(req);
+    const master = Number.isInteger(seriesId)
+      ? db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(seriesId)
+      : null;
+    if (!master) {
+      return res.status(404).json({ error: 'Calendar series not found.', code: 'calendar_series_not_found' });
+    }
+    const eligibility = isEligibleLocalSeries(db.get(), master, actorId, isAdmin);
+    if (!eligibility.eligible) {
+      const unauthorized = eligibility.reason === 'not_authorized';
+      return res.status(unauthorized ? 403 : 400).json({
+        error: unauthorized
+          ? 'Not authorized.'
+          : 'This calendar series cannot use occurrence overrides.',
+        code: eligibility.reason,
+      });
+    }
+    baseOccurrenceFor(master, req.params.recurrenceId);
+
+    const checks = [];
+    if (req.body.title !== undefined) checks.push(str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }));
+    if (req.body.description !== undefined) checks.push(str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }));
+    if (req.body.start_datetime !== undefined) checks.push(datetime(req.body.start_datetime, 'Startdatum'));
+    if (req.body.end_datetime !== undefined) checks.push(datetime(req.body.end_datetime, 'Enddatum'));
+    if (req.body.color !== undefined) checks.push(color(req.body.color, 'Farbe'));
+    if (req.body.location !== undefined) checks.push(str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }));
+    if (req.body.recurrence_rule !== undefined) checks.push(rrule(req.body.recurrence_rule, 'Wiederholung'));
+    const errors = collectErrors(checks);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+    const vIcon = req.body.icon !== undefined ? eventIcon(req.body.icon) : undefined;
+    if (req.body.icon !== undefined && !vIcon) {
+      return res.status(400).json({ error: 'icon: invalid calendar event icon.', code: 400 });
+    }
+    if (req.body.remove_attachment !== undefined && typeof req.body.remove_attachment !== 'boolean') {
+      return res.status(400).json({ error: 'remove_attachment: muss ein Boolean sein.', code: 400 });
+    }
+    if (req.body.reminder_offsets !== undefined
+        && (!Array.isArray(req.body.reminder_offsets)
+          || req.body.reminder_offsets.length > 5
+          || req.body.reminder_offsets.some((value) =>
+            !Number.isInteger(Number(value)) || Number(value) < 0))) {
+      return res.status(400).json({
+        error: 'reminder_offsets must be an array of at most 5 non-negative integers.',
+        code: 400,
+      });
+    }
+
+    const replacementRequested = typeof req.body.attachment_data === 'string'
+      && req.body.attachment_data.trim() !== '';
+    const removalRequested = req.body.remove_attachment === true
+      || (Object.hasOwn(req.body, 'attachment_data') && req.body.attachment_data === null);
+    if (replacementRequested && removalRequested) {
+      return res.status(400).json({
+        error: 'attachment_data und remove_attachment widersprechen sich.',
+        code: 400,
+      });
+    }
+    const parsedAttachment = replacementRequested
+      ? parseAttachment(req.body.attachment_data)
+      : null;
+    if (parsedAttachment?.buffer) {
+      stagedUpload = await stageDocumentUpload({
+        buffer: parsedAttachment.buffer,
+        mime: parsedAttachment.mime,
+        category: 'other',
+        originalName: req.body.attachment_name || 'Attachment',
+      });
+    }
+
+    const changes = {};
+    for (const field of [
+      'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
+      'location', 'color', 'visibility', 'countdown', 'recurrence_rule',
+    ]) {
+      if (Object.hasOwn(req.body, field)) changes[field] = req.body[field];
+    }
+    if (Object.hasOwn(req.body, 'visibility')) {
+      changes.visibility = normalizeVisibility(req.body.visibility, master.visibility);
+    }
+    if (vIcon !== undefined) changes.icon = vIcon;
+    const result = splitSeries(db.get(), {
+      seriesId,
+      recurrenceId: req.params.recurrenceId,
+      actorId,
+      isAdmin,
+      changes,
+      assignments: req.body.assigned_to === undefined
+        ? undefined
+        : parseAssignedTo(req.body.assigned_to),
+      attachment: removalRequested ? null : undefined,
+      createAttachment: replacementRequested
+        ? () => ({
+            attachment_name: req.body.attachment_name || 'Attachment',
+            attachment_mime: parsedAttachment.mime,
+            attachment_size: parsedAttachment.size,
+            attachment_data: null,
+            attachment_document_id: createAttachmentDocument(
+              db.get(),
+              parsedAttachment,
+              stagedUpload,
+              req.body,
+              master.created_by,
+            ),
+          })
+        : undefined,
+      reminderOffsets: req.body.reminder_offsets === undefined
+        ? undefined
+        : [...new Set(req.body.reminder_offsets.map(Number))],
+    });
+    res.status(result.wholeSeries ? 200 : 201).json({
+      data: serializeEvent(result.series, {
+        database: db.get(),
+        actorId,
+        isAdmin,
+      }),
+    });
+  } catch (err) {
+    if (err instanceof CalendarOccurrenceError && !stagedUpload) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    if (err instanceof StorageError && !stagedUpload) {
+      return sendStorageError(res, err, 'Calendar attachment storage upload failed.');
+    }
+    log.error('PUT occurrence following failed:', err);
+    if (stagedUpload) {
+      try {
+        await cleanupStagedUpload(stagedUpload);
+      } catch (cleanupError) {
+        return sendStorageError(
+          res,
+          cleanupError,
+          'Calendar attachment storage cleanup failed.',
+        );
+      }
+    }
+    if (err instanceof CalendarOccurrenceError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: 'Interner Fehler', code: 500 });
+  }
+});
+
+router.delete('/:seriesId/occurrences/:recurrenceId', (req, res) => {
+  try {
+    deleteOccurrence(db.get(), {
+      seriesId: req.params.seriesId,
+      recurrenceId: req.params.recurrenceId,
+      actorId: getUserId(req),
+      isAdmin: isAdminUser(req),
+    });
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof CalendarOccurrenceError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    log.error('DELETE occurrence failed:', err);
+    res.status(500).json({ error: 'Interner Fehler', code: 500 });
+  }
+});
+
+router.delete('/:seriesId/occurrences/:recurrenceId/following', (req, res) => {
+  try {
+    truncateSeries(db.get(), {
+      seriesId: req.params.seriesId,
+      recurrenceId: req.params.recurrenceId,
+      actorId: getUserId(req),
+      isAdmin: isAdminUser(req),
+    });
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof CalendarOccurrenceError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    log.error('DELETE occurrence following failed:', err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });
   }
 });
@@ -692,7 +1109,20 @@ router.delete('/:id', (req, res) => {
     if (!event) return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
     const queued = queueEventDeletion(event);
 
-    const result = db.get().prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
+    const result = db.get().transaction(() => {
+      const ownedIds = db.get().prepare(`
+        SELECT id FROM calendar_events
+        WHERE id = ? OR recurrence_parent_id = ?
+      `).all(id, id).map((row) => Number(row.id));
+      if (ownedIds.length) {
+        db.get().prepare(`
+          DELETE FROM reminders
+          WHERE entity_type = 'event'
+            AND entity_id IN (${ownedIds.map(() => '?').join(',')})
+        `).run(...ownedIds);
+      }
+      return db.get().prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
+    })();
     if (result.changes === 0)
       return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
 

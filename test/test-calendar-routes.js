@@ -938,6 +938,481 @@ test('POST /:id/exceptions — 403 fremd + 201 EXDATE angelegt', async () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
+// Linked local occurrence mutations (#975)
+// ════════════════════════════════════════════════════════════════════════════════
+
+test('PUT /:seriesId/occurrences/:recurrenceId authorizes creator and admin only', async () => {
+  const seriesId = insertEvent({
+    title: 'Occurrence auth',
+    start_datetime: '2046-01-01T09:00:00',
+    end_datetime: '2046-01-01T10:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    created_by: MARIA.id,
+  });
+
+  const creator = await call('PUT', `/${seriesId}/occurrences/2046-01-02`, {
+    actor: MARIA,
+    body: { title: 'Creator override' },
+  });
+  assert.equal(creator.status, 200);
+  assert.equal(creator.body.data.series_id, seriesId);
+  assert.equal(creator.body.data.recurrence_id, '2046-01-02');
+
+  const forbidden = await call('PUT', `/${seriesId}/occurrences/2046-01-02`, {
+    actor: TOM,
+    body: { title: 'Non-owner override' },
+  });
+  assert.equal(forbidden.status, 403);
+
+  const admin = await call('PUT', `/${seriesId}/occurrences/2046-01-02`, {
+    actor: ADMIN,
+    body: { title: 'Admin override' },
+  });
+  assert.equal(admin.status, 200);
+  assert.equal(admin.body.data.title, 'Admin override');
+  assert.equal(db.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
+  ).get(seriesId).count, 1);
+});
+
+test('occurrence PUT distinguishes missing, ineligible and invalid original slots', async () => {
+  const missing = await call('PUT', '/9999999/occurrences/2046-02-01', {
+    body: { title: 'Missing' },
+  });
+  assert.equal(missing.status, 404);
+
+  const invalidId = insertEvent({
+    title: 'Invalid identity',
+    start_datetime: '2046-02-02T09:00:00',
+    recurrence_rule: 'FREQ=WEEKLY;BYDAY=MO',
+  });
+  const invalid = await call('PUT', `/${invalidId}/occurrences/2046-02-03`, {
+    body: { title: 'Not a Tuesday series' },
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.body.code, 'invalid_recurrence_id');
+
+  const subscriptionId = db.prepare(`
+    INSERT INTO ics_subscriptions (name, url, color, created_by, shared)
+    VALUES ('Occurrence boundary', 'https://example.test/occurrence.ics', '#123456', 1, 0)
+  `).run().lastInsertRowid;
+  const calendarRefId = db.prepare(`
+    INSERT INTO external_calendars (source, external_id, name, color)
+    VALUES ('google', 'occurrence-boundary', 'Occurrence boundary', '#123456')
+  `).run().lastInsertRowid;
+  const outlookAccountId = db.prepare(`
+    INSERT INTO outlook_accounts (name, access_token, refresh_token)
+    VALUES ('Occurrence boundary', 'token', 'refresh')
+  `).run().lastInsertRowid;
+  const classifications = [
+    ['Google provider', (id) => db.prepare("UPDATE calendar_events SET external_source = 'google' WHERE id = ?").run(id)],
+    ['Apple provider', (id) => db.prepare("UPDATE calendar_events SET external_source = 'apple' WHERE id = ?").run(id)],
+    ['ICS provider', (id) => db.prepare("UPDATE calendar_events SET external_source = 'ics' WHERE id = ?").run(id)],
+    ['imported UID', (id) => db.prepare("UPDATE calendar_events SET external_calendar_id = 'uid::20460202' WHERE id = ?").run(id)],
+    ['external object', (id) => db.prepare("UPDATE calendar_events SET external_object_url = 'https://dav.test/event.ics' WHERE id = ?").run(id)],
+    ['calendar reference', (id) => db.prepare('UPDATE calendar_events SET calendar_ref_id = ? WHERE id = ?').run(calendarRefId, id)],
+    ['subscription', (id) => db.prepare('UPDATE calendar_events SET subscription_id = ? WHERE id = ?').run(subscriptionId, id)],
+    ['Google target', (id) => db.prepare("UPDATE calendar_events SET target_google_calendar_id = 'family@test' WHERE id = ?").run(id)],
+    ['CalDAV target', (id) => db.prepare("UPDATE calendar_events SET target_caldav_account_id = 1, target_caldav_calendar_url = 'https://dav.test/cal/' WHERE id = ?").run(id)],
+    ['Outlook target', (id) => db.prepare("UPDATE calendar_events SET target_outlook_account_id = 1, target_outlook_calendar_id = 'outlook-cal' WHERE id = ?").run(id)],
+    ['birthday owner', (id) => db.prepare(`
+      INSERT INTO birthdays (name, birth_date, calendar_event_id, created_by)
+      VALUES ('Boundary birthday', '2000-02-02', ?, 1)
+    `).run(id)],
+    ['name-day owner', (id) => db.prepare(`
+      INSERT INTO birthdays (name, birth_date, name_day, name_day_calendar_event_id, created_by)
+      VALUES ('Boundary name day', '2000-02-02', '02-02', ?, 1)
+    `).run(id)],
+    ['housekeeping owner', (id) => db.prepare(`
+      INSERT INTO housekeeping_work_sessions
+        (check_in, daily_rate, extras, calendar_event_id, created_by)
+      VALUES ('2046-02-02T09:00:00', 0, 0, ?, 1)
+    `).run(id)],
+    ['Outlook push link', (id) => db.prepare(`
+      INSERT INTO outlook_event_links
+        (event_id, account_id, outlook_calendar_id, outlook_event_id)
+      VALUES (?, ?, 'outlook-cal', 'outlook-event')
+    `).run(id, outlookAccountId)],
+    ['Outlook auto-sync', (id) => {
+      const accountId = db.prepare(`
+        INSERT INTO outlook_accounts
+          (name, access_token, refresh_token, auto_sync_calendar_id, owner_user_id)
+        VALUES ('Occurrence auto-sync', 'token', 'refresh', 'outlook-cal', 1)
+      `).run().lastInsertRowid;
+      return () => db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
+    }],
+  ];
+  for (const [label, configure] of classifications) {
+    const seriesId = insertEvent({
+      title: label,
+      start_datetime: '2046-02-02T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+    });
+    const cleanup = configure(seriesId);
+    const response = await call('PUT', `/${seriesId}/occurrences/2046-02-03`, {
+      body: { title: `${label} override` },
+    });
+    if (typeof cleanup === 'function') cleanup();
+    assert.equal(response.status, 400, label);
+    assert.equal(response.body.code, 'ineligible_series', label);
+    assert.equal(db.prepare(
+      'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
+    ).get(seriesId).count, 0, label);
+  }
+});
+
+test('occurrence route rolls back child creation when EXDATE insertion fails', async () => {
+  const seriesId = insertEvent({
+    title: 'Route rollback',
+    start_datetime: '2046-03-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  db.exec(`
+    CREATE TRIGGER fail_route_occurrence_exception
+    BEFORE INSERT ON calendar_event_exceptions
+    WHEN NEW.event_id = ${Number(seriesId)}
+    BEGIN SELECT RAISE(ABORT, 'route probe'); END;
+  `);
+
+  const response = await call('PUT', `/${seriesId}/occurrences/2046-03-02`, {
+    body: { title: 'Must roll back' },
+  });
+
+  assert.equal(response.status, 500);
+  assert.equal(db.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
+  ).get(seriesId).count, 0);
+  assert.equal(db.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_event_exceptions WHERE event_id = ?'
+  ).get(seriesId).count, 0);
+  db.exec('DROP TRIGGER fail_route_occurrence_exception;');
+});
+
+test('occurrence rollback removes a staged attachment from external storage', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yuvomi-occurrence-attach-'));
+  const previousEnabled = process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+  const previousPath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = 'true';
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = dir;
+  const seriesId = insertEvent({
+    title: 'Occurrence attachment rollback',
+    start_datetime: '2046-03-10T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  db.exec(`
+    CREATE TRIGGER fail_route_occurrence_attachment
+    BEFORE INSERT ON calendar_event_exceptions
+    WHEN NEW.event_id = ${Number(seriesId)}
+    BEGIN SELECT RAISE(ABORT, 'attachment route probe'); END;
+  `);
+
+  try {
+    const response = await call('PUT', `/${seriesId}/occurrences/2046-03-11`, {
+      body: {
+        title: 'Must roll back with attachment',
+        attachment_name: 'rollback.txt',
+        attachment_data: `data:text/plain;base64,${Buffer.from('rollback').toString('base64')}`,
+      },
+    });
+    assert.equal(response.status, 500);
+    const entries = await fs.readdir(dir, { withFileTypes: true, recursive: true });
+    assert.equal(entries.filter((entry) => entry.isFile()).length, 0);
+    assert.equal(db.prepare(`
+      SELECT COUNT(*) AS count FROM family_documents WHERE original_name = 'rollback.txt'
+    `).get().count, 0);
+  } finally {
+    db.exec('DROP TRIGGER fail_route_occurrence_attachment;');
+    if (previousEnabled === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+    else process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = previousEnabled;
+    if (previousPath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousPath;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('following conflict removes a staged attachment before returning 409', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yuvomi-following-conflict-'));
+  const previousEnabled = process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+  const previousPath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = 'true';
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = dir;
+  const seriesId = insertEvent({
+    title: 'Following conflict attachment',
+    start_datetime: '2046-03-20T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-03-21`, {
+    body: { title: 'Future override' },
+  });
+
+  try {
+    const response = await call('PUT', `/${seriesId}/occurrences/2046-03-20/following`, {
+      body: {
+        recurrence_rule: 'FREQ=WEEKLY;BYDAY=TU',
+        attachment_name: 'conflict.txt',
+        attachment_data: `data:text/plain;base64,${Buffer.from('conflict').toString('base64')}`,
+      },
+    });
+    assert.equal(response.status, 409);
+    const entries = await fs.readdir(dir, { withFileTypes: true, recursive: true });
+    assert.equal(entries.filter((entry) => entry.isFile()).length, 0);
+    assert.equal(db.prepare(`
+      SELECT COUNT(*) AS count FROM family_documents WHERE original_name = 'conflict.txt'
+    `).get().count, 0);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+    else process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = previousEnabled;
+    if (previousPath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousPath;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('occurrence PUT owns changed assignments reminders and attachment', async () => {
+  const seriesId = insertEvent({
+    title: 'Owned route fields',
+    start_datetime: '2046-04-01T09:00:00',
+    end_datetime: '2046-04-01T10:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    created_by: MARIA.id,
+  });
+  assignEvent(seriesId, MARIA.id);
+  db.prepare(`
+    INSERT INTO reminders (entity_type, entity_id, remind_at, created_by)
+    VALUES ('event', ?, '2046-03-31T09:00:00', ?)
+  `).run(seriesId, MARIA.id);
+  const dataUrl = `data:text/plain;base64,${Buffer.from('occurrence file').toString('base64')}`;
+
+  const response = await call('PUT', `/${seriesId}/occurrences/2046-04-02`, {
+    actor: MARIA,
+    body: {
+      assigned_to: [TOM.id],
+      visibility: 'assignees',
+      reminder_offsets: [60],
+      attachment_data: dataUrl,
+      attachment_name: 'occurrence.txt',
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const childId = Number(response.body.data.id);
+  assert.equal(response.body.data.assignment_owner_id, childId);
+  assert.equal(response.body.data.attachment_owner_id, childId);
+  assert.equal(response.body.data.reminder_owner_id, childId);
+  assert.deepEqual(db.prepare(`
+    SELECT user_id FROM event_assignments WHERE event_id = ? ORDER BY user_id
+  `).all(childId).map((row) => row.user_id), [TOM.id]);
+  const documentId = db.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+    .get(childId).attachment_document_id;
+  assert.ok(documentId);
+  assert.equal(db.prepare('SELECT visibility FROM family_documents WHERE id = ?')
+    .get(documentId).visibility, 'restricted');
+  assert.deepEqual(db.prepare(`
+    SELECT user_id FROM family_document_access WHERE document_id = ? ORDER BY user_id
+  `).all(documentId).map((row) => row.user_id), [TOM.id]);
+  assert.deepEqual(db.prepare(`
+    SELECT remind_at, created_by FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? ORDER BY created_by
+  `).all(childId), [
+    { remind_at: '2046-04-02T08:00:00', created_by: MARIA.id },
+    { remind_at: '2046-04-02T08:00:00', created_by: TOM.id },
+  ]);
+});
+
+test('DELETE occurrence scopes keep only-this suppression and truncate following state', async () => {
+  const onlyId = insertEvent({
+    title: 'Delete only',
+    start_datetime: '2046-05-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${onlyId}/occurrences/2046-05-02`, { body: { title: 'Edited only' } });
+  const only = await call('DELETE', `/${onlyId}/occurrences/2046-05-02`);
+  assert.equal(only.status, 204);
+  assert.equal(db.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
+  ).get(onlyId).count, 0);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_event_exceptions
+    WHERE event_id = ? AND exception_date = '2046-05-02'
+  `).get(onlyId).count, 1);
+
+  const followingId = insertEvent({
+    title: 'Delete following',
+    start_datetime: '2046-06-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  for (const recurrenceId of ['2046-06-02', '2046-06-03']) {
+    await call('PUT', `/${followingId}/occurrences/${recurrenceId}`, {
+      body: { title: `Edited ${recurrenceId}` },
+    });
+  }
+  const following = await call('DELETE', `/${followingId}/occurrences/2046-06-03/following`);
+  assert.equal(following.status, 204);
+  assert.equal(db.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+    .get(followingId).recurrence_rule, 'FREQ=DAILY;UNTIL=20460602');
+  assert.deepEqual(db.prepare(`
+    SELECT recurrence_id FROM calendar_events
+    WHERE recurrence_parent_id = ? ORDER BY recurrence_id
+  `).all(followingId).map((row) => row.recurrence_id), ['2046-06-02']);
+});
+
+test('following delete from the first slot and whole-series delete cascade linked state', async () => {
+  const firstId = insertEvent({
+    title: 'Delete from first',
+    start_datetime: '2046-07-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${firstId}/occurrences/2046-07-02`, { body: { title: 'Child' } });
+  const first = await call('DELETE', `/${firstId}/occurrences/2046-07-01/following`);
+  assert.equal(first.status, 204);
+  assert.equal(db.prepare('SELECT 1 FROM calendar_events WHERE id = ?').get(firstId), undefined);
+
+  const wholeId = insertEvent({
+    title: 'Delete whole',
+    start_datetime: '2046-08-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  const child = await call('PUT', `/${wholeId}/occurrences/2046-08-02`, {
+    body: { title: 'Whole child', reminder_offsets: [60] },
+  });
+  const childId = Number(child.body.data.id);
+  assert.equal((await call('DELETE', `/${wholeId}`)).status, 204);
+  assert.equal(db.prepare('SELECT 1 FROM calendar_events WHERE id = ?').get(childId), undefined);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM reminders
+    WHERE entity_type = 'event' AND entity_id IN (?, ?)
+  `).get(wholeId, childId).count, 0);
+});
+
+test('PUT occurrence following creates a successor and reparents future replacements', async () => {
+  const seriesId = insertEvent({
+    title: 'Split old',
+    start_datetime: '2046-09-01T09:00:00',
+    end_datetime: '2046-09-01T10:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-09-02`, { body: { title: 'Split new' } });
+  await call('PUT', `/${seriesId}/occurrences/2046-09-03`, { body: { description: 'Future note' } });
+
+  const split = await call('PUT', `/${seriesId}/occurrences/2046-09-02/following`, {
+    body: {
+      title: 'Split new',
+      start_datetime: '2046-09-02T09:00:00',
+      end_datetime: '2046-09-02T10:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+    },
+  });
+
+  assert.equal(split.status, 201);
+  const successorId = Number(split.body.data.id);
+  assert.equal(db.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+    .get(seriesId).recurrence_rule, 'FREQ=DAILY;UNTIL=20460901');
+  assert.equal(db.prepare(`
+    SELECT recurrence_parent_id FROM calendar_events WHERE recurrence_id = '2046-09-03'
+  `).get().recurrence_parent_id, successorId);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_events
+    WHERE recurrence_parent_id = ? AND recurrence_id = '2046-09-02'
+  `).get(successorId).count, 0);
+});
+
+test('whole-series rule update requires the exact orphan count and detaches confirmed rows', async () => {
+  const seriesId = insertEvent({
+    title: 'Orphan route',
+    start_datetime: '2046-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-10-02`, {
+    body: { title: 'Orphaned Friday' },
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-10-08`, {
+    body: { title: 'Still Thursday' },
+  });
+  db.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date) VALUES (?, ?)
+  `).run(seriesId, '2046-10-04');
+
+  const first = await call('PUT', `/${seriesId}`, {
+    body: { recurrence_rule: 'FREQ=WEEKLY;BYDAY=MO' },
+  });
+  assert.equal(first.status, 409);
+  assert.deepEqual(first.body, {
+    error: 'Edited occurrences no longer fit this recurrence rule.',
+    code: 409,
+    conflict: 'calendar_override_orphans',
+    orphaned_override_count: 1,
+  });
+
+  const stale = await call('PUT', `/${seriesId}`, {
+    body: {
+      recurrence_rule: 'FREQ=WEEKLY;BYDAY=MO',
+      confirmed_orphan_count: 0,
+    },
+  });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.orphaned_override_count, 1);
+  assert.equal(db.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+    .get(seriesId).recurrence_rule, 'FREQ=DAILY');
+
+  const confirmed = await call('PUT', `/${seriesId}`, {
+    body: {
+      recurrence_rule: 'FREQ=WEEKLY;BYDAY=MO',
+      confirmed_orphan_count: 1,
+    },
+  });
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.body.data.recurrence_rule, 'FREQ=WEEKLY;BYDAY=MO');
+  assert.equal(db.prepare(`
+    SELECT recurrence_parent_id FROM calendar_events WHERE title = 'Orphaned Friday'
+  `).get().recurrence_parent_id, null);
+  assert.equal(db.prepare(`
+    SELECT recurrence_parent_id FROM calendar_events WHERE title = 'Still Thursday'
+  `).get().recurrence_parent_id, seriesId);
+  assert.deepEqual(db.prepare(`
+    SELECT exception_date FROM calendar_event_exceptions
+    WHERE event_id = ? ORDER BY exception_date
+  `).all(seriesId).map((row) => row.exception_date), ['2046-10-08']);
+});
+
+test('whole-series outbound transition confirms detachment before setting the target', async () => {
+  const seriesId = insertEvent({
+    title: 'Outbound detach route',
+    start_datetime: '2046-11-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-11-02`, {
+    body: { title: 'Outbound edited occurrence' },
+  });
+
+  const first = await call('PUT', `/${seriesId}`, {
+    body: { target_google_calendar_id: 'family@test' },
+  });
+  assert.equal(first.status, 409);
+  assert.equal(first.body.orphaned_override_count, 1);
+  assert.equal(db.prepare('SELECT target_google_calendar_id FROM calendar_events WHERE id = ?')
+    .get(seriesId).target_google_calendar_id, null);
+
+  const confirmed = await call('PUT', `/${seriesId}`, {
+    body: {
+      target_google_calendar_id: 'family@test',
+      confirmed_orphan_count: 1,
+    },
+  });
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.body.data.target_google_calendar_id, 'family@test');
+  assert.equal(db.prepare(`
+    SELECT recurrence_parent_id FROM calendar_events
+    WHERE title = 'Outbound edited occurrence'
+  `).get().recurrence_parent_id, null);
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
 // DELETE /:id
 // ════════════════════════════════════════════════════════════════════════════════
 
