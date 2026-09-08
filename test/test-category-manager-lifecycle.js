@@ -25,15 +25,39 @@ globalThis.customElements = {
 const { api } = await import('/api.js');
 await import('../public/components/category-manager.js');
 
-function managerWithCategory(onChanged) {
+function managerWithCategory(onChanged, options = {}) {
   const manager = new CategoryManager();
   manager._renderShell = () => {};
   manager._load = () => {};
-  manager.configure({ basePath: '/notes/categories', onChanged });
+  manager.configure({ basePath: '/notes/categories', onChanged, ...options });
   manager._cats = [{ id: 7, name: 'Old', scope: 'personal' }];
   manager._renderGroup = () => {};
   return manager;
 }
+
+test('configured row icon resolver controls the rendered category glyph', () => {
+  const manager = managerWithCategory(() => {}, {
+    rowIconResolver: (category) => category.scope === 'personal' ? 'user-round' : 'house',
+  });
+
+  const markup = manager._markHtml({ id: 7, name: 'Old', scope: 'personal', icon: 'fallback' });
+
+  assert.match(markup, /data-lucide="user-round"/);
+  assert.doesNotMatch(markup, /data-lucide="fallback"/);
+});
+
+test('configured scope label key labels the unified scope selector', () => {
+  const manager = managerWithCategory(() => {}, {
+    unifiedAdd: true,
+    groups: [
+      { key: 'personal', labelKey: 'personal.label' },
+      { key: 'household', labelKey: 'household.label' },
+    ],
+    addScopeLabelKey: 'custom.scope.label',
+  });
+
+  assert.match(manager._unifiedAddFormHtml(), /aria-label="custom\.scope\.label"/);
+});
 
 test('successful delayed delete refreshes the page after the modal listener is gone', async () => {
   let finishDelete;
