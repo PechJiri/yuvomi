@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Birthdays no longer vanish from the calendar when you filter by person** (#1054). The person
+  filter and "Assigned to me" keep an entry only if a selected person is assigned to it, and a
+  birthday belongs to a contact, not to a household member - so any person selection emptied the
+  whole birthday layer. Birthdays now sit outside the person axes, the way holidays always have;
+  the "Birthdays" toggle in the filter sheet remains the way to hide them. Ordinary events without
+  an assignment still drop out under a person filter, which is intentional (#987).
+
 ## [2.65.0] - 2026-09-08
 
 ### Added

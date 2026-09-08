@@ -1029,8 +1029,18 @@ function matchesPeopleFilter(item) {
   return (item.assigned_users ?? []).some((u) => state.people.has(u.id));
 }
 
-/** Beide Personen-Achsen in einem Praedikat - „mir" und die Auswahl. */
+/**
+ * Beide Personen-Achsen in einem Praedikat - „mir" und die Auswahl.
+ *
+ * Ebenen-Eintraege sind keine Antwort auf „wessen Termin" (#1054): ein
+ * Geburtstag gehoert einem Kontakt, nicht einem Haushaltsmitglied, und traegt
+ * deshalb nie eine Zuweisung. Er liefe bei jeder Personenauswahl und unter
+ * „Mir zugewiesen" leer. Wie die Feiertage, die in ihrer eigenen Liste liegen
+ * und den Personenfilter nie sehen, bleibt er stehen - ausblenden tut ihn
+ * allein seine Ebene (isVisibleLayer), am selben Marker: birthday_name.
+ */
 function passesPersonFilters(item) {
+  if (item.birthday_name) return true;
   return belongsToMe(item) && matchesPeopleFilter(item);
 }
 
@@ -3319,6 +3329,8 @@ export const __test = {
   newEventDefaultDate,
   filterTasksForCalendar,
   tasksOnDay,
+  eventsOnDay,
+  passesPersonFilters,
   eventEndDate,
   isMultiDayEvent,
   isAllDayLike,

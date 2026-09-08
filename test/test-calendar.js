@@ -1407,6 +1407,63 @@ test('scheduleEntriesOnDay() respektiert den Personenfilter und den "Mir zugewie
   }
 });
 
+test('Geburtstage ueberleben den Personenfilter und "Mir zugewiesen" - sie sind eine Ebene, keine Zuweisung (#1054)', () => {
+  const { eventsOnDay, passesPersonFilters, state } = calendarHelpers;
+  const saved = {
+    events: state.events, people: state.people, assignedToMe: state.assignedToMe,
+    currentUserId: state.currentUserId, layerBirthdays: state.layerBirthdays,
+  };
+  const DAY = '2026-09-10';
+  const idsOn = (day) => eventsOnDay(day).map((e) => e.id);
+  try {
+    state.layerBirthdays = true;
+    state.events = [
+      // So legt server/services/birthdays.js einen Geburtstag an: ohne Zuweisung.
+      { id: 1, title: 'Anna', birthday_name: 'Anna', start_datetime: DAY, all_day: 1, assigned_users: [] },
+      { id: 2, title: 'Zahnarzt', start_datetime: `${DAY}T09:00:00`, assigned_users: [{ id: 1 }] },
+      { id: 3, title: 'Elternabend', start_datetime: `${DAY}T19:00:00`, assigned_users: [] },
+    ];
+
+    state.people = new Set();
+    state.assignedToMe = false;
+    assert(idsOn(DAY).length === 3, 'ohne aktiven Filter zeigt der Tag alle drei');
+
+    state.people = new Set([1]);
+    const gefiltert = idsOn(DAY);
+    assert(gefiltert.includes(1),
+      'der Geburtstag muss bei aktiver Personenauswahl stehen bleiben - vorher verschwand er mit jeder Auswahl, weil er nie eine Zuweisung traegt (#1054)');
+    assert(gefiltert.includes(2) && !gefiltert.includes(3),
+      'gewoehnliche Termine folgen weiter der Zuweisung: der Termin ohne Person faellt heraus, das ist Absicht (#987)');
+
+    state.people = new Set();
+    state.assignedToMe = true;
+    state.currentUserId = 2;
+    const meine = idsOn(DAY);
+    assert(meine.includes(1) && !meine.includes(2) && !meine.includes(3),
+      '"Mir zugewiesen" laesst den Geburtstag ebenfalls stehen und nimmt nur fremde Termine weg');
+
+    state.assignedToMe = false;
+    state.layerBirthdays = false;
+    assert(!eventsOnDay(DAY).some((e) => e.birthday_name),
+      'ausblenden tut ihn allein seine Ebene - der Schalter im Filterblatt bleibt der eine Weg');
+
+    // Das Praedikat selbst, damit der Guard auch den Tagesindex-Pfad abdeckt,
+    // der dieselbe Funktion auf die vorgebauten Buckets anwendet.
+    state.layerBirthdays = true;
+    state.people = new Set([1]);
+    assert(passesPersonFilters({ birthday_name: 'Anna', assigned_users: [] }) === true,
+      'passesPersonFilters() nimmt den Ebenen-Eintrag von beiden Personen-Achsen aus');
+    assert(passesPersonFilters({ title: 'ohne Person', assigned_users: [] }) === false,
+      'ein Termin ohne Zuweisung faellt unveraendert heraus');
+  } finally {
+    state.events = saved.events;
+    state.people = saved.people;
+    state.assignedToMe = saved.assignedToMe;
+    state.currentUserId = saved.currentUserId;
+    state.layerBirthdays = saved.layerBirthdays;
+  }
+});
+
 test('getWeekRange: Desktop bleibt beim reinen 7-Tage-Raster (#1006)', () => {
   const { from, to } = calendarHelpers.getWeekRange('2026-03-11', { weekStart: 1, mobile: false });
   assert(from === '2026-03-09' && to === '2026-03-15',
