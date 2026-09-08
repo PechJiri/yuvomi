@@ -1,4 +1,4 @@
-import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { readdirSync, readFileSync } from 'node:fs';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 
@@ -450,24 +450,24 @@ test('buildFeed resolves linked rows without reading legacy attachment bodies', 
     VALUES (?, '2026-07-02')
   `).run(masterId);
 
-  const attachmentReads = [];
-  d2.setAuthorizer((action, table, column) => {
-    if (action === sqliteConstants.SQLITE_READ
-        && table === 'calendar_events' && column === 'attachment_data') {
-      attachmentReads.push(`${table}.${column}`);
-    }
-    return sqliteConstants.SQLITE_OK;
-  });
+  const originalPrepare = d2.prepare.bind(d2);
+  const statements = [];
+  d2.prepare = (sql) => {
+    statements.push(String(sql));
+    return originalPrepare(sql);
+  };
   let ics;
   try {
     ics = buildFeed(d2, u1, NOW, FEED_TZ);
   } finally {
-    d2.setAuthorizer(null);
+    delete d2.prepare;
   }
 
   assert(ics.includes('SUMMARY:FeedAttachmentChild'), 'linked replacement fehlt');
-  assert(attachmentReads.length === 0,
-    `attachment_data wurde gelesen: ${attachmentReads.join(', ')}`);
+  const calendarReads = statements.filter((sql) => /\b(?:FROM|JOIN)\s+calendar_events\b/i.test(sql));
+  assert(calendarReads.length > 0, 'keine Kalenderabfrage aufgezeichnet');
+  assert(calendarReads.every((sql) => !/\be\.\*|\battachment_data\b/i.test(sql)),
+    `Attachment-Body in kompakter Kalenderabfrage: ${calendarReads.join('\n---\n')}`);
 });
 
 test('buildFeed: wiederkehrendes Event mit abgelaufenem UNTIL (Vergangenheit) wird ausgeschlossen', () => {

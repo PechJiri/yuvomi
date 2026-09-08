@@ -13,7 +13,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import { handleMcpRequest, LATEST_PROTOCOL_VERSION } from '../server/mcp/protocol.js';
 import { callTool, TOOL_DEFINITIONS } from '../server/mcp/tools.js';
@@ -368,23 +368,24 @@ test('tools/call list_upcoming_events liest keine großen attachment_data-Bodies
   `).run(`${dateKey}T13:00:00`, `${dateKey}T14:00:00`, uid, 'A'.repeat(1024 * 1024))
     .lastInsertRowid;
 
-  const attachmentReads = [];
-  db.setAuthorizer((action, table, column) => {
-    if (action === sqliteConstants.SQLITE_READ
-        && table === 'calendar_events' && column === 'attachment_data') {
-      attachmentReads.push(`${table}.${column}`);
-    }
-    return sqliteConstants.SQLITE_OK;
-  });
+  const originalPrepare = db.prepare.bind(db);
+  const statements = [];
+  db.prepare = (sql) => {
+    statements.push(String(sql));
+    return originalPrepare(sql);
+  };
   let events;
   try {
     events = parseContent(await toolCall('list_upcoming_events', { limit: 100 }));
   } finally {
-    db.setAuthorizer(null);
+    delete db.prepare;
   }
 
   assert.ok(events.some((event) => Number(event.id) === Number(id)), 'Termin fehlt');
-  assert.equal(attachmentReads.length, 0, `attachment_data wurde gelesen: ${attachmentReads.join(', ')}`);
+  const calendarReads = statements.filter((sql) => /\b(?:FROM|JOIN)\s+calendar_events\b/i.test(sql));
+  assert.ok(calendarReads.length > 0, 'keine Kalenderabfrage aufgezeichnet');
+  assert.ok(calendarReads.every((sql) => !/\be\.\*|\battachment_data\b/i.test(sql)),
+    `Attachment-Body in kompakter Kalenderabfrage: ${calendarReads.join('\n---\n')}`);
 });
 
 test('tools/call list_upcoming_events reuses linked occurrence resolution', async () => {

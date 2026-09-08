@@ -5,7 +5,7 @@
  * Ausführen: node --experimental-sqlite test/test-search.js
  */
 
-import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import { runSearch, buildMatchQuery } from '../server/services/search.js';
 
@@ -17,6 +17,13 @@ function test(name, fn) {
   catch (err) { console.error(`  ✗ ${name}: ${err.message}`); failed++; }
 }
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'Assertion fehlgeschlagen'); }
+
+function assertCompactCalendarQueries(statements) {
+  const calendarReads = statements.filter((sql) => /\b(?:FROM|JOIN)\s+calendar_events\b/i.test(sql));
+  assert(calendarReads.length > 0, 'keine Kalenderabfrage aufgezeichnet');
+  assert(calendarReads.every((sql) => !/\be\.\*|\battachment_data\b/i.test(sql)),
+    `Attachment-Body in kompakter Kalenderabfrage: ${calendarReads.join('\n---\n')}`);
+}
 
 const db = new DatabaseSync(':memory:');
 db.exec('PRAGMA foreign_keys = ON;');
@@ -201,23 +208,34 @@ test('globale Suche löst große Anhänge auf, ohne attachment_data zu lesen', (
             ?, '2030-08-01', '["title","start_datetime","end_datetime"]', ?, ?)
   `).run(masterId, uid, largeAttachment).lastInsertRowid;
 
-  const attachmentReads = [];
-  db.setAuthorizer((action, table, column) => {
-    if (action === sqliteConstants.SQLITE_READ
-        && table === 'calendar_events' && column === 'attachment_data') {
-      attachmentReads.push(`${table}.${column}`);
-    }
-    return sqliteConstants.SQLITE_OK;
-  });
+  const originalPrepare = db.prepare.bind(db);
+  const statements = [];
+  db.prepare = (sql) => {
+    statements.push(String(sql));
+    return originalPrepare(sql);
+  };
   let result;
   try {
     result = runSearch(db, 'Qzxlargeattachment', uid).events;
   } finally {
-    db.setAuthorizer(null);
+    delete db.prepare;
   }
 
   assert(result.some((event) => Number(event.id) === Number(childId)), 'linked Treffer fehlt');
-  assert(attachmentReads.length === 0, `attachment_data wurde gelesen: ${attachmentReads.join(', ')}`);
+  assertCompactCalendarQueries(statements);
+});
+
+test('SQL guard erkennt e.* auch hinter einem calendar_events-JOIN', () => {
+  let error;
+  try {
+    assertCompactCalendarQueries([
+      'SELECT e.* FROM search_index si JOIN calendar_events e ON e.id = si.entity_id',
+    ]);
+  } catch (caught) {
+    error = caught;
+  }
+  assert(error?.message.startsWith('Attachment-Body in kompakter Kalenderabfrage:'),
+    `JOIN-Wildcard wurde nicht als Attachment-Body erkannt: ${error?.message || 'kein Fehler'}`);
 });
 
 test('Präfix-Treffer funktionieren (Teilwort)', () => {

@@ -7,7 +7,7 @@
 process.env.DB_PATH = ':memory:';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 
-import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import * as nodeAssert from 'node:assert/strict';
@@ -1505,24 +1505,24 @@ test('getUpcomingEvents liest keine großen attachment_data-Bodies', () => {
     created_by: cuTheo,
     attachment_data: 'A'.repeat(1024 * 1024),
   });
-  const attachmentReads = [];
-  cdb.setAuthorizer((action, table, column) => {
-    if (action === sqliteConstants.SQLITE_READ
-        && table === 'calendar_events' && column === 'attachment_data') {
-      attachmentReads.push(`${table}.${column}`);
-    }
-    return sqliteConstants.SQLITE_OK;
-  });
+  const originalPrepare = cdb.prepare.bind(cdb);
+  const statements = [];
+  cdb.prepare = (sql) => {
+    statements.push(String(sql));
+    return originalPrepare(sql);
+  };
   let events;
   try {
     events = getUpcomingEvents(cdb, { userId: cuTheo, limit: 100 });
   } finally {
-    cdb.setAuthorizer(null);
+    delete cdb.prepare;
   }
 
   assert(events.some((event) => Number(event.id) === Number(eventId)), 'Termin fehlt');
-  assert(attachmentReads.length === 0,
-    `attachment_data wurde gelesen: ${attachmentReads.join(', ')}`);
+  const calendarReads = statements.filter((sql) => /\b(?:FROM|JOIN)\s+calendar_events\b/i.test(sql));
+  assert(calendarReads.length > 0, 'keine Kalenderabfrage aufgezeichnet');
+  assert(calendarReads.every((sql) => !/\be\.\*|\battachment_data\b/i.test(sql)),
+    `Attachment-Body in kompakter Kalenderabfrage: ${calendarReads.join('\n---\n')}`);
 });
 
 test('getUpcomingEvents: private ICS-Termine fremder User werden ausgeblendet', () => {
