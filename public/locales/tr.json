@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Kimse",
         "responsibleFilterEmptyTitle": "Bu kişi için kayıt yok",
         "responsibleFilterEmptyDescription": "Bu seçimde bu ay hiçbir kayıttan kimse sorumlu değil.",
-        "handoverToSplit": "Paylaşılan giderlere aktar"
+        "handoverToSplit": "Paylaşılan giderlere aktar",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plana göre: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Döngü sekmesini göster",

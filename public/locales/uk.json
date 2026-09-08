@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Ніхто",
         "responsibleFilterEmptyTitle": "Для цієї особи немає записів",
         "responsibleFilterEmptyDescription": "Цього місяця ніхто не відповідає за запис у цій вибірці.",
-        "handoverToSplit": "Перенести до спільних витрат"
+        "handoverToSplit": "Перенести до спільних витрат",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (план: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Показати вкладку циклу",

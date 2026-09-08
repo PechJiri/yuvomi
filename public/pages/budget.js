@@ -1823,7 +1823,21 @@ function openLoanReport(loan) {
       [t('budget.loanRemainingPrincipal'), formatLoanAmount(loan.remaining_principal, loan)],
       [t('budget.loanStillToPay'), formatLoanAmount(loan.remaining_amount, loan)],
       [t('budget.loanPaidAmount'), formatLoanAmount(loan.paid_amount, loan)],
-      [t('budget.loanRemainingInstallments'), String(loan.remaining_installments)],
+      /* ZWEI ZAHLEN, NICHT EINE (#964). Links steht, was der Kontostand hergibt -
+       * wer sondertilgt, sieht sie sinken. In Klammern die Planzahl, damit der
+       * Vertragsblick nicht still verschwindet: die Bank schickt weiter dieselbe
+       * Rate, und die uebrigen Kennzahlen daneben (Monatsrate, Gesamtzins)
+       * beschreiben ausdruecklich den Vertrag. Wo die Prognose nicht zu rechnen
+       * ist - Rate deckt den Zins nicht, Laufzeit ueber der Grenze - bleibt es
+       * bei der Planzahl allein. */
+      [t('budget.loanRemainingInstallments'),
+        (loan.remaining_installments_forecast != null
+          && loan.remaining_installments_forecast !== loan.remaining_installments)
+          ? t('budget.loanRemainingInstallmentsForecast', {
+            forecast: loan.remaining_installments_forecast,
+            plan: loan.remaining_installments,
+          })
+          : String(loan.remaining_installments)],
     ]
     : [
       [t('budget.loanAmountLabel'), formatLoanAmount(loan.total_amount, loan)],

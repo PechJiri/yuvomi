@@ -198,3 +198,69 @@ export function remainingPrincipalFromPayments({
   }
   return round2(Math.max(0, balance));
 }
+
+/**
+ * Wie viele Raten bei der REALEN Restschuld noch bleiben (#964).
+ *
+ * DIE EINE ZAHL DER GRUPPE, DIE DEM KONTOSTAND FOLGEN DARF. Monatsrate und
+ * Gesamtzins beschreiben den Vertrag - die Bank schickt keine kleinere Rechnung,
+ * weil jemand mehr gezahlt hat, und das bleibt so. Die Restlaufzeit ist der
+ * Punkt, an dem Vertrag und Kontostand verschieden antworten UND der Kontostand
+ * die Frage ist, die gestellt wurde: wer sondertilgt, um frueher fertig zu sein,
+ * und danach dieselbe Laufzeit abliest, bekommt genau die Enttaeuschung, gegen
+ * die die Funktion gebaut ist.
+ *
+ * KEIN RATSCHLAG, NUR ARITHMETIK. Die Annuitaet wird fortgeschrieben, wie sie im
+ * Vertrag steht; ob sich Sondertilgen lohnt, sagt diese Zahl nicht (#935:
+ * Vorfaelligkeitsentgelte halten diese Frage ausserhalb des Rahmens).
+ *
+ * Der Zinsverlauf folgt derselben Zweiphasigkeit wie computeLoanSchedule: waehrend
+ * der Bindung der feste Satz, danach der Anschlusssatz. `paidInstallments` sagt,
+ * wo im Vertrag wir stehen - ohne diese Angabe faenge die Bindung von vorn an und
+ * ein Darlehen kurz vor Ablauf bekaeme sie noch einmal geschenkt.
+ *
+ * @returns {number|null} Anzahl noch faelliger Raten; 0 bei getilgtem Darlehen,
+ *   `null`, wenn die Rate den Zins nicht deckt (dann tilgt nichts) oder die
+ *   Rechnung die Obergrenze reisst.
+ */
+export function remainingInstallmentsForBalance({
+  balance,
+  monthlyPayment,
+  fixedRate,
+  interestMode,
+  fixedPeriodMonths = null,
+  followupRate = null,
+  paidInstallments = 0,
+}) {
+  let rest = Number(balance);
+  if (!Number.isFinite(rest) || rest <= 0.005) return 0;
+
+  const zahlung = Number(monthlyPayment);
+  if (!Number.isFinite(zahlung) || zahlung <= 0) return null;
+
+  const rf = Number(fixedRate) || 0;
+  const variabel = interestMode === 'fixed_then_variable';
+  const rv = variabel ? (Number(followupRate) || 0) : rf;
+  const bindung = variabel && Number.isFinite(Number(fixedPeriodMonths))
+    ? Number(fixedPeriodMonths)
+    : null;
+
+  let raten = 0;
+  // Dieselbe Obergrenze wie der Plan: eine Rate, die kaum tilgt, soll die
+  // Schleife nicht ewig laufen lassen.
+  for (let n = Number(paidInstallments) + 1; n <= MAX_LOAN_MONTHS && rest > 0.005; n++) {
+    const satz = (!bindung || n <= bindung) ? rf : rv;
+    const zins = rest * (satz / 100 / 12);
+    const tilgung = zahlung - zins;
+    // ABKUERZUNG, KEIN SCHUTZ: ohne diese Zeile waechst `rest` statt zu fallen,
+    // die Schleife laeuft bis MAX_LOAN_MONTHS und liefert am Ende dasselbe
+    // `null`. Nachgemessen - die Gegenprobe bleibt gruen, wenn man sie
+    // entfernt. Sie steht hier, damit ein nicht tilgendes Darlehen nicht
+    // sechshundert Runden dreht, um das Offensichtliche zu bestaetigen.
+    if (tilgung <= 0) return null;
+    rest -= Math.min(tilgung, rest);
+    raten += 1;
+  }
+  return rest > 0.005 ? null : raten;
+}
+

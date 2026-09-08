@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Nobody responsible",
         "responsibleFilterEmptyTitle": "No entry for this person",
         "responsibleFilterEmptyDescription": "Nobody is responsible for an entry in this month under this selection.",
-        "handoverToSplit": "Move to Split Expenses"
+        "handoverToSplit": "Move to Split Expenses",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plan: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Show cycle tab",

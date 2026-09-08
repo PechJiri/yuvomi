@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Nadie",
         "responsibleFilterEmptyTitle": "Ningún apunte para esta persona",
         "responsibleFilterEmptyDescription": "Nadie es responsable de un apunte este mes con esta selección.",
-        "handoverToSplit": "Pasar a gastos compartidos"
+        "handoverToSplit": "Pasar a gastos compartidos",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (según plan: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Mostrar la pestaña de ciclo",

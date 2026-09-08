@@ -1482,7 +1482,8 @@
         "responsibleNobody": "कोई नहीं",
         "responsibleFilterEmptyTitle": "इस व्यक्ति के लिए कोई प्रविष्टि नहीं",
         "responsibleFilterEmptyDescription": "इस चयन में इस माह किसी प्रविष्टि के लिए कोई जिम्मेदार नहीं है।",
-        "handoverToSplit": "साझा खर्च में ले जाएं"
+        "handoverToSplit": "साझा खर्च में ले जाएं",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (योजना: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "चक्र टैब दिखाएँ",

@@ -1482,7 +1482,8 @@
         "responsibleNobody": "لا أحد",
         "responsibleFilterEmptyTitle": "لا توجد قيود لهذا الشخص",
         "responsibleFilterEmptyDescription": "لا أحد مسؤول عن أي قيد هذا الشهر ضمن هذا التحديد.",
-        "handoverToSplit": "نقل إلى النفقات المشتركة"
+        "handoverToSplit": "نقل إلى النفقات المشتركة",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (الخطة: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "إظهار علامة تبويب الدورة",

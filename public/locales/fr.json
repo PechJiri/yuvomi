@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Personne",
         "responsibleFilterEmptyTitle": "Aucune écriture pour cette personne",
         "responsibleFilterEmptyDescription": "Personne n'est responsable d'une écriture ce mois-ci avec cette sélection.",
-        "handoverToSplit": "Basculer vers les dépenses partagées"
+        "handoverToSplit": "Basculer vers les dépenses partagées",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plan : {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Afficher l’onglet cycle",

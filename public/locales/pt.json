@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Ninguém",
         "responsibleFilterEmptyTitle": "Nenhum lançamento para esta pessoa",
         "responsibleFilterEmptyDescription": "Ninguém é responsável por um lançamento neste mês com esta seleção.",
-        "handoverToSplit": "Passar para despesas partilhadas"
+        "handoverToSplit": "Passar para despesas partilhadas",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plano: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Mostrar a aba de ciclo",

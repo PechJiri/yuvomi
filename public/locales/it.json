@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Nessuno",
         "responsibleFilterEmptyTitle": "Nessuna registrazione per questa persona",
         "responsibleFilterEmptyDescription": "Nessuno è responsabile di una registrazione in questo mese con questa selezione.",
-        "handoverToSplit": "Passa alle spese condivise"
+        "handoverToSplit": "Passa alle spese condivise",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (piano: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Mostra la scheda ciclo",

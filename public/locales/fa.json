@@ -1494,7 +1494,8 @@
         "responsibleNobody": "هیچ‌کس",
         "responsibleFilterEmptyTitle": "موردی برای این شخص نیست",
         "responsibleFilterEmptyDescription": "در این ماه هیچ‌کس در این گزینش مسئول موردی نیست.",
-        "handoverToSplit": "انتقال به هزینه‌های مشترک"
+        "handoverToSplit": "انتقال به هزینه‌های مشترک",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (طرح: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "نمایش برگهٔ چرخه",

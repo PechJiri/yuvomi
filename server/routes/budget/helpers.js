@@ -12,7 +12,7 @@ import {
   budgetVisibilityWhere, budgetScopeWhere, budgetDetailsHiddenWhere, canEditEntry,
   resolveBudgetMode, maskBudgetEntry, BUDGET_MASKED_CATEGORY,
 } from '../../services/budget-visibility.js';
-import { computeLoanSchedule, remainingPrincipalFromPayments } from '../../services/loan-amortization.js';
+import { computeLoanSchedule, remainingPrincipalFromPayments, remainingInstallmentsForBalance } from '../../services/loan-amortization.js';
 import { todayKey } from '../../utils/timezone.js';
 
 // --------------------------------------------------------
@@ -687,6 +687,10 @@ export function loanSummaryRow(loan, baseCurrency = budgetCurrency()) {
     remaining_amount: remainingAmount,
     remaining_principal: remainingPrincipal,
     remaining_installments: remainingInstallments,
+    // Dieselbe Zahl, aber am Kontostand statt am Vertrag gerechnet (#964).
+    // Ohne Zinsteil oder bei nicht amortisierender Rate bleibt sie null, und die
+    // Oberflaeche zeigt dann allein die Planzahl.
+    remaining_installments_forecast: forecastRemainingInstallments(loan, interest, paidInstallments),
     is_settled: settled,
     next_installment_number: !settled ? paidInstallments + 1 : null,
     next_due_month: !settled ? addMonths(loan.start_month, paidInstallments) : null,
@@ -731,6 +735,34 @@ export function loanInterestSummary(loan, payments = []) {
     remaining_after_binding: calc.remainingAfterBinding,
     binding_end_month: loan.fixed_period_months ? addMonths(loan.start_month, loan.fixed_period_months) : null,
   };
+}
+
+/**
+ * Die Restlaufzeit, die dem Geld folgt (#964).
+ *
+ * `remaining_installments` an der Zeile zaehlt weiter die ungebuchten
+ * PLAN-Raten - das beschreibt den Vertrag und bleibt stehen. Diese Zahl daneben
+ * beantwortet die andere Frage: wie viele Raten sind es bei der REALEN
+ * Restschuld noch? Wer sondertilgt, sieht sie sinken, waehrend die Planzahl
+ * unveraendert bleibt; die Oberflaeche zeigt beide, damit der Vertragsblick
+ * nicht still verschwindet.
+ *
+ * `null`, wo die Frage keinen Sinn hat: zinsfreie Darlehen (dort IST die
+ * Planzahl die Antwort), nicht amortisierende Raten, und alles, was
+ * computeLoanSchedule schon nicht rechnen konnte.
+ */
+function forecastRemainingInstallments(loan, interest, paidInstallments) {
+  if (!interest) return null;
+  const zahl = remainingInstallmentsForBalance({
+    balance: interest.remaining_principal,
+    monthlyPayment: interest.monthly_payment,
+    fixedRate: loan.fixed_rate,
+    interestMode: loan.interest_mode,
+    fixedPeriodMonths: loan.fixed_period_months,
+    followupRate: loan.followup_rate,
+    paidInstallments,
+  });
+  return zahl;
 }
 
 export function loadLoan(id, baseCurrency = budgetCurrency()) {

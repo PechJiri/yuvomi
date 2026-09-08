@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Paying extra on a loan now shortens the remaining term, not only the balance** (#964). Since
+  #954 the remaining principal follows the money you actually paid, but the remaining term beside it
+  stayed plan-based and still said 100 installments after you had doubled a payment - the exact
+  number the reporter was looking at. It now shows what the account balance implies, with the
+  contractual figure in brackets: **98 (plan: 100)**.
+
+  Only that one figure moves. Monthly payment and total interest genuinely describe the contract -
+  the bank will not send a smaller invoice because you overpaid - and they stay as they are. The
+  remaining term is the one number in the group where the contract and the balance disagree and the
+  balance is what was being asked about. Both are shown so the contractual view does not quietly
+  disappear.
+
+  The projection is arithmetic, not advice: it carries the contractual annuity forward at the
+  contractual rates, including the switch to the follow-up rate at the end of a fixed period. It
+  says nothing about whether overpaying is worthwhile - early-repayment penalties keep that question
+  out of scope (#935). Where the sum cannot be computed - an instalment that does not cover the
+  interest - the plan figure stands alone rather than an invented one.
+
 - **A month-end series in its own timezone no longer drifts across a DST change** (#985). A series
   imported over CalDAV or ICS carries the timezone it was created in. Its recurrence was computed on
   **UTC** days, and where the UTC day and the local day disagree - a late-evening event, say 23:30 in

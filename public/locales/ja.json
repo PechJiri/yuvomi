@@ -1482,7 +1482,8 @@
         "responsibleNobody": "担当なし",
         "responsibleFilterEmptyTitle": "この人の記録はありません",
         "responsibleFilterEmptyDescription": "この選択では、今月どの記録にも担当者がいません。",
-        "handoverToSplit": "共有支出に移す"
+        "handoverToSplit": "共有支出に移す",
+        "loanRemainingInstallmentsForecast": "{{forecast}}（計画: {{plan}}）"
     },
     "settings": {
         "healthCycleEnableLabel": "周期タブを表示",

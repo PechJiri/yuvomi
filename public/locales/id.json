@@ -1494,7 +1494,8 @@
         "responsibleNobody": "Tidak ada",
         "responsibleFilterEmptyTitle": "Tidak ada entri untuk orang ini",
         "responsibleFilterEmptyDescription": "Tidak ada yang bertanggung jawab atas entri bulan ini dalam pilihan ini.",
-        "handoverToSplit": "Pindahkan ke pengeluaran bersama"
+        "handoverToSplit": "Pindahkan ke pengeluaran bersama",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (rencana: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Tampilkan tab siklus",

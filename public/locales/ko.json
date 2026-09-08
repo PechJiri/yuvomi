@@ -1494,7 +1494,8 @@
         "responsibleNobody": "담당 없음",
         "responsibleFilterEmptyTitle": "이 사람의 항목이 없습니다",
         "responsibleFilterEmptyDescription": "이 선택에서 이번 달에는 어떤 항목에도 담당자가 없습니다.",
-        "handoverToSplit": "공동 지출로 옮기기"
+        "handoverToSplit": "공동 지출로 옮기기",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (계획: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "주기 탭 표시",

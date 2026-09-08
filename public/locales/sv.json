@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Ingen",
         "responsibleFilterEmptyTitle": "Ingen post för den här personen",
         "responsibleFilterEmptyDescription": "Ingen är ansvarig för en post den här månaden i det här urvalet.",
-        "handoverToSplit": "Flytta till delade utgifter"
+        "handoverToSplit": "Flytta till delade utgifter",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (enligt plan: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Visa cykelfliken",

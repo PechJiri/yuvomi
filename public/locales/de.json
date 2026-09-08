@@ -1494,7 +1494,8 @@
         "responsibleNobody": "Niemand zuständig",
         "responsibleFilterEmptyTitle": "Keine Buchung für diese Person",
         "responsibleFilterEmptyDescription": "In diesem Monat ist niemand für eine Buchung dieser Auswahl zuständig.",
-        "handoverToSplit": "In geteilte Ausgaben übernehmen"
+        "handoverToSplit": "In geteilte Ausgaben übernehmen",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (Plan: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Zyklus-Tab anzeigen",

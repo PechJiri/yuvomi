@@ -1494,7 +1494,8 @@
         "responsibleNobody": "Nikt",
         "responsibleFilterEmptyTitle": "Brak wpisów dla tej osoby",
         "responsibleFilterEmptyDescription": "W tym miesiącu nikt nie odpowiada za wpis w tym wyborze.",
-        "handoverToSplit": "Przenieś do wydatków wspólnych"
+        "handoverToSplit": "Przenieś do wydatków wspólnych",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (wg planu: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Pokaż kartę cyklu",

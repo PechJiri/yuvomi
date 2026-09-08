@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Không ai",
         "responsibleFilterEmptyTitle": "Không có mục nào cho người này",
         "responsibleFilterEmptyDescription": "Tháng này không ai phụ trách mục nào trong lựa chọn này.",
-        "handoverToSplit": "Chuyển sang chi tiêu chung"
+        "handoverToSplit": "Chuyển sang chi tiêu chung",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (kế hoạch: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Hiện tab chu kỳ",

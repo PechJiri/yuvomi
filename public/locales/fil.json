@@ -1494,7 +1494,8 @@
         "responsibleNobody": "Walang responsable",
         "responsibleFilterEmptyTitle": "Walang entry para sa taong ito",
         "responsibleFilterEmptyDescription": "Walang responsable sa anumang entry ngayong buwan sa piniling ito.",
-        "handoverToSplit": "Ilipat sa shared expenses"
+        "handoverToSplit": "Ilipat sa shared expenses",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plano: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Ipakita ang tab ng siklo",

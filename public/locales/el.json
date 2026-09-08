@@ -1482,7 +1482,8 @@
         "responsibleNobody": "Κανείς",
         "responsibleFilterEmptyTitle": "Καμία εγγραφή για αυτό το άτομο",
         "responsibleFilterEmptyDescription": "Κανείς δεν είναι υπεύθυνος για εγγραφή αυτόν τον μήνα σε αυτή την επιλογή.",
-        "handoverToSplit": "Μεταφορά στα κοινά έξοδα"
+        "handoverToSplit": "Μεταφορά στα κοινά έξοδα",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (σχέδιο: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Εμφάνιση καρτέλας κύκλου",
