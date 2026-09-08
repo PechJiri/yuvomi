@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0] - 2026-09-08
+
 ### Added
 
 - **Medication reminders now reach the person's caregivers too, and say whose dose it is** (D#1041,

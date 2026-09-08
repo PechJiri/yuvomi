@@ -637,6 +637,8 @@ from a shared UID would be ambiguous; the planned unified override model must pr
 
 The wording is coarse while the date is far off and exact once it is near (`public/utils/countdown.js`): exact days up to 30, then about-weeks, about-months, about-years. The switch is built in rather than offered as a setting — "10 days until the licence expires" has to stay 10 days, and a threshold for a display detail is a question nobody wants to be asked.
 
+**Overdue grace period (#969, #1027):** an expired countdown stays on the tile for a household-wide number of days after its date, `countdown_grace_days` in the preferences API (Settings → Modules; default 7 from `DEFAULT_OVERDUE_GRACE_DAYS` in `server/services/countdowns.js`, integer 0 … 90, admin-only to write, a blank field is rejected rather than saved as 0). It is a household value, not a personal one, because the tile sorts overdue rows first: a long grace period pushes upcoming dates out of the visible rows for everyone. 0 is a valid choice and means an overdue entry disappears the next day.
+
 **Colour carries urgency, not origin** (`countdownRank()`, four ranks): `overdue` red, `now` (today/tomorrow) amber, `soon` (≤30 days, the exactly-counted band) label colour, `later` secondary. The 30-day boundary is the same one at which the wording switches, so the tile has one idea of "near" rather than two. The origin colour stays on the mark at the left, where the 16%-tint/35%-mix recipe applies — the same one the calendar uses for `--ev-color`, because a user-chosen event colour is not a curated module tone (see the limit of the accent-on-tint rule under Colors).
 
 **A passed date stays for `OVERDUE_GRACE_DAYS` (7)** and is shown as "3 days ago", sorted to the top because its day count is negative. It used to drop out immediately; for events "overdue" exists nowhere else, and the thread's own motivating case is an expiry date, so the countdown vanished exactly when the consequence began. **Recurring entries are exempt** — a yearly renewal is never "expired", it has a next turn. What does not fit the tile is named (`+N more`) rather than cut silently; `countdownTotal` travels beside the list for that, like `birthdayCount` beside `birthdays`.
@@ -2758,7 +2760,7 @@ patterns. Any member may add one; renaming or deleting one is the creator's call
 | short_code | TEXT | optional, max 12 chars — the compact calendar strip shows this |
 | start_time / end_time | TEXT | HH:MM, both or neither (`CHECK`). `end <= start` means the shift crosses midnight; it stays on its start day |
 | color | TEXT | NOT NULL (default `#6C3AED`) |
-| icon | TEXT | optional Lucide icon name (migration 170), validated for form only (lowercase/digits/hyphens, ≤48 chars) — the same rule quick-links applies to its icon field, since the vocabulary itself lives client-side (`window.lucide`) and isn't reachable from the server |
+| icon | TEXT | optional Lucide icon name (migration 182), validated for form only (lowercase/digits/hyphens, ≤48 chars) — the same rule quick-links applies to its icon field, since the vocabulary itself lives client-side (`window.lucide`) and isn't reachable from the server |
 | created_by | INTEGER | FK → Users (SET NULL) — decides who may change it |
 | created_at / updated_at | TEXT | ISO 8601 |
 
@@ -2788,7 +2790,7 @@ formally closed.
 | shift_type_id | INTEGER | FK → Schedule Shift Types (RESTRICT) — NULL is a free day within the cycle |
 
 Shortening a pattern is refused while days sit beyond the new length, rather than silently dropping
-them. As of migration 183, a position is **not** unique — a cycle day may carry several rows (a
+them. As of migration 188, a position is **not** unique — a cycle day may carry several rows (a
 timetable's multiple classes at different times on the same weekday), each its own `shift_type_id`.
 `PUT /patterns/:id/days` always replaces every row of a pattern in one transaction (delete-all,
 re-insert-all), so every save assigns fresh ids to every row, even unchanged ones.
@@ -2810,7 +2812,7 @@ reassignment) instead of one `PUT` per day. Its cap is a separate constant from 
 *writes* real rows, cutting against the "computed on read, never materialized" rule above if it
 were allowed to run for years at a time; the number is sized for an absence, not a shadow pattern.
 
-#### Schedule Extra Shifts (Schedule v4, migration 180)
+#### Schedule Extra Shifts (Schedule v3, migration 186)
 
 Additive to whatever the primary pattern/override slot resolves for a day - never a replacement
 for it, and deliberately not a generalization of Schedule Overrides' one-row-per-day model. The
@@ -2867,7 +2869,7 @@ three lists (patterns, overrides, extras), and one create modal reaches all thre
 toggles: **Recurring** (a pattern vs. a one-time entry) and, if one-time, **Replace** (an override,
 which may carry a free/no-shift value) vs. **Add** (an extra, which must always name a real shift).
 
-#### Schedule Custom Fields (migration 184)
+#### Schedule Custom Fields (migration 189)
 
 A household-wide registry of extra fields (e.g. "Room", "Instructor") a shift type can carry beyond
 its own name — deliberately **not** fixed columns like Timetables' `subject`/`room`/`instructor`,
@@ -3674,13 +3676,18 @@ Off by default. Four tabs (shift types, patterns, overrides, statistics) plus a 
   is not.
 - **Overnight shifts** stay on their start day, so a night shift does not smear across two calendar
   days. `end_time <= start_time` is what marks one; `end == start` is a 24-hour shift.
-- **Quick-start presets:** the Shift Types tab's empty state offers a one-click "quick start" that
-  creates seven common presets (Early/Late/Night/Day/24-hour, plus Vacation/Sick) client-side,
-  sequentially, against the existing unrestricted `POST /shift-types` — reusing the same preset
+- **Quick-start templates:** the Shift Types tab offers a one-click "quick start" in three
+  templates, work, school and university (`QUICKSTART_TEMPLATES` in `public/pages/schedule.js`),
+  each creating its preset shift types client-side, sequentially, against the existing
+  unrestricted `POST /shift-types` — reusing the same preset
   values that already prefill the create-shift-type form, rather than a dedicated bulk-create
   endpoint. Vacation and Sick carry no start/end time on purpose - a shift type without times is
   already a valid, "all day" type (`start_time`/`end_time` are nullable as a pair), so an absence
-  reason is just a shift type nobody works, not a new concept or column.
+  reason is just a shift type nobody works, not a new concept or column. Which templates the
+  quick start offers is a household preference, `schedule_hidden_templates` (a subset of the three
+  keys; admin-only to write, like `disabled_modules` and unlike the per-user `hidden_modules`,
+  because the templates create *shared* shift types). Hiding a template never touches shift types
+  it already created.
 - **Fill a date range:** `POST /overrides/fill` writes an override across an inclusive range in one
   call (e.g. a vacation), instead of one `PUT` per day — see Schedule Overrides above for its cap.
   The client always confirms before submitting, since it silently overwrites any existing overrides
