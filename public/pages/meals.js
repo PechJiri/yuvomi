@@ -21,6 +21,7 @@ import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
 import { findPageFab } from '/utils/fab.js';
 import { zonedWeekday } from '/utils/timezone.js';
 import { mealTypeList, primeMealTypeNames } from '/utils/meal-types.js';
+import { recipeThumbHtml, wireRecipeThumbs } from '/utils/recipe-thumb.js';
 
 // --------------------------------------------------------
 // Konstanten
@@ -447,6 +448,9 @@ function renderWeekGrid() {
 
   grid.removeAttribute('aria-busy');
   if (window.lucide) lucide.createIcons({ el: grid });
+  // Vorschaubilder brauchen ihren Platzhalter-Ruecksturz per Listener (#1059) -
+  // ein `onerror` im Markup waere ein Inline-Handler und CSP-verboten.
+  wireRecipeThumbs(grid);
   stagger(grid.querySelectorAll('.meal-card'));
   wireGrid(grid);
 
@@ -642,9 +646,14 @@ function renderSlot(date, type, mealsForDay, dayCol, typeRow) {
     // gehört der Titelfläche; die Aktionen stehen daneben, nicht darin.
     return `
       <div class="meal-card" data-meal-id="${meal.id}">
-        <button type="button" class="meal-card__open"
+        <button type="button" class="meal-card__open${meal.recipe_has_image ? ' meal-card__open--with-thumb' : ''}"
            data-action="edit-meal"
            data-meal-id="${meal.id}">
+          ${meal.recipe_has_image ? recipeThumbHtml({
+            recipeId: meal.recipe_id,
+            hasImage: true,
+            className: 'meal-card__thumb',
+          }) : ''}
           <span class="meal-card__title"><span class="meal-card__title-text">${esc(meal.title)}</span>${recurrenceBadge}</span>
           ${ingLabel ? `<span class="meal-card__meta">
             <span class="meal-card__ingredients-count">${ingLabel}${esc(ingDoneLabel)}</span>

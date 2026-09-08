@@ -327,11 +327,16 @@ router.get('/', (req, res) => {
       : ALL_MEAL_TYPES;
     const placeholders = visibleTypes.map(() => '?').join(', ');
     result.todayMeals = d.prepare(`
-      SELECT * FROM meals
-      WHERE date = ?
-        AND meal_type IN (${placeholders})
+      SELECT m.*,
+             -- Wie im Planer (#1059): ob das verknuepfte Rezept ein
+             -- Provider-Bild hat, entscheidet die Kachel ohne Nachfrage.
+             r.provider_has_image AS recipe_has_image
+      FROM meals m
+      LEFT JOIN recipes r ON r.id = m.recipe_id
+      WHERE m.date = ?
+        AND m.meal_type IN (${placeholders})
       ORDER BY
-        CASE meal_type
+        CASE m.meal_type
           WHEN 'breakfast' THEN 0
           WHEN 'lunch'     THEN 1
           WHEN 'dinner'    THEN 2

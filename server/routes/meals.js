@@ -214,10 +214,16 @@ router.get('/', (req, res) => {
     // nachfragen. NULL heißt unbegrenzt.
     const meals = db.get().prepare(`
       SELECT m.*, u.display_name AS creator_name, u.avatar_color AS creator_color,
-             mrt.end_date AS recurrence_end_date
+             mrt.end_date AS recurrence_end_date,
+             -- Hat das verknuepfte Rezept ein Bild beim Provider (#1059)? Der
+             -- Planer stellt damit den Platzhalter ODER das Vorschaubild, ohne
+             -- je Karte nachzufragen - und ohne einen Thumbnail-Request, der
+             -- fuer ein bildloses Rezept ohnehin nur ein 404 waere.
+             r.provider_has_image AS recipe_has_image
       FROM meals m
       LEFT JOIN users u ON u.id = m.created_by
       LEFT JOIN meal_recurrence_templates mrt ON mrt.id = m.recurrence_template_id
+      LEFT JOIN recipes r ON r.id = m.recipe_id
       WHERE m.date BETWEEN ? AND ?
       ORDER BY m.date ASC,
         CASE m.meal_type

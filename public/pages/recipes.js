@@ -21,6 +21,7 @@ import { renderSkeletonList } from '/utils/skeleton.js';
 import { mountEmptyState, mountLoadError } from '/utils/empty-state.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { mealTypeList, ensureMealTypeNames } from '/utils/meal-types.js';
+import { recipeThumbEl } from '/utils/recipe-thumb.js';
 
 let _container = null;
 /** Handle des geteilten Suchfelds (setValue/clear), gesetzt in render(). */
@@ -70,34 +71,16 @@ function sourceBadge(recipe) {
   return badge;
 }
 
-// Vorschaubild für ein gespiegeltes Rezept. Ohne Bild in Mealie (kein
-// provider_has_image aus dem letzten Sync) direkt der Platzhalter - kein
-// Thumbnail-Request, der ohnehin nur in einem 404 endet (bekannter Mealie-
-// eigener Logspam, siehe mealie-recipes/mealie#4804). Mit Bild wird echt
-// geladen, fällt aber per onerror auf denselben Platzhalter zurück, falls das
-// Bild zwischen dem letzten Sync und jetzt in Mealie gelöscht wurde - sonst
-// stünde ein kaputtes Bild-Icon in der Zeile, bis der nächste Sync es merkt.
+// Vorschaubild fuer ein gespiegeltes Rezept. Die beiden Faelle - kein Bild beim
+// Provider, Bild seit dem letzten Sync verschwunden - stehen samt Begruendung in
+// utils/recipe-thumb.js; seit #1059 zeigen auch Planer und Uebersichtskachel
+// dasselbe Bild und teilen sich denselben Ruecksturz.
 function recipeThumb(recipe) {
-  const slot = document.createElement('span');
-  slot.className = 'recipe-row__thumb';
-  if (!recipe.provider_has_image) {
-    slot.classList.add('recipe-row__thumb--placeholder');
-    slot.insertAdjacentHTML('beforeend', '<i data-lucide="utensils" class="icon-sm" aria-hidden="true"></i>');
-    return slot;
-  }
-  const img = document.createElement('img');
-  img.className = 'recipe-row__thumb-img';
-  img.src = `/api/v1/recipes/${recipe.id}/provider-thumbnail`;
-  img.alt = '';
-  img.loading = 'lazy';
-  img.addEventListener('error', () => {
-    img.remove();
-    slot.classList.add('recipe-row__thumb--placeholder');
-    slot.insertAdjacentHTML('beforeend', '<i data-lucide="utensils" class="icon-sm" aria-hidden="true"></i>');
-    if (window.lucide) window.lucide.createIcons({ el: slot });
-  }, { once: true });
-  slot.appendChild(img);
-  return slot;
+  return recipeThumbEl({
+    recipeId: recipe.id,
+    hasImage: recipe.provider_has_image,
+    className: 'recipe-row__thumb',
+  });
 }
 
 function mealTypeOptions() {

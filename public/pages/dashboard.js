@@ -48,6 +48,7 @@ import { prefersInkText } from '/utils/contrast.js';
 import { openQuickLinksManager } from '/components/quick-links-manager.js';
 import { attachOverlay } from '/utils/overlay-history.js';
 import { mealTypeList, primeMealTypeNames } from '/utils/meal-types.js';
+import { recipeThumbHtml, wireRecipeThumbs } from '/utils/recipe-thumb.js';
 
 // Hält den AbortController des aktuellen FAB-Listeners - wird bei jedem render() erneuert.
 let _fabController = null;
@@ -1226,7 +1227,18 @@ function renderTodayMeals(meals, visibleMealTypes = MEAL_ORDER) {
           <span class="meal-slot__type">${mealLabels[type]}</span>
           <i data-lucide="${MEAL_ICONS[type]}" class="meal-slot__icon" aria-hidden="true"></i>
         </div>
-        <div class="meal-slot__title${meal ? '' : ' meal-slot__title--empty'}">${meal ? esc(meal.title) : '—'}</div>
+        <div class="meal-slot__title${meal ? '' : ' meal-slot__title--empty'}">${meal
+          // NUR MIT BILD, anders als im Planer (#1059). Der Slot traegt oben
+          // rechts schon ein Symbol fuer seine Mahlzeitenart; ein zweites,
+          // gleich aussehendes Platzhalter-Symbol daneben waere Unruhe ohne
+          // Aussage. Die Hoehe der Kachel haengt nicht daran - das Bild sitzt
+          // in der Titelzeile und ist so hoch wie sie.
+          ? `${meal.recipe_has_image ? recipeThumbHtml({
+              recipeId: meal.recipe_id,
+              hasImage: true,
+              className: 'meal-slot__thumb',
+            }) : ''}<span class="meal-slot__title-text">${esc(meal.title)}</span>`
+          : '—'}</div>
       </div>
     `;
   }).join('');
@@ -4575,6 +4587,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
     container.querySelectorAll('[data-widget-retry]').forEach((btn) =>
       btn.addEventListener('click', rerender, { signal: signal }));
     if (window.lucide) window.lucide.createIcons({ el: shell });
+    // Vorschaubilder der Mahlzeitenkachel: Ruecksturz auf den Platzhalter per
+    // Listener, weil ein `onerror` im Markup gegen die CSP liefe (#1059).
+    wireRecipeThumbs(shell);
     wireWeatherRefresh(container, (updatedWeather) => {
       weather = updatedWeather;
       rebuildDashboard(cfg);

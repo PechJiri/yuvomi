@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Planned meals show their recipe's picture, for recipes mirrored from Mealie or Tandoor**
+  (#1059, step one). The thumbnail proxy has existed since the provider sync landed, but only the
+  recipe list used it; the meal planner and the "today's meals" tile rendered text. Both now show
+  the picture where the recipe has one, so a household running a recipe manager gets a visual
+  planner with no new field and no upload. Recipes typed into Yuvomi still have no image - that is
+  step two, and it is the storage work.
+
+  A card **without** a picture is untouched: no placeholder, no indent, the same title width it had
+  before. The first cut gave every card an image slot so all of them would line up, which turned
+  out to be exactly the layout change the issue rules out - measured in the week view, the slot
+  cost 32px plus spacing out of a roughly 100px column, in every cell, and a household without a
+  recipe manager would have paid a third of its title width for a meaningless cutlery icon. Row
+  height is what stays equal: the same card measures 121px with a picture and 121px without.
+
 - **A household can name the four meal slots itself** (#1058). Breakfast, lunch, dinner and snack
   are now shown under whatever your household calls them - set in Settings → Modules → Kitchen,
   next to the switch that decides which slots appear at all, because which slots and what they are
