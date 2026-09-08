@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Aggiorna anche le voci esistenti",
         "healthVisibilityApplyHint": "Salvato. Vuoi aggiornare anche le voci esistenti in {{area}}?",
         "healthVisibilityApplied": "{{count}} voci aggiornate.",
-        "healthVisibilityApplied_one": "Una voce aggiornata."
+        "healthVisibilityApplied_one": "Una voce aggiornata.",
+        "mealTypeNamesLabel": "Nomi personalizzati",
+        "mealTypeNamesHint": "Come la tua famiglia chiama i quattro pasti. Lascia vuoto per il nome integrato. Il nome appare uguale in tutte le lingue.",
+        "mealTypeNamesSaved": "Nomi salvati."
     },
     "login": {
         "tagline": "Bentornato nel tuo pianificatore familiare.",

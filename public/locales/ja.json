@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "既存の記録も変更する",
         "healthVisibilityApplyHint": "保存しました。{{area}} の既存の記録も変更しますか？",
         "healthVisibilityApplied": "{{count}} 件の記録を変更しました。",
-        "healthVisibilityApplied_one": "1 件の記録を変更しました。"
+        "healthVisibilityApplied_one": "1 件の記録を変更しました。",
+        "mealTypeNamesLabel": "独自の名前",
+        "mealTypeNamesHint": "この家庭で四つの食事を何と呼ぶか。空欄にすると既定の名前を使います。名前は入力したまま、すべての言語で表示されます。",
+        "mealTypeNamesSaved": "名前を保存しました。"
     },
     "login": {
         "tagline": "家族のプランナーへおかえりなさい。",

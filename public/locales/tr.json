@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Mevcut kayıtları da değiştir",
         "healthVisibilityApplyHint": "Kaydedildi. {{area}} altındaki mevcut kayıtlar da değiştirilsin mi?",
         "healthVisibilityApplied": "{{count}} kayıt değiştirildi.",
-        "healthVisibilityApplied_one": "Bir kayıt değiştirildi."
+        "healthVisibilityApplied_one": "Bir kayıt değiştirildi.",
+        "mealTypeNamesLabel": "Kendi adlarınız",
+        "mealTypeNamesHint": "Haneniz dört öğünü nasıl adlandırıyor. Yerleşik ad için boş bırakın. Ad, her dilde yazdığınız gibi görünür.",
+        "mealTypeNamesSaved": "Adlar kaydedildi."
     },
     "login": {
         "tagline": "Aile planlayıcına tekrar hoş geldin.",

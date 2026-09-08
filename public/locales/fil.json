@@ -2603,7 +2603,10 @@
         "healthVisibilityApply": "Baguhin din ang mga umiiral na entry",
         "healthVisibilityApplyHint": "Nai-save. Baguhin din ba ang mga umiiral na entry sa {{area}}?",
         "healthVisibilityApplied": "{{count}} entry ang binago.",
-        "healthVisibilityApplied_one": "Isang entry ang binago."
+        "healthVisibilityApplied_one": "Isang entry ang binago.",
+        "mealTypeNamesLabel": "Sarili mong mga pangalan",
+        "mealTypeNamesHint": "Kung ano ang tawag ng inyong sambahayan sa apat na pagkain. Iwanang blangko para sa nakatakdang pangalan. Lumalabas ang pangalan sa lahat ng wika nang eksakto tulad ng iyong isinulat.",
+        "mealTypeNamesSaved": "Na-save ang mga pangalan."
     },
     "login": {
         "tagline": "Maligayang pagbabalik sa iyong family planner.",

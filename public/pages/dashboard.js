@@ -47,6 +47,7 @@ import { hasIcon } from '/utils/lucide-icons.js';
 import { prefersInkText } from '/utils/contrast.js';
 import { openQuickLinksManager } from '/components/quick-links-manager.js';
 import { attachOverlay } from '/utils/overlay-history.js';
+import { mealTypeList, primeMealTypeNames } from '/utils/meal-types.js';
 
 // Hält den AbortController des aktuellen FAB-Listeners - wird bei jedem render() erneuert.
 let _fabController = null;
@@ -639,12 +640,12 @@ function normalizeVisibleMealTypes(visibleMealTypes) {
   return filtered.length ? filtered : MEAL_ORDER;
 }
 
-const MEAL_LABELS = () => ({
-  breakfast: t('meals.typeBreakfast'),
-  lunch:     t('meals.typeLunch'),
-  dinner:    t('meals.typeDinner'),
-  snack:     t('meals.typeSnack'),
-});
+// Aus utils/meal-types.js, nicht aus vier eigenen t()-Zeilen: der Haushalt darf
+// die Slots umbenennen (#1058), und die Kachel nennt dieselbe Mahlzeit wie der
+// Planer daneben.
+const MEAL_LABELS = () => Object.fromEntries(
+  mealTypeList().map(({ key, label }) => [key, label]),
+);
 
 const MEAL_ICONS = {
   breakfast: 'sunrise',
@@ -4087,6 +4088,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     // Ueberholt oder verlassen, waehrend die Antworten unterwegs waren (#977):
     // dieser Aufbau gehoert niemandem mehr und faesst die Flaeche nicht an.
     if (signal.aborted) return;
+    primeMealTypeNames(prefsRes?.data);
     data         = dashRes;
     /* Die Zahlen an den Nav-Zielen und Modulkacheln kommen aus derselben
      * Antwort (#868). Sie hier hereinzureichen spart die zweite Aggregation,

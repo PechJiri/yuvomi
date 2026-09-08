@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "A meglévő bejegyzések is változzanak",
         "healthVisibilityApplyHint": "Mentve. A(z) {{area}} meglévő bejegyzései is változzanak?",
         "healthVisibilityApplied": "{{count}} bejegyzés módosítva.",
-        "healthVisibilityApplied_one": "Egy bejegyzés módosítva."
+        "healthVisibilityApplied_one": "Egy bejegyzés módosítva.",
+        "mealTypeNamesLabel": "Saját elnevezések",
+        "mealTypeNamesHint": "Hogyan hívja a háztartásod a négy étkezést. Hagyd üresen a beépített névhez. A név minden nyelven pontosan úgy jelenik meg, ahogy beírod.",
+        "mealTypeNamesSaved": "Elnevezések elmentve."
     },
     "login": {
         "tagline": "Üdv újra a családi tervezőben.",

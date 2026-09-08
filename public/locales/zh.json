@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "同时修改已有记录",
         "healthVisibilityApplyHint": "已保存。是否也修改 {{area}} 中的已有记录？",
         "healthVisibilityApplied": "已修改 {{count}} 条记录。",
-        "healthVisibilityApplied_one": "已修改 1 条记录。"
+        "healthVisibilityApplied_one": "已修改 1 条记录。",
+        "mealTypeNamesLabel": "自定义名称",
+        "mealTypeNamesHint": "你家对这四餐的称呼。留空则使用内置名称。名称在所有语言中都按你输入的样子显示。",
+        "mealTypeNamesSaved": "名称已保存。"
     },
     "login": {
         "tagline": "欢迎回到您的家庭计划工具。",

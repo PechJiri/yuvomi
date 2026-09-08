@@ -2603,7 +2603,10 @@
         "healthVisibilityApply": "Zmień też istniejące wpisy",
         "healthVisibilityApplyHint": "Zapisano. Czy zmienić także istniejące wpisy w obszarze {{area}}?",
         "healthVisibilityApplied": "Zmieniono wpisów: {{count}}.",
-        "healthVisibilityApplied_one": "Zmieniono jeden wpis."
+        "healthVisibilityApplied_one": "Zmieniono jeden wpis.",
+        "mealTypeNamesLabel": "Własne nazwy",
+        "mealTypeNamesHint": "Jak twoje gospodarstwo domowe nazywa cztery posiłki. Pozostaw puste, aby użyć nazwy wbudowanej. Nazwa wyświetla się tak samo we wszystkich językach.",
+        "mealTypeNamesSaved": "Nazwy zapisane."
     },
     "login": {
         "tagline": "Witaj ponownie w swoim planerze rodzinnym.",

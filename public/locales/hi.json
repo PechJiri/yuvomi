@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "मौजूदा प्रविष्टियाँ भी बदलें",
         "healthVisibilityApplyHint": "सहेजा गया। क्या {{area}} की मौजूदा प्रविष्टियाँ भी बदली जाएँ?",
         "healthVisibilityApplied": "{{count}} प्रविष्टियाँ बदली गईं।",
-        "healthVisibilityApplied_one": "एक प्रविष्टि बदली गई।"
+        "healthVisibilityApplied_one": "एक प्रविष्टि बदली गई।",
+        "mealTypeNamesLabel": "अपने नाम",
+        "mealTypeNamesHint": "आपका परिवार चारों भोजन को क्या कहता है। अंतर्निहित नाम के लिए खाली छोड़ें। नाम हर भाषा में वैसा ही दिखता है जैसा आप लिखते हैं।",
+        "mealTypeNamesSaved": "नाम सहेजे गए।"
     },
     "login": {
         "tagline": "अपने पारिवारिक प्लानर में फिर से आपका स्वागत है।",

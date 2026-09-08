@@ -2603,7 +2603,10 @@
         "healthVisibilityApply": "Ubah juga entri yang ada",
         "healthVisibilityApplyHint": "Tersimpan. Ubah juga entri yang ada di {{area}}?",
         "healthVisibilityApplied": "{{count}} entri diubah.",
-        "healthVisibilityApplied_one": "Satu entri diubah."
+        "healthVisibilityApplied_one": "Satu entri diubah.",
+        "mealTypeNamesLabel": "Nama sendiri",
+        "mealTypeNamesHint": "Sebutan rumah tangga Anda untuk keempat waktu makan. Biarkan kosong untuk nama bawaan. Nama tampil sama persis di semua bahasa.",
+        "mealTypeNamesSaved": "Nama disimpan."
     },
     "login": {
         "tagline": "Selamat datang kembali di perencana keluarga Anda.",

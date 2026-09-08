@@ -20,17 +20,16 @@ import { mountEmptyState, mountLoadError, emptyStateEl } from '/utils/empty-stat
 import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
 import { findPageFab } from '/utils/fab.js';
 import { zonedWeekday } from '/utils/timezone.js';
+import { mealTypeList, primeMealTypeNames } from '/utils/meal-types.js';
 
 // --------------------------------------------------------
 // Konstanten
 // --------------------------------------------------------
 
-const MEAL_TYPES = () => [
-  { key: 'breakfast', label: t('meals.typeBreakfast'), icon: 'sunrise' },
-  { key: 'lunch',     label: t('meals.typeLunch'),     icon: 'sun'     },
-  { key: 'dinner',    label: t('meals.typeDinner'),    icon: 'moon'    },
-  { key: 'snack',     label: t('meals.typeSnack'),     icon: 'cookie'  },
-];
+// Slots, Symbole und Namen kommen aus utils/meal-types.js - der Haushalt darf
+// sie umbenennen (#1058), und ein zweiter Ort haette dabei den alten Namen
+// behalten.
+const MEAL_TYPES = () => mealTypeList();
 
 const DAY_NAMES = () => [
   t('meals.dayMo'), t('meals.dayDi'), t('meals.dayMi'), t('meals.dayDo'),
@@ -93,12 +92,7 @@ function mealCategories() {
 }
 
 function recipeMealTypeOptions() {
-  return [
-    { key: 'breakfast', label: t('meals.typeBreakfast') },
-    { key: 'lunch', label: t('meals.typeLunch') },
-    { key: 'dinner', label: t('meals.typeDinner') },
-    { key: 'snack', label: t('meals.typeSnack') },
-  ];
+  return mealTypeList().map(({ key, label }) => ({ key, label }));
 }
 
 function buildRandomMealAssignments({ weekStart, visibleMealTypes, meals, recipes, replaceExisting = false, pick = Math.random }) {
@@ -199,6 +193,7 @@ async function loadPreferences() {
   try {
     const res = await api.get('/preferences');
     state.visibleMealTypes = res.data.visible_meal_types ?? state.visibleMealTypes;
+    primeMealTypeNames(res.data);
   } catch {
     // Default beibehalten
   }

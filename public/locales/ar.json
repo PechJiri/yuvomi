@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "غيّر الإدخالات الموجودة أيضاً",
         "healthVisibilityApplyHint": "تم الحفظ. هل تُغيَّر أيضاً الإدخالات الموجودة في {{area}}؟",
         "healthVisibilityApplied": "تم تغيير {{count}} إدخالاً.",
-        "healthVisibilityApplied_one": "تم تغيير إدخال واحد."
+        "healthVisibilityApplied_one": "تم تغيير إدخال واحد.",
+        "mealTypeNamesLabel": "أسماؤك الخاصة",
+        "mealTypeNamesHint": "ما تسميه أسرتك للوجبات الأربع. اتركه فارغًا لاستخدام الاسم المدمج. يظهر الاسم كما تكتبه في كل اللغات.",
+        "mealTypeNamesSaved": "تم حفظ الأسماء."
     },
     "login": {
         "tagline": "مرحبًا بعودتك إلى منظّم عائلتك.",

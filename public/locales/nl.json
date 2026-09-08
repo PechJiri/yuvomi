@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Bestaande items ook aanpassen",
         "healthVisibilityApplyHint": "Opgeslagen. Moeten de bestaande items onder {{area}} ook worden aangepast?",
         "healthVisibilityApplied": "{{count}} items aangepast.",
-        "healthVisibilityApplied_one": "Eén item aangepast."
+        "healthVisibilityApplied_one": "Eén item aangepast.",
+        "mealTypeNamesLabel": "Eigen namen",
+        "mealTypeNamesHint": "Hoe jouw huishouden de vier maaltijden noemt. Laat leeg voor de ingebouwde naam. De naam verschijnt in elke taal precies zoals je hem typt.",
+        "mealTypeNamesSaved": "Namen opgeslagen."
     },
     "login": {
         "tagline": "Welkom terug bij je gezinsplanner.",

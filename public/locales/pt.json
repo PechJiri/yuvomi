@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Alterar também as existentes",
         "healthVisibilityApplyHint": "Guardado. Queres alterar também as entradas existentes em {{area}}?",
         "healthVisibilityApplied": "{{count}} entradas alteradas.",
-        "healthVisibilityApplied_one": "Uma entrada alterada."
+        "healthVisibilityApplied_one": "Uma entrada alterada.",
+        "mealTypeNamesLabel": "Nomes próprios",
+        "mealTypeNamesHint": "Como o seu agregado chama as quatro refeições. Deixe vazio para o nome integrado. O nome aparece igual em todos os idiomas.",
+        "mealTypeNamesSaved": "Nomes guardados."
     },
     "login": {
         "tagline": "Bem-vindo de volta ao teu planeador familiar.",

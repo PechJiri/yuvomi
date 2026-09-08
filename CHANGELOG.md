@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A household can name the four meal slots itself** (#1058). Breakfast, lunch, dinner and snack
+  are now shown under whatever your household calls them - set in Settings → Modules → Kitchen,
+  next to the switch that decides which slots appear at all, because which slots and what they are
+  called is one setting. The name is not a translation: it shows in every language exactly as it
+  was typed, which is the point - `fr`, `fr-CA` and `fr-BE` do not agree on what the evening meal
+  is called, and no locale file can settle that per household. An empty field means the built-in
+  word, so nothing changes for anyone who does not rename. The slot **keys** are untouched: recipe
+  suitability, the Mealie and Tandoor mapping and the planner rows all keep working, and nothing
+  migrates. The four slots now come from one place in the client rather than five copies, so the
+  planner, the overview tile and the recipe form always say the same word.
+
 ### Changed
 
 - **The recurring-payment dialog now says that editing a series also rewrites its first booking**

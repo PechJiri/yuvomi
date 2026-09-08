@@ -11,6 +11,17 @@ import { getPreferences, savePreferences } from '/settings/preferences-cache.js'
 import { esc } from '/utils/html.js';
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'];
+// Muss zur Serverpruefung in routes/preferences.js passen; der Server kappt
+// ohnehin, das `maxlength` erspart dem Nutzer nur die Fehlermeldung.
+const MAX_MEAL_TYPE_NAME = 40;
+
+/* Hier steht bewusst das EINGEBAUTE Wort, nicht mealTypeLabel(): dieser Schirm
+ * ist der Ort, an dem der Haushaltsname vergeben wird, und er steht direkt
+ * daneben im Feld. Beides auf denselben Namen zu setzen zeigte ihn zweimal und
+ * verbaerge, was das Feld eigentlich ueberschreibt. */
+function builtInMealTypeLabel(mealType) {
+  return t(`meals.type${mealType[0].toUpperCase()}${mealType.slice(1)}`);
+}
 
 // Anzeigename je Provider - Eigenname, keine i18n-Übersetzung (wie
 // recipes.sourceMealie/sourceTandoor in jeder Locale unübersetzt bleiben).
@@ -64,6 +75,9 @@ function renderPage(container, preferences) {
   const visibleMealTypes = Array.isArray(preferences.visible_meal_types)
     ? preferences.visible_meal_types
     : MEAL_TYPES;
+  const mealTypeNames = (preferences.meal_type_names && typeof preferences.meal_type_names === 'object')
+    ? preferences.meal_type_names
+    : {};
 
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
@@ -74,10 +88,23 @@ function renderPage(container, preferences) {
         <p class="form-hint">${t('settings.mealTypesHint')}</p>
         <div class="meal-type-toggles" id="meal-type-toggles">
           ${MEAL_TYPES.map((mealType) => toggleRowHtml({
-            label: t(`meals.type${mealType[0].toUpperCase()}${mealType.slice(1)}`),
+            label: builtInMealTypeLabel(mealType),
             checked: visibleMealTypes.includes(mealType),
             attrs: { value: mealType },
           })).join('')}
+        </div>
+        <h3 class="settings-card__title">${t('settings.mealTypeNamesLabel')}</h3>
+        <p class="form-hint">${t('settings.mealTypeNamesHint')}</p>
+        <div class="meal-type-names" id="meal-type-names">
+          ${MEAL_TYPES.map((mealType) => `
+            <div class="form-field">
+              <label class="form-label" for="meal-name-${mealType}">${builtInMealTypeLabel(mealType)}</label>
+              <input class="form-input" type="text" id="meal-name-${mealType}"
+                     data-meal-name="${mealType}" maxlength="${MAX_MEAL_TYPE_NAME}"
+                     value="${esc(mealTypeNames[mealType] ?? '')}"
+                     placeholder="${esc(builtInMealTypeLabel(mealType))}">
+            </div>
+          `).join('')}
         </div>
         <p class="form-hint">${t('settings.kitchenExternalHint')}</p>
       </div>
@@ -394,6 +421,39 @@ function bindEvents(container) {
       window.yuvomi?.showToast(t('settings.mealTypesSaved'), 'success');
     } catch (error) {
       window.yuvomi?.showToast(error.message || t('common.errorGeneric'), 'danger');
+    }
+  });
+
+  /* Namen der Slots (#1058).
+   *
+   * AUF `change`, NICHT AUF `input`: sonst schriebe jeder Tastendruck eine
+   * Praeferenz. Der Browser feuert `change` beim Verlassen des Feldes und bei
+   * Enter - genau dann, wenn der Name fertig ist.
+   *
+   * ALLE VIER WERDEN GESENDET, nicht nur das geaenderte: der Server speichert
+   * das Objekt als Ganzes, ein Teil-Objekt loeschte die uebrigen Namen. */
+  const nameFields = container.querySelector('#meal-type-names');
+  const nameInputs = [...(nameFields?.querySelectorAll('[data-meal-name]') ?? [])];
+  let persistedNames = Object.fromEntries(nameInputs.map((i) => [i.dataset.mealName, i.value]));
+
+  nameFields?.addEventListener('change', async (event) => {
+    const field = event.target.closest('[data-meal-name]');
+    if (!field) return;
+
+    const names = Object.fromEntries(nameInputs.map((i) => [i.dataset.mealName, i.value.trim()]));
+    nameInputs.forEach((i) => { i.disabled = true; });
+    try {
+      await savePreferences({ meal_type_names: names });
+      // Der Server trimmt und wirft leere Namen weg - das Feld zeigt danach,
+      // was wirklich gespeichert ist, statt der eingetippten Leerzeichen.
+      nameInputs.forEach((i) => { i.value = names[i.dataset.mealName] ?? ''; });
+      persistedNames = names;
+      window.yuvomi?.showToast(t('settings.mealTypeNamesSaved'), 'success');
+    } catch (error) {
+      nameInputs.forEach((i) => { i.value = persistedNames[i.dataset.mealName] ?? ''; });
+      window.yuvomi?.showToast(error.message || t('common.errorGeneric'), 'danger');
+    } finally {
+      nameInputs.forEach((i) => { i.disabled = false; });
     }
   });
 }

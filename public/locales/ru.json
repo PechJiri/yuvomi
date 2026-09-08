@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Изменить и существующие записи",
         "healthVisibilityApplyHint": "Сохранено. Изменить также существующие записи в разделе {{area}}?",
         "healthVisibilityApplied": "Изменено записей: {{count}}.",
-        "healthVisibilityApplied_one": "Изменена одна запись."
+        "healthVisibilityApplied_one": "Изменена одна запись.",
+        "mealTypeNamesLabel": "Свои названия",
+        "mealTypeNamesHint": "Как ваша семья называет четыре приёма пищи. Оставьте пустым, чтобы использовать встроенное название. Название отображается одинаково на всех языках.",
+        "mealTypeNamesSaved": "Названия сохранены."
     },
     "login": {
         "tagline": "С возвращением в ваш семейный планировщик.",

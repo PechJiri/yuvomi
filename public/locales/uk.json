@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Змінити й наявні записи",
         "healthVisibilityApplyHint": "Збережено. Змінити також наявні записи в розділі {{area}}?",
         "healthVisibilityApplied": "Змінено записів: {{count}}.",
-        "healthVisibilityApplied_one": "Змінено один запис."
+        "healthVisibilityApplied_one": "Змінено один запис.",
+        "mealTypeNamesLabel": "Власні назви",
+        "mealTypeNamesHint": "Як ваша родина називає чотири прийоми їжі. Залиште порожнім для вбудованої назви. Назва відображається однаково всіма мовами.",
+        "mealTypeNamesSaved": "Назви збережено."
     },
     "login": {
         "tagline": "З поверненням до вашого сімейного планувальника.",

@@ -2603,7 +2603,10 @@
         "healthVisibilityApply": "Bestehende Einträge mitziehen",
         "healthVisibilityApplyHint": "Gespeichert. Sollen die vorhandenen Einträge unter {{area}} auch umgestellt werden?",
         "healthVisibilityApplied": "{{count}} Einträge umgestellt.",
-        "healthVisibilityApplied_one": "Ein Eintrag umgestellt."
+        "healthVisibilityApplied_one": "Ein Eintrag umgestellt.",
+        "mealTypeNamesLabel": "Eigene Namen",
+        "mealTypeNamesHint": "Wie dein Haushalt die vier Mahlzeiten nennt. Leer lassen für den eingebauten Namen. Der Name gilt in jeder Sprache so, wie du ihn eintippst.",
+        "mealTypeNamesSaved": "Namen gespeichert."
     },
     "login": {
         "tagline": "Willkommen zurück bei deinem Familienplaner.",

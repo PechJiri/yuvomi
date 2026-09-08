@@ -2603,7 +2603,10 @@
         "healthVisibilityApply": "기존 기록도 변경",
         "healthVisibilityApplyHint": "저장했습니다. {{area}}의 기존 기록도 변경할까요?",
         "healthVisibilityApplied": "기록 {{count}}건을 변경했습니다.",
-        "healthVisibilityApplied_one": "기록 1건을 변경했습니다."
+        "healthVisibilityApplied_one": "기록 1건을 변경했습니다.",
+        "mealTypeNamesLabel": "직접 지은 이름",
+        "mealTypeNamesHint": "가정에서 네 가지 식사를 부르는 이름입니다. 비워 두면 기본 이름을 사용합니다. 이름은 입력한 그대로 모든 언어에서 표시됩니다.",
+        "mealTypeNamesSaved": "이름을 저장했습니다."
     },
     "login": {
         "tagline": "가족 플래너에 다시 오신 것을 환영합니다.",

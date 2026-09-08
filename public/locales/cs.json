@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Upravit i stávající záznamy",
         "healthVisibilityApplyHint": "Uloženo. Mají se upravit i stávající záznamy v oblasti {{area}}?",
         "healthVisibilityApplied": "Upraveno záznamů: {{count}}.",
-        "healthVisibilityApplied_one": "Upraven jeden záznam."
+        "healthVisibilityApplied_one": "Upraven jeden záznam.",
+        "mealTypeNamesLabel": "Vlastní názvy",
+        "mealTypeNamesHint": "Jak vaše domácnost nazývá čtyři jídla. Ponechte prázdné pro vestavěný název. Název se ve všech jazycích zobrazí přesně tak, jak jej napíšete.",
+        "mealTypeNamesSaved": "Názvy uloženy."
     },
     "login": {
         "tagline": "Vítejte zpět ve svém rodinném plánovači.",

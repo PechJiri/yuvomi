@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Đổi cả các mục hiện có",
         "healthVisibilityApplyHint": "Đã lưu. Có đổi cả các mục hiện có trong {{area}} không?",
         "healthVisibilityApplied": "Đã đổi {{count}} mục.",
-        "healthVisibilityApplied_one": "Đã đổi một mục."
+        "healthVisibilityApplied_one": "Đã đổi một mục.",
+        "mealTypeNamesLabel": "Tên riêng của bạn",
+        "mealTypeNamesHint": "Gia đình bạn gọi bốn bữa ăn là gì. Để trống để dùng tên mặc định. Tên hiển thị giống nhau trong mọi ngôn ngữ.",
+        "mealTypeNamesSaved": "Đã lưu tên."
     },
     "login": {
         "tagline": "Chào mừng bạn trở lại trình lập kế hoạch gia đình.",

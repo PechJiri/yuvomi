@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Modifier aussi les entrées existantes",
         "healthVisibilityApplyHint": "Enregistré. Faut-il aussi modifier les entrées existantes de {{area}} ?",
         "healthVisibilityApplied": "{{count}} entrées modifiées.",
-        "healthVisibilityApplied_one": "Une entrée modifiée."
+        "healthVisibilityApplied_one": "Une entrée modifiée.",
+        "mealTypeNamesLabel": "Vos propres noms",
+        "mealTypeNamesHint": "Comment votre foyer appelle les quatre repas. Laissez vide pour le nom intégré. Le nom s'affiche tel quel dans toutes les langues.",
+        "mealTypeNamesSaved": "Noms enregistrés."
     },
     "login": {
         "tagline": "Bon retour sur votre planificateur familial.",

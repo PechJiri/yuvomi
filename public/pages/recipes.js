@@ -20,6 +20,7 @@ import '/components/datepicker.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { mountEmptyState, mountLoadError } from '/utils/empty-state.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
+import { mealTypeList, ensureMealTypeNames } from '/utils/meal-types.js';
 
 let _container = null;
 /** Handle des geteilten Suchfelds (setValue/clear), gesetzt in render(). */
@@ -100,12 +101,7 @@ function recipeThumb(recipe) {
 }
 
 function mealTypeOptions() {
-  return [
-    { key: 'breakfast', label: t('meals.typeBreakfast') },
-    { key: 'lunch', label: t('meals.typeLunch') },
-    { key: 'dinner', label: t('meals.typeDinner') },
-    { key: 'snack', label: t('meals.typeSnack') },
-  ];
+  return mealTypeList().map(({ key, label }) => ({ key, label }));
 }
 
 /**
@@ -298,7 +294,7 @@ export async function render(container) {
 
   if (window.lucide) window.lucide.createIcons({ el: container });
 
-  await Promise.all([loadRecipes(), loadCategories(), loadShoppingLists(), loadPlannedRecipes()]);
+  await Promise.all([loadRecipes(), loadCategories(), loadShoppingLists(), loadPlannedRecipes(), ensureMealTypeNames()]);
   renderSourceFilter();
   renderRecipeList();
 

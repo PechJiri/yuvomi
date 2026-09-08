@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Αλλαγή και των υπαρχουσών καταχωρήσεων",
         "healthVisibilityApplyHint": "Αποθηκεύτηκε. Να αλλάξουν και οι υπάρχουσες καταχωρήσεις στο {{area}};",
         "healthVisibilityApplied": "Άλλαξαν {{count}} καταχωρήσεις.",
-        "healthVisibilityApplied_one": "Άλλαξε μία καταχώρηση."
+        "healthVisibilityApplied_one": "Άλλαξε μία καταχώρηση.",
+        "mealTypeNamesLabel": "Δικά σας ονόματα",
+        "mealTypeNamesHint": "Πώς ονομάζει το νοικοκυριό σας τα τέσσερα γεύματα. Αφήστε το κενό για το ενσωματωμένο όνομα. Το όνομα εμφανίζεται ίδιο σε κάθε γλώσσα.",
+        "mealTypeNamesSaved": "Τα ονόματα αποθηκεύτηκαν."
     },
     "login": {
         "tagline": "Καλώς ήρθατε ξανά στον οικογενειακό σας οργανωτή.",

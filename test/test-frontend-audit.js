@@ -1438,7 +1438,7 @@ test('module-specific settings leaves only reference their owned preferences and
   const ownership = {
     '../public/settings/pages/modules-kitchen.js': {
       endpoints: ['/preferences'],
-      preferences: ['visible_meal_types'],
+      preferences: ['meal_type_names', 'visible_meal_types'],
     },
     '../public/settings/pages/modules-calendar.js': {
       endpoints: [
@@ -1468,7 +1468,14 @@ test('module-specific settings leaves only reference their owned preferences and
   };
 
   for (const [file, approved] of Object.entries(ownership)) {
-    const source = read(file);
+    /* OHNE KOMMENTARE ZAEHLEN. Der Schluessel-Regex unten ist
+     * `preferences\.<wort>`, und genau so liest sich auch ein DATEINAME im
+     * Fliesstext: ein Kommentar, der auf `routes/preferences.js` verweist,
+     * wurde als Praeferenz-Schluessel `js` gezaehlt und der Guard rot, obwohl
+     * die Datei nichts Neues anfasste. Gemessen, bevor das hier stand: von den
+     * drei Blaettern verliert keines einen echten Schluessel durch das
+     * Strippen - alle stehen im Code, nicht nur in der Beschreibung. */
+    const source = read(file).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
     const endpoints = [
       ...source.matchAll(/\bapi\.(?:get|put|post|patch|delete)\(\s*`([^`$]*)/g),
       ...source.matchAll(/\bapi\.(?:get|put|post|patch|delete)\(\s*['"]([^'"]+)/g),

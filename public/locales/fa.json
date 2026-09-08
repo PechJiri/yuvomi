@@ -2603,7 +2603,10 @@
         "healthVisibilityApply": "ورودی‌های موجود هم تغییر کنند",
         "healthVisibilityApplyHint": "ذخیره شد. ورودی‌های موجود در {{area}} هم تغییر کنند؟",
         "healthVisibilityApplied": "{{count}} ورودی تغییر کرد.",
-        "healthVisibilityApplied_one": "یک ورودی تغییر کرد."
+        "healthVisibilityApplied_one": "یک ورودی تغییر کرد.",
+        "mealTypeNamesLabel": "نام‌های دلخواه",
+        "mealTypeNamesHint": "خانواده شما چهار وعده را چه می‌نامد. برای نام پیش‌فرض خالی بگذارید. نام در همه زبان‌ها دقیقاً همان‌طور که می‌نویسید نمایش داده می‌شود.",
+        "mealTypeNamesSaved": "نام‌ها ذخیره شد."
     },
     "login": {
         "tagline": "دوباره به برنامه‌ریز خانوادگی‌تان خوش آمدید.",

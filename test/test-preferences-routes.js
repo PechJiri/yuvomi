@@ -107,6 +107,52 @@ test('PUT visible_meal_types: gültige Teilmenge persistiert + filtert Unbekannt
 });
 
 // --------------------------------------------------------
+// meal_type_names (#1058) - Haushaltsnamen ueber stabilen Slot-Schluesseln
+// --------------------------------------------------------
+test('PUT meal_type_names: Nicht-Objekt -> 400', async () => {
+  assert.equal((await put({ meal_type_names: 'Zmittag' })).status, 400);
+  assert.equal((await put({ meal_type_names: ['Zmittag'] })).status, 400);
+});
+test('PUT meal_type_names: Nicht-String als Wert -> 400', async () => {
+  assert.equal((await put({ meal_type_names: { lunch: 42 } })).status, 400);
+});
+test('PUT meal_type_names: zu langer Name -> 400', async () => {
+  assert.equal((await put({ meal_type_names: { lunch: 'x'.repeat(41) } })).status, 400);
+  assert.equal((await put({ meal_type_names: { lunch: 'x'.repeat(40) } })).status, 200);
+});
+test('PUT meal_type_names: Name wird gespeichert und wieder gelesen', async () => {
+  // Ein Komma im Namen ist der Grund fuer JSON statt der kommaseparierten Form
+  // von visible_meal_types nebenan: ein split(',') machte hier zwei Namen.
+  const { status, body } = await put({ meal_type_names: { lunch: '  Zmittag  ', snack: 'Znueni, spaet' } });
+  assert.equal(status, 200);
+  assert.deepEqual(body.data.meal_type_names, { lunch: 'Zmittag', snack: 'Znueni, spaet' });
+  assert.deepEqual((await get()).body.data.meal_type_names, { lunch: 'Zmittag', snack: 'Znueni, spaet' });
+});
+test('PUT meal_type_names: unbekannter Slot faellt weg, ohne den Request zu kippen', async () => {
+  const { status, body } = await put({ meal_type_names: { lunch: 'Zmittag', brunch: 'Elf Uhr' } });
+  assert.equal(status, 200);
+  assert.deepEqual(body.data.meal_type_names, { lunch: 'Zmittag' });
+});
+test('PUT meal_type_names: leerer Name entfernt ihn - das eingebaute Wort gilt wieder', async () => {
+  await put({ meal_type_names: { lunch: 'Zmittag', snack: 'Znueni' } });
+  const { body } = await put({ meal_type_names: { lunch: '', snack: 'Znueni' } });
+  assert.deepEqual(body.data.meal_type_names, { snack: 'Znueni' });
+  // Und der Weg ganz zurueck: null loescht die Zeile, GET faellt auf {} zurueck.
+  await put({ meal_type_names: null });
+  assert.deepEqual((await get()).body.data.meal_type_names, {});
+});
+test('GET meal_type_names: eine kaputte Zeile liefert {}, keinen 500er', async () => {
+  // Der Lesepfad darf an handgeschriebenem Muell in sync_config nicht sterben -
+  // sonst nimmt eine unlesbare Zeile die ganze Praeferenz-Antwort mit.
+  db.prepare("INSERT INTO sync_config (key, value) VALUES ('meal_type_names', '{kaputt')"
+    + " ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
+  const { status, body } = await get();
+  assert.equal(status, 200);
+  assert.deepEqual(body.data.meal_type_names, {});
+  await put({ meal_type_names: null });
+});
+
+// --------------------------------------------------------
 // currency / date_format / time_format / region
 // --------------------------------------------------------
 test('PUT currency: ungültig -> 400, gültig -> persist', async () => {

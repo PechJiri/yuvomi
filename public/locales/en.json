@@ -2591,7 +2591,10 @@
         "healthVisibilityApply": "Move existing entries too",
         "healthVisibilityApplyHint": "Saved. Should the existing entries under {{area}} be changed as well?",
         "healthVisibilityApplied": "{{count}} entries changed.",
-        "healthVisibilityApplied_one": "One entry changed."
+        "healthVisibilityApplied_one": "One entry changed.",
+        "mealTypeNamesLabel": "Your own names",
+        "mealTypeNamesHint": "What your household calls the four meals. Leave empty for the built-in name. The name shows in every language exactly as you type it.",
+        "mealTypeNamesSaved": "Names saved."
     },
     "login": {
         "tagline": "Welcome back to your family planner.",
