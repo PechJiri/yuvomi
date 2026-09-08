@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
 import { readdirSync, readFileSync } from 'node:fs';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 
@@ -65,7 +65,9 @@ d2.exec(`CREATE TABLE users (
   created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '');`);
 d2.exec(MIGRATIONS_SQL[10]);
 d2.exec(MIGRATIONS_SQL[11]);
+d2.exec(MIGRATIONS_SQL[27]); // legacy calendar attachment bodies
 d2.exec(MIGRATIONS_SQL[61]);
+d2.exec("ALTER TABLE calendar_events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'all';");
 d2.exec(MIGRATIONS_SQL[80]);
 d2.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions (EXDATE, #489)
 d2.exec(MIGRATIONS_SQL[97]); // calendar_events.tzid (DST-Export, #549)
@@ -365,6 +367,107 @@ test('buildFeed: verschobener Ersatz behält seinen abgelaufenen Master im Feed'
   assert(master.includes('EXDATE;VALUE=DATE:20250102'), 'Master-EXDATE fehlt: ' + master);
   assert(child?.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss die Master-UID nutzen: ' + child);
   assert(child.includes('RECURRENCE-ID;VALUE=DATE:20250102'), 'Replacement-Slot fehlt: ' + child);
+});
+
+test('buildFeed: linked private and assignee-only series remain household-feed events', () => {
+  const privateMasterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,
+       visibility,created_by)
+    VALUES ('HouseholdPrivateMaster','2026-11-01T09:00','2026-11-01T10:00',0,
+            'local','FREQ=DAILY;COUNT=2','private',?)
+  `).run(u2).lastInsertRowid;
+  d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,visibility,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('HouseholdPrivateChild','2026-11-03T09:00','2026-11-03T10:00',0,
+            'local','private',?,?,?,?)
+  `).run(u2, privateMasterId, '2026-11-02', JSON.stringify([
+    'title', 'start_datetime', 'end_datetime',
+  ]));
+  d2.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id,exception_date)
+    VALUES (?, '2026-11-02')
+  `).run(privateMasterId);
+
+  const assignedMasterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,
+       visibility,created_by)
+    VALUES ('HouseholdAssignedMaster','2026-12-01T09:00','2026-12-01T10:00',0,
+            'local','FREQ=DAILY;COUNT=2','assignees',?)
+  `).run(u2).lastInsertRowid;
+  d2.prepare('INSERT INTO event_assignments (event_id,user_id) VALUES (?,?)')
+    .run(assignedMasterId, u2);
+  d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,visibility,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('HouseholdAssignedChild','2026-12-03T09:00','2026-12-03T10:00',0,
+            'local','assignees',?,?,?,?)
+  `).run(u2, assignedMasterId, '2026-12-02', JSON.stringify([
+    'title', 'start_datetime', 'end_datetime',
+  ]));
+  d2.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id,exception_date)
+    VALUES (?, '2026-12-02')
+  `).run(assignedMasterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  for (const title of [
+    'HouseholdPrivateMaster', 'HouseholdPrivateChild',
+    'HouseholdAssignedMaster', 'HouseholdAssignedChild',
+  ]) {
+    assert(ics.includes(`SUMMARY:${title}`), `${title} fehlt im ungefilterten Haushaltsfeed`);
+  }
+});
+
+test('buildFeed resolves linked rows without reading legacy attachment bodies', () => {
+  const largeAttachment = 'A'.repeat(1024 * 1024);
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,
+       attachment_data,created_by)
+    VALUES ('FeedAttachmentMaster','2026-07-01T09:00','2026-07-01T10:00',0,
+            'local','FREQ=DAILY;COUNT=2',?,?)
+  `).run(largeAttachment, u1).lastInsertRowid;
+  d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,attachment_data,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('FeedAttachmentChild','2026-07-03T09:00','2026-07-03T10:00',0,
+            'local',?,?,?,?,?)
+  `).run(
+    largeAttachment,
+    u1,
+    masterId,
+    '2026-07-02',
+    JSON.stringify(['title', 'start_datetime', 'end_datetime']),
+  );
+  d2.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id,exception_date)
+    VALUES (?, '2026-07-02')
+  `).run(masterId);
+
+  const attachmentReads = [];
+  d2.setAuthorizer((action, table, column) => {
+    if (action === sqliteConstants.SQLITE_READ
+        && table === 'calendar_events' && column === 'attachment_data') {
+      attachmentReads.push(`${table}.${column}`);
+    }
+    return sqliteConstants.SQLITE_OK;
+  });
+  let ics;
+  try {
+    ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  } finally {
+    d2.setAuthorizer(null);
+  }
+
+  assert(ics.includes('SUMMARY:FeedAttachmentChild'), 'linked replacement fehlt');
+  assert(attachmentReads.length === 0,
+    `attachment_data wurde gelesen: ${attachmentReads.join(', ')}`);
 });
 
 test('buildFeed: wiederkehrendes Event mit abgelaufenem UNTIL (Vergangenheit) wird ausgeschlossen', () => {

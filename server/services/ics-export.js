@@ -9,7 +9,9 @@ import { randomBytes } from 'node:crypto';
 import { householdTimeZone, isValidTimeZone } from '../utils/timezone.js';
 import { formatWall, vtimezoneFor } from '../utils/vtimezone.js';
 import { rruleLine } from './recurrence.js';
-import { resolveProjectedEventRows } from './calendar-event-reader.js';
+import {
+  BODY_FREE_EVENT_COLUMNS, eventProjectionSql, resolveProjectedEventRows,
+} from './calendar-event-reader.js';
 import { baseOccurrenceFor, isLinkedOccurrence } from './calendar-occurrence-overrides.js';
 
 function escapeICSText(s) {
@@ -232,7 +234,7 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
            )) AS assignee_names_json` : '';
 
   const queriedRows = conn.prepare(`
-    SELECT e.*${assigneeSelect}
+    SELECT ${eventProjectionSql(conn, 'e', BODY_FREE_EVENT_COLUMNS)}${assigneeSelect}
     FROM calendar_events e
     WHERE (
       e.external_source <> 'ics'
@@ -268,7 +270,7 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
     for (const ev of rows) ev.exception_dates = byEvent.get(ev.id) || [];
   }
 
-  const resolvedRows = resolveProjectedEventRows(conn, rows);
+  const resolvedRows = resolveProjectedEventRows(conn, rows, { lightweight: true });
   // Keep recurrence context even when an old master itself falls outside the
   // rolling feed window but one of its moved replacements is displayed now.
   const mastersById = new Map(queriedRows
