@@ -646,12 +646,13 @@ function renderSlot(date, type, mealsForDay, dayCol, typeRow) {
     // gehört der Titelfläche; die Aktionen stehen daneben, nicht darin.
     return `
       <div class="meal-card" data-meal-id="${meal.id}">
-        <button type="button" class="meal-card__open${meal.recipe_has_image ? ' meal-card__open--with-thumb' : ''}"
+        <button type="button" class="meal-card__open${(meal.recipe_has_own_image || meal.recipe_has_image) ? ' meal-card__open--with-thumb' : ''}"
            data-action="edit-meal"
            data-meal-id="${meal.id}">
-          ${meal.recipe_has_image ? recipeThumbHtml({
+          ${(meal.recipe_has_own_image || meal.recipe_has_image) ? recipeThumbHtml({
             recipeId: meal.recipe_id,
-            hasImage: true,
+            hasImage: meal.recipe_has_image,
+            hasOwnImage: meal.recipe_has_own_image,
             className: 'meal-card__thumb',
           }) : ''}
           <span class="meal-card__title"><span class="meal-card__title-text">${esc(meal.title)}</span>${recurrenceBadge}</span>

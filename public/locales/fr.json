@@ -2759,7 +2759,12 @@
         "sourceNative": "Natif",
         "sourceAll": "Tous",
         "sourceFilterLabel": "Filtrer par source",
-        "plannedThisWeek": "Prévu cette semaine"
+        "plannedThisWeek": "Prévu cette semaine",
+        "imageLabel": "Image",
+        "imageChoose": "Choisir une image",
+        "imageRemove": "Supprimer l'image",
+        "imageHint": "Une image par recette. Elle apparaît dans le planificateur de repas et sur la tuile d'aperçu.",
+        "imageTooLarge": "L'image reste trop volumineuse après réduction."
     },
     "search": {
         "emptyHint": "Saisis au moins 2 caractères pour chercher dans les tâches, rendez-vous, notes, contacts, courses et santé.",

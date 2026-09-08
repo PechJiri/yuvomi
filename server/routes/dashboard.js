@@ -328,9 +328,11 @@ router.get('/', (req, res) => {
     const placeholders = visibleTypes.map(() => '?').join(', ');
     result.todayMeals = d.prepare(`
       SELECT m.*,
-             -- Wie im Planer (#1059): ob das verknuepfte Rezept ein
-             -- Provider-Bild hat, entscheidet die Kachel ohne Nachfrage.
-             r.provider_has_image AS recipe_has_image
+             -- Wie im Planer (#1059): ob das verknuepfte Rezept ein Bild hat,
+             -- entscheidet die Kachel ohne Nachfrage - eigenes zuerst, sonst das
+             -- des Providers.
+             r.provider_has_image AS recipe_has_image,
+             (r.image_data IS NOT NULL) AS recipe_has_own_image
       FROM meals m
       LEFT JOIN recipes r ON r.id = m.recipe_id
       WHERE m.date = ?

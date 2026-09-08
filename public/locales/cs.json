@@ -3474,7 +3474,12 @@
         "sourceNative": "Vlastní",
         "sourceAll": "Vše",
         "sourceFilterLabel": "Filtrovat podle zdroje",
-        "plannedThisWeek": "Naplánováno na tento týden"
+        "plannedThisWeek": "Naplánováno na tento týden",
+        "imageLabel": "Obrázek",
+        "imageChoose": "Vybrat obrázek",
+        "imageRemove": "Odebrat obrázek",
+        "imageHint": "Jeden obrázek na recept. Zobrazí se v jídelním plánu a na dlaždici přehledu.",
+        "imageTooLarge": "Obrázek je i po zmenšení příliš velký."
     },
     "wmo": {
         "0": "Jasno",

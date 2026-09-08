@@ -2862,7 +2862,12 @@
         "sourceNative": "Asli",
         "sourceAll": "Semua",
         "sourceFilterLabel": "Filter menurut sumber",
-        "plannedThisWeek": "Direncanakan minggu ini"
+        "plannedThisWeek": "Direncanakan minggu ini",
+        "imageLabel": "Gambar",
+        "imageChoose": "Pilih gambar",
+        "imageRemove": "Hapus gambar",
+        "imageHint": "Satu gambar per resep. Tampil di rencana makan dan di kartu ringkasan.",
+        "imageTooLarge": "Gambar masih terlalu besar setelah diperkecil."
     },
     "onboarding": {
         "step1Title": "Selamat datang di {{name}}",

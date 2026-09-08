@@ -2850,7 +2850,12 @@
         "sourceNative": "Gốc",
         "sourceAll": "Tất cả",
         "sourceFilterLabel": "Lọc theo nguồn",
-        "plannedThisWeek": "Đã lên kế hoạch tuần này"
+        "plannedThisWeek": "Đã lên kế hoạch tuần này",
+        "imageLabel": "Hình ảnh",
+        "imageChoose": "Chọn hình ảnh",
+        "imageRemove": "Xóa hình ảnh",
+        "imageHint": "Một hình cho mỗi công thức. Hình hiện trong kế hoạch bữa ăn và trên ô tổng quan.",
+        "imageTooLarge": "Hình vẫn quá lớn sau khi thu nhỏ."
     },
     "search": {
         "emptyHint": "Nhập ít nhất 2 ký tự để tìm trong công việc, sự kiện, ghi chú, danh bạ, mua sắm và sức khỏe.",

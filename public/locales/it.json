@@ -2759,7 +2759,12 @@
         "sourceNative": "Nativa",
         "sourceAll": "Tutte",
         "sourceFilterLabel": "Filtra per origine",
-        "plannedThisWeek": "In programma questa settimana"
+        "plannedThisWeek": "In programma questa settimana",
+        "imageLabel": "Immagine",
+        "imageChoose": "Scegli immagine",
+        "imageRemove": "Rimuovi immagine",
+        "imageHint": "Un'immagine per ricetta. Appare nel piano pasti e nel riquadro panoramica.",
+        "imageTooLarge": "L'immagine è ancora troppo grande dopo il ridimensionamento."
     },
     "search": {
         "emptyHint": "Digita almeno 2 caratteri per cercare tra attività, appuntamenti, note, contatti, spesa e salute.",

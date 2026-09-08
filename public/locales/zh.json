@@ -2759,7 +2759,12 @@
         "sourceNative": "本地",
         "sourceAll": "全部",
         "sourceFilterLabel": "按来源筛选",
-        "plannedThisWeek": "本周已安排"
+        "plannedThisWeek": "本周已安排",
+        "imageLabel": "图片",
+        "imageChoose": "选择图片",
+        "imageRemove": "移除图片",
+        "imageHint": "每个食谱一张图片。会显示在饮食计划和概览卡片上。",
+        "imageTooLarge": "缩小后图片仍然过大。"
     },
     "search": {
         "emptyHint": "输入至少 2 个字符即可搜索任务、日程、便签、联系人、购物和健康。",

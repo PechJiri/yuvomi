@@ -559,3 +559,66 @@ test('PUT /:id: ein Teil-Update ohne meal_types lässt die Auswahl stehen (#750)
   assert.equal(kept.title, 'Sud, verfeinert');
   assert.equal(kept.meal_types, '');
 });
+
+// --------------------------------------------------------
+// Eigenes Rezeptbild (#1059, Schritt 2)
+// --------------------------------------------------------
+
+const PNG_1X1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+test('POST /recipes: ein eigenes Bild wird gespeichert, aber nie mitgeliefert', async () => {
+  const r = await call('POST', '/', { title: 'Mit Bild', image_data: PNG_1X1 });
+  assert.equal(r.status, 201);
+  // DIE DATEN SELBST GEHEN NIE MIT: eine Data-URL von bis zu 5 MB in jeder
+  // Listenzeile waere ein Vielfaches der Antwort, fuer eine 32px-Vorschau.
+  assert.equal(r.body.data.image_data, undefined, 'image_data darf nicht in der Antwort stehen');
+  assert.equal(r.body.data.has_own_image, true, 'das Flag sagt, dass es eins gibt');
+});
+
+test('GET /recipes: die Liste traegt das Flag, nicht das Bild', async () => {
+  const r = await call('GET', '/');
+  const mitBild = r.body.data.find((x) => x.title === 'Mit Bild');
+  assert.ok(mitBild, 'das Rezept muss in der Liste stehen');
+  assert.equal(mitBild.image_data, undefined);
+  assert.equal(mitBild.has_own_image, true);
+});
+
+test('GET /recipes/:id/image liefert das Bild als Datei', async () => {
+  const created = await call('POST', '/', { title: 'Bildabruf', image_data: PNG_1X1 });
+  const res = await fetch(`${baseUrl}/${created.body.data.id}/image`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/png');
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  const buf = Buffer.from(await res.arrayBuffer());
+  assert.ok(buf.length > 0, 'die Datei darf nicht leer sein');
+});
+
+test('GET /recipes/:id/image: ohne Bild 404', async () => {
+  const ohne = await call('POST', '/', { title: 'Ohne Bild' });
+  assert.equal(ohne.body.data.has_own_image, false);
+  const res = await fetch(`${baseUrl}/${ohne.body.data.id}/image`);
+  assert.equal(res.status, 404);
+});
+
+test('PUT /recipes: ohne das Feld bleibt das Bild stehen, null loescht es', async () => {
+  // Der wichtigere Fall ist der erste: ein Speichern, das nur den Titel aendert,
+  // darf das Bild nicht stillschweigend abraeumen - und es auch nicht erneut
+  // hochladen muessen.
+  const created = await call('POST', '/', { title: 'Bleibt', image_data: PNG_1X1 });
+  const id = created.body.data.id;
+
+  const ohneFeld = await call('PUT', `/${id}`, { title: 'Bleibt, neuer Titel' });
+  assert.equal(ohneFeld.body.data.has_own_image, true, 'ohne Feld unveraendert');
+
+  const geloescht = await call('PUT', `/${id}`, { title: 'Bleibt', image_data: null });
+  assert.equal(geloescht.body.data.has_own_image, false, 'null loescht');
+  assert.equal((await fetch(`${baseUrl}/${id}/image`)).status, 404);
+});
+
+test('POST /recipes: ein Bild, dessen Inhalt nicht zum Typ passt -> 400', async () => {
+  // Der Praefix kommt aus dem Browser des Absenders (#937); geprueft wird der
+  // Inhalt. Hier steht ein PNG-Rumpf unter einer JPEG-Deklaration.
+  const gelogen = PNG_1X1.replace('image/png', 'image/jpeg');
+  const r = await call('POST', '/', { title: 'Gelogen', image_data: gelogen });
+  assert.equal(r.status, 400);
+});

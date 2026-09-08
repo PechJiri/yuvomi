@@ -2862,7 +2862,12 @@
         "sourceNative": "Nativ",
         "sourceAll": "Alle",
         "sourceFilterLabel": "Nach Quelle filtern",
-        "plannedThisWeek": "Diese Woche geplant"
+        "plannedThisWeek": "Diese Woche geplant",
+        "imageLabel": "Bild",
+        "imageChoose": "Bild wählen",
+        "imageRemove": "Bild entfernen",
+        "imageHint": "Ein Bild je Rezept. Es erscheint im Essensplan und auf der Übersichtskachel.",
+        "imageTooLarge": "Das Bild ist nach dem Verkleinern noch zu groß."
     },
     "onboarding": {
         "step1Title": "Willkommen bei {{name}}",

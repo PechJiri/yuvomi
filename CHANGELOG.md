@@ -110,6 +110,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recipe manager would have paid a third of its title width for a meaningless cutlery icon. Row
   height is what stays equal: the same card measures 121px with a picture and 121px without.
 
+- **A recipe typed into Yuvomi can carry its own picture** (#1059, step two - the part most
+  households need, since most do not run a recipe manager). One image per recipe, chosen and cropped
+  in the recipe dialog the same way an inventory photo is, and shown wherever the provider thumbnail
+  already appeared: the planner and the "today's meals" tile. Where a recipe has both, **its own
+  image wins** - someone who uploads one has chosen that picture.
+
+  The image is served from `GET /api/v1/recipes/{id}/image` rather than travelling with the recipe.
+  The column holds a data URL of up to 5 MB; shipping that with every row of a recipe list, or with
+  a week of meals, would have dwarfed the rest of the response for a 32-pixel preview. Lists carry a
+  `has_own_image` flag instead, and the stored data URL never leaves the server as part of a record.
+  Saving a recipe without touching the image leaves it alone; only an explicit clear removes it.
+
 - **A household can name the four meal slots itself** (#1058). Breakfast, lunch, dinner and snack
   are now shown under whatever your household calls them - set in Settings → Modules → Kitchen,
   next to the switch that decides which slots appear at all, because which slots and what they are

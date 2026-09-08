@@ -10,6 +10,13 @@
  * Kopie je Flaeche haette drei Orte erzeugt, an denen der Ruecksturz auf den
  * Platzhalter einzeln richtig sein muss.
  *
+ * ZWEI BILDQUELLEN, EINE REIHENFOLGE (#1059 Schritt 2). Ein Rezept kann ein
+ * selbst hochgeladenes Bild haben (`hasOwnImage`, Route `/recipes/:id/image`)
+ * und/oder eines beim Provider (`hasImage`, Proxy-Route). DAS EIGENE GEWINNT:
+ * wer eines hochlaedt, hat sich fuer genau dieses entschieden - beim
+ * gespiegelten Rezept ist das eine bewusste Korrektur des Providerbildes, sonst
+ * ist es die einzige Quelle. Beide fallen auf denselben Platzhalter zurueck.
+ *
  * ZWEI FAELLE, DIE BEIDE VORKOMMEN:
  *
  * 1. KEIN BILD BEIM PROVIDER (`hasImage` falsch, aus dem letzten Sync). Dann
@@ -35,7 +42,15 @@ import { esc } from '/utils/html.js';
  * @param {string} [opts.iconClass] Groessenklasse des Platzhalter-Symbols.
  * @returns {HTMLElement}
  */
-export function recipeThumbEl({ recipeId, hasImage, className, iconClass = 'icon-sm' }) {
+/** Die Bild-URL eines Rezepts - eigenes zuerst, sonst das des Providers. */
+function bildUrl(recipeId, { hasImage, hasOwnImage }) {
+  if (!recipeId) return null;
+  if (hasOwnImage) return `/api/v1/recipes/${Number(recipeId)}/image`;
+  if (hasImage) return `/api/v1/recipes/${Number(recipeId)}/provider-thumbnail`;
+  return null;
+}
+
+export function recipeThumbEl({ recipeId, hasImage, hasOwnImage, className, iconClass = 'icon-sm' }) {
   const slot = document.createElement('span');
   slot.className = className;
 
@@ -44,14 +59,15 @@ export function recipeThumbEl({ recipeId, hasImage, className, iconClass = 'icon
     slot.insertAdjacentHTML('beforeend', `<i data-lucide="utensils" class="${iconClass}" aria-hidden="true"></i>`);
   };
 
-  if (!hasImage || !recipeId) {
+  const url = bildUrl(recipeId, { hasImage, hasOwnImage });
+  if (!url) {
     placeholder();
     return slot;
   }
 
   const img = document.createElement('img');
   img.className = `${className}-img`;
-  img.src = `/api/v1/recipes/${recipeId}/provider-thumbnail`;
+  img.src = url;
   // Leeres alt: das Bild wiederholt den Titel, der daneben steht. Ein alt-Text
   // waere hier eine zweite Ansage derselben Sache.
   img.alt = '';
@@ -75,11 +91,12 @@ export function recipeThumbEl({ recipeId, hasImage, className, iconClass = 'icon
  * Wer diese Form benutzt, ruft nach dem Einfuegen `wireRecipeThumbs(root)` -
  * genau so, wie die Karten daneben ihre `data-action`-Knoepfe verdrahten.
  */
-export function recipeThumbHtml({ recipeId, hasImage, className, iconClass = 'icon-sm' }) {
-  if (!hasImage || !recipeId) {
+export function recipeThumbHtml({ recipeId, hasImage, hasOwnImage, className, iconClass = 'icon-sm' }) {
+  const url = bildUrl(recipeId, { hasImage, hasOwnImage });
+  if (!url) {
     return `<span class="${className} ${className}--placeholder"><i data-lucide="utensils" class="${iconClass}" aria-hidden="true"></i></span>`;
   }
-  return `<span class="${className}"><img class="${className}-img" src="/api/v1/recipes/${Number(recipeId)}/provider-thumbnail" alt="" loading="lazy" data-recipe-thumb="${esc(className)}" data-thumb-icon="${esc(iconClass)}"></span>`;
+  return `<span class="${className}"><img class="${className}-img" src="${esc(url)}" alt="" loading="lazy" data-recipe-thumb="${esc(className)}" data-thumb-icon="${esc(iconClass)}"></span>`;
 }
 
 /**

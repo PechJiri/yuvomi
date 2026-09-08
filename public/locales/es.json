@@ -2759,7 +2759,12 @@
         "sourceNative": "Nativo",
         "sourceAll": "Todas",
         "sourceFilterLabel": "Filtrar por origen",
-        "plannedThisWeek": "Planificado esta semana"
+        "plannedThisWeek": "Planificado esta semana",
+        "imageLabel": "Imagen",
+        "imageChoose": "Elegir imagen",
+        "imageRemove": "Quitar imagen",
+        "imageHint": "Una imagen por receta. Aparece en el plan de comidas y en el mosaico de resumen.",
+        "imageTooLarge": "La imagen sigue siendo demasiado grande tras reducirla."
     },
     "search": {
         "emptyHint": "Escribe al menos 2 caracteres para buscar en tareas, citas, notas, contactos, compras y salud.",

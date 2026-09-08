@@ -2862,7 +2862,12 @@
         "sourceNative": "기본",
         "sourceAll": "전체",
         "sourceFilterLabel": "출처별로 필터링",
-        "plannedThisWeek": "이번 주에 계획됨"
+        "plannedThisWeek": "이번 주에 계획됨",
+        "imageLabel": "이미지",
+        "imageChoose": "이미지 선택",
+        "imageRemove": "이미지 삭제",
+        "imageHint": "레시피당 한 장. 식단표와 개요 타일에 표시됩니다.",
+        "imageTooLarge": "축소한 뒤에도 이미지가 너무 큽니다."
     },
     "onboarding": {
         "step1Title": "{{name}}에 오신 것을 환영합니다",

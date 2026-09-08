@@ -2862,7 +2862,12 @@
         "sourceNative": "بومی",
         "sourceAll": "همه",
         "sourceFilterLabel": "فیلتر بر اساس منبع",
-        "plannedThisWeek": "برنامه‌ریزی‌شده برای این هفته"
+        "plannedThisWeek": "برنامه‌ریزی‌شده برای این هفته",
+        "imageLabel": "تصویر",
+        "imageChoose": "انتخاب تصویر",
+        "imageRemove": "حذف تصویر",
+        "imageHint": "یک تصویر برای هر دستور پخت. در برنامه غذایی و کاشی نمای کلی دیده می‌شود.",
+        "imageTooLarge": "تصویر پس از کوچک‌سازی هنوز بزرگ است."
     },
     "onboarding": {
         "step1Title": "به {{name}} خوش آمدید",

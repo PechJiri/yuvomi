@@ -1233,9 +1233,10 @@ function renderTodayMeals(meals, visibleMealTypes = MEAL_ORDER) {
           // gleich aussehendes Platzhalter-Symbol daneben waere Unruhe ohne
           // Aussage. Die Hoehe der Kachel haengt nicht daran - das Bild sitzt
           // in der Titelzeile und ist so hoch wie sie.
-          ? `${meal.recipe_has_image ? recipeThumbHtml({
+          ? `${(meal.recipe_has_own_image || meal.recipe_has_image) ? recipeThumbHtml({
               recipeId: meal.recipe_id,
-              hasImage: true,
+              hasImage: meal.recipe_has_image,
+              hasOwnImage: meal.recipe_has_own_image,
               className: 'meal-slot__thumb',
             }) : ''}<span class="meal-slot__title-text">${esc(meal.title)}</span>`
           : '—'}</div>

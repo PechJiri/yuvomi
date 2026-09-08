@@ -2759,7 +2759,12 @@
         "sourceNative": "Egna",
         "sourceAll": "Alla",
         "sourceFilterLabel": "Filtrera efter källa",
-        "plannedThisWeek": "Planerad denna vecka"
+        "plannedThisWeek": "Planerad denna vecka",
+        "imageLabel": "Bild",
+        "imageChoose": "Välj bild",
+        "imageRemove": "Ta bort bild",
+        "imageHint": "En bild per recept. Den visas i måltidsplaneraren och på översiktsrutan.",
+        "imageTooLarge": "Bilden är fortfarande för stor efter förminskning."
     },
     "search": {
         "emptyHint": "Skriv minst 2 tecken för att söka bland uppgifter, händelser, anteckningar, kontakter, inköp och hälsa.",

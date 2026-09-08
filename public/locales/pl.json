@@ -2862,7 +2862,12 @@
         "sourceNative": "Lokalny",
         "sourceAll": "Wszystkie",
         "sourceFilterLabel": "Filtruj według źródła",
-        "plannedThisWeek": "Zaplanowane na ten tydzień"
+        "plannedThisWeek": "Zaplanowane na ten tydzień",
+        "imageLabel": "Obraz",
+        "imageChoose": "Wybierz obraz",
+        "imageRemove": "Usuń obraz",
+        "imageHint": "Jeden obraz na przepis. Pojawia się w planie posiłków i na kafelku przeglądu.",
+        "imageTooLarge": "Obraz jest nadal za duży po zmniejszeniu."
     },
     "onboarding": {
         "step1Title": "Witaj w {{name}}",

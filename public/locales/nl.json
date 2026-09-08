@@ -2850,7 +2850,12 @@
         "sourceNative": "Eigen",
         "sourceAll": "Alle",
         "sourceFilterLabel": "Filter op bron",
-        "plannedThisWeek": "Deze week gepland"
+        "plannedThisWeek": "Deze week gepland",
+        "imageLabel": "Afbeelding",
+        "imageChoose": "Afbeelding kiezen",
+        "imageRemove": "Afbeelding verwijderen",
+        "imageHint": "Eén afbeelding per recept. Hij verschijnt in de maaltijdplanner en op de overzichtstegel.",
+        "imageTooLarge": "De afbeelding is na verkleinen nog te groot."
     },
     "search": {
         "emptyHint": "Typ minstens 2 tekens om te zoeken in taken, afspraken, notities, contacten, boodschappen en gezondheid.",

@@ -2862,7 +2862,12 @@
         "sourceNative": "Katutubo",
         "sourceAll": "Lahat",
         "sourceFilterLabel": "I-filter ayon sa pinagmulan",
-        "plannedThisWeek": "Nakaplano ngayong linggo"
+        "plannedThisWeek": "Nakaplano ngayong linggo",
+        "imageLabel": "Larawan",
+        "imageChoose": "Pumili ng larawan",
+        "imageRemove": "Alisin ang larawan",
+        "imageHint": "Isang larawan bawat resipe. Lumalabas ito sa tagaplano ng pagkain at sa overview tile.",
+        "imageTooLarge": "Masyado pa ring malaki ang larawan pagkatapos paliitin."
     },
     "onboarding": {
         "step1Title": "Maligayang pagdating sa {{name}}",

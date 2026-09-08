@@ -2850,7 +2850,12 @@
         "sourceNative": "Native",
         "sourceAll": "All",
         "sourceFilterLabel": "Filter by source",
-        "plannedThisWeek": "Planned this week"
+        "plannedThisWeek": "Planned this week",
+        "imageLabel": "Image",
+        "imageChoose": "Choose image",
+        "imageRemove": "Remove image",
+        "imageHint": "One image per recipe. It shows in the meal planner and on the overview tile.",
+        "imageTooLarge": "The image is still too large after resizing."
     },
     "search": {
         "emptyHint": "Type at least 2 characters to search tasks, events, notes, contacts, shopping and health.",
