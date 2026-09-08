@@ -1475,7 +1475,14 @@
         "planHistoricNote": "Measured against your current plan. Yuvomi does not record what the plan was in an earlier month.",
         "recurringEditSeriesHint": "The series' first entry is also its template - title, amount, category and account change there too, even if it lies in the past.",
         "responsibleLabel": "Responsible",
-        "responsibleHint": "Who takes care of this entry. Moves no money - use Split Expenses to settle up."
+        "responsibleHint": "Who takes care of this entry. Moves no money - use Split Expenses to settle up.",
+        "responsibleFilterTo": "Only entries for {{name}}",
+        "clearResponsibleFilter": "Clear responsible filter",
+        "groupByResponsible": "By responsible",
+        "responsibleNobody": "Nobody responsible",
+        "responsibleFilterEmptyTitle": "No entry for this person",
+        "responsibleFilterEmptyDescription": "Nobody is responsible for an entry in this month under this selection.",
+        "handoverToSplit": "Move to Split Expenses"
     },
     "settings": {
         "healthCycleEnableLabel": "Show cycle tab",

@@ -1475,7 +1475,14 @@
         "planHistoricNote": "مقاسة على خطتك الحالية. لا يحتفظ Yuvomi بما كانت عليه الخطة في شهر سابق.",
         "recurringEditSeriesHint": "أول دفعة في السلسلة هي أيضًا قالبها - العنوان والمبلغ والفئة والحساب تتغير هناك أيضًا، حتى لو كانت في الماضي.",
         "responsibleLabel": "المسؤول",
-        "responsibleHint": "من يتولى هذا القيد. لا ينقل أي مبلغ - للتسوية استخدم النفقات المشتركة."
+        "responsibleHint": "من يتولى هذا القيد. لا ينقل أي مبلغ - للتسوية استخدم النفقات المشتركة.",
+        "responsibleFilterTo": "قيود {{name}} فقط",
+        "clearResponsibleFilter": "إزالة مرشِّح المسؤول",
+        "groupByResponsible": "حسب المسؤول",
+        "responsibleNobody": "لا أحد",
+        "responsibleFilterEmptyTitle": "لا توجد قيود لهذا الشخص",
+        "responsibleFilterEmptyDescription": "لا أحد مسؤول عن أي قيد هذا الشهر ضمن هذا التحديد.",
+        "handoverToSplit": "نقل إلى النفقات المشتركة"
     },
     "settings": {
         "healthCycleEnableLabel": "إظهار علامة تبويب الدورة",

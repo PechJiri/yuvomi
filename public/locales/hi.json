@@ -1475,7 +1475,14 @@
         "planHistoricNote": "आपकी मौजूदा योजना के आधार पर मापा गया। Yuvomi यह नहीं रखता कि पिछले महीने योजना क्या थी।",
         "recurringEditSeriesHint": "श्रृंखला की पहली प्रविष्टि ही उसका टेम्पलेट भी है - शीर्षक, राशि, श्रेणी और खाता वहां भी बदल जाते हैं, भले ही वह अतीत में हो।",
         "responsibleLabel": "जिम्मेदार",
-        "responsibleHint": "इस प्रविष्टि की देखभाल कौन करता है। इससे पैसा नहीं चलता - हिसाब बराबर करने के लिए साझा खर्च हैं।"
+        "responsibleHint": "इस प्रविष्टि की देखभाल कौन करता है। इससे पैसा नहीं चलता - हिसाब बराबर करने के लिए साझा खर्च हैं।",
+        "responsibleFilterTo": "केवल {{name}} की प्रविष्टियां",
+        "clearResponsibleFilter": "जिम्मेदार फ़िल्टर हटाएं",
+        "groupByResponsible": "जिम्मेदार के अनुसार",
+        "responsibleNobody": "कोई नहीं",
+        "responsibleFilterEmptyTitle": "इस व्यक्ति के लिए कोई प्रविष्टि नहीं",
+        "responsibleFilterEmptyDescription": "इस चयन में इस माह किसी प्रविष्टि के लिए कोई जिम्मेदार नहीं है।",
+        "handoverToSplit": "साझा खर्च में ले जाएं"
     },
     "settings": {
         "healthCycleEnableLabel": "चक्र टैब दिखाएँ",

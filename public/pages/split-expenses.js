@@ -35,6 +35,24 @@ let state = {
   user: null,
 };
 let _container = null;
+
+/* UEBERGABE AUS DEM BUDGET (#1057).
+ *
+ * Eine Buchung mit Zustaendigen kann in die geteilten Ausgaben gereicht werden,
+ * mit den Zustaendigen als Beteiligte. Das ist der Uebergang, den das Ticket
+ * ausdruecklich statt einer Verschmelzung der beiden Funktionen wollte: das
+ * Etikett im Budget bleibt eine Zuschreibung, die Forderung entsteht erst hier,
+ * und der Nutzer bestaetigt sie im Dialog.
+ *
+ * DER DIALOG WIRD NICHT UEBERSPRUNGEN. Die Aufteilung, die Waehrung und die
+ * Gruppe sind Entscheidungen, die das Budget nicht treffen kann - vorbefuellt
+ * wird, was es weiss, den Rest sieht und bestaetigt die Person davor.
+ */
+let _pendingPrefill = null;
+
+export function prefillSplitExpense(data) {
+  _pendingPrefill = data ?? null;
+}
 let _statusTablist = null;   // wireTablist-Handle des Statusfilters (sync ohne onChange)
 
 function setHtml(element, html) {
@@ -124,6 +142,14 @@ export async function render(container, { user } = {}) {
   await loadInitial();
   bindShell();
   renderAll();
+
+  // Erst NACH renderAll(): der Dialog braucht die geladenen Gruppen und
+  // Mitglieder, sonst stuende er ohne Beteiligte da.
+  if (_pendingPrefill) {
+    const prefill = _pendingPrefill;
+    _pendingPrefill = null;
+    openExpenseModal(null, prefill);
+  }
 }
 
 async function loadInitial() {
@@ -911,14 +937,35 @@ async function openGroupModal(group = null) {
   });
 }
 
-function openExpenseModal(expense = null) {
+function openExpenseModal(expense = null, prefill = null) {
   if (!state.activeGroupId) return openGroupModal();
   const group = state.groups.find((g) => g.id === state.activeGroupId);
   const isEdit = Boolean(expense && expense.id);
+  // Eine Vorbelegung aus dem Budget (#1057) verhaelt sich wie eine NEUE Ausgabe,
+  // deren Felder schon ausgefuellt sind - nicht wie eine bearbeitete.
+  if (prefill && !isEdit) {
+    expense = {
+      title: prefill.title ?? '',
+      amount: prefill.amount ?? '',
+      currency: prefill.currency ?? group.default_currency,
+      expense_date: prefill.date ?? null,
+    };
+  }
   // Neue Ausgaben starten mit der Standard-Aufteilung der Gruppe (#517),
   // bestehende mit ihrer eigenen gespeicherten Aufteilung.
   const method = isEdit ? (expense.split_method || 'equal') : (group.default_split_method || 'equal');
-  const selectedIds = isEdit ? (expense.splits || []).map((s) => s.user_id) : null;
+  // `null` heisst "Standard-Aufteilung der Gruppe". Eine Vorbelegung aus dem
+  // Budget nennt dagegen genau die Zustaendigen (#1057) - aber nur die, die
+  // auch in DIESER Gruppe sind: eine Person, die im Haushalt zustaendig ist,
+  // aber nicht zur Gruppe gehoert, kann hier nichts tragen. Bleibt davon
+  // niemand uebrig, faellt es auf die Standard-Aufteilung zurueck statt auf
+  // eine Ausgabe ohne Beteiligte.
+  const prefilledIds = prefill?.participantIds?.length
+    ? prefill.participantIds.filter((id) => state.groupMembers.some((m) => Number(m.id ?? m.user_id) === Number(id)))
+    : [];
+  const selectedIds = isEdit
+    ? (expense.splits || []).map((s) => s.user_id)
+    : (prefilledIds.length ? prefilledIds : null);
   const splitValues = isEdit ? deriveSplitValues(expense) : defaultSplitValues(group);
   // Der vorbelegte Tag ist „heute" und geht deshalb nach der Anzeigezone - aus
   // der Browser-Uhr gebaut trug eine neue Ausgabe abends in einer anderen Zone
@@ -935,8 +982,8 @@ function openExpenseModal(expense = null) {
           <label>${t('splitExpenses.paidBy')}<select class="input" name="payer_id">${memberOptions(isEdit ? expense.payer_id : state.user?.id)}</select></label>
         </div>
         <div class="split-form-row">
-          <label>${t('splitExpenses.currency')}<select class="input" name="currency">${state.meta.currencies.map((c) => `<option value="${c}" ${c === (isEdit ? expense.currency : group.default_currency) ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
-          <label>${t('splitExpenses.date')}<yuvomi-datepicker name="expense_date" type="date" value="${esc(isEdit ? (expense.expense_date || today) : today)}"></yuvomi-datepicker></label>
+          <label>${t('splitExpenses.currency')}<select class="input" name="currency">${state.meta.currencies.map((c) => `<option value="${c}" ${c === (expense?.currency || group.default_currency) ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+          <label>${t('splitExpenses.date')}<yuvomi-datepicker name="expense_date" type="date" value="${esc(expense?.expense_date || today)}"></yuvomi-datepicker></label>
         </div>
         <label>${t('splitExpenses.splitMethod')}<select class="input" name="split_method">
           ${methodOption('equal', t('splitExpenses.splitEqual'))}

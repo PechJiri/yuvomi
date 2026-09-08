@@ -1487,7 +1487,14 @@
         "planHistoricNote": "현재 계획을 기준으로 비교한 값입니다. Yuvomi는 이전 달의 계획이 얼마였는지 보관하지 않습니다.",
         "recurringEditSeriesHint": "시리즈의 첫 항목은 동시에 템플릿이기도 합니다. 제목, 금액, 카테고리, 계좌가 그곳에서도 함께 바뀌며, 과거 날짜여도 마찬가지입니다.",
         "responsibleLabel": "담당",
-        "responsibleHint": "이 항목을 맡은 사람입니다. 돈은 이동하지 않으며, 정산은 공동 지출에서 합니다."
+        "responsibleHint": "이 항목을 맡은 사람입니다. 돈은 이동하지 않으며, 정산은 공동 지출에서 합니다.",
+        "responsibleFilterTo": "{{name}}의 항목만",
+        "clearResponsibleFilter": "담당 필터 해제",
+        "groupByResponsible": "담당별",
+        "responsibleNobody": "담당 없음",
+        "responsibleFilterEmptyTitle": "이 사람의 항목이 없습니다",
+        "responsibleFilterEmptyDescription": "이 선택에서 이번 달에는 어떤 항목에도 담당자가 없습니다.",
+        "handoverToSplit": "공동 지출로 옮기기"
     },
     "settings": {
         "healthCycleEnableLabel": "주기 탭 표시",

@@ -1860,3 +1860,41 @@ button.budget-entry__title {
   .budget-plan-row__fill { transition: none; }
   .budget-plan-savings:hover { transform: none; }
 }
+
+/* Zustaendige einer Buchung (#1057) - Avatare in der Metazeile, klickbar als
+   Filter auf diese Person. Als Button, weil es eine Geste ist und keine
+   Dekoration; die Flaeche bleibt so klein wie die Avatare, deshalb kein
+   Knopf-Aussehen. */
+.budget-responsible-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+/* Gruppierte Liste (#1057).
+   DIE GRUPPEN SIND NICHT DISJUNKT: eine Buchung mit zwei Zustaendigen steht in
+   beiden. Deshalb traegt der Kopf eine ANZAHL und keine Geldsumme - eine Summe
+   je Gruppe liesse sich addieren, und die Summe waere falsch. */
+.budget-responsible-group + .budget-responsible-group {
+  margin-top: var(--space-4);
+}
+
+.budget-responsible-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.budget-responsible-group__count {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}

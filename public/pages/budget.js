@@ -13,7 +13,7 @@ import { wireTablist } from '/utils/tablist.js';
 import { t, formatDate, formatDayMonth, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
-import { render as renderSplitExpenses } from '/pages/split-expenses.js';
+import { render as renderSplitExpenses, prefillSplitExpense } from '/pages/split-expenses.js';
 import { openSubscriptionModal, render as renderSubscriptions } from '/pages/subscriptions.js';
 import { renderStats } from '/pages/budget-stats.js';
 import { renderPlans } from '/pages/budget-plans.js';
@@ -39,6 +39,9 @@ import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderA
 // aus, damit reines Ausgaben-Tracking nicht als roter Minus-Saldo missverstanden wird.
 // Reine Client-Ansicht (kein Server-Pref), analog zu documents-view/Kalender-Layern.
 const EXPENSES_ONLY_KEY = 'yuvomi-budget-expenses-only';
+// Geraeteweit wie die Ausgaben-Ansicht daneben: ob die Liste nach Zustaendigen
+// gruppiert erscheint, ist eine Frage des Schirms, nicht des Haushalts (#1057).
+const GROUP_RESPONSIBLE_KEY = 'yuvomi:budget:group-responsible';
 
 const SUBCATEGORY_I18N = () => ({
   rent_mortgage:            t('budget.subcatRentMortgage'),
@@ -207,6 +210,8 @@ let state = {
   currency:    'EUR',
   budgetMode:  'shared',      // 'shared' (Altverhalten) | 'personal' (#476/#505)
   members:     [],            // Haushaltsmitglieder fuer den Zustaendigen-Picker (#1057)
+  responsibleFilterId: null,  // aktiver Zustaendigen-Filter der Liste (#1057)
+  groupByResponsible: false,  // Liste nach Zustaendigem gruppieren (#1057)
   scope:       'mine',        // Ansichts-Filter im personal-Modus: 'mine' | 'household'
   expensesOnly: false,        // Anzeige „Nur Ausgaben" (#504): Einnahmen+Saldo ausblenden
   meta:        { expenseCategories: [], incomeCategories: [], subcategories: {} },
@@ -438,6 +443,7 @@ export async function render(container, { user }) {
     } catch (_) { /* Fallback auf EUR */ }
   }
   state.expensesOnly = localStorage.getItem(EXPENSES_ONLY_KEY) === '1';
+  state.groupByResponsible = localStorage.getItem(GROUP_RESPONSIBLE_KEY) === '1';
 
   setHtml(container, `
     <div class="budget-page app-page app-page--reading page-measure--narrow" data-composition="reading">
@@ -825,8 +831,21 @@ function renderBody() {
             <span>${esc(accountName(state.accountFilterId))}</span>
             <i data-lucide="x" class="icon-sm" aria-hidden="true"></i>
           </button>` : ''}
+          ${state.responsibleFilterId != null ? `
+          <button class="budget-account-chip" id="budget-clear-responsible-filter" type="button"
+                  aria-label="${esc(t('budget.clearResponsibleFilter'))}">
+            <i data-lucide="user-round" class="icon-sm" aria-hidden="true"></i>
+            <span>${esc(state.members.find((u) => u.id === state.responsibleFilterId)?.display_name ?? '')}</span>
+            <i data-lucide="x" class="icon-sm" aria-hidden="true"></i>
+          </button>` : ''}
         </div>
         <div class="budget-list-header__actions">
+        ${state.entries.some((e) => e.responsible_users?.length) ? `
+        <button class="btn btn--secondary${state.groupByResponsible ? ' is-active' : ''}" id="budget-group-responsible"
+          type="button" aria-pressed="${state.groupByResponsible ? 'true' : 'false'}"
+          title="${esc(t('budget.groupByResponsible'))}">
+          <i data-lucide="users" class="icon-sm" aria-hidden="true"></i>${esc(t('budget.groupByResponsible'))}
+        </button>` : ''}
         <button class="btn btn--secondary budget-manage-categories" id="budget-manage-categories"
           title="${t('budget.manageCategories')}">
           <i data-lucide="tags" class="icon-sm" aria-hidden="true"></i>${t('budget.manageCategories')}
@@ -860,6 +879,18 @@ function renderBody() {
     await loadMonth(state.month);
     renderBody();
   });
+  // Zustaendigen-Filter und Gruppierung arbeiten auf den SCHON geladenen Zeilen
+  // (#1057) - kein Nachladen, der Monat liegt vollstaendig vor.
+  _container.querySelector('#budget-clear-responsible-filter')?.addEventListener('click', () => {
+    state.responsibleFilterId = null;
+    renderBody();
+  });
+  _container.querySelector('#budget-group-responsible')?.addEventListener('click', () => {
+    state.groupByResponsible = !state.groupByResponsible;
+    try { localStorage.setItem(GROUP_RESPONSIBLE_KEY, state.groupByResponsible ? '1' : '0'); } catch (_) { /* Private-Mode */ }
+    vibrate(10);
+    renderBody();
+  });
   stagger(_container.querySelector('#budget-list')?.querySelectorAll('.budget-entry') ?? []);
 
   _container.querySelector('#budget-list')?.addEventListener('click', async (e) => {
@@ -868,6 +899,17 @@ function renderBody() {
 
     const confirmBtn = e.target.closest('[data-action="confirm"]');
     if (confirmBtn) { await openConfirmBookingModal(parseInt(confirmBtn.dataset.id, 10)); return; }
+
+    // Ein Klick auf die Avatare filtert auf diese Person (#1057) - dieselbe
+    // Geste wie der Konto-Drilldown, und sie braucht kein eigenes Bedienelement
+    // in einer Kopfzeile, die schon voll ist.
+    const respBtn = e.target.closest('[data-responsible]');
+    if (respBtn) {
+      const id = parseInt(respBtn.dataset.responsible, 10);
+      state.responsibleFilterId = state.responsibleFilterId === id ? null : id;
+      renderBody();
+      return;
+    }
 
     const item = e.target.closest('.budget-entry[data-id]');
     if (item && !e.target.closest('[data-action]')) {
@@ -989,6 +1031,42 @@ function renderCategoryBars(byCategory) {
   }).join('');
 }
 
+/* DIE LISTE NACH ZUSTAENDIGEN (#1057).
+ *
+ * EINE BUCHUNG KANN IN ZWEI GRUPPEN STEHEN, und das ist kein Fehler: "die
+ * Versicherung laeuft auf uns beide" ist der Fall, fuer den es das Feld gibt.
+ * Die Gruppen sind deshalb ausdruecklich NICHT disjunkt, ihre Summen addieren
+ * sich nicht zum Monat, und die Ueberschrift sagt "mitzustaendig" statt
+ * "zustaendig". Eine Gesamtsumme ueber die Gruppen waere doppelt gezaehlt -
+ * es gibt hier bewusst keine.
+ *
+ * "Niemand" ist eine eigene Gruppe und steht am Ende: eine Buchung, um die sich
+ * niemand kuemmert, ist die interessanteste Zeile der Ansicht, aber nicht die
+ * erste, die jemand sucht.
+ */
+function groupEntriesByResponsible(entries) {
+  const groups = new Map();
+  const unassigned = [];
+  for (const e of entries) {
+    const people = e.responsible_users ?? [];
+    if (!people.length) { unassigned.push(e); continue; }
+    for (const person of people) {
+      if (!groups.has(person.id)) groups.set(person.id, { person, entries: [] });
+      groups.get(person.id).entries.push(e);
+    }
+  }
+  const ordered = [...groups.values()].sort((a, b) =>
+    String(a.person.display_name ?? '').localeCompare(String(b.person.display_name ?? '')));
+  if (unassigned.length) ordered.push({ person: null, entries: unassigned });
+  return ordered;
+}
+
+function visibleEntries() {
+  if (state.responsibleFilterId == null) return state.entries;
+  return state.entries.filter((e) =>
+    (e.responsible_users ?? []).some((u) => u.id === state.responsibleFilterId));
+}
+
 function renderEntries() {
   if (!state.entries.length) {
     return emptyStateHTML({
@@ -1000,7 +1078,37 @@ function renderEntries() {
     });
   }
 
-  return state.entries.map((e) => {
+  const rows = visibleEntries();
+  if (!rows.length) {
+    // Gefiltert und nichts uebrig: der Leerzustand muss den FILTER benennen,
+    // nicht "noch keine Buchungen" behaupten - sonst sieht es aus, als waere
+    // der Monat leer.
+    return emptyStateHTML({
+      icon: 'user-round-x',
+      title: t('budget.responsibleFilterEmptyTitle'),
+      description: t('budget.responsibleFilterEmptyDescription'),
+    });
+  }
+
+  if (state.groupByResponsible) {
+    return groupEntriesByResponsible(rows).map((group) => `
+      <div class="budget-responsible-group">
+        <div class="budget-responsible-group__head">
+          ${group.person
+            ? `${renderAvatarStack([group.person], { size: 20, maxVisible: 1 })}<span>${esc(group.person.display_name ?? '')}</span>`
+            : `<span>${esc(t('budget.responsibleNobody'))}</span>`}
+          <span class="budget-responsible-group__count">${group.entries.length}</span>
+        </div>
+        ${entryRows(group.entries)}
+      </div>`).join('');
+  }
+
+  return entryRows(rows);
+}
+
+/** Die Buchungszeilen selbst - einmal gebaut, von Liste und Gruppen benutzt. */
+function entryRows(list) {
+  return list.map((e) => {
     const isIncome  = e.amount > 0;
     const amtClass  = isIncome ? 'budget-entry__amount--income' : 'budget-entry__amount--expenses';
     const indClass  = isIncome ? 'budget-entry__indicator--income' : 'budget-entry__indicator--expenses';
@@ -1096,7 +1204,9 @@ function renderEntries() {
     // einer maskierten Buchung faellt er weg: deren Zweck bleibt verborgen, und
     // wer sich darum kuemmert, gehoert dazu (#659).
     const responsibleMark = (!masked && (e.responsible_users?.length))
-      ? ` · ${renderAvatarStack(e.responsible_users, { size: 16, maxVisible: 3 })}`
+      ? ` · <button type="button" class="budget-responsible-chip" data-responsible="${e.responsible_users[0].id}"
+             aria-label="${esc(t('budget.responsibleFilterTo', { name: e.responsible_users[0].display_name ?? '' }))}"
+           >${renderAvatarStack(e.responsible_users, { size: 16, maxVisible: 3 })}</button>`
       : '';
     const rowActions = masked ? '' : `
           ${confirmBtn}
@@ -2069,6 +2179,14 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
     ${state.members.length > 1 ? `<div class="form-group js-entry-field">
       ${renderUserMultiSelect(state.members, isEdit ? (entry.responsible_users ?? []).map((u) => u.id) : [], 'bm-responsible', 'budget.responsibleLabel')}
       <p class="form-hint">${esc(t('budget.responsibleHint'))}</p>
+      ${/* Der Weg von der Zuschreibung zur Forderung (#1057) - und er ist
+          * ausdruecklich ein Weg und keine Verschmelzung: hier entsteht nichts,
+          * dort bestaetigt die Person, was entsteht. Nur beim Bearbeiten, weil
+          * eine noch nicht gespeicherte Buchung nichts zu uebergeben hat. */ ''}
+      ${isEdit && (entry.responsible_users ?? []).length ? `
+      <button type="button" class="btn btn--secondary btn--sm" id="bm-to-split">
+        <i data-lucide="arrow-right-left" class="icon-sm" aria-hidden="true"></i>${esc(t('budget.handoverToSplit'))}
+      </button>` : ''}
     </div>` : ''}
 
     <div class="js-entry-field">
@@ -2166,6 +2284,23 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
       // uebrigen aus und umgekehrt. Ohne diese Bindung waeren beide gleichzeitig
       // anwaehlbar.
       bindUserMultiSelect(panel, 'bm-responsible');
+
+      // Uebergabe an die geteilten Ausgaben (#1057). Der Dialog schliesst, der
+      // Tab wechselt, und dort oeffnet sich die neue Ausgabe mit Titel, Betrag
+      // und den Zustaendigen als Beteiligten - zu bestaetigen ist sie dort.
+      panel.querySelector('#bm-to-split')?.addEventListener('click', async () => {
+        prefillSplitExpense({
+          title: entry.title,
+          amount: Math.abs(entry.amount),
+          date: entry.date,
+          currency: state.currency,
+          participantIds: (entry.responsible_users ?? []).map((u) => u.id),
+        });
+        await closeModal({ force: true });
+        state.activeTab = 'split-expenses';
+        _tablist?.setActive?.('split-expenses');
+        renderBody();
+      });
 
       const setType = (type) => {
         currentType = type;

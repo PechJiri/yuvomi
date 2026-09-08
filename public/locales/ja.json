@@ -1475,7 +1475,14 @@
         "planHistoricNote": "現在の予算計画と比較しています。Yuvomi は過去の月の計画内容を保存していません。",
         "recurringEditSeriesHint": "シリーズの最初の項目はテンプレートでもあります。タイトル、金額、カテゴリー、口座はそこでも変更され、過去の日付であっても同様です。",
         "responsibleLabel": "担当",
-        "responsibleHint": "この記録を担当する人。お金は動きません。精算は共有支出で行います。"
+        "responsibleHint": "この記録を担当する人。お金は動きません。精算は共有支出で行います。",
+        "responsibleFilterTo": "{{name}} の記録のみ",
+        "clearResponsibleFilter": "担当フィルターを解除",
+        "groupByResponsible": "担当ごと",
+        "responsibleNobody": "担当なし",
+        "responsibleFilterEmptyTitle": "この人の記録はありません",
+        "responsibleFilterEmptyDescription": "この選択では、今月どの記録にも担当者がいません。",
+        "handoverToSplit": "共有支出に移す"
     },
     "settings": {
         "healthCycleEnableLabel": "周期タブを表示",

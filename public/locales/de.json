@@ -1487,7 +1487,14 @@
         "planHistoricNote": "Gemessen an deinem aktuellen Plan. Yuvomi merkt sich nicht, was der Plan in einem früheren Monat war.",
         "recurringEditSeriesHint": "Die erste Buchung der Serie ist zugleich ihre Vorlage - Titel, Betrag, Kategorie und Konto ändern sich dort mit, auch wenn sie in der Vergangenheit liegt.",
         "responsibleLabel": "Zuständig",
-        "responsibleHint": "Wer sich um diese Buchung kümmert. Bewegt kein Geld - zum Abrechnen gibt es die geteilten Ausgaben."
+        "responsibleHint": "Wer sich um diese Buchung kümmert. Bewegt kein Geld - zum Abrechnen gibt es die geteilten Ausgaben.",
+        "responsibleFilterTo": "Nur Buchungen von {{name}}",
+        "clearResponsibleFilter": "Zuständigen-Filter aufheben",
+        "groupByResponsible": "Nach Zuständigen",
+        "responsibleNobody": "Niemand zuständig",
+        "responsibleFilterEmptyTitle": "Keine Buchung für diese Person",
+        "responsibleFilterEmptyDescription": "In diesem Monat ist niemand für eine Buchung dieser Auswahl zuständig.",
+        "handoverToSplit": "In geteilte Ausgaben übernehmen"
     },
     "settings": {
         "healthCycleEnableLabel": "Zyklus-Tab anzeigen",

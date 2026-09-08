@@ -1475,7 +1475,14 @@
         "planHistoricNote": "Сравнение с вашим текущим планом. Yuvomi не хранит, каким план был в прошлом месяце.",
         "recurringEditSeriesHint": "Первая запись серии одновременно является её шаблоном - заголовок, сумма, категория и счёт меняются и там, даже если она в прошлом.",
         "responsibleLabel": "Ответственный",
-        "responsibleHint": "Кто занимается этой записью. Деньги не перемещаются - для расчётов есть общие расходы."
+        "responsibleHint": "Кто занимается этой записью. Деньги не перемещаются - для расчётов есть общие расходы.",
+        "responsibleFilterTo": "Только записи: {{name}}",
+        "clearResponsibleFilter": "Сбросить фильтр по ответственному",
+        "groupByResponsible": "По ответственному",
+        "responsibleNobody": "Никто",
+        "responsibleFilterEmptyTitle": "Для этого человека нет записей",
+        "responsibleFilterEmptyDescription": "В этом месяце никто не отвечает за запись в этой выборке.",
+        "handoverToSplit": "Перенести в общие расходы"
     },
     "settings": {
         "healthCycleEnableLabel": "Показать вкладку цикла",

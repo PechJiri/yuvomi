@@ -1475,7 +1475,14 @@
         "planHistoricNote": "Medido em relação ao seu plano atual. O Yuvomi não guarda qual era o plano num mês anterior.",
         "recurringEditSeriesHint": "O primeiro lançamento da série é também o seu modelo - título, valor, categoria e conta mudam lá também, mesmo que esteja no passado.",
         "responsibleLabel": "Responsável",
-        "responsibleHint": "Quem trata deste lançamento. Não movimenta dinheiro - para acertar contas use as despesas partilhadas."
+        "responsibleHint": "Quem trata deste lançamento. Não movimenta dinheiro - para acertar contas use as despesas partilhadas.",
+        "responsibleFilterTo": "Apenas lançamentos de {{name}}",
+        "clearResponsibleFilter": "Limpar filtro de responsável",
+        "groupByResponsible": "Por responsável",
+        "responsibleNobody": "Ninguém",
+        "responsibleFilterEmptyTitle": "Nenhum lançamento para esta pessoa",
+        "responsibleFilterEmptyDescription": "Ninguém é responsável por um lançamento neste mês com esta seleção.",
+        "handoverToSplit": "Passar para despesas partilhadas"
     },
     "settings": {
         "healthCycleEnableLabel": "Mostrar a aba de ciclo",

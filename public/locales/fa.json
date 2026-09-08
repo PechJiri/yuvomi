@@ -1487,7 +1487,14 @@
         "planHistoricNote": "بر اساس برنامهٔ فعلی شما سنجیده شده است. Yuvomi نگه نمی‌دارد که برنامه در ماه‌های گذشته چه بوده است.",
         "recurringEditSeriesHint": "نخستین مدخل مجموعه همزمان الگوی آن است - عنوان، مبلغ، دسته و حساب در آنجا هم تغییر می‌کنند، حتی اگر در گذشته باشد.",
         "responsibleLabel": "مسئول",
-        "responsibleHint": "چه کسی این مورد را رسیدگی می‌کند. پولی جابه‌جا نمی‌شود - برای تسویه از هزینه‌های مشترک استفاده کنید."
+        "responsibleHint": "چه کسی این مورد را رسیدگی می‌کند. پولی جابه‌جا نمی‌شود - برای تسویه از هزینه‌های مشترک استفاده کنید.",
+        "responsibleFilterTo": "فقط موارد {{name}}",
+        "clearResponsibleFilter": "پاک کردن صافی مسئول",
+        "groupByResponsible": "بر پایه مسئول",
+        "responsibleNobody": "هیچ‌کس",
+        "responsibleFilterEmptyTitle": "موردی برای این شخص نیست",
+        "responsibleFilterEmptyDescription": "در این ماه هیچ‌کس در این گزینش مسئول موردی نیست.",
+        "handoverToSplit": "انتقال به هزینه‌های مشترک"
     },
     "settings": {
         "healthCycleEnableLabel": "نمایش برگهٔ چرخه",

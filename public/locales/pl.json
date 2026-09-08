@@ -1487,7 +1487,14 @@
         "planHistoricNote": "Mierzone względem Twojego bieżącego planu. Yuvomi nie zapisuje, jaki był plan we wcześniejszym miesiącu.",
         "recurringEditSeriesHint": "Pierwszy wpis serii jest zarazem jej szablonem - tytuł, kwota, kategoria i konto zmieniają się także tam, nawet jeśli jest w przeszłości.",
         "responsibleLabel": "Odpowiedzialny",
-        "responsibleHint": "Kto zajmuje się tym wpisem. Nie przenosi pieniędzy - do rozliczeń służą wydatki wspólne."
+        "responsibleHint": "Kto zajmuje się tym wpisem. Nie przenosi pieniędzy - do rozliczeń służą wydatki wspólne.",
+        "responsibleFilterTo": "Tylko wpisy: {{name}}",
+        "clearResponsibleFilter": "Wyczyść filtr odpowiedzialnego",
+        "groupByResponsible": "Wg odpowiedzialnego",
+        "responsibleNobody": "Nikt",
+        "responsibleFilterEmptyTitle": "Brak wpisów dla tej osoby",
+        "responsibleFilterEmptyDescription": "W tym miesiącu nikt nie odpowiada za wpis w tym wyborze.",
+        "handoverToSplit": "Przenieś do wydatków wspólnych"
     },
     "settings": {
         "healthCycleEnableLabel": "Pokaż kartę cyklu",

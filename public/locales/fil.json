@@ -1487,7 +1487,14 @@
         "planHistoricNote": "Sinusukat laban sa iyong kasalukuyang plano. Hindi itinatala ng Yuvomi kung ano ang plano noong nakaraang buwan.",
         "recurringEditSeriesHint": "Ang unang entry ng serye ay siya ring template nito - nagbabago rin doon ang pamagat, halaga, kategorya at account, kahit nakaraan na ito.",
         "responsibleLabel": "Responsable",
-        "responsibleHint": "Kung sino ang nag-aasikaso ng entry na ito. Walang perang inililipat - gamitin ang shared expenses para maghatian."
+        "responsibleHint": "Kung sino ang nag-aasikaso ng entry na ito. Walang perang inililipat - gamitin ang shared expenses para maghatian.",
+        "responsibleFilterTo": "Mga entry lang ni {{name}}",
+        "clearResponsibleFilter": "Alisin ang filter ng responsable",
+        "groupByResponsible": "Ayon sa responsable",
+        "responsibleNobody": "Walang responsable",
+        "responsibleFilterEmptyTitle": "Walang entry para sa taong ito",
+        "responsibleFilterEmptyDescription": "Walang responsable sa anumang entry ngayong buwan sa piniling ito.",
+        "handoverToSplit": "Ilipat sa shared expenses"
     },
     "settings": {
         "healthCycleEnableLabel": "Ipakita ang tab ng siklo",

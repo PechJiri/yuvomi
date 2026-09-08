@@ -1475,7 +1475,14 @@
         "planHistoricNote": "Mätt mot din nuvarande plan. Yuvomi sparar inte vad planen var en tidigare månad.",
         "recurringEditSeriesHint": "Seriens första post är samtidigt dess mall - titel, belopp, kategori och konto ändras även där, även om den ligger i det förflutna.",
         "responsibleLabel": "Ansvarig",
-        "responsibleHint": "Vem som sköter den här posten. Flyttar inga pengar - använd delade utgifter för att göra upp."
+        "responsibleHint": "Vem som sköter den här posten. Flyttar inga pengar - använd delade utgifter för att göra upp.",
+        "responsibleFilterTo": "Endast poster för {{name}}",
+        "clearResponsibleFilter": "Rensa ansvarsfiltret",
+        "groupByResponsible": "Efter ansvarig",
+        "responsibleNobody": "Ingen",
+        "responsibleFilterEmptyTitle": "Ingen post för den här personen",
+        "responsibleFilterEmptyDescription": "Ingen är ansvarig för en post den här månaden i det här urvalet.",
+        "handoverToSplit": "Flytta till delade utgifter"
     },
     "settings": {
         "healthCycleEnableLabel": "Visa cykelfliken",

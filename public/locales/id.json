@@ -1487,7 +1487,14 @@
         "planHistoricNote": "Diukur terhadap rencana Anda saat ini. Yuvomi tidak menyimpan berapa rencana pada bulan sebelumnya.",
         "recurringEditSeriesHint": "Entri pertama dalam seri ini sekaligus templatnya - judul, jumlah, kategori, dan akun ikut berubah di sana, meskipun sudah lewat.",
         "responsibleLabel": "Penanggung jawab",
-        "responsibleHint": "Siapa yang mengurus entri ini. Tidak memindahkan uang - untuk penyelesaian gunakan pengeluaran bersama."
+        "responsibleHint": "Siapa yang mengurus entri ini. Tidak memindahkan uang - untuk penyelesaian gunakan pengeluaran bersama.",
+        "responsibleFilterTo": "Hanya entri {{name}}",
+        "clearResponsibleFilter": "Hapus filter penanggung jawab",
+        "groupByResponsible": "Menurut penanggung jawab",
+        "responsibleNobody": "Tidak ada",
+        "responsibleFilterEmptyTitle": "Tidak ada entri untuk orang ini",
+        "responsibleFilterEmptyDescription": "Tidak ada yang bertanggung jawab atas entri bulan ini dalam pilihan ini.",
+        "handoverToSplit": "Pindahkan ke pengeluaran bersama"
     },
     "settings": {
         "healthCycleEnableLabel": "Tampilkan tab siklus",

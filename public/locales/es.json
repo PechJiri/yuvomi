@@ -1475,7 +1475,14 @@
         "planHistoricNote": "Medido con tu plan actual. Yuvomi no guarda cuál era el plan en un mes anterior.",
         "recurringEditSeriesHint": "El primer apunte de la serie es también su plantilla - título, importe, categoría y cuenta cambian también ahí, aunque esté en el pasado.",
         "responsibleLabel": "Responsable",
-        "responsibleHint": "Quién se ocupa de este apunte. No mueve dinero: para saldar cuentas están los gastos compartidos."
+        "responsibleHint": "Quién se ocupa de este apunte. No mueve dinero: para saldar cuentas están los gastos compartidos.",
+        "responsibleFilterTo": "Solo apuntes de {{name}}",
+        "clearResponsibleFilter": "Quitar el filtro de responsable",
+        "groupByResponsible": "Por responsable",
+        "responsibleNobody": "Nadie",
+        "responsibleFilterEmptyTitle": "Ningún apunte para esta persona",
+        "responsibleFilterEmptyDescription": "Nadie es responsable de un apunte este mes con esta selección.",
+        "handoverToSplit": "Pasar a gastos compartidos"
     },
     "settings": {
         "healthCycleEnableLabel": "Mostrar la pestaña de ciclo",

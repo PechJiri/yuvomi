@@ -1475,7 +1475,14 @@
         "planHistoricNote": "Mevcut planınıza göre ölçülmüştür. Yuvomi, önceki bir aydaki planın ne olduğunu saklamaz.",
         "recurringEditSeriesHint": "Serinin ilk kaydı aynı zamanda şablonudur - başlık, tutar, kategori ve hesap orada da değişir, geçmişte olsa bile.",
         "responsibleLabel": "Sorumlu",
-        "responsibleHint": "Bu kaydı kim üstleniyor. Para hareketi oluşturmaz - hesaplaşmak için paylaşılan giderleri kullanın."
+        "responsibleHint": "Bu kaydı kim üstleniyor. Para hareketi oluşturmaz - hesaplaşmak için paylaşılan giderleri kullanın.",
+        "responsibleFilterTo": "Yalnızca {{name}} kayıtları",
+        "clearResponsibleFilter": "Sorumlu filtresini kaldır",
+        "groupByResponsible": "Sorumluya göre",
+        "responsibleNobody": "Kimse",
+        "responsibleFilterEmptyTitle": "Bu kişi için kayıt yok",
+        "responsibleFilterEmptyDescription": "Bu seçimde bu ay hiçbir kayıttan kimse sorumlu değil.",
+        "handoverToSplit": "Paylaşılan giderlere aktar"
     },
     "settings": {
         "healthCycleEnableLabel": "Döngü sekmesini göster",

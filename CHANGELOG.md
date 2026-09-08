@@ -26,8 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keep whoever was responsible then. Unlike the account, a virtual series inherits it too - the
   label cannot distort a balance. In a one-person household the picker does not appear at all.
 
-  Still open from the issue: grouping and filtering the overview by responsible member, and the
-  handover to Split Expenses that pre-fills participants.
+  The overview can be **filtered and grouped** by responsible member: clicking the avatars on a row
+  filters to that person, a chip clears it again, and a toggle groups the list. The groups are
+  deliberately **not** disjoint - an entry two people share appears under both - so each group head
+  carries a count rather than a sum; a per-group total would invite adding them up, and the total
+  would be wrong.
+
+  A **handover to Split Expenses** sits under the picker: it switches to that tab and opens a new
+  expense with the title, amount and date filled in and the responsible members pre-selected as
+  participants. The dialog is not skipped - the split method, the currency and the group are
+  decisions Budget cannot make, and the claim only comes into existence once it is confirmed there.
+  Responsible members who are not in the group are dropped from the pre-selection; if none are left,
+  it falls back to the group's default split rather than an expense with no participants.
 
 
 - **Inventory items and subscriptions can record the account they are registered under** (#1004).

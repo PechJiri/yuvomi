@@ -1475,7 +1475,14 @@
         "planHistoricNote": "Mesuré par rapport à votre plan actuel. Yuvomi ne conserve pas le plan tel qu’il était un mois plus tôt.",
         "recurringEditSeriesHint": "La première écriture de la série est aussi son modèle - titre, montant, catégorie et compte y changent également, même si elle est passée.",
         "responsibleLabel": "Responsable",
-        "responsibleHint": "Qui s'occupe de cette écriture. N'entraîne aucun mouvement d'argent - utilisez les dépenses partagées pour régler."
+        "responsibleHint": "Qui s'occupe de cette écriture. N'entraîne aucun mouvement d'argent - utilisez les dépenses partagées pour régler.",
+        "responsibleFilterTo": "Uniquement les écritures de {{name}}",
+        "clearResponsibleFilter": "Effacer le filtre responsable",
+        "groupByResponsible": "Par responsable",
+        "responsibleNobody": "Personne",
+        "responsibleFilterEmptyTitle": "Aucune écriture pour cette personne",
+        "responsibleFilterEmptyDescription": "Personne n'est responsable d'une écriture ce mois-ci avec cette sélection.",
+        "handoverToSplit": "Basculer vers les dépenses partagées"
     },
     "settings": {
         "healthCycleEnableLabel": "Afficher l’onglet cycle",
