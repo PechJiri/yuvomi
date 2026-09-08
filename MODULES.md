@@ -100,7 +100,7 @@ export async function render(container, context) {
 }
 ```
 
-`context` carries `user` and `page`. `page` is the normalized declaration from your manifest (`composition`, `width`, `navigation`, `responsive`), so a module can branch on it without reading `module.json` a second time.
+`context` carries `user`, `page` and `signal`. `page` is the normalized declaration from your manifest (`composition`, `width`, `navigation`, `responsive`), so a module can branch on it without reading `module.json` a second time. `signal` is an `AbortSignal` the router aborts as soon as the user leaves your page: pass it to every `addEventListener` (`{ signal }`) and clear timers on its `abort` event, and check `signal.aborted` after each `await` before touching the DOM. Without that, a page keeps polling and re-rendering into a container that is no longer on screen.
 
 Modules may import public Yuvomi browser libraries such as `/api.js`, `/i18n.js`, and utilities under `/utils/`. For calls to Yuvomi's built-in REST API, prefer `import { api } from '/api.js'`: it prefixes requests with `/api/v1`, sends the current session credentials, handles CSRF tokens, and uses non-cached fetches for user data.
 

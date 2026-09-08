@@ -406,6 +406,8 @@ let isNavigating = false;
 // komplett neu zu rendern (Teardown + Slide-Transition), tauscht das Modul über
 // seine optionale update()-Funktion nur den betroffenen Detailbereich aus.
 let _renderedModule = null;
+/** AbortController des laufenden Seitenaufbaus; abgebrochen, sobald die Route ersetzt wird (#976). */
+let _pageController = null;
 let _renderedModuleName = null;
 let _preferencesLoaded = false;
 let _disabledModules = new Set();
@@ -1535,6 +1537,17 @@ async function renderPage(route, previousPath = null, scrollTarget = 0) {
     // setzt sie beim Rendern.
     clearBulkPill();
     style.cleanup();
+    // Lebenszyklus-Vertrag (#976): der Router besitzt EIN AbortController je
+    // Seitenaufbau und bricht ihn hier ab, wo die Route ersetzt wird. Die
+    // Seite bekommt das Signal als `context.signal` und haengt Timer und
+    // Listener daran (Bruecke: utils/page-lifecycle.js). Bis dahin gab es
+    // keinen Teardown fuer Seiten - das Dashboard brach seinen Controller nur
+    // zu Beginn des NAECHSTEN eigenen render() ab, also nie beim Verlassen:
+    // Uhr, stiller Refresh, Wetter- und Wandtimer liefen gegen einen
+    // abgehaengten Container weiter und starteten Anfragen hinter der
+    // naechsten Seite.
+    _pageController?.abort();
+    _pageController = new AbortController();
 
     // Teardown abgeschlossen: ein evtl. gemerktes Soft-Update-Ziel ist jetzt
     // ungültig, bis das neue Modul erfolgreich gerendert hat.
@@ -1557,8 +1570,8 @@ async function renderPage(route, previousPath = null, scrollTarget = 0) {
       ? mountExtensionPage(pageWrapper, route.thirdPartyModule)
       : pageWrapper;
     const context = route.thirdPartyModule
-      ? { user: currentUser, page: { ...route.thirdPartyModule.page } }
-      : { user: currentUser };
+      ? { user: currentUser, page: { ...route.thirdPartyModule.page }, signal: _pageController.signal }
+      : { user: currentUser, signal: _pageController.signal };
     const renderPromise = module.render(target, context);
 
     // Schon jetzt umziehen, nicht erst nach den Daten: die meisten Seiten legen

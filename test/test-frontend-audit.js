@@ -15663,3 +15663,59 @@ test('Seitenmenue: der Scrollbalken ist am Desktop sichtbar (#970)', () => {
   assert.doesNotMatch(itemsRule.body, /#[0-9a-fA-F]{3,8}\b|\brgba?\(/,
     'Farbwerte kommen aus tokens.css, nicht als Literal');
 });
+
+// ---------------------------------------------------------------------------
+// Seiten-Lebenszyklus (#976, #977): der Router vergibt je Seitenaufbau ein
+// Signal und bricht es beim Routenwechsel ab; das Dashboard haengt ALLES an
+// das Signal des eigenen Aufbaus. Browser-gekoppelt, deshalb Textguards -
+// die Bruecke selbst ist in test-page-lifecycle.js nach Verhalten geprueft.
+// ---------------------------------------------------------------------------
+
+test('router: ein AbortController je Seitenaufbau, abgebrochen vor dem naechsten render(), Signal im Kontext (#976)', () => {
+  const router = withoutBlockComments(read('../public/router.js'));
+  const renderPage = router.slice(router.indexOf('async function renderPage('));
+  assert.ok(renderPage.length > 100, 'renderPage() nicht gefunden');
+  const abortAt = renderPage.indexOf('_pageController?.abort();');
+  const createAt = renderPage.indexOf('_pageController = new AbortController();');
+  const renderAt = renderPage.indexOf('module.render(target, context)');
+  assert.ok(abortAt > 0 && createAt > abortAt && renderAt > createAt,
+    'renderPage() muss den vorigen Controller abbrechen und einen neuen anlegen, BEVOR es render() ruft');
+  // Beide Kontext-Fassungen tragen das Signal - Kernseiten und Erweiterungen.
+  assert.match(renderPage, /\{ user: currentUser, signal: _pageController\.signal \}/,
+    'Kern-Kontext ohne Router-Signal');
+  assert.match(renderPage, /\{ user: currentUser, page: \{ \.\.\.route\.thirdPartyModule\.page \}, signal: _pageController\.signal \}/,
+    'Erweiterungs-Kontext ohne Router-Signal');
+});
+
+test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht am Modul-Feld (#976/#977)', () => {
+  const dashboard = withoutBlockComments(read('../public/pages/dashboard.js'));
+  assert.match(dashboard, /import \{ createPageController \} from '\/utils\/page-lifecycle\.js'/);
+  const render = dashboard.slice(dashboard.indexOf('export async function render('));
+  assert.match(render, /signal: routeSignal = null/, 'render() nimmt das Router-Signal aus dem Kontext');
+  assert.match(render, /const controller = createPageController\(routeSignal\);/);
+  assert.match(render, /const \{ signal \} = controller;/);
+  // Kein Listener und kein Timer-Abbau darf auf das Modul-Feld zeigen: ein
+  // ueberholter Aufbau registrierte sich sonst am Controller des neueren.
+  assert.doesNotMatch(render, /_fabController\.signal/,
+    'render() verdrahtet ueber `signal` (lokal), nicht ueber `_fabController.signal`');
+  assert.match(render, /const rerender = \(\) => render\(container, \{ user, signal: routeSignal \}\);/,
+    'ein Neuaufbau reicht das Router-Signal weiter, sonst ueberlebt er das Verlassen der Seite');
+  // Der Engpass fuer verspaetete Antworten (#977) und die Pruefungen hinter den
+  // awaits, die selbst zeichnen.
+  const rebuild = render.slice(render.indexOf('function rebuildDashboard(cfg) {'), render.indexOf('function rebuildDashboard(cfg) {') + 400);
+  // Zwischen Kopf und Pruefung duerfen nur Zeilenkommentare stehen.
+  assert.match(rebuild, /function rebuildDashboard\(cfg\) \{\n(?:\s*\/\/[^\n]*\n)*\s*if \(signal\.aborted\) return;/,
+    'rebuildDashboard() prueft als Erstes, ob dieser Aufbau noch gilt');
+  for (const fn of ['async function refreshDashboardData()', 'const doAutoRefresh = async () =>', 'const doWeatherRefresh = async () =>']) {
+    const at = render.indexOf(fn);
+    assert.ok(at > 0, `${fn} nicht gefunden`);
+    const body = render.slice(at, at + 1200);
+    assert.match(body, /await [\s\S]*?if \(signal\.aborted\) return;/, `${fn}: nach dem await fehlt die Pruefung`);
+  }
+  // Sieben Stellen: nach der ersten Antwortrunde, nach der gefilterten
+  // Nachfrage, nach den Slice-Nachladungen, im Engpass rebuildDashboard() und
+  // in den drei Pfaden, die von sich aus neu zeichnen (stiller Refresh,
+  // Wetter-Auto-Refresh, Wetter-Knopf).
+  assert.ok((render.match(/if \(signal\.aborted\) return;/g) ?? []).length >= 7,
+    'die Pruefung steht hinter jedem await des Hauptflusses und in jedem Pfad, der selbst zeichnet');
+});

@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Leaving the dashboard now stops its clock, silent refresh, weather and wall timers** (#976,
+  #977). The router had no teardown contract for pages: the dashboard only cancelled its own
+  timers at the start of its next render, never when you navigated away, so they kept ticking
+  against a container that was no longer on screen and started dashboard requests behind whatever
+  page you were on - the wall kitchen timer even chimed and re-rendered there. Every page render
+  now receives an abort signal from the router that fires as soon as the route is replaced, and
+  the dashboard binds all its timers and listeners to it. A render that is overtaken by another
+  one (retry, the customize toggle, a weather refresh, a wall timer) now stops after its pending
+  requests instead of rebuilding the surface a second time, so an older response can no longer
+  overwrite a newer one. Third-party modules get the same `signal` in their render context.
 - **Birthdays no longer vanish from the calendar when you filter by person** (#1054). The person
   filter and "Assigned to me" keep an entry only if a selected person is assigned to it, and a
   birthday belongs to a contact, not to a household member - so any person selection emptied the
