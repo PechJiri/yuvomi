@@ -1925,6 +1925,138 @@ test('following orphan-clone rollback removes every staged storage copy', async 
   }
 });
 
+test('second clone upload failure keeps the storage response after cleaning the first clone', async () => {
+  const driveStorage = await import('../server/services/google-drive-storage.js');
+  const configKeys = [
+    'document_storage_selected_backend',
+    'document_storage_google_drive_refresh_token',
+    'document_storage_google_drive_folder_id',
+  ];
+  const previousConfig = new Map(configKeys.map((key) => [
+    key,
+    db.prepare('SELECT value FROM sync_config WHERE key = ?').get(key)?.value,
+  ]));
+  const previousEnv = {
+    localEnabled: process.env.DOCUMENT_STORAGE_LOCAL_ENABLED,
+    clientId: process.env.GOOGLE_DRIVE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_DRIVE_CLIENT_SECRET,
+    redirectUri: process.env.GOOGLE_DRIVE_REDIRECT_URI,
+  };
+  const uploads = [];
+  const deleted = [];
+
+  try {
+    process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = 'false';
+    db.prepare(`
+      INSERT OR REPLACE INTO sync_config (key, value)
+      VALUES ('document_storage_selected_backend', 'local')
+    `).run();
+    const created = await call('POST', '/', {
+      actor: MARIA,
+      body: {
+        title: 'Second clone storage failure',
+        start_datetime: '2058-09-01T09:00:00',
+        recurrence_rule: 'FREQ=DAILY',
+        assigned_to: [MARIA.id],
+        attachment_name: 'second-clone.txt',
+        attachment_data: `data:text/plain;base64,${Buffer.from('clone contract').toString('base64')}`,
+      },
+    });
+    assert.equal(created.status, 201);
+    const seriesId = Number(created.body.data.id);
+    const child = await call('PUT', `/${seriesId}/occurrences/2058-09-03`, {
+      actor: MARIA,
+      body: { title: 'Inherited orphan for failed upload' },
+    });
+    assert.equal(child.status, 200);
+
+    process.env.GOOGLE_DRIVE_CLIENT_ID = 'route-drive-client';
+    process.env.GOOGLE_DRIVE_CLIENT_SECRET = 'route-drive-secret';
+    process.env.GOOGLE_DRIVE_REDIRECT_URI = 'https://example.test/drive-callback';
+    db.exec(`
+      INSERT OR REPLACE INTO sync_config (key, value)
+      VALUES
+        ('document_storage_selected_backend', 'google_drive'),
+        ('document_storage_google_drive_refresh_token', 'route-refresh'),
+        ('document_storage_google_drive_folder_id', 'documents-folder');
+    `);
+    driveStorage.__setGoogleApiFactoryForTests({
+      createOAuth2: () => ({
+        setCredentials() {},
+        on() {},
+      }),
+      createDrive: () => ({
+        files: {
+          get: async ({ fileId }) => ({
+            data: {
+              id: fileId,
+              name: 'Documents',
+              mimeType: 'application/vnd.google-apps.folder',
+              trashed: false,
+            },
+          }),
+          create: async () => {
+            uploads.push(`attempt-${uploads.length + 1}`);
+            if (uploads.length === 2) throw new Error('second clone upload probe');
+            return { data: { id: 'first-staged-clone' } };
+          },
+          delete: async ({ fileId }) => {
+            deleted.push(fileId);
+            return { data: {} };
+          },
+        },
+      }),
+    });
+
+    const response = await call('PUT', `/${seriesId}/occurrences/2058-09-02/following`, {
+      actor: MARIA,
+      body: {
+        recurrence_rule: 'FREQ=WEEKLY;BYDAY=MO',
+        confirmed_orphan_count: 1,
+      },
+    });
+
+    assert.equal(uploads.length, 2);
+    assert.deepEqual(deleted, ['first-staged-clone']);
+    assert.equal(response.status, 502);
+    assert.deepEqual(response.body, {
+      error: 'Calendar attachment storage upload failed.',
+      code: 502,
+      storage_code: 'DOCUMENT_STORAGE_UPLOAD_FAILED',
+    });
+    assert.equal(db.prepare(`
+      SELECT COUNT(*) AS count FROM family_documents
+      WHERE original_name = 'second-clone.txt'
+    `).get().count, 1);
+    assert.equal(db.prepare('SELECT recurrence_parent_id FROM calendar_events WHERE id = ?')
+      .get(child.body.data.id).recurrence_parent_id, seriesId);
+  } finally {
+    driveStorage.__setGoogleApiFactoryForTests();
+    db.prepare(`
+      DELETE FROM sync_config
+      WHERE key IN (
+        'document_storage_selected_backend',
+        'document_storage_google_drive_refresh_token',
+        'document_storage_google_drive_folder_id'
+      )
+    `).run();
+    for (const [key, value] of previousConfig) {
+      if (value !== undefined) {
+        db.prepare('INSERT INTO sync_config (key, value) VALUES (?, ?)').run(key, value);
+      }
+    }
+    for (const [name, value] of [
+      ['DOCUMENT_STORAGE_LOCAL_ENABLED', previousEnv.localEnabled],
+      ['GOOGLE_DRIVE_CLIENT_ID', previousEnv.clientId],
+      ['GOOGLE_DRIVE_CLIENT_SECRET', previousEnv.clientSecret],
+      ['GOOGLE_DRIVE_REDIRECT_URI', previousEnv.redirectUri],
+    ]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test('occurrence and split responses preserve assignment primary order and projections', async () => {
   db.prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run('#FF9500', TOM.id);
   const cases = [

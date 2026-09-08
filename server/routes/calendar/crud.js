@@ -827,6 +827,9 @@ router.put('/:id', async (req, res) => {
         );
       }
     }
+    if (err instanceof StorageError) {
+      return sendStorageError(res, err, 'Calendar attachment storage upload failed.');
+    }
     if (err instanceof CalendarOccurrenceError) return sendCalendarOccurrenceError(res, err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });
   }
@@ -1176,6 +1179,9 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
           'Calendar attachment storage cleanup failed.',
         );
       }
+    }
+    if (err instanceof StorageError) {
+      return sendStorageError(res, err, 'Calendar attachment storage upload failed.');
     }
     if (err instanceof CalendarOccurrenceError) return sendCalendarOccurrenceError(res, err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });
