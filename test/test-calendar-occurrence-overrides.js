@@ -61,6 +61,7 @@ function createDatabase() {
   const database = new DatabaseSync(':memory:');
   database.exec('PRAGMA foreign_keys = ON;');
   database.exec(MIGRATIONS_SQL[1]);
+  database.exec(MIGRATIONS_SQL[26]); // family document ACLs
   database.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
   database.exec(MIGRATIONS_SQL[174]); // generated name-day event owner
   database.exec(`
@@ -1533,6 +1534,160 @@ test('following edit refreshes future inherited projections and shifts owned rem
   `).all(future.id).map((row) => row.remind_at), ['2026-10-03T09:30:00']);
 });
 
+test('following split clones inherited attachment ownership for divergent ACLs and lifecycle', () => {
+  const cases = [
+    {
+      label: 'private to family',
+      oldVisibility: 'private',
+      oldAssignments: [1],
+      newVisibility: 'all',
+      newAssignments: [2],
+      expectedOldDocumentVisibility: 'private',
+      expectedOldAccess: [],
+      expectedNewDocumentVisibility: 'family',
+      expectedNewAccess: [],
+      deleteSide: 'new',
+    },
+    {
+      label: 'family to private',
+      oldVisibility: 'all',
+      oldAssignments: [1],
+      newVisibility: 'private',
+      newAssignments: [2],
+      expectedOldDocumentVisibility: 'family',
+      expectedOldAccess: [],
+      expectedNewDocumentVisibility: 'private',
+      expectedNewAccess: [],
+      deleteSide: 'old',
+    },
+    {
+      label: 'divergent restricted memberships',
+      oldVisibility: 'assignees',
+      oldAssignments: [1],
+      newVisibility: 'assignees',
+      newAssignments: [2, 3],
+      expectedOldDocumentVisibility: 'restricted',
+      expectedOldAccess: [1],
+      expectedNewDocumentVisibility: 'restricted',
+      expectedNewAccess: [2, 3],
+      deleteSide: 'new',
+    },
+  ];
+
+  for (const scenario of cases) {
+    const database = createDatabase();
+    const originalDocumentId = Number(database.prepare(`
+      INSERT INTO family_documents
+        (name, description, category, status, visibility, original_name, mime_type,
+         file_size, content_data, storage_provider, storage_key, created_by)
+      VALUES (?, 'source metadata', 'other', 'active', ?, 'source.txt', 'text/plain',
+              12, 'source bytes', 'local', NULL, 1)
+    `).run(`Attachment ${scenario.label}`, scenario.expectedOldDocumentVisibility).lastInsertRowid);
+    for (const userId of scenario.expectedOldAccess) {
+      database.prepare(`
+        INSERT INTO family_document_access (document_id, user_id) VALUES (?, ?)
+      `).run(originalDocumentId, userId);
+    }
+    const seriesId = Number(insertSeries(database, {
+      title: `Split ${scenario.label}`,
+      start_datetime: '2026-10-01T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+      assigned_to: scenario.oldAssignments[0],
+      visibility: scenario.oldVisibility,
+    }));
+    database.prepare(`
+      UPDATE calendar_events
+      SET attachment_name = 'source.txt', attachment_mime = 'text/plain',
+          attachment_size = 12, attachment_document_id = ?
+      WHERE id = ?
+    `).run(originalDocumentId, seriesId);
+    for (const userId of scenario.oldAssignments) {
+      database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)')
+        .run(seriesId, userId);
+    }
+
+    let clonedDocumentId = null;
+    const result = splitSeries(database, {
+      seriesId,
+      recurrenceId: '2026-10-02',
+      actorId: 1,
+      changes: {
+        visibility: scenario.newVisibility,
+        recurrence_rule: 'FREQ=DAILY',
+      },
+      assignments: scenario.newAssignments,
+      cloneAttachment() {
+        const source = database.prepare('SELECT * FROM family_documents WHERE id = ?')
+          .get(originalDocumentId);
+        clonedDocumentId = Number(database.prepare(`
+          INSERT INTO family_documents
+            (name, description, category, status, visibility, original_name, mime_type,
+             file_size, content_data, storage_provider, storage_key, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          source.name,
+          source.description,
+          source.category,
+          source.status,
+          source.visibility,
+          source.original_name,
+          source.mime_type,
+          source.file_size,
+          source.content_data,
+          source.storage_provider,
+          source.storage_key,
+          source.created_by,
+        ).lastInsertRowid);
+        return {
+          attachment_name: 'source.txt',
+          attachment_mime: 'text/plain',
+          attachment_size: 12,
+          attachment_data: null,
+          attachment_document_id: clonedDocumentId,
+        };
+      },
+    });
+
+    const oldDocument = database.prepare(`
+      SELECT visibility, content_data FROM family_documents WHERE id = ?
+    `).get(originalDocumentId);
+    const newDocument = database.prepare(`
+      SELECT visibility, content_data FROM family_documents WHERE id = ?
+    `).get(clonedDocumentId);
+    const accessFor = (documentId) => database.prepare(`
+      SELECT user_id FROM family_document_access WHERE document_id = ? ORDER BY user_id
+    `).all(documentId).map((row) => Number(row.user_id));
+
+    assert.notEqual(clonedDocumentId, originalDocumentId, `${scenario.label}: document identity`);
+    assert.equal(database.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+      .get(seriesId).attachment_document_id, originalDocumentId, `${scenario.label}: old series owner`);
+    assert.equal(database.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+      .get(result.series.id).attachment_document_id, clonedDocumentId, `${scenario.label}: successor owner`);
+    assert.deepEqual({ ...oldDocument }, {
+      visibility: scenario.expectedOldDocumentVisibility,
+      content_data: 'source bytes',
+    }, `${scenario.label}: old document`);
+    assert.deepEqual({ ...newDocument }, {
+      visibility: scenario.expectedNewDocumentVisibility,
+      content_data: 'source bytes',
+    }, `${scenario.label}: cloned document`);
+    assert.deepEqual(accessFor(originalDocumentId), scenario.expectedOldAccess,
+      `${scenario.label}: old ACL`);
+    assert.deepEqual(accessFor(clonedDocumentId), scenario.expectedNewAccess,
+      `${scenario.label}: new ACL`);
+
+    const deletedDocumentId = scenario.deleteSide === 'old'
+      ? originalDocumentId
+      : clonedDocumentId;
+    const survivingDocumentId = scenario.deleteSide === 'old'
+      ? clonedDocumentId
+      : originalDocumentId;
+    database.prepare('DELETE FROM family_documents WHERE id = ?').run(deletedDocumentId);
+    assert.ok(database.prepare('SELECT id FROM family_documents WHERE id = ?')
+      .get(survivingDocumentId), `${scenario.label}: other lifecycle remains intact`);
+  }
+});
+
 test('following edit from the first slot applies whole-series owned fields', () => {
   const database = createDatabase();
   const seriesId = Number(insertSeries(database, {
@@ -1841,6 +1996,118 @@ test('following split carries all users reminder ownership, anchors and dismissa
   ]);
 });
 
+test('following split compares reminder inheritance for every owner before dropping child state', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Per-owner reminder split source',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    assigned_to: 2,
+    created_by: 2,
+  }));
+  database.prepare(`
+    INSERT INTO event_assignments (event_id, user_id) VALUES (?, 2), (?, 3)
+  `).run(seriesId, seriesId);
+  database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, '2026-10-01T08:00:00', 0, 2, NULL),
+           ('event', ?, '2026-10-01T08:00:00', 1, 3, 2)
+  `).run(seriesId, seriesId);
+  const future = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-03',
+    actorId: 1,
+    isAdmin: true,
+    changes: { title: 'Admin-owned reminder override' },
+    reminderOffsets: [30],
+  }).event;
+  database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, '2026-10-03T08:00:00', 0, 2, NULL),
+           ('event', ?, '2026-10-03T08:00:00', 1, 3, 2)
+  `).run(future.id, future.id);
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 2,
+    changes: {
+      start_datetime: '2026-10-02T11:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+    },
+  });
+
+  assert.equal(database.prepare('SELECT overridden_fields FROM calendar_events WHERE id = ?')
+    .get(future.id).overridden_fields, '["title","reminders"]');
+  assert.deepEqual(database.prepare(`
+    SELECT created_by, assigned_from, remind_at, dismissed FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+    ORDER BY created_by, assigned_from
+  `).all(future.id).map((row) => ({ ...row })), [
+    { created_by: 1, assigned_from: null, remind_at: '2026-10-03T10:30:00', dismissed: 0 },
+    { created_by: 2, assigned_from: null, remind_at: '2026-10-03T10:00:00', dismissed: 0 },
+    { created_by: 3, assigned_from: 2, remind_at: '2026-10-03T10:00:00', dismissed: 1 },
+  ]);
+  assert.deepEqual(database.prepare(`
+    SELECT created_by, assigned_from, remind_at, dismissed FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+    ORDER BY created_by, assigned_from
+  `).all(result.series.id).map((row) => ({ ...row })), [
+    { created_by: 2, assigned_from: null, remind_at: '2026-10-02T10:00:00', dismissed: 0 },
+    { created_by: 3, assigned_from: 2, remind_at: '2026-10-02T10:00:00', dismissed: 1 },
+  ]);
+});
+
+test('following split drops reminder ownership only when every user state inherits', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Equal reminder split source',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    assigned_to: 2,
+    created_by: 2,
+  }));
+  database.prepare(`
+    INSERT INTO event_assignments (event_id, user_id) VALUES (?, 2), (?, 3)
+  `).run(seriesId, seriesId);
+  database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, '2026-10-01T08:00:00', 0, 2, NULL),
+           ('event', ?, '2026-10-01T08:00:00', 1, 3, 2)
+  `).run(seriesId, seriesId);
+  const future = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-03',
+    actorId: 2,
+    changes: { title: 'Title remains owned' },
+  }).event;
+  database.prepare(`
+    UPDATE calendar_events SET overridden_fields = '["title","reminders"]' WHERE id = ?
+  `).run(future.id);
+  database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, '2026-10-03T08:00:00', 0, 2, NULL),
+           ('event', ?, '2026-10-03T08:00:00', 1, 3, 2)
+  `).run(future.id, future.id);
+
+  splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 2,
+    changes: { recurrence_rule: 'FREQ=DAILY' },
+  });
+
+  assert.equal(database.prepare('SELECT overridden_fields FROM calendar_events WHERE id = ?')
+    .get(future.id).overridden_fields, '["title"]');
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM reminders WHERE entity_type = 'event' AND entity_id = ?
+  `).get(future.id).count, 0);
+});
+
 test('whole-series updates refresh inherited child projections and assignments atomically', () => {
   const database = createDatabase();
   const seriesId = Number(insertSeries(database, {
@@ -1907,4 +2174,71 @@ test('whole-series updates refresh inherited child projections and assignments a
     { created_by: 1, assigned_from: null, remind_at: '2026-10-02T09:30:00' },
     { created_by: 2, assigned_from: 1, remind_at: '2026-10-02T09:30:00' },
   ]);
+});
+
+test('whole-series projection refresh synchronizes occurrence-owned attachment ACLs', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Attachment ACL source',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    assigned_to: 1,
+    visibility: 'all',
+  }));
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1)')
+    .run(seriesId);
+  const documentId = Number(database.prepare(`
+    INSERT INTO family_documents
+      (name, visibility, original_name, mime_type, file_size, content_data, created_by)
+    VALUES ('Occurrence attachment', 'family', 'occurrence.txt', 'text/plain', 4, 'body', 1)
+  `).run().lastInsertRowid);
+  const child = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { title: 'Attachment-owning occurrence' },
+    attachment: {
+      attachment_name: 'occurrence.txt',
+      attachment_mime: 'text/plain',
+      attachment_size: 4,
+      attachment_data: null,
+      attachment_document_id: documentId,
+    },
+  }).event;
+
+  const access = () => database.prepare(`
+    SELECT user_id FROM family_document_access WHERE document_id = ? ORDER BY user_id
+  `).all(documentId).map((row) => Number(row.user_id));
+  const visibility = () => database.prepare(
+    'SELECT visibility FROM family_documents WHERE id = ?'
+  ).get(documentId).visibility;
+  const update = (eventVisibility, assignments) => updateSeriesWithOverrides(database, {
+    seriesId,
+    actorId: 1,
+    changes: { visibility: eventVisibility },
+    assignments,
+  });
+
+  update('private', [2]);
+  assert.equal(visibility(), 'private');
+  assert.deepEqual(access(), []);
+  assert.deepEqual({ ...database.prepare(`
+    SELECT visibility, assigned_to, attachment_document_id FROM calendar_events WHERE id = ?
+  `).get(child.id) }, {
+    visibility: 'private',
+    assigned_to: 2,
+    attachment_document_id: documentId,
+  });
+
+  update('all', [2]);
+  assert.equal(visibility(), 'family');
+  assert.deepEqual(access(), []);
+
+  update('assignees', [2]);
+  assert.equal(visibility(), 'restricted');
+  assert.deepEqual(access(), [2]);
+
+  update('assignees', [3]);
+  assert.equal(visibility(), 'restricted');
+  assert.deepEqual(access(), [3]);
 });

@@ -539,6 +539,32 @@ function reminderOffsets(database, eventId, actorId, anchorStart) {
     .sort((left, right) => left - right);
 }
 
+function reminderState(database, eventId, anchorStart) {
+  const anchor = wallTimeMs(anchorStart);
+  if (!Number.isFinite(anchor)) return [];
+  return database.prepare(`
+    SELECT remind_at, dismissed, created_by, assigned_from
+    FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+    ORDER BY created_by, assigned_from, remind_at, dismissed
+  `).all(eventId).map((row) => ({
+    offsetMs: anchor - wallTimeMs(row.remind_at),
+    dismissed: Number(row.dismissed),
+    createdBy: Number(row.created_by),
+    assignedFrom: row.assigned_from === null ? null : Number(row.assigned_from),
+  }));
+}
+
+function sameReminderState(left, right) {
+  return left.length === right.length && left.every((row, index) => {
+    const other = right[index];
+    return row.offsetMs === other.offsetMs
+      && row.dismissed === other.dismissed
+      && row.createdBy === other.createdBy
+      && row.assignedFrom === other.assignedFrom;
+  });
+}
+
 function remindAtForOffset(anchorStart, offset) {
   const anchor = wallTimeMs(anchorStart);
   const result = new Date(anchor - offset * 60000).toISOString();
@@ -965,19 +991,9 @@ function refreshReparentedChild(database, child, oldResolved, successor, success
     : attachmentValues(successor);
   if (!sameAttachment(effectiveAttachment, attachmentValues(successor))) fields.push('attachment');
   if (oldFields.includes('reminders')) {
-    const childOffsets = reminderOffsets(
-      database,
-      child.id,
-      successor.created_by,
-      oldResolved.start_datetime,
-    );
-    const seriesOffsets = reminderOffsets(
-      database,
-      successor.id,
-      successor.created_by,
-      successor.start_datetime,
-    );
-    if (!sameNumberSet(childOffsets, seriesOffsets)) {
+    const childState = reminderState(database, child.id, oldResolved.start_datetime);
+    const seriesState = reminderState(database, successor.id, successor.start_datetime);
+    if (!sameReminderState(childState, seriesState)) {
       fields.push('reminders');
       shiftOwnedReminders(database, child.id, oldResolved.start_datetime, values.start_datetime);
     } else {
@@ -1047,6 +1063,7 @@ export function splitSeries(database, {
   assignments,
   attachment,
   createAttachment,
+  cloneAttachment,
   reminderOffsets: requestedReminderOffsets,
   confirmedOrphanCount,
 }) {
@@ -1134,10 +1151,25 @@ export function splitSeries(database, {
     const createdAttachment = typeof createAttachment === 'function'
       ? createAttachment()
       : attachment;
+    const inheritedDocumentId = !selectedFields.includes('attachment')
+      ? Number(master.attachment_document_id)
+      : null;
+    const inheritedDocumentExists = inheritedDocumentId > 0
+      && hasColumn(database, 'family_documents', 'id')
+      && Boolean(database.prepare('SELECT 1 FROM family_documents WHERE id = ?')
+        .get(inheritedDocumentId));
+    if (createdAttachment === undefined
+        && inheritedDocumentExists
+        && typeof cloneAttachment !== 'function') {
+      throw new Error('An inherited attachment document requires an independent clone.');
+    }
+    const clonedAttachment = createdAttachment === undefined && inheritedDocumentExists
+      ? cloneAttachment(inheritedDocumentId)
+      : undefined;
     const successorAttachment = createdAttachment === undefined
       ? selectedFields.includes('attachment')
         ? attachmentValues(selectedChild)
-        : attachmentValues(master)
+        : attachmentValues(clonedAttachment ?? master)
       : attachmentValues(createdAttachment);
     Object.assign(successorValues, successorAttachment);
 
@@ -1380,8 +1412,11 @@ function refreshInheritedChild(database, child, oldResolved, updatedMaster) {
   }
   const ownsAssignments = fields.includes('assignments');
   const ownsAttachment = fields.includes('attachment');
+  const effectiveAssignments = ownsAssignments
+    ? canonicalIds(assignmentIds(database, child.id))
+    : canonicalIds(assignmentIds(database, updatedMaster.id));
   if (!ownsAssignments) {
-    replaceAssignments(database, child.id, canonicalIds(assignmentIds(database, updatedMaster.id)));
+    replaceAssignments(database, child.id, effectiveAssignments);
   }
   if (fields.includes('reminders')) {
     shiftOwnedReminders(database, child.id, oldResolved.start_datetime, values.start_datetime);
@@ -1416,6 +1451,14 @@ function refreshInheritedChild(database, child, oldResolved, updatedMaster) {
     effectiveAttachment.attachment_document_id,
     child.id,
   );
+  if (ownsAttachment) {
+    syncOwnedAttachmentAccess(
+      database,
+      effectiveAttachment.attachment_document_id,
+      values.visibility,
+      effectiveAssignments,
+    );
+  }
 }
 
 /** Applies a whole-series update with exact-count orphan confirmation. */

@@ -14,6 +14,7 @@ import { utcToWall } from '../../utils/timezone.js';
 import {
   StorageError,
   cleanupStagedUpload,
+  readDocumentContent,
   stageDocumentUpload,
 } from '../../services/document-storage.js';
 import { queueEventDeletion, markEventOutbound, flushOutbound } from '../../services/calendar-outbound.js';
@@ -23,6 +24,7 @@ import {
   CalendarOccurrenceError,
   deleteOccurrence,
   isEligibleLocalSeries,
+  parseOverrideFields,
   splitSeries,
   truncateSeries,
   upsertOccurrenceOverride,
@@ -35,6 +37,7 @@ import {
   eventIcon,
   parseAttachment,
   caldavTarget,
+  cloneAttachmentDocument,
   googleTarget,
   outlookTarget,
   createAttachmentDocument,
@@ -990,6 +993,35 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       });
     }
 
+    let inheritedAttachmentClone = null;
+    if (!replacementRequested
+        && !removalRequested
+        && !selectedBase.is_series_start
+        && master.attachment_document_id) {
+      const selectedChild = db.get().prepare(`
+        SELECT overridden_fields FROM calendar_events
+        WHERE recurrence_parent_id = ? AND recurrence_id = ?
+      `).get(seriesId, req.params.recurrenceId);
+      const selectedOwnsAttachment = selectedChild
+        ? parseOverrideFields(selectedChild.overridden_fields).includes('attachment')
+        : false;
+      if (!selectedOwnsAttachment) {
+        const sourceDocument = db.get().prepare(
+          'SELECT * FROM family_documents WHERE id = ?'
+        ).get(master.attachment_document_id);
+        if (sourceDocument) {
+          const content = await readDocumentContent(sourceDocument);
+          stagedUpload = await stageDocumentUpload({
+            buffer: content.buffer,
+            mime: content.mime,
+            category: sourceDocument.category,
+            originalName: sourceDocument.original_name,
+          });
+          inheritedAttachmentClone = { sourceDocument };
+        }
+      }
+    }
+
     const changes = {};
     for (const field of [
       'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
@@ -1024,6 +1056,20 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
               parsedAttachment,
               stagedUpload,
               req.body,
+              master.created_by,
+            ),
+          })
+        : undefined,
+      cloneAttachment: inheritedAttachmentClone
+        ? () => ({
+            attachment_name: master.attachment_name,
+            attachment_mime: master.attachment_mime,
+            attachment_size: master.attachment_size,
+            attachment_data: null,
+            attachment_document_id: cloneAttachmentDocument(
+              db.get(),
+              inheritedAttachmentClone.sourceDocument,
+              stagedUpload,
               master.created_by,
             ),
           })

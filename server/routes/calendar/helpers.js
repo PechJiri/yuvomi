@@ -185,6 +185,32 @@ export function createAttachmentDocument(database, attachment, staged, body, act
   return result.lastInsertRowid;
 }
 
+export function cloneAttachmentDocument(database, source, staged, actorId) {
+  if (!source || !staged) return null;
+  return database.prepare(`
+    INSERT INTO family_documents
+      (name, description, category, status, visibility, folder_id, original_name,
+       mime_type, file_size, content_data, storage_provider, storage_backend,
+       storage_key, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    source.name,
+    source.description ?? null,
+    source.category,
+    source.status,
+    source.visibility,
+    source.folder_id ?? null,
+    source.original_name,
+    source.mime_type,
+    source.file_size,
+    staged.content_data,
+    staged.storage_provider,
+    staged.storage_backend,
+    staged.storage_key,
+    actorId,
+  ).lastInsertRowid;
+}
+
 export function attachmentDataUrl(event) {
   if (!event?.attachment_data) return event?.attachment_data ?? null;
   if (String(event.attachment_data).startsWith('data:')) return event.attachment_data;

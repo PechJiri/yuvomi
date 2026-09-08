@@ -1637,6 +1637,71 @@ test('occurrence PUT owns changed assignments reminders and attachment', async (
   ]);
 });
 
+test('following route copies inherited attachment bytes into an independently owned document', async () => {
+  const originalBytes = Buffer.from('independent split attachment');
+  const created = await call('POST', '/', {
+    actor: MARIA,
+    body: {
+      title: 'Storage-safe split source',
+      start_datetime: '2046-04-20T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+      visibility: 'all',
+      assigned_to: [MARIA.id],
+      attachment_name: 'split-source.txt',
+      attachment_data: `data:text/plain;base64,${originalBytes.toString('base64')}`,
+    },
+  });
+  assert.equal(created.status, 201);
+  const seriesId = Number(created.body.data.id);
+  const originalDocumentId = Number(created.body.data.attachment_document_id);
+
+  const split = await call('PUT', `/${seriesId}/occurrences/2046-04-21/following`, {
+    actor: MARIA,
+    body: {
+      recurrence_rule: 'FREQ=DAILY',
+      visibility: 'assignees',
+      assigned_to: [TOM.id],
+    },
+  });
+
+  assert.equal(split.status, 201);
+  const successorId = Number(split.body.data.id);
+  const clonedDocumentId = Number(split.body.data.attachment_document_id);
+  assert.notEqual(clonedDocumentId, originalDocumentId);
+  assert.equal(db.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+    .get(seriesId).attachment_document_id, originalDocumentId);
+  assert.equal(db.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+    .get(successorId).attachment_document_id, clonedDocumentId);
+  const original = db.prepare(`
+    SELECT visibility, content_data, storage_backend, storage_key
+    FROM family_documents WHERE id = ?
+  `).get(originalDocumentId);
+  const cloned = db.prepare(`
+    SELECT visibility, content_data, storage_backend, storage_key
+    FROM family_documents WHERE id = ?
+  `).get(clonedDocumentId);
+  assert.equal(original.visibility, 'family');
+  assert.equal(cloned.visibility, 'restricted');
+  assert.deepEqual(Buffer.from(original.content_data), originalBytes);
+  assert.deepEqual(Buffer.from(cloned.content_data), originalBytes);
+  assert.equal(original.storage_backend, 'local');
+  assert.equal(cloned.storage_backend, 'local');
+  assert.deepEqual(db.prepare(`
+    SELECT user_id FROM family_document_access WHERE document_id = ? ORDER BY user_id
+  `).all(originalDocumentId).map((row) => Number(row.user_id)), []);
+  assert.deepEqual(db.prepare(`
+    SELECT user_id FROM family_document_access WHERE document_id = ? ORDER BY user_id
+  `).all(clonedDocumentId).map((row) => Number(row.user_id)), [TOM.id]);
+
+  db.prepare('DELETE FROM family_documents WHERE id = ?').run(clonedDocumentId);
+  assert.equal(db.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+    .get(successorId).attachment_document_id, null);
+  assert.equal(db.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+    .get(seriesId).attachment_document_id, originalDocumentId);
+  assert.deepEqual(Buffer.from(db.prepare('SELECT content_data FROM family_documents WHERE id = ?')
+    .get(originalDocumentId).content_data), originalBytes);
+});
+
 test('occurrence and split responses preserve assignment primary order and projections', async () => {
   db.prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run('#FF9500', TOM.id);
   const cases = [
