@@ -13,6 +13,9 @@ import express from 'express';
 import * as db from '../db.js';
 import { str, MAX_TITLE, MAX_URL } from '../middleware/validate.js';
 import { getAdapter, SUPPORTED_PROVIDERS } from '../services/recipe-providers/index.js';
+import {
+  isBlockedBaseUrl, isPrivateNetworkRefusal, withPrivateNetworkHint, PRIVATE_NETWORK_MESSAGE,
+} from '../services/recipe-providers/private-network.js';
 import { sync, syncOne, getStatus } from '../services/recipe-provider-sync.js';
 
 const log = createLogger('RecipeProviders');
@@ -66,8 +69,19 @@ router.post('/accounts', async (req, res) => {
     }
 
     const baseUrl = vUrl.value.replace(/\/+$/, '');
+    // Was sich ohne DNS entscheiden laesst, faellt schon hier (#1053): localhost,
+    // reservierte Suffixe und ein IP-Literal aus einem privaten Netz. Die Antwort
+    // auf das Formular ist der Ort, an dem ein Admin den Schalter erfaehrt - im
+    // Sync-Log Stunden spaeter liest sie niemand. Einen Namen prueft erst der
+    // Lookup-Hook im Adapter, je Verbindung.
+    if (isBlockedBaseUrl(baseUrl)) return res.status(400).json({ error: PRIVATE_NETWORK_MESSAGE, code: 400 });
     const test = await getAdapter({ provider, base_url: baseUrl, api_token: vToken.value }).testConnection();
     if (!test.ok) {
+      // Der Hook lehnt einen Namen ab, der privat aufloest. Das ist keine
+      // Credential-Frage - bis #1053 hiess die Antwort trotzdem so.
+      if (isPrivateNetworkRefusal(test.error)) {
+        return res.status(400).json({ error: withPrivateNetworkHint(test.error), code: 400 });
+      }
       return res.status(502).json({ error: 'Could not connect to the recipe provider with these credentials.', code: 502 });
     }
 
@@ -147,7 +161,10 @@ router.post('/accounts/:id/test', async (req, res) => {
     if (!isAdmin(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
     const account = getAccount(Number(req.params.id));
     if (!account) return res.status(404).json({ error: 'Recipe provider account not found.', code: 404 });
-    const result = await getAdapter(account).testConnection();
+    const probe = await getAdapter(account).testConnection();
+    // Die Lookup-Ablehnung bekommt den Schalter angehaengt (#1053) - sie landet
+    // als last_error auf der Konto-Karte, und dort muss stehen, was zu tun ist.
+    const result = probe.ok ? probe : { ...probe, error: withPrivateNetworkHint(probe.error) };
     if (!result.ok) db.get().prepare('UPDATE recipe_provider_accounts SET last_error = ? WHERE id = ?').run(result.error || `HTTP ${result.status}`, account.id);
     res.json({ data: result });
   } catch (err) {

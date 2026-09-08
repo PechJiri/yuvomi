@@ -18,24 +18,15 @@
  */
 import { categorizeIngredient } from './categorize.js';
 import { safeRequest } from '../../utils/http.js';
-import { createGuardedLookup, readPrivateNetworkOptIn } from '../../utils/ssrf.js';
+import { createGuardedLookup } from '../../utils/ssrf.js';
+// Opt-in RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK: one place for both adapters and
+// the route, so the switch named in the error message is the one read here.
+import { isPrivateNetworkAllowed } from './private-network.js';
 
 const REQUEST_TIMEOUT_MS = 8000;
 const PAGE_SIZE = 50;
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_THUMBNAIL_BYTES = 20 * 1024 * 1024;
-
-const ENV_ALLOW_PRIVATE_NETWORK = 'RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK';
-
-/**
- * Opt-in: allows private/local network targets for the Tandoor base_url (e.g.
- * a Docker-internal compose hostname). Deliberately lifts the SSRF guard -
- * only set in controlled environments. Read at call time so tests can set
- * process.env before invoking.
- */
-function isPrivateNetworkAllowed() {
-  return readPrivateNetworkOptIn(ENV_ALLOW_PRIVATE_NETWORK);
-}
 
 /**
  * Request options including timeout and (unless opted out) the anti-rebinding

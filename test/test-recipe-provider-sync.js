@@ -374,3 +374,34 @@ test('syncOne(): synchronisiert nur den angegebenen Account', async () => {
 test('syncOne(): unbekannter Account wirft', async () => {
   await assert.rejects(() => sync.syncOne(999999), /not found/i);
 });
+
+// --------------------------------------------------------------------------
+// Privates Netz (#1053): die Lookup-Ablehnung landet mit dem Schalter in last_error
+// --------------------------------------------------------------------------
+// Die Konto-Karte zeigt last_error. Bis #1053 stand dort die nackte Hook-Meldung
+// "URL resolves to a private IP address: x" - richtig, aber ohne den Schalter,
+// der sie behebt. Ein anderer Fehler bleibt unveraendert.
+
+test('sync(): eine Lookup-Ablehnung schreibt last_error MIT dem Schalter, ein anderer Fehler ohne (#1053)', async () => {
+  const accountId = newAccount('LanName');
+  _setAdapterFactory(() => ({
+    testConnection: async () => ({ ok: true, status: 200, linkContext: { groupSlug: 'home' } }),
+    listRecipeSummaries: async () => { throw new Error('URL resolves to a private IP address: 192.168.0.9'); },
+    getRecipe: async () => { throw new Error('sollte nicht aufgerufen werden'); },
+    recipeUrl: () => null,
+  }));
+  await sync.sync();
+  const refused = conn.prepare('SELECT last_error FROM recipe_provider_accounts WHERE id = ?').get(accountId);
+  assert.match(refused.last_error, /private IP address: 192\.168\.0\.9/, 'die Adresse aus der Hook-Meldung bleibt');
+  assert.match(refused.last_error, /RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK=true/, 'und der Schalter steht dabei');
+
+  _setAdapterFactory(() => ({
+    testConnection: async () => ({ ok: true, status: 200, linkContext: { groupSlug: 'home' } }),
+    listRecipeSummaries: async () => { throw new Error('network down'); },
+    getRecipe: async () => null,
+    recipeUrl: () => null,
+  }));
+  await sync.sync();
+  const plain = conn.prepare('SELECT last_error FROM recipe_provider_accounts WHERE id = ?').get(accountId);
+  assert.equal(plain.last_error, 'network down', 'kein Hinweis, wo er nicht hingehoert');
+});

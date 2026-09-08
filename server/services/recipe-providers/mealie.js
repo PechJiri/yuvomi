@@ -17,24 +17,15 @@
  */
 import { categorizeIngredient } from './categorize.js';
 import { safeRequest } from '../../utils/http.js';
-import { createGuardedLookup, readPrivateNetworkOptIn } from '../../utils/ssrf.js';
+import { createGuardedLookup } from '../../utils/ssrf.js';
+// Opt-in RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK: eine Stelle fuer beide Adapter
+// und die Route, damit der Schalter in der Fehlermeldung derselbe ist wie hier.
+import { isPrivateNetworkAllowed } from './private-network.js';
 
 const REQUEST_TIMEOUT_MS = 8000;
 const PAGE_SIZE = 50;
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_THUMBNAIL_BYTES = 20 * 1024 * 1024;
-
-const ENV_ALLOW_PRIVATE_NETWORK = 'RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK';
-
-/**
- * Opt-in: erlaubt private/lokale Netzwerkziele für die Mealie-base_url (z. B.
- * ein Docker-internes Compose-Hostname). Hebt den SSRF-Schutz bewusst auf -
- * nur in kontrollierten Umgebungen setzen. Wird zur Laufzeit gelesen, damit
- * Tests process.env vor dem Aufruf setzen können.
- */
-function isPrivateNetworkAllowed() {
-  return readPrivateNetworkOptIn(ENV_ALLOW_PRIVATE_NETWORK);
-}
 
 /**
  * Request-Optionen inkl. Timeout und (sofern kein Opt-in gesetzt) dem

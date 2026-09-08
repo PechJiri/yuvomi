@@ -18,6 +18,7 @@
 import { createLogger } from '../logger.js';
 import * as db from '../db.js';
 import { getAdapter } from './recipe-providers/index.js';
+import { withPrivateNetworkHint } from './recipe-providers/private-network.js';
 
 const log = createLogger('RecipeProviderSync');
 
@@ -163,7 +164,10 @@ async function syncAccount(account) {
 /** Schreibt last_sync/last_error auf den Account nach einem Durchlauf. Gibt zurück, ob er erfolgreich war. */
 function recordAccountResult(account, result) {
   if (result.failed) {
-    db.get().prepare('UPDATE recipe_provider_accounts SET last_error = ? WHERE id = ?').run(result.error, account.id);
+    // Eine Lookup-Ablehnung ("URL resolves to a private IP address") nennt hier
+    // den Schalter mit (#1053): last_error ist, was die Konto-Karte zeigt.
+    db.get().prepare('UPDATE recipe_provider_accounts SET last_error = ? WHERE id = ?')
+      .run(withPrivateNetworkHint(result.error), account.id);
     return false;
   }
   db.get().prepare('UPDATE recipe_provider_accounts SET last_sync = ?, last_error = NULL WHERE id = ?')

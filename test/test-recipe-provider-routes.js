@@ -90,6 +90,100 @@ test('POST /accounts: fehlgeschlagener Verbindungstest → 502, kein Account ang
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM recipe_provider_accounts').get().n, before);
 });
 
+// --------------------------------------------------------------------------
+// Privates Netz (#1053): der Schalter steht in der Antwort, nicht im Handbuch
+// --------------------------------------------------------------------------
+// Bis v2.64.0 rutschte ein IP-Literal (http://192.168.1.50:9925) am SSRF-Hook
+// vorbei, weil node:http ihn fuer Literale nicht ruft; seit GHSA-9jh6 fragt
+// safeRequest ihn auch dafuer - und diese Route antwortete auf die Ablehnung mit
+// "with these credentials". Jetzt entscheidet sie VOR dem Netzaufruf, was ohne
+// DNS entscheidbar ist, und nennt RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK; die
+// Lookup-Ablehnung eines Namens bekommt denselben Hinweis.
+
+const ENV_FLAG = 'RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK';
+const SWITCH_RE = /RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK=true/;
+const accountCount = () => db.prepare('SELECT COUNT(*) AS n FROM recipe_provider_accounts').get().n;
+
+function countingAdapter(result) {
+  const calls = { testConnection: 0 };
+  const factory = () => ({ testConnection: async () => { calls.testConnection += 1; return result; } });
+  return { calls, factory };
+}
+
+function withEnv(value, fn) {
+  const saved = process.env[ENV_FLAG];
+  if (value === undefined) delete process.env[ENV_FLAG]; else process.env[ENV_FLAG] = value;
+  return fn().finally(() => {
+    if (saved === undefined) delete process.env[ENV_FLAG]; else process.env[ENV_FLAG] = saved;
+  });
+}
+
+test('POST /accounts: localhost, reserviertes Suffix und privates IP-Literal → 400 mit dem Schalter, ohne Netzaufruf (#1053)', () => withEnv(undefined, async () => {
+  const { calls, factory } = countingAdapter({ ok: true, status: 200, linkContext: { groupSlug: 'home' } });
+  _setAdapterFactory(factory);
+  const before = accountCount();
+  const blocked = ['http://192.168.1.50:9925', 'http://10.0.0.5', 'http://127.0.0.1:9925', 'http://[::1]:9925', 'http://localhost:9925', 'http://mealie.local'];
+  for (const base_url of blocked) {
+    const r = await call('POST', '/accounts', { name: `Privat ${base_url}`, base_url, api_token: 't' });
+    assert.equal(r.status, 400, `${base_url} muss abgelehnt werden`);
+    assert.match(r.body.error, SWITCH_RE, `${base_url}: die Meldung muss den Schalter nennen`);
+    assert.doesNotMatch(r.body.error, /credentials/i, `${base_url}: die Ablehnung ist keine Credential-Frage`);
+  }
+  assert.equal(calls.testConnection, 0, 'entschieden VOR dem Netzaufruf - der Adapter darf nicht gefragt worden sein');
+  assert.equal(accountCount(), before, 'nichts angelegt');
+}));
+
+test('POST /accounts: mit RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK=true wird ein LAN-Literal wie jedes andere Ziel getestet und angelegt (#1053)', () => withEnv('true', async () => {
+  const { calls, factory } = countingAdapter({ ok: true, status: 200, linkContext: { groupSlug: 'home' } });
+  _setAdapterFactory(factory);
+  const r = await call('POST', '/accounts', { name: 'LAN', base_url: 'http://192.168.1.50:9925', api_token: 't' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(calls.testConnection, 1, 'mit Opt-in laeuft der Verbindungstest wie sonst');
+  assert.equal(r.body.data.base_url, 'http://192.168.1.50:9925');
+}));
+
+test('POST /accounts: die Lookup-Ablehnung eines Namens → 400 mit dem Schalter, nicht 502 "credentials" (#1053)', () => withEnv(undefined, async () => {
+  // So kommt die Ablehnung aus createGuardedLookup() beim Adapter an: ein
+  // oeffentlich aussehender Name, der in ein privates Netz aufloest.
+  const { factory } = countingAdapter({ ok: false, status: 0, error: 'URL resolves to a private IP address: 10.0.0.5' });
+  _setAdapterFactory(factory);
+  const before = accountCount();
+  const r = await call('POST', '/accounts', { name: 'Name im LAN', base_url: 'https://mealie.lan', api_token: 't' });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /private IP address: 10\.0\.0\.5/, 'die Hook-Meldung bleibt drin - sie nennt die Adresse');
+  assert.match(r.body.error, SWITCH_RE, 'und der Schalter kommt dazu');
+  assert.doesNotMatch(r.body.error, /credentials/i);
+  assert.equal(accountCount(), before);
+  // Ein gewoehnlicher Fehlschlag bleibt das 502 von oben - der Hinweis gilt
+  // nur der Lookup-Ablehnung, sonst wuerde er bei jedem falschen Token stehen.
+  _setAdapterFactory(fakeAdapter({ ok: false }));
+  const plain = await call('POST', '/accounts', { name: 'Kaputt 2', base_url: 'https://bad2.example.com', api_token: 't' });
+  assert.equal(plain.status, 502);
+  assert.doesNotMatch(plain.body.error, SWITCH_RE);
+}));
+
+test('POST /accounts/:id/test: die Lookup-Ablehnung traegt den Schalter in der Antwort UND in last_error (#1053)', () => withEnv(undefined, async () => {
+  _setAdapterFactory(fakeAdapter());
+  const created = await call('POST', '/accounts', { name: 'Spaeter privat', base_url: 'https://later.example.com', api_token: 't' });
+  assert.equal(created.status, 201);
+  const id = created.body.data.id;
+
+  const { factory } = countingAdapter({ ok: false, status: 0, error: 'URL resolves to a private IP address: 192.168.0.9' });
+  _setAdapterFactory(factory);
+  const r = await call('POST', `/accounts/${id}/test`);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.ok, false);
+  assert.match(r.body.data.error, SWITCH_RE, 'die Antwort des Verbindungstests nennt den Schalter');
+  const row = db.prepare('SELECT last_error FROM recipe_provider_accounts WHERE id = ?').get(id);
+  assert.match(row.last_error, SWITCH_RE, 'last_error ist, was die Konto-Karte zeigt - dort muss der Schalter stehen');
+
+  // Ein anderer Fehler bleibt unveraendert, ohne angehaengten Hinweis.
+  _setAdapterFactory(fakeAdapter({ ok: false }));
+  const plain = await call('POST', `/accounts/${id}/test`);
+  assert.equal(plain.body.data.error, 'bad token');
+  assert.equal(db.prepare('SELECT last_error FROM recipe_provider_accounts WHERE id = ?').get(id).last_error, 'bad token');
+}));
+
 test('POST /accounts: erfolgreiche Anlage → 201, Token nie in der Antwort, has_token=true', async () => {
   _setAdapterFactory(fakeAdapter());
   const r = await call('POST', '/accounts', { name: 'Zuhause', base_url: 'https://mealie.example.com/', api_token: 'super-secret' });
@@ -110,7 +204,10 @@ test('POST /accounts: external_url ohne http(s):// → 400', async () => {
   assert.match(r.body.error, /External URL/);
 });
 
-test('POST /accounts: external_url wird getrimmt und gespeichert (base_url bleibt für Requests, external_url nur für Links)', async () => {
+// Ein internes Ziel (.local) braucht seit #1053 schon beim Speichern das Opt-in -
+// genau wie im Betrieb, wo der Lookup es ohne Opt-in ablehnt; nur der
+// Fake-Adapter hat das hier nie gesehen.
+test('POST /accounts: external_url wird getrimmt und gespeichert (base_url bleibt für Requests, external_url nur für Links)', () => withEnv('true', async () => {
   _setAdapterFactory(fakeAdapter());
   const r = await call('POST', '/accounts', {
     name: 'MitVanity', base_url: 'https://internal.mealie.local', external_url: 'https://recipes.example.com/', api_token: 't3',
@@ -118,7 +215,7 @@ test('POST /accounts: external_url wird getrimmt und gespeichert (base_url bleib
   assert.equal(r.status, 201);
   assert.equal(r.body.data.external_url, 'https://recipes.example.com'); // trailing slash entfernt
   assert.equal(r.body.data.base_url, 'https://internal.mealie.local');
-});
+}));
 
 test('POST /accounts: doppelte base_url → 409', async () => {
   const r = await call('POST', '/accounts', { name: 'Zweitkonto', base_url: 'https://mealie.example.com', api_token: 't2' });

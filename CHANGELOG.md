@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole birthday layer. Birthdays now sit outside the person axes, the way holidays always have;
   the "Birthdays" toggle in the filter sheet remains the way to hide them. Ordinary events without
   an assignment still drop out under a person filter, which is intentional (#987).
+- **A Mealie or Tandoor address on a private or local network now says which switch to set**
+  (#1053). Since 2.64.1 the SSRF guard also checks an IP literal on the first hop (GHSA-9jh6), so a
+  provider configured as `http://192.168.x.x` that used to slip past the guard now needs
+  `RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK=true` - but the form answered "Could not connect to the
+  recipe provider with these credentials", and the account card showed the bare resolver message.
+  The form now refuses a local name or a private IP literal before any network call and names the
+  switch, the way notification channels do; a hostname that resolves into a private network gets
+  the same hint on the connection test, on the account card and after a failed sync. The 2.64.1
+  notes below carry the same addendum, since that is where an upgrader looks first.
 
 ## [2.65.0] - 2026-09-08
 
@@ -502,7 +511,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `302` whose `Location` was `http://169.254.169.254/` was therefore connected to without the
   per-connection check that guards every named hop. The HTTP client now asks the hook for an IP
   literal itself, on every hop including the first, so a public feed that redirects into the
-  server's own network is refused like a hostname that resolves there.
+  server's own network is refused like a hostname that resolves there. *Addendum (#1053): the
+  first-hop check also catches a target that is itself a private IP literal. A Mealie or Tandoor
+  configured as `http://192.168.x.x` slipped past the guard before this release and needs
+  `RECIPE_PROVIDER_ALLOW_PRIVATE_NETWORK=true` from now on. ICS feeds already refused such a literal
+  when saved, and notification channels have their own note above.*
 
 - **Two write paths now enforce what their create paths always did (GHSA-4p5w-5346-8598).** Editing
   a shared expense checked who was allowed to edit it but no longer, unlike creating one, whether
