@@ -2234,6 +2234,132 @@ test('first visible following edit preserves off-rule master anchors and applies
   }
 });
 
+test('first visible following edit preserves submitted all-day and timed representations', () => {
+  for (const fixture of [
+    {
+      label: 'all-day to timed',
+      start: '2026-01-15',
+      end: '2026-01-16',
+      submittedStart: '2026-01-31T09:30',
+      submittedEnd: '2026-02-01T10:45',
+      allDay: false,
+      expectedStart: '2026-01-15T09:30',
+      expectedEnd: '2026-01-16T10:45',
+    },
+    {
+      label: 'timed to all-day',
+      start: '2026-01-15T09:00',
+      end: '2026-01-15T10:00',
+      submittedStart: '2026-01-31',
+      submittedEnd: '2026-01-31',
+      allDay: true,
+      expectedStart: '2026-01-15',
+      expectedEnd: '2026-01-15',
+    },
+  ]) {
+    const database = createDatabase();
+    const seriesId = Number(insertSeries(database, {
+      title: fixture.label,
+      start_datetime: fixture.start,
+      end_datetime: fixture.end,
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    }));
+    database.prepare('UPDATE calendar_events SET all_day = ? WHERE id = ?')
+      .run(fixture.allDay ? 0 : 1, seriesId);
+    const result = splitSeries(database, {
+      seriesId,
+      recurrenceId: '2026-01-31',
+      actorId: 1,
+      changes: {
+        all_day: fixture.allDay,
+        start_datetime: fixture.submittedStart,
+        end_datetime: fixture.submittedEnd,
+      },
+    });
+    assert.equal(result.wholeSeries, true, fixture.label);
+    assert.deepEqual({ ...database.prepare(`
+      SELECT start_datetime, end_datetime, all_day FROM calendar_events WHERE id = ?
+    `).get(seriesId) }, {
+      start_datetime: fixture.expectedStart,
+      end_datetime: fixture.expectedEnd,
+      all_day: fixture.allDay ? 1 : 0,
+    }, fixture.label);
+  }
+
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    start_datetime: '2026-01-15T09:00',
+    end_datetime: '2026-01-15T10:00',
+    recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  }));
+  splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-01-31',
+    actorId: 1,
+    changes: {
+      start_datetime: '2026-01-31T09:00',
+      end_datetime: '2026-01-31T10:00',
+    },
+  });
+  assert.deepEqual({ ...database.prepare(`
+    SELECT start_datetime, end_datetime FROM calendar_events WHERE id = ?
+  `).get(seriesId) }, {
+    start_datetime: '2026-01-15T09:00',
+    end_datetime: '2026-01-15T10:00',
+  }, 'minute precision stays stable');
+});
+
+test('occurrence assignment changes own only the effective reminder recipients', () => {
+  for (const fixture of [
+    { label: 'removed omitted', assignments: [1], reminderOffsets: undefined },
+    { label: 'removed explicit', assignments: [1], reminderOffsets: [60] },
+    { label: 'added omitted', assignments: [1, 2, 3], reminderOffsets: undefined },
+    { label: 'added explicit', assignments: [1, 2, 3], reminderOffsets: [60] },
+  ]) {
+    const database = createDatabase();
+    const seriesId = Number(insertSeries(database, {
+      title: fixture.label,
+      start_datetime: '2026-10-01T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+      assigned_to: 1,
+    }));
+    database.prepare(`
+      INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1), (?, 2)
+    `).run(seriesId, seriesId);
+    database.prepare(`
+      INSERT INTO reminders
+        (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+      VALUES ('event', ?, '2026-10-01T08:00:00', 0, 1, NULL),
+             ('event', ?, '2026-10-01T08:00:00', 1, 2, 1)
+    `).run(seriesId, seriesId);
+    const result = upsertOccurrenceOverride(database, {
+      seriesId,
+      recurrenceId: '2026-10-02',
+      actorId: 1,
+      assignments: fixture.assignments,
+      reminderOffsets: fixture.reminderOffsets,
+    }).event;
+    const recipients = database.prepare(`
+      SELECT created_by, assigned_from, dismissed FROM reminders
+      WHERE entity_type = 'event' AND entity_id = ? ORDER BY created_by
+    `).all(result.id).map((row) => ({ ...row }));
+
+    assert.equal(database.prepare('SELECT overridden_fields FROM calendar_events WHERE id = ?')
+      .get(result.id).overridden_fields, '["assignments","reminders"]', fixture.label);
+    if (fixture.assignments.includes(2)) {
+      assert.deepEqual(recipients, [
+        { created_by: 1, assigned_from: null, dismissed: 0 },
+        { created_by: 2, assigned_from: 1, dismissed: 1 },
+        { created_by: 3, assigned_from: 1, dismissed: 0 },
+      ], fixture.label);
+    } else {
+      assert.deepEqual(recipients, [
+        { created_by: 1, assigned_from: null, dismissed: 0 },
+      ], fixture.label);
+    }
+  }
+});
+
 test('rule changes require an exact orphan count and clean deletion-only exceptions', () => {
   const database = createDatabase();
   const seriesId = Number(insertSeries(database, {

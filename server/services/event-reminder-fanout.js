@@ -87,7 +87,10 @@ export function fanOutEventReminders(database, eventId, authorId) {
   const wanted = remindAts.join('|');
   let written = 0;
   for (const userId of targets) {
-    if (ownRow.get(eventId, userId)) continue;
+    if (ownRow.get(eventId, userId)) {
+      dropDerived.run(eventId, userId, authorId);
+      continue;
+    }
     const have = derivedOf.all(eventId, userId, authorId).map((r) => r.remind_at).join('|');
     if (have === wanted) continue;
 

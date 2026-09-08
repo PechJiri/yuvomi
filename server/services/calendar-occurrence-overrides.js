@@ -31,6 +31,7 @@ export const OVERRIDE_FIELDS = Object.freeze([
 ]);
 
 const OVERRIDE_FIELD_SET = new Set(OVERRIDE_FIELDS);
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export class CalendarOccurrenceError extends Error {
   constructor(message, {
@@ -697,9 +698,9 @@ function wallTimeMs(value) {
 function shiftedDateTimeLike(value, shiftMs) {
   const shifted = new Date(wallTimeMs(value) + shiftMs).toISOString();
   const source = String(value);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(source)) return shifted.slice(0, 10);
-  if (/Z$/.test(source)) return shifted.replace('.000Z', 'Z');
-  return shifted.slice(0, /:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(source) ? 19 : 16);
+  if (DATE_ONLY_RE.test(source)) return shifted.slice(0, 10);
+  const local = shifted.slice(0, /T\d{2}:\d{2}:\d{2}/.test(source) ? 19 : 16);
+  return /Z$/.test(source) ? `${local}Z` : local;
 }
 
 function firstSlotSeriesChanges(master, selected, changes) {
@@ -707,15 +708,14 @@ function firstSlotSeriesChanges(master, selected, changes) {
   const slotShift = wallTimeMs(master.start_datetime) - wallTimeMs(selected.start_datetime);
   for (const field of ['start_datetime', 'end_datetime']) {
     if (!Object.hasOwn(changes, field) || changes[field] === null) continue;
-    const selectedValue = selected[field];
-    const masterValue = master[field];
-    if (selectedValue && masterValue) {
-      normalized[field] = shiftedDateTimeLike(
-        masterValue,
-        wallTimeMs(changes[field]) - wallTimeMs(selectedValue),
-      );
-    } else if (Number.isFinite(slotShift)) {
-      normalized[field] = shiftedDateTimeLike(changes[field], slotShift);
+    if (Number.isFinite(slotShift)) {
+      const shifted = shiftedDateTimeLike(changes[field], slotShift);
+      const representationChanged = DATE_ONLY_RE.test(String(master[field] ?? ''))
+        !== DATE_ONLY_RE.test(String(changes[field]));
+      normalized[field] = !representationChanged
+          && wallTimeMs(shifted) === wallTimeMs(master[field])
+        ? master[field]
+        : shifted;
     }
   }
   return normalized;
@@ -805,6 +805,17 @@ function copyReminderState(database, sourceId, targetId, sourceAnchor, targetAnc
   }
 }
 
+function pruneInheritedRemindersToAssignments(database, eventId, userIds) {
+  const effective = new Set(userIds.map(Number));
+  const removedRecipients = database.prepare(`
+    SELECT DISTINCT created_by FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NOT NULL
+  `).all(eventId)
+    .map((row) => Number(row.created_by))
+    .filter((userId) => !effective.has(userId));
+  dropInheritedEventReminders(database, eventId, removedRecipients);
+}
+
 /**
  * Creates or updates one local replacement and its EXDATE in one transaction.
  * `changes` is already validated route data; omitted properties retain the
@@ -866,7 +877,6 @@ export function upsertOccurrenceOverride(database, {
       : attachmentValues(createdAttachment);
 
     const remindersWereOwned = existingFields.includes('reminders');
-    const remindersMayDiffer = remindersWereOwned || requestedReminderOffsets !== undefined;
 
     const scalarDifferences = new Set(SCALAR_OVERRIDE_FIELDS.filter((field) =>
       !sameScalar(materialized[field], base[field])
@@ -875,6 +885,9 @@ export function upsertOccurrenceOverride(database, {
       canonicalIds(effectiveAssignments),
       baseAssignments,
     ) || effectivePrimary !== basePrimary;
+    const remindersMayDiffer = remindersWereOwned
+      || requestedReminderOffsets !== undefined
+      || assignmentsDiffer;
     const attachmentDiffers = !sameAttachment(effectiveAttachment, baseAttachment);
     let fields = OVERRIDE_FIELDS.filter((field) =>
       scalarDifferences.has(field)
@@ -983,6 +996,9 @@ export function upsertOccurrenceOverride(database, {
         materialized.start_datetime,
         canonicalOffsets(requestedReminderOffsets),
       );
+    }
+    if (remindersMayDiffer) {
+      pruneInheritedRemindersToAssignments(database, childId, effectiveAssignments);
     }
     if (remindersMayDiffer) fanOutEventReminders(database, childId, master.created_by);
 
@@ -1633,8 +1649,8 @@ function materializeDetachedChild(database, child, master, {
       sourceAnchor: master.start_datetime,
       targetAnchor: resolved.start_datetime,
     });
-    fanOutEventReminders(database, child.id, master.created_by);
   }
+  fanOutEventReminders(database, child.id, master.created_by);
   const inheritsAttachment = !fields.includes('attachment')
     && attachmentDocumentExists(database, resolved.attachment_document_id);
   const detachedAttachment = inheritsAttachment

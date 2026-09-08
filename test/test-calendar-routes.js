@@ -2161,13 +2161,64 @@ test('first-visible following edits preserve off-rule DTSTART and reminder ancho
     assert.deepEqual({ ...db.prepare(`
       SELECT start_datetime, end_datetime FROM calendar_events WHERE id = ?
     `).get(seriesId) }, {
-      start_datetime: fixture.start.replace('09:00:00', '11:00:00'),
-      end_datetime: fixture.end.replace('10:00:00', '12:00:00'),
+      start_datetime: fixture.start.replace('09:00:00', '11:00:00').slice(0, 16),
+      end_datetime: fixture.end.replace('10:00:00', '12:00:00').slice(0, 16),
     }, `${fixture.label}: edited anchor delta`);
     assert.equal(db.prepare(`
       SELECT remind_at FROM reminders WHERE entity_type = 'event' AND entity_id = ?
     `).get(seriesId).remind_at, fixture.start.replace('09:00:00', '10:00:00'),
     `${fixture.label}: edited reminder anchor`);
+  }
+});
+
+test('first-visible following edits preserve submitted all-day and timed representations', async () => {
+  for (const fixture of [
+    {
+      label: 'all-day to timed',
+      initialAllDay: 1,
+      start: '2046-01-15',
+      end: '2046-01-16',
+      submittedStart: '2046-01-31T09:30',
+      submittedEnd: '2046-02-01T10:45',
+      allDay: false,
+      expectedStart: '2046-01-15T09:30',
+      expectedEnd: '2046-01-16T10:45',
+    },
+    {
+      label: 'timed to all-day',
+      initialAllDay: 0,
+      start: '2046-01-15T09:00',
+      end: '2046-01-15T10:00',
+      submittedStart: '2046-01-31',
+      submittedEnd: '2046-01-31',
+      allDay: true,
+      expectedStart: '2046-01-15',
+      expectedEnd: '2046-01-15',
+    },
+  ]) {
+    const seriesId = Number(insertEvent({
+      title: fixture.label,
+      start_datetime: fixture.start,
+      end_datetime: fixture.end,
+      all_day: fixture.initialAllDay,
+      recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    }));
+    const response = await call('PUT', `/${seriesId}/occurrences/2046-01-31/following`, {
+      body: {
+        start_datetime: fixture.submittedStart,
+        end_datetime: fixture.submittedEnd,
+        all_day: fixture.allDay,
+        recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+      },
+    });
+    assert.equal(response.status, 200, fixture.label);
+    assert.deepEqual({ ...db.prepare(`
+      SELECT start_datetime, end_datetime, all_day FROM calendar_events WHERE id = ?
+    `).get(seriesId) }, {
+      start_datetime: fixture.expectedStart,
+      end_datetime: fixture.expectedEnd,
+      all_day: fixture.allDay ? 1 : 0,
+    }, fixture.label);
   }
 });
 
@@ -2177,7 +2228,11 @@ test('occurrence mutation routes reject schema-invalid values before persistence
     { title: '   ' },
     { start_datetime: null },
     { start_datetime: '' },
+    { start_datetime: '2046-02-31T09:00' },
+    { start_datetime: '2046-06-02T25:00' },
+    { start_datetime: '2046-06-02T09:99' },
     { end_datetime: '' },
+    { end_datetime: '2046-02-31' },
     { all_day: 'false' },
     { countdown: 1 },
     { assigned_to: 0 },

@@ -148,6 +148,26 @@ function validateOccurrenceAssignments(database, value) {
   return { value: ids, error: null };
 }
 
+function isPossibleCalendarDateTime(value) {
+  const match = String(value).trim().match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):?(\d{2}))?)?$/
+  );
+  if (!match) return false;
+  const [, year, month, day, hour, minute, second, offsetHour, offsetMinute] = match;
+  const parsed = new Date(0);
+  parsed.setUTCHours(0, 0, 0, 0);
+  parsed.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
+  if (parsed.getUTCFullYear() !== Number(year)
+      || parsed.getUTCMonth() !== Number(month) - 1
+      || parsed.getUTCDate() !== Number(day)) return false;
+  if (hour === undefined) return true;
+  return Number(hour) <= 23
+    && Number(minute) <= 59
+    && (second === undefined || Number(second) <= 59)
+    && (offsetHour === undefined || Number(offsetHour) <= 23)
+    && (offsetMinute === undefined || Number(offsetMinute) <= 59);
+}
+
 function validateOccurrenceMutationBody(database, body, { following = false } = {}) {
   const values = {};
   const errors = [];
@@ -181,7 +201,9 @@ function validateOccurrenceMutationBody(database, body, { following = false } = 
     }
     const result = datetime(body[field], label, true);
     if (result.error) errors.push(result.error);
-    else values[field] = result.value;
+    else if (!isPossibleCalendarDateTime(body[field])) {
+      errors.push(`${field} must be a valid calendar date or date-time.`);
+    } else values[field] = result.value;
   };
 
   validateString('title', 'Titel', { max: MAX_TITLE });
