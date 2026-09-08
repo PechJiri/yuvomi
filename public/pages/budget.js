@@ -29,6 +29,7 @@ import '/components/category-manager.js';
 import { findPageFab } from '/utils/fab.js';
 import { emptyStateHTML, mountLoadError } from '/utils/empty-state.js';
 import { attachOverlay } from '/utils/overlay-history.js';
+import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderAvatarStack } from '/components/user-multi-select.js';
 
 // --------------------------------------------------------
 // Konstanten
@@ -205,6 +206,7 @@ let state = {
   loanStatusFilter: 'active',
   currency:    'EUR',
   budgetMode:  'shared',      // 'shared' (Altverhalten) | 'personal' (#476/#505)
+  members:     [],            // Haushaltsmitglieder fuer den Zustaendigen-Picker (#1057)
   scope:       'mine',        // Ansichts-Filter im personal-Modus: 'mine' | 'household'
   expensesOnly: false,        // Anzeige „Nur Ausgaben" (#504): Einnahmen+Saldo ausblenden
   meta:        { expenseCategories: [], incomeCategories: [], subcategories: {} },
@@ -422,12 +424,17 @@ export async function render(container, { user }) {
 
   if (user?.access_scope !== 'split_guest') {
     try {
-      const [prefsRes] = await Promise.all([
+      const [prefsRes, usersRes] = await Promise.all([
         api.get('/preferences'),
+        // Fuer den Zustaendigen-Picker (#1057). Faellt der Aufruf aus, bleibt die
+        // Liste leer und das Feld verschwindet - eine Buchung ohne Picker ist
+        // besser als ein Formular, das gar nicht aufgeht.
+        api.get('/auth/users').catch(() => ({ data: [] })),
         loadBudgetMeta(),
       ]);
       state.currency = prefsRes.data?.currency ?? 'EUR';
       state.budgetMode = prefsRes.data?.budget_mode === 'personal' ? 'personal' : 'shared';
+      state.members = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.users ?? []);
     } catch (_) { /* Fallback auf EUR */ }
   }
   state.expensesOnly = localStorage.getItem(EXPENSES_ONLY_KEY) === '1';
@@ -1084,6 +1091,13 @@ function renderEntries() {
       ? `<div class="list-row__name budget-entry__title">${esc(displayTitle)}${sharedBadge}${maskedBadge}${pendingBadge}</div>`
       : `<button class="list-row__name budget-entry__title" type="button"
            aria-label="${esc(t('budget.editEntry'))}: ${esc(e.title)}, ${amountText}">${esc(displayTitle)}${sharedBadge}${maskedBadge}${pendingBadge}</button>`;
+    // ZUSTAENDIGE (#1057) als Avatar-Stapel in der Metazeile - dieselbe Sprache,
+    // die Kalender und Aufgaben fuer "wer gehoert dazu" schon sprechen. Bei
+    // einer maskierten Buchung faellt er weg: deren Zweck bleibt verborgen, und
+    // wer sich darum kuemmert, gehoert dazu (#659).
+    const responsibleMark = (!masked && (e.responsible_users?.length))
+      ? ` · ${renderAvatarStack(e.responsible_users, { size: 16, maxVisible: 3 })}`
+      : '';
     const rowActions = masked ? '' : `
           ${confirmBtn}
           <button class="row-action row-action--danger" data-action="delete" data-id="${e.id}" aria-label="${t('budget.deleteLabel')}">
@@ -1095,7 +1109,7 @@ function renderEntries() {
         <div class="budget-entry__indicator ${indClass}"></div>
         <div class="list-row__main">
           ${titleCell}
-          <div class="list-row__meta budget-entry__meta">${date} · ${esc(categoryMeta)}${acctMeta}${recurTag}${receiptMark}</div>
+          <div class="list-row__meta budget-entry__meta">${date} · ${esc(categoryMeta)}${acctMeta}${recurTag}${receiptMark}${responsibleMark}</div>
         </div>
         <div class="budget-entry__amount ${amtClass}">${amountText}</div>
         <div class="list-row__actions">${rowActions}
@@ -2041,6 +2055,22 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
       <p class="form-hint" id="bm-visibility-hint">${esc(t(`budget.visibilityHint_${isEdit ? entry.visibility : 'shared'}`))}</p>
     </div>` : ''}
 
+    ${/* ZUSTAENDIG (#1057) - ein Etikett, das kein Geld bewegt.
+        *
+        * Steht bewusst NEBEN der Sichtbarkeit und nicht in ihr: `owner_id` ist
+        * die Datenschutz-Achse und liegt fest, die Zustaendigkeit ist die
+        * zweite Achse und darf wechseln. Wer die Wasserrechnung uebernimmt,
+        * bekommt damit keine private Buchung und schuldet auch nichts - das
+        * Abrechnen bleibt in den geteilten Ausgaben.
+        *
+        * Verschwindet im Solo-Haushalt: eine Zustaendigkeitsfrage mit genau
+        * einer moeglichen Antwort ist ein Formularfeld ohne Frage (dieselbe
+        * Regel wie in utils/household.js). */ ''}
+    ${state.members.length > 1 ? `<div class="form-group js-entry-field">
+      ${renderUserMultiSelect(state.members, isEdit ? (entry.responsible_users ?? []).map((u) => u.id) : [], 'bm-responsible', 'budget.responsibleLabel')}
+      <p class="form-hint">${esc(t('budget.responsibleHint'))}</p>
+    </div>` : ''}
+
     <div class="js-entry-field">
       ${advancedSection(`
         ${accountField}
@@ -2131,6 +2161,11 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
     size: 'sm',
     onSave(panel) {
       let currentType = !isEdit && initialType === 'loan' ? 'loan' : (isExpense ? 'expense' : 'income');
+
+      // Checkbox-Logik des Zustaendigen-Pickers (#1057): "Niemand" schliesst die
+      // uebrigen aus und umgekehrt. Ohne diese Bindung waeren beide gleichzeitig
+      // anwaehlbar.
+      bindUserMultiSelect(panel, 'bm-responsible');
 
       const setType = (type) => {
         currentType = type;
@@ -2339,6 +2374,12 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
             recurrence_confirm: confirmFirst,
           };
           if (accountId !== undefined) body.account_id = accountId;
+          // Zustaendige (#1057): nur mitsenden, wenn der Picker ueberhaupt da
+          // ist. Im Solo-Haushalt fehlt er, und ein leeres Array wuerde dort
+          // beim Bearbeiten die vorhandene Zuordnung abraeumen.
+          if (panel.querySelector('[data-ms-name="bm-responsible"]')) {
+            body.responsible_user_ids = getSelectedUserIds(panel, 'bm-responsible');
+          }
           // Sichtbarkeit nur im personal-Modus mitsenden (#476/#505, #659).
           const visibilityEl = panel.querySelector('#bm-visibility');
           if (visibilityEl && VISIBILITY_LEVELS.includes(visibilityEl.value)) {

@@ -19,6 +19,7 @@ import {
   normalizeIntervalCount, effectiveMonthly,
   validCategoryKeys, defaultCategory, validateSubcategory, validateAccountRef,
   entryWithLoanMeta, refreshLoanStatus, fromBudgetAmount, bookingFor,
+  RESPONSIBLE_USERS_SQL, replaceResponsibles, withResponsibles,
 } from './helpers.js';
 
 const log = createLogger('Budget');
@@ -208,6 +209,7 @@ router.get('/', (req, res) => {
     const to     = `${month}-31`;
     let sql      = `
       SELECT b.*, u.display_name AS creator_name,
+             ${RESPONSIBLE_USERS_SQL},
              p.id AS loan_payment_id,
              p.loan_id AS loan_id,
              p.installment_number AS loan_installment_number,
@@ -249,7 +251,7 @@ router.get('/', (req, res) => {
 
     sql += ' ORDER BY b.date DESC, b.created_at DESC';
 
-    const entries = db.get().prepare(sql).all(...params);
+    const entries = db.get().prepare(sql).all(...params).map(withResponsibles);
     res.json({
       data: maskEntries(req, withAttachments(entries, req.authUserId || req.session.userId)),
     });
@@ -323,6 +325,8 @@ router.post('/', (req, res) => {
     // Belege (#583): optional, deshalb erst nach dem Insert - der Eintrag steht
     // auch ohne sie, ein unbekanntes Dokument darf ihn nicht scheitern lassen.
     replaceAttachments(result.lastInsertRowid, req.body.attachment_document_ids, me);
+    // Zustaendige (#1057) - ein Etikett neben der Buchung, keine Forderung.
+    replaceResponsibles(result.lastInsertRowid, req.body.responsible_user_ids);
 
     const entry = entryWithLoanMeta(result.lastInsertRowid);
 
@@ -514,6 +518,31 @@ router.put('/:id/series', (req, res) => {
     // Buchung, nicht zur Serie - eine Stromrechnung hat je Monat einen eigenen
     // Beleg. Der Preis dafuer: die oben geloeschten kuenftigen Instanzen nehmen
     // ihre Verknuepfungen mit. Die Dokumente selbst bleiben im Dokumente-Modul.
+    //
+    // DIE ZUSTAENDIGKEIT DAGEGEN GEHOERT DER SERIE (#1057): "wer kuemmert sich
+    // um die Wasserrechnung" ist keine Eigenschaft des einzelnen Monats. Sie
+    // folgt deshalb denselben Schnitt wie Titel und Betrag daneben - ab
+    // cutoffDate, also ab heute. Eine bereits materialisierte Instanz aus der
+    // Vergangenheit behaelt, wer damals zustaendig war; wer die Rechnung
+    // uebernimmt, uebernimmt sie nicht rueckwirkend. Gemessen: Juni-Instanz
+    // bleibt bei der alten Person, Dezember zieht nach.
+    //
+    // WAS DER SCHNITT NICHT LEISTET, und das gilt fuer jedes Serienfeld gleich:
+    // ein Monat, der noch NIE geoeffnet wurde, hat noch keine Instanz. Sie
+    // entsteht beim ersten Aufruf aus dem HEUTIGEN Serienstand - auch wenn ihr
+    // Datum in der Vergangenheit liegt. Wer den Juli nie aufgeschlagen hat,
+    // sieht dort also die neue zustaendige Person, so wie er dort auch den
+    // neuen Titel saehe.
+    if (req.body.responsible_user_ids !== undefined) {
+      db.get().transaction(() => {
+        replaceResponsibles(parentId, req.body.responsible_user_ids);
+        const future = db.get().prepare(
+          'SELECT id FROM budget_entries WHERE recurrence_parent_id = ? AND date >= ?'
+        ).all(parentId, cutoffDate);
+        for (const row of future) replaceResponsibles(row.id, req.body.responsible_user_ids);
+      })();
+    }
+
     const me = req.authUserId || req.session.userId;
     const updated = entryWithLoanMeta(parentId);
     res.json({ data: { ...updated, attachments: attachmentsFor(parentId, me) } });
@@ -723,6 +752,9 @@ router.put('/:id', (req, res) => {
     if (req.body.attachment_document_ids !== undefined) {
       replaceAttachments(id, req.body.attachment_document_ids, me);
     }
+    // Dieselbe Zurueckhaltung wie bei den Belegen: nur anfassen, wenn das Feld
+    // mitkommt (#1057). replaceResponsibles() prueft das selbst.
+    replaceResponsibles(id, req.body.responsible_user_ids);
 
     const updated = entryWithLoanMeta(id);
 

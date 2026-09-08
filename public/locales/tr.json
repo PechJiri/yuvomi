@@ -1473,7 +1473,9 @@
         "loanPaidInstallmentsHint": "Zaten devam eden bir kredi için. Bu taksitler kaydedilir, ancak bütçeye işlenmez.",
         "loanPaymentTypeLocked": "Gelir mi gider mi olduğu kredi türüne bağlıdır ve orada değiştirilir.",
         "planHistoricNote": "Mevcut planınıza göre ölçülmüştür. Yuvomi, önceki bir aydaki planın ne olduğunu saklamaz.",
-        "recurringEditSeriesHint": "Serinin ilk kaydı aynı zamanda şablonudur - başlık, tutar, kategori ve hesap orada da değişir, geçmişte olsa bile."
+        "recurringEditSeriesHint": "Serinin ilk kaydı aynı zamanda şablonudur - başlık, tutar, kategori ve hesap orada da değişir, geçmişte olsa bile.",
+        "responsibleLabel": "Sorumlu",
+        "responsibleHint": "Bu kaydı kim üstleniyor. Para hareketi oluşturmaz - hesaplaşmak için paylaşılan giderleri kullanın."
     },
     "settings": {
         "healthCycleEnableLabel": "Döngü sekmesini göster",

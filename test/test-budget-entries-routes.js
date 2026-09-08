@@ -794,3 +794,75 @@ test('POST: recurrence_confirm reist mit und gilt nur für Serien', async () => 
   } });
   assert.equal(single.body.data.recurrence_confirm, 0, 'ohne Serie gibt es nichts zu bestätigen');
 });
+
+// --------------------------------------------------------
+// Zustaendige je Buchung (#1057) - ein Etikett, das kein Geld bewegt
+// --------------------------------------------------------
+
+test('POST: responsible_user_ids legt die Zustaendigen an', async () => {
+  const r = await call('POST', '/', { body: {
+    title: 'Wasser', amount: -42, category: 'housing', date: '2038-09-01',
+    responsible_user_ids: [A, B],
+  } });
+  assert.equal(r.status, 201);
+  assert.deepEqual(r.body.data.responsible_users.map((u) => u.id).sort(), [A, B].sort());
+});
+
+test('PUT ohne das Feld laesst die Zustaendigen stehen, ein leeres Array raeumt sie ab', async () => {
+  // Der wichtigere der beiden Faelle ist der erste: ein Teil-Request, der nur
+  // den Betrag korrigiert, darf die Zuordnung nicht stillschweigend loeschen.
+  const created = await call('POST', '/', { body: {
+    title: 'Strom', amount: -80, category: 'housing', date: '2038-09-02', responsible_user_ids: [A],
+  } });
+  const id = created.body.data.id;
+
+  const partial = await call('PUT', `/${id}`, { body: {
+    title: 'Strom', amount: -90, category: 'housing', date: '2038-09-02',
+  } });
+  assert.deepEqual(partial.body.data.responsible_users.map((u) => u.id), [A], 'ohne Feld unveraendert');
+
+  const cleared = await call('PUT', `/${id}`, { body: {
+    title: 'Strom', amount: -90, category: 'housing', date: '2038-09-02', responsible_user_ids: [],
+  } });
+  assert.deepEqual(cleared.body.data.responsible_users, [], 'leeres Array heisst niemand');
+});
+
+test('POST: eine unbekannte User-ID faellt weg, ohne den Request zu kippen', async () => {
+  // Die Auswahl kann eine Person nennen, die zwischen Laden und Absenden
+  // entfernt wurde - das ist kein Fehler des Aufrufers.
+  const r = await call('POST', '/', { body: {
+    title: 'Gas', amount: -60, category: 'housing', date: '2038-09-03',
+    responsible_user_ids: [A, 999999],
+  } });
+  assert.equal(r.status, 201);
+  assert.deepEqual(r.body.data.responsible_users.map((u) => u.id), [A]);
+});
+
+test('PUT /:id/series: kuenftige Instanzen ziehen nach, bereits gebuchte nicht', async () => {
+  const series = await call('POST', '/', { body: {
+    title: 'Abschlag', amount: -50, category: 'housing', date: '2020-01-05',
+    is_recurring: 1, recurrence_interval: 'monthly', responsible_user_ids: [A],
+  } });
+  const pid = series.body.data.id;
+
+  // Eine Instanz in der Vergangenheit und eine in der Zukunft materialisieren,
+  // BEVOR die Serie umgeschrieben wird - sonst entstuenden beide erst danach
+  // und trueden ohnehin den neuen Stand.
+  const past = insertEntry({
+    title: 'Abschlag', amount: -50, category: 'housing', date: '2020-02-05', recurrence_parent_id: pid,
+  });
+  const future = insertEntry({
+    title: 'Abschlag', amount: -50, category: 'housing', date: '2038-02-05', recurrence_parent_id: pid,
+  });
+  db.prepare('INSERT INTO budget_entry_responsibles (entry_id, user_id) VALUES (?, ?), (?, ?)')
+    .run(past, A, future, A);
+
+  await call('PUT', `/${pid}/series`, { body: {
+    title: 'Abschlag', amount: -50, category: 'housing', responsible_user_ids: [B],
+  } });
+
+  const who = (id) => db.prepare('SELECT user_id FROM budget_entry_responsibles WHERE entry_id = ? ORDER BY user_id').all(id).map((r) => r.user_id);
+  assert.deepEqual(who(pid), [B], 'das Original traegt die neue Zustaendigkeit');
+  assert.deepEqual(who(future), [B], 'kuenftige Instanz zieht nach');
+  assert.deepEqual(who(past), [A], 'eine gebuchte Vergangenheit bleibt, wie sie war');
+});

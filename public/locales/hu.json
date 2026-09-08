@@ -1473,7 +1473,9 @@
         "loanPaidInstallmentsHint": "Már futó kölcsönhöz. Ezek a részletek rögzülnek, de nem kerülnek be a költségvetésbe.",
         "loanPaymentTypeLocked": "A bevétel vagy kiadás a kölcsön típusát követi, és ott módosítható.",
         "planHistoricNote": "A jelenlegi tervedhez mérve. A Yuvomi nem őrzi meg, mi volt a terv egy korábbi hónapban.",
-        "recurringEditSeriesHint": "A sorozat első tétele egyben a sablonja is - a cím, az összeg, a kategória és a számla ott is módosul, még akkor is, ha a múltban van."
+        "recurringEditSeriesHint": "A sorozat első tétele egyben a sablonja is - a cím, az összeg, a kategória és a számla ott is módosul, még akkor is, ha a múltban van.",
+        "responsibleLabel": "Felelős",
+        "responsibleHint": "Ki intézi ezt a tételt. Nem mozgat pénzt - az elszámoláshoz a közös kiadások vannak."
     },
     "settings": {
         "healthCycleEnableLabel": "Ciklus fül megjelenítése",

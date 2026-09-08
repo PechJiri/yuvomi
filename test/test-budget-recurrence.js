@@ -69,6 +69,14 @@ function freshDb() {
       date      TEXT    NOT NULL,
       UNIQUE(parent_id, date)
     );
+    -- Zustaendige je Buchung (#1057, Migration 191). Diese Suite baut ihr Schema
+    -- von Hand statt ueber die Migrationen; generateRecurringInstances() vererbt
+    -- die Zeilen an jede neue Instanz und braucht die Tabelle deshalb auch hier.
+    CREATE TABLE budget_entry_responsibles (
+      entry_id INTEGER NOT NULL REFERENCES budget_entries(id) ON DELETE CASCADE,
+      user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (entry_id, user_id)
+    );
     INSERT INTO users (username, display_name, password_hash, role)
       VALUES ('admin', 'Admin', 'x', 'admin');
   `);
@@ -421,6 +429,34 @@ test('Instanz erbt das Konto der Serie', () => {
     assert(inst.account_id === 9,
       `Instanz ${month} muss das Konto der Serie tragen, war ${inst.account_id}`);
   }
+});
+
+test('Instanz erbt die Zustaendigen der Serie - auch die virtuelle', () => {
+  // Anders als das Konto (das eine virtuelle Serie NICHT vererbt, weil ihre
+  // Instanzen Planwerte sind und einen Saldo verfaelschen wuerden) bewegt die
+  // Zustaendigkeit kein Geld: sie gilt am Planwert genauso wie an der Zahlung.
+  for (const virtual of [0, 1]) {
+    const db = freshDb();
+    const pid = insertParent(db, { amount: -90000, date: '2026-08-05', virtual, full: virtual ? -90000 : null });
+    db.prepare('INSERT INTO budget_entry_responsibles (entry_id, user_id) VALUES (?, 1)').run(pid);
+
+    generateRecurringInstances(db, '2026-09');
+
+    const inst = instanceIn(db, pid, '2026-09');
+    assert(inst, `Instanz vorhanden (virtual=${virtual})`);
+    const who = db.prepare('SELECT user_id FROM budget_entry_responsibles WHERE entry_id = ?').all(inst.id);
+    assert(who.length === 1 && who[0].user_id === 1,
+      `Instanz muss die zustaendige Person der Serie erben (virtual=${virtual}), war ${JSON.stringify(who)}`);
+  }
+});
+
+test('Eine Serie ohne Zustaendige vererbt keine', () => {
+  const db = freshDb();
+  const pid = insertParent(db, { amount: -1000, date: '2026-08-05' });
+  generateRecurringInstances(db, '2026-09');
+  const inst = instanceIn(db, pid, '2026-09');
+  const who = db.prepare('SELECT user_id FROM budget_entry_responsibles WHERE entry_id = ?').all(inst.id);
+  assert(who.length === 0, `keine Zustaendigen erwartet, waren ${who.length}`);
 });
 
 test('Serie ohne Konto vererbt keines', () => {

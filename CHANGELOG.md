@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A budget entry can name who is responsible for it** (#1057, first cut). One or more household
+  members marked as looking after an entry - "who handles the water bill" - picked in the entry
+  dialog and shown as avatars on the row. **It moves no money.** Marking someone responsible
+  creates nothing they owe; settling up between people stays in Split Expenses, and the hint under
+  the picker says so.
+
+  It is deliberately **not** `owner_id`. That column is the privacy axis: it is fixed to the
+  creating person and not editable, because the visibility of private entries hangs off it.
+  Reusing it would have handed the responsible member the private-entry semantics of the row - a
+  permissions bug that looks like a feature. Responsibility is a second axis, in its own table, so
+  several people can share one entry.
+
+  On a recurring series the label belongs to the series: newly materialised instances inherit it,
+  and editing the series moves it on every instance from today onwards while already-booked months
+  keep whoever was responsible then. Unlike the account, a virtual series inherits it too - the
+  label cannot distort a balance. In a one-person household the picker does not appear at all.
+
+  Still open from the issue: grouping and filtering the overview by responsible member, and the
+  handover to Split Expenses that pre-fills participants.
+
+
 - **Inventory items and subscriptions can record the account they are registered under** (#1004).
   One field per module: the e-mail address or username a device or a service runs on. It is
   deliberately **not** a password field and never will be - a username without its password is a

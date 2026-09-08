@@ -1473,7 +1473,9 @@
         "loanPaidInstallmentsHint": "För ett lån som redan löper. Dessa delbetalningar registreras men bokförs inte i budgeten.",
         "loanPaymentTypeLocked": "Inkomst eller utgift följer typen av lån och ändras där.",
         "planHistoricNote": "Mätt mot din nuvarande plan. Yuvomi sparar inte vad planen var en tidigare månad.",
-        "recurringEditSeriesHint": "Seriens första post är samtidigt dess mall - titel, belopp, kategori och konto ändras även där, även om den ligger i det förflutna."
+        "recurringEditSeriesHint": "Seriens första post är samtidigt dess mall - titel, belopp, kategori och konto ändras även där, även om den ligger i det förflutna.",
+        "responsibleLabel": "Ansvarig",
+        "responsibleHint": "Vem som sköter den här posten. Flyttar inga pengar - använd delade utgifter för att göra upp."
     },
     "settings": {
         "healthCycleEnableLabel": "Visa cykelfliken",

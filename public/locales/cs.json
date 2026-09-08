@@ -1473,7 +1473,9 @@
         "loanPaidInstallmentsHint": "Pro půjčku, která již běží. Tyto splátky se doplní, ale nezaúčtují se do rozpočtu.",
         "loanPaymentTypeLocked": "Příjem nebo výdaj se řídí typem půjčky a mění se tam.",
         "planHistoricNote": "Měřeno vůči vašemu aktuálnímu plánu. Yuvomi si nepamatuje, jaký byl plán v dřívějším měsíci.",
-        "recurringEditSeriesHint": "První záznam série je zároveň její šablonou - název, částka, kategorie a účet se změní i tam, i když leží v minulosti."
+        "recurringEditSeriesHint": "První záznam série je zároveň její šablonou - název, částka, kategorie a účet se změní i tam, i když leží v minulosti.",
+        "responsibleLabel": "Odpovídá",
+        "responsibleHint": "Kdo se o tento záznam stará. Nepřesouvá peníze - k vyrovnání slouží sdílené výdaje."
     },
     "settings": {
         "healthCycleEnableLabel": "Zobrazit kartu cyklu",
