@@ -3,7 +3,9 @@
  * Zweck: Reine Suchlogik gegen den FTS5-Index `search_index` (Migration 44).
  *        Keine Abhängigkeit auf db.js - die Datenbank wird hereingereicht, damit
  *        die Logik direkt mit node:sqlite getestet werden kann.
+ * Abhaengigkeiten: server/services/visibility.js (reiner SQL-Baustein, kein db.js)
  */
+import { visibilityWhere } from './visibility.js';
 
 export const SEARCH_LIMIT = 5;
 
@@ -120,17 +122,29 @@ export function runSearch(database, q, userId, { hiddenModules = null } = {}) {
   `).all({ match, userId, limit });
 
   // Termine sind Familienbesitz (die Kalenderliste zeigt alle Termine, nicht nur
-  // eigene) — daher KEIN created_by-Filter, konsistent mit GET /calendar und der
-  // Kalender-Suche (#471). Sonst lieferten globale vs. Kalender-Suche unterschiedliche
-  // Treffer fürs gleiche Stichwort.
+  // eigene) - daher KEIN created_by-Filter, konsistent mit GET /calendar und der
+  // Kalender-Suche (#471). Was die beiden aber seit #474 haben und diese Abfrage
+  // bis zum Review von #1055 nicht: die Zeilen-Sichtbarkeit (`all` / Ersteller /
+  // Zugewiesene) und den Abo-Filter (ICS-Termine nur aus geteilten oder eigenen
+  // Abos). Ohne beides fand jedes Mitglied Titel und Datum fremder PRIVATER
+  // Termine ueber ein Stichwort. Es sind dieselben zwei Klauseln wie in
+  // routes/calendar/read.js, damit globale und Kalender-Suche fuers gleiche
+  // Stichwort dieselben Treffer liefern - das war der Sinn von #471.
   if (allows('events')) results.events = database.prepare(`
     SELECT e.id, e.title, e.start_datetime, e.all_day
     FROM search_index s
     JOIN calendar_events e ON e.id = s.entity_id
     WHERE s.entity = 'event' AND s.search_index MATCH @match
+      AND (
+        e.external_source <> 'ics'
+        OR e.subscription_id IN (
+          SELECT id FROM ics_subscriptions WHERE shared = 1 OR created_by = @userId
+        )
+      )
+      AND ${visibilityWhere('e', 'event_assignments', 'event_id', '@userId')}
     ORDER BY e.start_datetime ASC
     LIMIT @limit
-  `).all({ match, limit });
+  `).all({ match, userId, limit });
 
   if (allows('notes')) results.notes = database.prepare(`
     SELECT n.id, n.title, n.content

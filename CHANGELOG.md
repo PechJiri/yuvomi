@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Global search no longer surfaces other members' private calendar events.** The search box
+  at the top of the app queries every module at once, and its calendar bucket applied only the
+  module-access check: a member could type a word and get the title and date of another member's
+  private appointment, or of an event from a subscribed calendar that was never shared - while the
+  calendar's own search has filtered both since #474. The global search now applies the same two
+  clauses as the calendar search, so the two return the same hits for the same word, which is what
+  #471 intended. Found while reviewing #1055.
+
 ### Fixed
 
 - **Birthdays no longer vanish from the calendar when you filter by person** (#1054). The person

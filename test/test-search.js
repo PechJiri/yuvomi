@@ -57,6 +57,30 @@ db.prepare(`INSERT INTO contacts (name, phone, email) VALUES ('Cake Bakery', '55
 db.prepare(`INSERT INTO calendar_events (title, description, start_datetime, created_by)
   VALUES ('Cake tasting', 'pick a flavor', '2030-01-01T10:00:00Z', ?)`).run(uid);
 
+// Sichtbarkeit in der globalen Suche (#474, Luecke aus dem #1055-Review): der
+// Events-Bucket traegt dieselben zwei Klauseln wie die Kalender-Suche. Die
+// Fixture braucht dafuer die Abo-Tabelle (Migration 10) und `subscription_id`;
+// der CHECK auf external_source kennt in Migration 1 kein 'ics', deshalb wird
+// er fuer die zwei Abo-Zeilen ausgesetzt - im echten Schema ist er erweitert.
+db.exec(MIGRATIONS_SQL[10]);
+db.exec('ALTER TABLE calendar_events ADD COLUMN subscription_id INTEGER REFERENCES ics_subscriptions(id) ON DELETE CASCADE;');
+const insVisEvent = db.prepare(`INSERT INTO calendar_events
+  (title, description, start_datetime, created_by, visibility, external_source, subscription_id)
+  VALUES (?, ?, '2030-02-01T10:00:00Z', ?, ?, ?, ?)`);
+insVisEvent.run('Cake secret private', 'hidden', otherUid, 'private', 'local', null);
+const cakeAssignedToMe = insVisEvent.run('Cake assignees with me', 'shared with me', otherUid, 'assignees', 'local', null).lastInsertRowid;
+db.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(cakeAssignedToMe, uid);
+insVisEvent.run('Cake assignees without me', 'not for me', otherUid, 'assignees', 'local', null);
+insVisEvent.run('Cake own private', 'mine', uid, 'private', 'local', null);
+const sharedSub = db.prepare(`INSERT INTO ics_subscriptions (name, url, shared, created_by)
+  VALUES ('Shared feed', 'https://feed.test/shared.ics', 1, ?)`).run(otherUid).lastInsertRowid;
+const privateSub = db.prepare(`INSERT INTO ics_subscriptions (name, url, shared, created_by)
+  VALUES ('Private feed', 'https://feed.test/private.ics', 0, ?)`).run(otherUid).lastInsertRowid;
+db.exec('PRAGMA ignore_check_constraints = ON;');
+insVisEvent.run('Cake from shared feed', 'ics row', otherUid, 'all', 'ics', sharedSub);
+insVisEvent.run('Cake from private feed', 'ics row', otherUid, 'all', 'ics', privateSub);
+db.exec('PRAGMA ignore_check_constraints = OFF;');
+
 // Health medications: own (private), foreign family-visible, foreign private.
 db.prepare(`INSERT INTO medications (user_id, name, dosage_text, visibility)
   VALUES (?, 'Aspirin', '500mg tablet', 'private')`).run(uid);
@@ -161,6 +185,36 @@ test('Health-Suche verbirgt fremde private Zeilen', () => {
   assert(med.meds.length === 0, 'Fremdes privates Medikament ausgeschlossen');
   const act = runSearch(db, 'boxing', uid);
   assert(act.activities.length === 0, 'Fremde private Aktivität ausgeschlossen');
+});
+
+// --------------------------------------------------------
+// Termine: Sichtbarkeit (#474) und Abo-Filter in der globalen Suche.
+// Bis zum Review von #1055 hatte der Events-Bucket keine der beiden Klauseln,
+// die die Kalender-Suche (routes/calendar/read.js) seit #474 traegt - jedes
+// Mitglied fand Titel und Datum fremder PRIVATER Termine ueber ein Stichwort.
+// --------------------------------------------------------
+
+test('Termine: die globale Suche zeigt, was die Kalender-Suche zeigt - eigene, "all", mir zugewiesene, aus geteilten Abos', () => {
+  const titles = runSearch(db, 'cake', uid).events.map((e) => e.title);
+  for (const wanted of ['Cake tasting', 'Cake assignees with me', 'Cake own private', 'Cake from shared feed']) {
+    assert(titles.includes(wanted), `${wanted} muss gefunden werden`);
+  }
+});
+
+test('Termine: fremde private, fremd-zugewiesene und Termine aus fremden privaten Abos bleiben unsichtbar', () => {
+  const titles = runSearch(db, 'cake', uid).events.map((e) => e.title);
+  for (const hidden of ['Cake secret private', 'Cake assignees without me', 'Cake from private feed']) {
+    assert(!titles.includes(hidden),
+      `${hidden} darf NICHT gefunden werden - vorher fand jedes Mitglied Titel und Datum fremder privater Termine`);
+  }
+  // Der Ersteller selbst findet seine privaten Termine und sein eigenes Abo weiter.
+  assert(runSearch(db, 'secret', otherUid).events.some((e) => e.title === 'Cake secret private'),
+    'der Ersteller sieht seinen eigenen privaten Termin');
+  const feeds = runSearch(db, 'feed', otherUid).events.map((e) => e.title);
+  assert(feeds.includes('Cake from private feed') && feeds.includes('Cake from shared feed'),
+    'der Abo-Besitzer sieht beide Abos');
+  assert(!runSearch(db, 'feed', uid).events.some((e) => e.title === 'Cake from private feed'),
+    'ein fremdes, nicht geteiltes Abo bleibt fuer andere unsichtbar');
 });
 
 test('Health-Suchtrigger halten den Index synchron (UPDATE/DELETE)', () => {
