@@ -392,7 +392,10 @@ test('Outlook auto-sync eligibility follows visible event ownership and assignme
   assert.deepEqual(isEligibleLocalSeries(database, privateEvent, 1, true), { eligible: true, reason: null });
 
   database.prepare('UPDATE outlook_accounts SET needs_reauth = 1 WHERE id = 20').run();
-  assert.deepEqual(isEligibleLocalSeries(database, publicEvent, 1, true), { eligible: true, reason: null });
+  assert.deepEqual(isEligibleLocalSeries(database, publicEvent, 1, true), {
+    eligible: false,
+    reason: 'ineligible_series',
+  });
 });
 
 test('daily recurrence identity resolves the exact timed occurrence', () => {
@@ -764,6 +767,7 @@ test('serializeEvent appends recurrence metadata and owner identities', () => {
   assert.equal(serialized.series_id, parentId);
   assert.equal(serialized.recurrence_id, '2026-10-31');
   assert.equal(serialized.is_occurrence_override, true);
+  assert.equal(serialized.is_local_recurring_series, true);
   assert.equal(serialized.can_override_occurrence, true);
   assert.equal(serialized.assignment_owner_id, parentId);
   assert.equal(serialized.attachment_owner_id, parentId);
@@ -793,6 +797,7 @@ test('serializeEvent exposes capability for a series without changing legacy row
     series_id: serializedMaster.series_id,
     recurrence_id: serializedMaster.recurrence_id,
     is_occurrence_override: serializedMaster.is_occurrence_override,
+    is_local_recurring_series: serializedMaster.is_local_recurring_series,
     can_override_occurrence: serializedMaster.can_override_occurrence,
     assignment_owner_id: serializedMaster.assignment_owner_id,
     attachment_owner_id: serializedMaster.attachment_owner_id,
@@ -802,6 +807,7 @@ test('serializeEvent exposes capability for a series without changing legacy row
     series_id: masterId,
     recurrence_id: '2026-10-31',
     is_occurrence_override: false,
+    is_local_recurring_series: true,
     can_override_occurrence: true,
     assignment_owner_id: masterId,
     attachment_owner_id: masterId,
@@ -809,9 +815,10 @@ test('serializeEvent exposes capability for a series without changing legacy row
     reminder_anchor_start: '2026-10-31T09:00:00',
   });
   assert.equal(serializedUnauthorized.can_override_occurrence, false);
+  assert.equal(serializedUnauthorized.is_local_recurring_series, true);
   for (const key of [
     'recurrence_parent_id', 'recurrence_id', 'overridden_fields', 'series_id',
-    'is_occurrence_override', 'can_override_occurrence', 'assignment_owner_id',
+    'is_occurrence_override', 'is_local_recurring_series', 'can_override_occurrence', 'assignment_owner_id',
     'attachment_owner_id', 'reminder_owner_id', 'reminder_anchor_start',
   ]) {
     assert.equal(Object.hasOwn(serializedLegacy, key), false, `${key} must not change a standalone event shape`);
@@ -1750,6 +1757,87 @@ test('orphan detachment reconciles inherited reminder fan-out with owned assignm
   `).all(child.id).map((row) => ({ ...row })), [
     { created_by: 1, assigned_from: null, remind_at: '2026-10-02T08:00:00' },
     { created_by: 3, assigned_from: null, remind_at: '2026-10-02T07:30:00' },
+  ]);
+});
+
+test('orphan detachment preserves every resolved self-owned reminder and derived dismissal state', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Multi-user detach source',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    assigned_to: 1,
+  }));
+  database.prepare(`
+    INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1), (?, 2), (?, 3)
+  `).run(seriesId, seriesId, seriesId);
+  database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, '2026-10-01T08:00:00', 1, 1, NULL),
+           ('event', ?, '2026-10-01T08:00:00', 1, 2, 1),
+           ('event', ?, '2026-10-01T07:00:00', 1, 3, NULL)
+  `).run(seriesId, seriesId, seriesId);
+  const childRow = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { title: 'Multi-user detached occurrence' },
+  }).event;
+
+  updateSeriesWithOverrides(database, {
+    seriesId,
+    actorId: 1,
+    changes: { recurrence_rule: 'FREQ=WEEKLY;BYDAY=TH' },
+    confirmedOrphanCount: 1,
+  });
+
+  assert.deepEqual(database.prepare(`
+    SELECT created_by, assigned_from, remind_at, dismissed FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+    ORDER BY created_by, assigned_from
+  `).all(childRow.id).map((row) => ({ ...row })), [
+    { created_by: 1, assigned_from: null, remind_at: '2026-10-02T08:00:00', dismissed: 1 },
+    { created_by: 2, assigned_from: 1, remind_at: '2026-10-02T08:00:00', dismissed: 1 },
+    { created_by: 3, assigned_from: null, remind_at: '2026-10-02T07:00:00', dismissed: 1 },
+  ]);
+});
+
+test('following split carries all users reminder ownership, anchors and dismissals to the successor', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Multi-user split source',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    assigned_to: 1,
+  }));
+  database.prepare(`
+    INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1), (?, 2), (?, 3)
+  `).run(seriesId, seriesId, seriesId);
+  database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, '2026-10-01T08:00:00', 0, 1, NULL),
+           ('event', ?, '2026-10-01T08:00:00', 1, 2, 1),
+           ('event', ?, '2026-10-01T07:00:00', 1, 3, NULL)
+  `).run(seriesId, seriesId, seriesId);
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { start_datetime: '2026-10-02T11:00:00' },
+  });
+  const successorId = Number(result.series.id);
+
+  assert.deepEqual(database.prepare(`
+    SELECT created_by, assigned_from, remind_at, dismissed FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+    ORDER BY created_by, assigned_from
+  `).all(successorId).map((row) => ({ ...row })), [
+    { created_by: 1, assigned_from: null, remind_at: '2026-10-02T10:00:00', dismissed: 0 },
+    { created_by: 2, assigned_from: 1, remind_at: '2026-10-02T10:00:00', dismissed: 1 },
+    { created_by: 3, assigned_from: null, remind_at: '2026-10-02T09:00:00', dismissed: 1 },
   ]);
 });
 

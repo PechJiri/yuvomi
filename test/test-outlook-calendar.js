@@ -545,12 +545,106 @@ describe('Outlook auto-sync', () => {
     outlook.updateAccount(accountA, { autoSyncCalendarId: 'yuvomi-cal-A' });
   });
 
+  it('updateAccount lehnt Auto-Sync-Aktivierung bei sichtbaren verknüpften Ausnahmen atomar ab', () => {
+    const accountId = db.prepare(`
+      INSERT INTO outlook_accounts
+        (name, ms_user_id, email, access_token, refresh_token, token_expiry, owner_user_id)
+      VALUES ('Activation guard', 'ms-activation-guard', 'guard@example.com', 'tok', 'ref', ?, ?)
+    `).run(futureExpiry, anna).lastInsertRowid;
+    db.prepare(`
+      INSERT INTO outlook_calendar_selection
+        (account_id, calendar_id, calendar_name, can_edit, enabled)
+      VALUES (?, 'guard-cal', 'Guard', 1, 0)
+    `).run(accountId);
+    const masterId = insertEvent({ title: 'Guarded series', createdBy: anna });
+    const childId = insertEvent({ title: 'Guarded occurrence', createdBy: anna });
+    db.prepare("UPDATE calendar_events SET recurrence_rule = 'FREQ=DAILY' WHERE id = ?").run(masterId);
+    db.prepare(`
+      UPDATE calendar_events
+      SET recurrence_parent_id = ?, recurrence_id = '2026-09-02', overridden_fields = '["title"]'
+      WHERE id = ?
+    `).run(masterId, childId);
+
+    assert.throws(
+      () => outlook.updateAccount(accountId, { autoSyncCalendarId: 'guard-cal' }),
+      (err) => err.code === 'outlook_auto_sync_overrides' && err.linkedOverrideCount === 1
+    );
+    assert.equal(db.prepare(
+      'SELECT auto_sync_calendar_id FROM outlook_accounts WHERE id = ?'
+    ).get(accountId).auto_sync_calendar_id, null);
+    assert.equal(db.prepare(`
+      SELECT enabled FROM outlook_calendar_selection WHERE account_id = ? AND calendar_id = 'guard-cal'
+    `).get(accountId).enabled, 0);
+
+    db.prepare('DELETE FROM calendar_events WHERE id = ?').run(masterId);
+    db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
+  });
+
+  it('handleCallback reaktiviert konfigurierten Auto-Sync nicht über verknüpfte Ausnahmen hinweg', async () => {
+    const accountId = db.prepare(`
+      INSERT INTO outlook_accounts
+        (name, ms_user_id, email, access_token, refresh_token, token_expiry,
+         needs_reauth, auto_sync_calendar_id, owner_user_id)
+      VALUES ('Reauth guard', 'ms-reauth-guard', 'old@example.com', 'old-access', 'old-refresh', ?,
+              1, 'reauth-cal', ?)
+    `).run(futureExpiry, anna).lastInsertRowid;
+    const masterId = insertEvent({ title: 'Reauth guarded series', createdBy: anna });
+    const childId = insertEvent({ title: 'Reauth guarded occurrence', createdBy: anna });
+    db.prepare("UPDATE calendar_events SET recurrence_rule = 'FREQ=DAILY' WHERE id = ?").run(masterId);
+    db.prepare(`
+      UPDATE calendar_events
+      SET recurrence_parent_id = ?, recurrence_id = '2026-09-02', overridden_fields = '["title"]'
+      WHERE id = ?
+    `).run(masterId, childId);
+    const fetchImpl = makeFetch((call) => {
+      if (call.method === 'POST' && call.url.includes('/oauth2/v2.0/token')) {
+        return jsonRes(200, {
+          access_token: 'new-access',
+          refresh_token: 'new-refresh',
+          expires_in: 3600,
+        });
+      }
+      if (call.method === 'GET' && call.url.includes('/me?$select=')) {
+        return jsonRes(200, {
+          id: 'ms-reauth-guard',
+          displayName: 'Reauth guard',
+          mail: 'new@example.com',
+        });
+      }
+      throw new Error(`Unexpected request: ${call.method} ${call.url}`);
+    });
+
+    await assert.rejects(
+      outlook.handleCallback('reauth-code', fetchImpl),
+      (err) => err.code === 'outlook_auto_sync_overrides' && err.linkedOverrideCount === 1
+    );
+    const stored = db.prepare(`
+      SELECT needs_reauth, access_token, refresh_token FROM outlook_accounts WHERE id = ?
+    `).get(accountId);
+    assert.deepEqual(stored, { needs_reauth: 1, access_token: 'old-access', refresh_token: 'old-refresh' });
+    assert.equal(fetchImpl.calls.length, 2, 'Kalenderliste wird nach dem Konflikt nicht geladen');
+
+    db.prepare('DELETE FROM calendar_events WHERE id = ?').run(masterId);
+    db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
+  });
+
   it('collectCandidates: sichtbar-für-Owner, keine externen Events, explizites Ziel gewinnt', () => {
     const familyEvent  = insertEvent({ title: 'Familienessen', createdBy: anna, assignees: [anna, ben] });
     const plainEvent   = insertEvent({ title: 'Testtermin', createdBy: ben });
     const privateEvent = insertEvent({ title: 'Geheim', createdBy: stranger, visibility: 'private' });
     const icsEvent     = insertEvent({ title: 'Feiertag', createdBy: anna, source: 'ics' });
     const explicitEvent = insertEvent({ title: 'Explizit', createdBy: anna });
+    const recurringMaster = insertEvent({ title: 'Lokale Serie', createdBy: anna });
+    const linkedChild = insertEvent({ title: 'Lokale Ausnahme', createdBy: anna });
+    db.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+      .run('FREQ=DAILY', recurringMaster);
+    db.prepare(`
+      UPDATE calendar_events
+      SET recurrence_parent_id = ?, recurrence_id = '2026-09-02',
+          overridden_fields = '["title"]', target_outlook_account_id = ?,
+          target_outlook_calendar_id = 'extra-cal'
+      WHERE id = ?
+    `).run(recurringMaster, accountA, linkedChild);
     db.prepare(
       'UPDATE calendar_events SET target_outlook_account_id = ?, target_outlook_calendar_id = ? WHERE id = ?'
     ).run(accountA, 'extra-cal', explicitEvent);
@@ -562,6 +656,8 @@ describe('Outlook auto-sync', () => {
     assert.ok(candidates.has(plainEvent), 'Event ohne Zuweisung ist Kandidat');
     assert.ok(!candidates.has(privateEvent), 'privates Event einer anderen Person ist KEIN Kandidat');
     assert.ok(!candidates.has(icsEvent), 'extern synchronisiertes Event ist KEIN Kandidat');
+    assert.ok(candidates.has(recurringMaster), 'lokaler Serien-Master bleibt Kandidat');
+    assert.ok(!candidates.has(linkedChild), 'verknüpfte Ausnahme ist nie ein eigener Outlook-Kandidat');
     assert.equal(candidates.get(familyEvent).calendarId, 'yuvomi-cal-A');
     assert.equal(candidates.get(explicitEvent).calendarId, 'extra-cal', 'explizites Ziel gewinnt');
 
@@ -569,7 +665,8 @@ describe('Outlook auto-sync', () => {
     assert.deepEqual(names, ['Anna', 'Ben'], 'Zuweisungs-Namen alphabetisch');
 
     // Aufräumen für die Sync-Tests: nur familyEvent + plainEvent behalten.
-    db.prepare('DELETE FROM calendar_events WHERE id IN (?, ?, ?)').run(privateEvent, icsEvent, explicitEvent);
+    db.prepare('DELETE FROM calendar_events WHERE id IN (?, ?, ?, ?)')
+      .run(privateEvent, icsEvent, explicitEvent, recurringMaster);
   });
 
   it('pusht in beide Konten mit Titel-Suffix (Composite-PK) bzw. ohne Suffix', async () => {

@@ -24,6 +24,11 @@ const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}/;
  * fängt eine Antwort ab, die die Spalte gar nicht mitliefert.
  */
 export function isLocalRecurringSeries(event) {
+  return event?.is_local_recurring_series === true;
+}
+
+/** Whether this actor may use the occurrence-only mutation endpoints. */
+export function canOverrideCalendarOccurrence(event) {
   return event?.can_override_occurrence === true;
 }
 

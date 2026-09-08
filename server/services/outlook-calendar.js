@@ -44,6 +44,16 @@ class ReauthRequiredError extends Error {
   }
 }
 
+class OutlookAutoSyncOverrideError extends Error {
+  constructor(linkedOverrideCount) {
+    super('Outlook auto-sync cannot be activated while matching recurring series have linked occurrence overrides.');
+    this.name = 'OutlookAutoSyncOverrideError';
+    this.code = 'outlook_auto_sync_overrides';
+    this.status = 409;
+    this.linkedOverrideCount = linkedOverrideCount;
+  }
+}
+
 function envConfig() {
   return {
     clientId:     process.env.MS_CLIENT_ID,
@@ -107,6 +117,27 @@ function listAccounts() {
   }));
 }
 
+function countAutoSyncSeriesWithOverrides(conn, ownerUserId) {
+  if (!ownerUserId) return 0;
+  return conn.prepare(`
+    SELECT COUNT(*) AS count
+    FROM calendar_events e
+    WHERE e.external_source = 'local'
+      AND e.recurrence_parent_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM calendar_events child
+        WHERE child.recurrence_parent_id = e.id
+      )
+      AND ${visibilityWhere('e', 'event_assignments', 'event_id')}
+  `).get(ownerUserId, ownerUserId).count;
+}
+
+function assertAutoSyncActivationSafe(conn, autoSyncCalendarId, ownerUserId) {
+  if (!autoSyncCalendarId || !ownerUserId) return;
+  const linkedOverrideCount = countAutoSyncSeriesWithOverrides(conn, ownerUserId);
+  if (linkedOverrideCount > 0) throw new OutlookAutoSyncOverrideError(linkedOverrideCount);
+}
+
 /**
  * Partial-Update eines Kontos. Nur übergebene Felder werden geändert;
  * autoSyncCalendarId/ownerUserId akzeptieren null zum Deaktivieren.
@@ -114,11 +145,15 @@ function listAccounts() {
  * automatisch als Push-Ziel aktiviert (enabled=1).
  */
 function updateAccount(accountId, { name, autoSyncCalendarId, ownerUserId } = {}) {
+  const conn = db.get();
   const account = getAccountById(accountId);
   if (!account) throw new Error(`Account ${accountId} not found.`);
 
   const updates = [];
   const values = [];
+  let calendarToEnable = null;
+  let proposedAutoSyncCalendarId = account.auto_sync_calendar_id;
+  let proposedOwnerUserId = account.owner_user_id;
 
   if (name !== undefined) {
     const trimmed = typeof name === 'string' ? name.trim() : '';
@@ -130,21 +165,19 @@ function updateAccount(accountId, { name, autoSyncCalendarId, ownerUserId } = {}
   if (autoSyncCalendarId !== undefined) {
     if (autoSyncCalendarId === null || autoSyncCalendarId === '') {
       updates.push('auto_sync_calendar_id = NULL');
+      proposedAutoSyncCalendarId = null;
     } else {
       if (typeof autoSyncCalendarId !== 'string') {
         throw new Error('autoSyncCalendarId must be a string or null.');
       }
-      const cal = db.get().prepare(`
+      const cal = conn.prepare(`
         SELECT can_edit FROM outlook_calendar_selection
         WHERE account_id = ? AND calendar_id = ?
       `).get(accountId, autoSyncCalendarId);
       if (!cal) throw new Error('Calendar not found for this account.');
       if (cal.can_edit !== 1) throw new Error('Calendar is read-only.');
-      // Der Auto-Sync-Kalender ist implizit auch als Ziel aktiv.
-      db.get().prepare(`
-        UPDATE outlook_calendar_selection SET enabled = 1
-        WHERE account_id = ? AND calendar_id = ?
-      `).run(accountId, autoSyncCalendarId);
+      calendarToEnable = autoSyncCalendarId;
+      proposedAutoSyncCalendarId = autoSyncCalendarId;
       updates.push('auto_sync_calendar_id = ?');
       values.push(autoSyncCalendarId);
     }
@@ -153,19 +186,37 @@ function updateAccount(accountId, { name, autoSyncCalendarId, ownerUserId } = {}
   if (ownerUserId !== undefined) {
     if (ownerUserId === null || ownerUserId === '') {
       updates.push('owner_user_id = NULL');
+      proposedOwnerUserId = null;
     } else {
       const userId = Number(ownerUserId);
-      if (!Number.isInteger(userId) || !db.get().prepare('SELECT 1 FROM users WHERE id = ?').get(userId)) {
+      if (!Number.isInteger(userId) || !conn.prepare('SELECT 1 FROM users WHERE id = ?').get(userId)) {
         throw new Error('Unknown owner user id.');
       }
       updates.push('owner_user_id = ?');
       values.push(userId);
+      proposedOwnerUserId = userId;
     }
   }
 
   if (updates.length === 0) throw new Error('No fields to update.');
+  if (autoSyncCalendarId !== undefined || ownerUserId !== undefined) {
+    assertAutoSyncActivationSafe(conn, proposedAutoSyncCalendarId, proposedOwnerUserId);
+  }
   values.push(accountId);
-  db.get().prepare(`UPDATE outlook_accounts SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  conn.exec('BEGIN');
+  try {
+    if (calendarToEnable) {
+      conn.prepare(`
+        UPDATE outlook_calendar_selection SET enabled = 1
+        WHERE account_id = ? AND calendar_id = ?
+      `).run(accountId, calendarToEnable);
+    }
+    conn.prepare(`UPDATE outlook_accounts SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    conn.exec('COMMIT');
+  } catch (err) {
+    conn.exec('ROLLBACK');
+    throw err;
+  }
   return { success: true };
 }
 
@@ -297,11 +348,20 @@ async function handleCallback(code, fetchImpl = fetch) {
   const name  = me.displayName || email || 'Outlook';
 
   const existing = me.id
-    ? db.get().prepare('SELECT id FROM outlook_accounts WHERE ms_user_id = ?').get(me.id)
+    ? db.get().prepare(`
+        SELECT id, auto_sync_calendar_id, owner_user_id
+        FROM outlook_accounts
+        WHERE ms_user_id = ?
+      `).get(me.id)
     : null;
 
   let accountId;
   if (existing) {
+    assertAutoSyncActivationSafe(
+      db.get(),
+      existing.auto_sync_calendar_id,
+      existing.owner_user_id
+    );
     db.get().prepare(`
       UPDATE outlook_accounts
       SET email = ?, access_token = ?, refresh_token = ?, token_expiry = ?,
@@ -615,6 +675,7 @@ function collectCandidates(conn, account) {
       SELECT e.*, ${ASSIGNEE_NAMES_SQL}
       FROM calendar_events e
       WHERE e.external_source = 'local'
+        AND e.recurrence_parent_id IS NULL
         AND ${visibilityWhere('e', 'event_assignments', 'event_id')}
     `).all(account.owner_user_id, account.owner_user_id);
     for (const event of rows) {
@@ -625,7 +686,9 @@ function collectCandidates(conn, account) {
   const explicit = conn.prepare(`
     SELECT e.*, ${ASSIGNEE_NAMES_SQL}
     FROM calendar_events e
-    WHERE e.external_source = 'local' AND e.target_outlook_account_id = ?
+    WHERE e.external_source = 'local'
+      AND e.recurrence_parent_id IS NULL
+      AND e.target_outlook_account_id = ?
   `).all(account.id);
   for (const event of explicit) {
     candidates.set(event.id, { event, calendarId: event.target_outlook_calendar_id });

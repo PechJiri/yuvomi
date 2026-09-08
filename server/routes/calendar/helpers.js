@@ -12,7 +12,8 @@ import {
   fanOutEventReminders, dropInheritedEventReminders, eventAuthorId,
 } from '../../services/event-reminder-fanout.js';
 import {
-  isEligibleLocalSeries, isLinkedOccurrence, parseOverrideFields, recurrenceIdFor, seriesIdFor,
+  classifyLocalSeries, isEligibleLocalSeries, isLinkedOccurrence, parseOverrideFields,
+  recurrenceIdFor, seriesIdFor,
 } from '../../services/calendar-occurrence-overrides.js';
 
 export const VALID_SOURCES  = ['local', 'google', 'apple', 'ics'];
@@ -278,7 +279,9 @@ function recurrenceMetadata(event, context) {
   if (!master && !linked) master = event;
 
   let canOverride = Boolean(event.can_override_occurrence);
+  let isLocalRecurringSeries = Boolean(event.is_local_recurring_series);
   if (context?.database && master) {
+    isLocalRecurringSeries = classifyLocalSeries(context.database, master).eligible;
     canOverride = isEligibleLocalSeries(
       context.database,
       master,
@@ -304,6 +307,7 @@ function recurrenceMetadata(event, context) {
     series_id: seriesId,
     recurrence_id: event.recurrence_id ?? recurrenceIdFor(event),
     is_occurrence_override: linked,
+    is_local_recurring_series: isLocalRecurringSeries,
     can_override_occurrence: canOverride,
     assignment_owner_id: Number(assignmentOwnerId),
     attachment_owner_id: Number(attachmentOwnerId),

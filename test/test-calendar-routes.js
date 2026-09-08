@@ -47,6 +47,10 @@ import express from 'express';
 
 const dbmod = await import('../server/db.js');
 const { default: calendarRouter } = await import('../server/routes/calendar.js');
+const {
+  calendarOccurrenceDeleteTarget,
+  calendarOccurrenceMutationTarget,
+} = await import('../public/utils/recurrence-scope.js');
 const db = dbmod.get();
 
 // ── Nutzer anlegen (IDs deterministisch ab 1: eigener Prozess je Testdatei) ──────
@@ -764,6 +768,104 @@ test('POST / — mit Zuweisungen, Serie und Sichtbarkeit', async () => {
   assert.equal(res.body.data.assigned_users.length, 2);
 });
 
+test('create response immediately satisfies browser occurrence edit and delete contracts', async () => {
+  const created = await call('POST', '/', { actor: ADMIN, body: {
+    title: 'Immediate browser contract',
+    start_datetime: '2040-03-15T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  } });
+  assert.equal(created.status, 201);
+  const event = created.body.data;
+  assert.equal(event.series_id, event.id);
+  assert.equal(event.recurrence_id, '2040-03-15');
+  assert.equal(event.is_local_recurring_series, true);
+  assert.equal(event.can_override_occurrence, true);
+  assert.equal(event.assignment_owner_id, event.id);
+  assert.equal(event.reminder_owner_id, event.id);
+
+  const editTarget = calendarOccurrenceMutationTarget(event, 'this');
+  assert.deepEqual(editTarget, {
+    method: 'put',
+    path: `/calendar/${event.id}/occurrences/2040-03-15`,
+    carriesReminderOffsets: true,
+  });
+  const edited = await call('PUT', editTarget.path.replace('/calendar', ''), {
+    actor: ADMIN,
+    body: { title: 'Immediate edited occurrence' },
+  });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.data.series_id, event.id);
+  assert.equal(edited.body.data.recurrence_id, '2040-03-15');
+
+  const deleteTarget = calendarOccurrenceDeleteTarget(event, 'this');
+  assert.deepEqual(deleteTarget, {
+    method: 'delete',
+    path: `/calendar/${event.id}/occurrences/2040-03-15`,
+  });
+  const deleted = await call('DELETE', deleteTarget.path.replace('/calendar', ''), { actor: ADMIN });
+  assert.equal(deleted.status, 204);
+});
+
+test('occurrence-only route persists normalized validated strings and datetimes', async () => {
+  const seriesId = insertEvent({
+    title: 'Only normalization source',
+    start_datetime: '2040-04-10T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  const response = await call('PUT', `/${seriesId}/occurrences/2040-04-11`, {
+    actor: ADMIN,
+    body: {
+      title: '  Normalized title  ',
+      description: '  Normalized description  ',
+      location: '  Normalized location  ',
+      start_datetime: '2040-04-11T10:15:59',
+      end_datetime: '2040-04-11T11:45:30',
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual({ ...db.prepare(`
+    SELECT title, description, location, start_datetime, end_datetime
+    FROM calendar_events WHERE id = ?
+  `).get(response.body.data.id) }, {
+    title: 'Normalized title',
+    description: 'Normalized description',
+    location: 'Normalized location',
+    start_datetime: '2040-04-11T10:15',
+    end_datetime: '2040-04-11T11:45',
+  });
+});
+
+test('following route persists normalized strings, datetimes and canonical trimmed RRULE', async () => {
+  const seriesId = insertEvent({
+    title: 'Following normalization source',
+    start_datetime: '2040-04-20T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  const response = await call('PUT', `/${seriesId}/occurrences/2040-04-21/following`, {
+    actor: ADMIN,
+    body: {
+      title: '  Normalized successor  ',
+      description: '  Successor description  ',
+      location: '  Successor location  ',
+      start_datetime: '2040-04-21T10:15:59',
+      end_datetime: '2040-04-21T11:45:30',
+      recurrence_rule: '  FREQ=WEEKLY;BYDAY=MO,TU  ',
+    },
+  });
+  assert.equal(response.status, 201);
+  assert.deepEqual({ ...db.prepare(`
+    SELECT title, description, location, start_datetime, end_datetime, recurrence_rule
+    FROM calendar_events WHERE id = ?
+  `).get(response.body.data.id) }, {
+    title: 'Normalized successor',
+    description: 'Successor description',
+    location: 'Successor location',
+    start_datetime: '2040-04-21T10:15',
+    end_datetime: '2040-04-21T11:45',
+    recurrence_rule: 'FREQ=WEEKLY;BYDAY=MO,TU',
+  });
+});
+
 test('POST / — Anhang wird als Familien-Dokument abgelegt', async () => {
   const dataUrl = `data:text/plain;base64,${Buffer.from('Anhangstext').toString('base64')}`;
   const res = await call('POST', '/', { actor: ADMIN, body: {
@@ -1271,6 +1373,59 @@ test('occurrence PUT refuses every provider-owned, imported, generated and outbo
   }
 });
 
+test('Outlook account activation reports linked override conflicts with an exact count', async () => {
+  const existingLinkedCandidateCount = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM calendar_events e
+    WHERE e.external_source = 'local'
+      AND e.recurrence_parent_id IS NULL
+      AND EXISTS (SELECT 1 FROM calendar_events child WHERE child.recurrence_parent_id = e.id)
+      AND (
+        e.visibility = 'all'
+        OR e.created_by = ?
+        OR (e.visibility = 'assignees' AND EXISTS (
+          SELECT 1 FROM event_assignments ea
+          WHERE ea.event_id = e.id AND ea.user_id = ?
+        ))
+      )
+  `).get(ADMIN.id, ADMIN.id).count;
+  const accountId = db.prepare(`
+    INSERT INTO outlook_accounts
+      (name, access_token, refresh_token, owner_user_id)
+    VALUES ('Route activation guard', 'token', 'refresh', ?)
+  `).run(ADMIN.id).lastInsertRowid;
+  db.prepare(`
+    INSERT INTO outlook_calendar_selection
+      (account_id, calendar_id, calendar_name, can_edit, enabled)
+    VALUES (?, 'route-guard-cal', 'Route guard', 1, 0)
+  `).run(accountId);
+  const masterId = insertEvent({
+    title: 'Route activation series',
+    recurrence_rule: 'FREQ=DAILY',
+    visibility: 'all',
+  });
+  const childId = insertEvent({ title: 'Route activation occurrence' });
+  db.prepare(`
+    UPDATE calendar_events
+    SET recurrence_parent_id = ?, recurrence_id = '2035-03-11', overridden_fields = '["title"]'
+    WHERE id = ?
+  `).run(masterId, childId);
+
+  const response = await call('PUT', `/outlook/accounts/${accountId}`, {
+    actor: ADMIN,
+    body: { autoSyncCalendarId: 'route-guard-cal' },
+  });
+  const stored = db.prepare('SELECT auto_sync_calendar_id FROM outlook_accounts WHERE id = ?')
+    .get(accountId).auto_sync_calendar_id;
+  db.prepare('DELETE FROM calendar_events WHERE id = ?').run(masterId);
+  db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
+
+  assert.equal(response.status, 409);
+  assert.equal(response.body.conflict, 'outlook_auto_sync_overrides');
+  assert.equal(response.body.linked_override_count, existingLinkedCandidateCount + 1);
+  assert.equal(stored, null);
+});
+
 test('occurrence route rolls back child creation when EXDATE insertion fails', async () => {
   const seriesId = insertEvent({
     title: 'Route rollback',
@@ -1669,6 +1824,124 @@ test('whole-series rule update requires the exact orphan count and detaches conf
     SELECT exception_date FROM calendar_event_exceptions
     WHERE event_id = ? ORDER BY exception_date
   `).all(seriesId).map((row) => row.exception_date), ['2046-10-08']);
+});
+
+test('visible non-owner keeps generic whole-series edit and delete authorization after children exist', async () => {
+  const seriesId = insertEvent({
+    title: 'Shared non-owner series',
+    start_datetime: '2046-10-12T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    created_by: MARIA.id,
+    visibility: 'all',
+  });
+  const beforeChild = await call('PUT', `/${seriesId}`, {
+    actor: TOM,
+    body: { title: 'Shared non-owner before child' },
+  });
+  assert.equal(beforeChild.status, 200);
+
+  const childId = insertEvent({
+    title: 'Shared non-owner occurrence',
+    start_datetime: '2046-10-13T09:00:00',
+    recurrence_parent_id: seriesId,
+    recurrence_id: '2046-10-13',
+    overridden_fields: '["title"]',
+    created_by: MARIA.id,
+  });
+  const afterChild = await call('PUT', `/${seriesId}`, {
+    actor: TOM,
+    body: { title: 'Shared non-owner after child' },
+  });
+  assert.equal(afterChild.status, 200);
+  assert.equal(afterChild.body.data.title, 'Shared non-owner after child');
+  assert.equal(afterChild.body.data.series_id, seriesId);
+  assert.equal(afterChild.body.data.recurrence_id, '2046-10-12');
+  assert.equal(afterChild.body.data.is_local_recurring_series, true);
+  assert.equal(afterChild.body.data.can_override_occurrence, false);
+  assert.equal(db.prepare('SELECT title FROM calendar_events WHERE id = ?').get(childId).title,
+    'Shared non-owner occurrence');
+
+  const deleted = await call('DELETE', `/${seriesId}`, { actor: TOM });
+  assert.equal(deleted.status, 204);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_events WHERE id = ? OR recurrence_parent_id = ?
+  `).get(seriesId, seriesId).count, 0);
+});
+
+test('whole-series Outlook auto-sync visibility and assignment transitions require exact detach confirmation', async () => {
+  const accountId = db.prepare(`
+    INSERT INTO outlook_accounts
+      (name, access_token, refresh_token, needs_reauth, auto_sync_calendar_id, owner_user_id)
+    VALUES ('Configured reauth target', 'token', 'refresh', 1, 'configured-cal', ?)
+  `).run(TOM.id).lastInsertRowid;
+
+  const privateMasterId = insertEvent({
+    title: 'Private transition',
+    start_datetime: '2046-10-20T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    created_by: ADMIN.id,
+    visibility: 'private',
+  });
+  const privateChildId = insertEvent({
+    title: 'Private transition occurrence',
+    start_datetime: '2046-10-21T09:00:00',
+    recurrence_parent_id: privateMasterId,
+    recurrence_id: '2046-10-21',
+    overridden_fields: '["title"]',
+  });
+
+  const visibilityConflict = await call('PUT', `/${privateMasterId}`, {
+    actor: ADMIN,
+    body: { visibility: 'all' },
+  });
+  assert.equal(visibilityConflict.status, 409);
+  assert.equal(visibilityConflict.body.orphaned_override_count, 1);
+  assert.equal(db.prepare('SELECT visibility FROM calendar_events WHERE id = ?')
+    .get(privateMasterId).visibility, 'private');
+
+  const visibilityConfirmed = await call('PUT', `/${privateMasterId}`, {
+    actor: ADMIN,
+    body: { visibility: 'all', confirmed_orphan_count: 1 },
+  });
+  assert.equal(visibilityConfirmed.status, 200);
+  assert.equal(db.prepare('SELECT recurrence_parent_id FROM calendar_events WHERE id = ?')
+    .get(privateChildId).recurrence_parent_id, null);
+
+  const assigneeMasterId = insertEvent({
+    title: 'Assignee transition',
+    start_datetime: '2046-10-25T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    created_by: ADMIN.id,
+    visibility: 'assignees',
+  });
+  assignEvent(assigneeMasterId, ADMIN.id);
+  const assigneeChildId = insertEvent({
+    title: 'Assignee transition occurrence',
+    start_datetime: '2046-10-26T09:00:00',
+    recurrence_parent_id: assigneeMasterId,
+    recurrence_id: '2046-10-26',
+    overridden_fields: '["title"]',
+  });
+
+  const assignmentConflict = await call('PUT', `/${assigneeMasterId}`, {
+    actor: ADMIN,
+    body: { assigned_to: [TOM.id] },
+  });
+  assert.equal(assignmentConflict.status, 409);
+  assert.equal(assignmentConflict.body.orphaned_override_count, 1);
+  assert.deepEqual(db.prepare(
+    'SELECT user_id FROM event_assignments WHERE event_id = ? ORDER BY user_id'
+  ).all(assigneeMasterId).map((row) => row.user_id), [ADMIN.id]);
+
+  const assignmentConfirmed = await call('PUT', `/${assigneeMasterId}`, {
+    actor: ADMIN,
+    body: { assigned_to: [TOM.id], confirmed_orphan_count: 1 },
+  });
+  assert.equal(assignmentConfirmed.status, 200);
+  assert.equal(db.prepare('SELECT recurrence_parent_id FROM calendar_events WHERE id = ?')
+    .get(assigneeChildId).recurrence_parent_id, null);
+
+  db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
 });
 
 test('whole-series stale orphan confirmation is rejected after the count reaches zero', async () => {

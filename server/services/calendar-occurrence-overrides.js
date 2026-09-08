@@ -5,7 +5,6 @@
  * every occurrence mutation applies the same ownership and eligibility rules.
  */
 
-import { visibilityWhere } from './visibility.js';
 import { hasAnyOccurrence, parseRRule } from './recurrence.js';
 import {
   ASSIGNED_USERS_SQL, expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
@@ -328,9 +327,8 @@ function hasOutlookLink(database, eventId) {
   ).get(eventId));
 }
 
-function hasActiveOutlookAutoSyncTarget(database, eventId) {
+function hasConfiguredOutlookAutoSyncTarget(database, row, assignments) {
   const requiredColumns = [
-    ['outlook_accounts', 'needs_reauth'],
     ['outlook_accounts', 'auto_sync_calendar_id'],
     ['outlook_accounts', 'owner_user_id'],
     ['calendar_events', 'visibility'],
@@ -339,25 +337,25 @@ function hasActiveOutlookAutoSyncTarget(database, eventId) {
     ['event_assignments', 'user_id'],
   ];
   if (!requiredColumns.every(([table, column]) => hasColumn(database, table, column))) return false;
-
-  return Boolean(database.prepare(`
-    SELECT 1
-    FROM outlook_accounts oa
-    JOIN calendar_events e ON e.id = ? AND e.external_source = 'local'
-    WHERE oa.needs_reauth = 0
-      AND oa.auto_sync_calendar_id IS NOT NULL
-      AND oa.owner_user_id IS NOT NULL
-      AND ${visibilityWhere('e', 'event_assignments', 'event_id', 'oa.owner_user_id')}
-    LIMIT 1
-  `).get(eventId));
+  if (!row || row.external_source !== 'local') return false;
+  const assignedIds = assignments === undefined
+    ? canonicalIds(assignmentIds(database, row.id))
+    : canonicalIds(assignments);
+  const assigned = new Set(assignedIds.map(Number));
+  const accounts = database.prepare(`
+    SELECT owner_user_id
+    FROM outlook_accounts
+    WHERE auto_sync_calendar_id IS NOT NULL AND owner_user_id IS NOT NULL
+  `).all();
+  return accounts.some(({ owner_user_id: ownerUserId }) => (
+    row.visibility === 'all'
+    || Number(row.created_by) === Number(ownerUserId)
+    || (row.visibility === 'assignees' && assigned.has(Number(ownerUserId)))
+  ));
 }
 
-/**
- * Determines whether one persisted series may use local occurrence overrides.
- * Classification is evaluated before authorization so callers can report a
- * normal 400 capability error independently of a 403 ownership error.
- */
-export function isEligibleLocalSeries(database, row, actorId, isAdmin) {
+/** Classifies persisted series ownership independently of the requesting actor. */
+export function classifyLocalSeries(database, row) {
   const ineligible = !row?.recurrence_rule
     || row.external_source !== 'local'
     || row.external_calendar_id != null
@@ -372,9 +370,16 @@ export function isEligibleLocalSeries(database, row, actorId, isAdmin) {
     || row.recurrence_parent_id != null
     || hasGeneratedOwner(database, row.id)
     || hasOutlookLink(database, row.id)
-    || hasActiveOutlookAutoSyncTarget(database, row.id);
+    || hasConfiguredOutlookAutoSyncTarget(database, row);
 
   if (ineligible) return { eligible: false, reason: 'ineligible_series' };
+  return { eligible: true, reason: null };
+}
+
+/** Adds actor authorization to the structural occurrence-capability classification. */
+export function isEligibleLocalSeries(database, row, actorId, isAdmin) {
+  const classification = classifyLocalSeries(database, row);
+  if (!classification.eligible) return classification;
   if (!isAdmin && row.created_by !== actorId) return { eligible: false, reason: 'not_authorized' };
   return { eligible: true, reason: null };
 }
@@ -397,7 +402,7 @@ function runTransaction(database, work) {
   }
 }
 
-function loadSeriesForMutation(database, seriesId, actorId, isAdmin) {
+function loadSeriesForMutation(database, seriesId, actorId, isAdmin, authorizeActor = true) {
   const id = Number(seriesId);
   const master = Number.isInteger(id) && id > 0
     ? database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(id)
@@ -408,7 +413,9 @@ function loadSeriesForMutation(database, seriesId, actorId, isAdmin) {
       code: 'calendar_series_not_found',
     });
   }
-  const eligibility = isEligibleLocalSeries(database, master, actorId, isAdmin);
+  const eligibility = authorizeActor
+    ? isEligibleLocalSeries(database, master, actorId, isAdmin)
+    : classifyLocalSeries(database, master);
   if (!eligibility.eligible) {
     const unauthorized = eligibility.reason === 'not_authorized';
     throw new CalendarOccurrenceError(
@@ -1134,18 +1141,29 @@ export function splitSeries(database, {
       : attachmentValues(createdAttachment);
     Object.assign(successorValues, successorAttachment);
 
-    const successorOffsets = requestedReminderOffsets === undefined
-      ? selectedFields.includes('reminders')
-        ? reminderOffsets(database, selectedChild.id, actorId, selectedResolved.start_datetime)
-        : reminderOffsets(database, master.id, actorId, master.start_datetime)
-      : canonicalOffsets(requestedReminderOffsets);
-
     database.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
       .run(truncateRuleBefore(master.recurrence_rule, recurrenceId), master.id);
     const successorId = insertSeriesRow(database, successorValues);
     replaceAssignments(database, successorId, successorAssignments);
-    replaceReminders(database, successorId, actorId, successorValues.start_datetime, successorOffsets);
-    if (actorId === master.created_by) fanOutEventReminders(database, successorId, actorId);
+    const reminderSource = selectedFields.includes('reminders') ? selectedChild : master;
+    copyResolvedReminderState(database, {
+      sourceEventId: reminderSource.id,
+      targetEventId: successorId,
+      sourceAnchor: selectedFields.includes('reminders')
+        ? selectedResolved.start_datetime
+        : master.start_datetime,
+      targetAnchor: successorValues.start_datetime,
+    });
+    if (requestedReminderOffsets !== undefined) {
+      replaceReminders(
+        database,
+        successorId,
+        actorId,
+        successorValues.start_datetime,
+        canonicalOffsets(requestedReminderOffsets),
+      );
+    }
+    fanOutEventReminders(database, successorId, master.created_by);
     const insertException = database.prepare(`
       INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date)
       VALUES (?, ?)
@@ -1236,6 +1254,49 @@ function classifyOrphans(children, proposed, detachAll) {
   });
 }
 
+function copyResolvedReminderState(database, {
+  sourceEventId,
+  targetEventId,
+  sourceAnchor,
+  targetAnchor,
+}) {
+  const rows = database.prepare(`
+    SELECT remind_at, dismissed, created_by, assigned_from
+    FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+    ORDER BY id
+  `).all(sourceEventId);
+  const targetOwn = new Set(database.prepare(`
+    SELECT DISTINCT created_by
+    FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NULL
+  `).all(targetEventId).map((row) => Number(row.created_by)));
+  const targetAssignees = new Set(assignmentIds(database, targetEventId).map(Number));
+  database.prepare(`
+    DELETE FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NOT NULL
+  `).run(targetEventId);
+  const shift = wallTimeMs(targetAnchor) - wallTimeMs(sourceAnchor);
+  const insert = database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, ?, ?, ?, ?)
+  `);
+  for (const row of rows) {
+    const createdBy = Number(row.created_by);
+    if (targetOwn.has(createdBy)) continue;
+    if (row.assigned_from !== null && !targetAssignees.has(createdBy)) continue;
+    const shifted = new Date(wallTimeMs(row.remind_at) + shift).toISOString();
+    insert.run(
+      targetEventId,
+      /Z$/.test(String(row.remind_at)) ? shifted : shifted.slice(0, 19),
+      row.dismissed,
+      createdBy,
+      row.assigned_from,
+    );
+  }
+}
+
 function materializeDetachedChild(database, child, master) {
   const fields = parseOverrideFields(child.overridden_fields);
   const resolved = resolveOccurrence(database, child, master);
@@ -1243,38 +1304,12 @@ function materializeDetachedChild(database, child, master) {
     replaceAssignments(database, child.id, canonicalIds(assignmentIds(database, master.id)));
   }
   if (!fields.includes('reminders')) {
-    const rows = database.prepare(`
-      SELECT remind_at, dismissed
-      FROM reminders
-      WHERE entity_type = 'event' AND entity_id = ?
-        AND created_by = ? AND assigned_from IS NULL
-    `).all(master.id, master.created_by);
-    database.prepare(`
-      DELETE FROM reminders
-      WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NOT NULL
-    `).run(child.id);
-    const shift = wallTimeMs(resolved.start_datetime) - wallTimeMs(master.start_datetime);
-    const insert = database.prepare(`
-      INSERT INTO reminders (entity_type, entity_id, remind_at, dismissed, created_by)
-      VALUES ('event', ?, ?, ?, ?)
-    `);
-    const ownsTemplate = database.prepare(`
-      SELECT 1 FROM reminders
-      WHERE entity_type = 'event' AND entity_id = ?
-        AND created_by = ? AND assigned_from IS NULL
-      LIMIT 1
-    `).get(child.id, master.created_by);
-    if (!ownsTemplate) {
-      for (const row of rows) {
-        const shifted = new Date(wallTimeMs(row.remind_at) + shift).toISOString();
-        insert.run(
-          child.id,
-          /Z$/.test(String(row.remind_at)) ? shifted : shifted.slice(0, 19),
-          row.dismissed,
-          master.created_by,
-        );
-      }
-    }
+    copyResolvedReminderState(database, {
+      sourceEventId: master.id,
+      targetEventId: child.id,
+      sourceAnchor: master.start_datetime,
+      targetAnchor: resolved.start_datetime,
+    });
     fanOutEventReminders(database, child.id, master.created_by);
   }
   database.prepare(`
@@ -1395,9 +1430,10 @@ export function updateSeriesWithOverrides(database, {
   reminderOffsets: requestedReminderOffsets,
   confirmedOrphanCount,
   applyUpdate,
+  authorizeActor = true,
 }) {
   return runTransaction(database, () => {
-    const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
+    const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin, authorizeActor);
     const current = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(master.id);
     const proposed = { ...current };
     for (const field of SERIES_UPDATE_FIELDS) {
@@ -1408,7 +1444,13 @@ export function updateSeriesWithOverrides(database, {
       Number(child.id),
       resolveOccurrence(database, child, current),
     ]));
-    const detachAll = !hasOutboundTarget(current) && hasOutboundTarget(proposed);
+    const currentAssignments = canonicalIds(assignmentIds(database, master.id));
+    const proposedAssignments = assignments === undefined
+      ? currentAssignments
+      : orderedIds(assignments);
+    const detachAll = (!hasOutboundTarget(current) && hasOutboundTarget(proposed))
+      || (!hasConfiguredOutlookAutoSyncTarget(database, current, currentAssignments)
+        && hasConfiguredOutlookAutoSyncTarget(database, proposed, proposedAssignments));
     const orphans = classifyOrphans(children, proposed, detachAll);
     const confirmationSupplied = confirmedOrphanCount !== undefined;
     if ((orphans.length > 0 || confirmationSupplied)
@@ -1419,6 +1461,10 @@ export function updateSeriesWithOverrides(database, {
     for (const child of orphans) materializeDetachedChild(database, child, current);
     if (typeof applyUpdate === 'function') applyUpdate(database, current);
     else applySeriesChanges(database, master.id, changes);
+    const updatedAnchor = database.prepare(
+      'SELECT start_datetime FROM calendar_events WHERE id = ?'
+    ).get(master.id).start_datetime;
+    shiftOwnedReminders(database, master.id, current.start_datetime, updatedAnchor);
     if (assignments !== undefined) {
       const userIds = orderedIds(assignments);
       database.prepare('UPDATE calendar_events SET assigned_to = ? WHERE id = ?')
@@ -1454,7 +1500,7 @@ export function updateSeriesWithOverrides(database, {
         anchor,
         canonicalOffsets(requestedReminderOffsets),
       );
-      if (actorId === master.created_by) fanOutEventReminders(database, master.id, actorId);
+      fanOutEventReminders(database, master.id, master.created_by);
     }
     const updated = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(master.id);
     if (createdAttachment !== undefined) {

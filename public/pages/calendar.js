@@ -18,6 +18,7 @@ import { shiftEndDateKey, isEndBeforeStart, weekStartIndex, weekdayOrder,
 import {
   calendarOccurrenceDeleteTarget,
   calendarOccurrenceMutationTarget,
+  canOverrideCalendarOccurrence,
   isExternalRecurringSeries,
   isLocalRecurringSeries,
   requestCalendarOccurrenceMutation,
@@ -4555,7 +4556,9 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
       startDate,
     })}
 
-    ${isEdit && isLocalRecurringSeries(event) ? renderRecurringScopeChooser('modal-edit', event.start_datetime.slice(0, 10)) : ''}
+    ${isEdit && isLocalRecurringSeries(event) && canOverrideCalendarOccurrence(event)
+      ? renderRecurringScopeChooser('modal-edit', event.start_datetime.slice(0, 10))
+      : ''}
 
     ${renderCalendarReminderSection(reminder, event, isEdit ? [] : state.defaultReminders)}
 
@@ -4736,10 +4739,11 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
       savedEventId = res.data?.id;
     } else {
       const localRecurring = isLocalRecurringSeries(event);
-      const scope = localRecurring
+      const canOverrideOccurrence = canOverrideCalendarOccurrence(event);
+      const scope = localRecurring && canOverrideOccurrence
         ? getRecurringScope(overlay, 'modal-edit')
         : 'series';
-      if (localRecurring && (scope === 'this' || scope === 'following')) {
+      if (localRecurring && canOverrideOccurrence && (scope === 'this' || scope === 'following')) {
         const target = calendarOccurrenceMutationTarget(event, scope);
         const res = await requestCalendarOccurrenceMutation({
           api,
@@ -4974,6 +4978,10 @@ async function requestDeleteEvent(event) {
     return;
   }
   if (!isLocalRecurringSeries(event)) {
+    await deleteEvent(event);
+    return;
+  }
+  if (!canOverrideCalendarOccurrence(event)) {
     await deleteEvent(event);
     return;
   }

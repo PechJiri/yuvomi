@@ -229,7 +229,12 @@ router.post('/', async (req, res) => {
       WHERE e.id = ?
     `).get(eventId);
 
-    res.status(201).json({ data: serializeEvent(event) });
+    res.status(201).json({ data: serializeEvent(event, {
+      database: db.get(),
+      actorId: getUserId(req),
+      isAdmin: isAdminUser(req),
+      master: event,
+    }) });
   } catch (err) {
     if (err instanceof StorageError && !stagedUpload) {
       log.error('POST / storage error:', err);
@@ -669,8 +674,10 @@ router.put('/:id', async (req, res) => {
         actorId: getUserId(req),
         isAdmin: isAdminUser(req),
         changes: seriesChanges,
+        assignments: assignedTouched ? userIds : undefined,
         confirmedOrphanCount: req.body.confirmed_orphan_count,
         applyUpdate,
+        authorizeActor: false,
       });
     } else {
       db.get().transaction(applyUpdate)();
@@ -699,7 +706,12 @@ router.put('/:id', async (req, res) => {
     // Wie beim Löschen: vormerken, antworten, danach best effort ausführen.
     const pending = markEventOutbound(event, updated);
 
-    res.json({ data: serializeEvent(updated) });
+    res.json({ data: serializeEvent(updated, {
+      database: db.get(),
+      actorId: getUserId(req),
+      isAdmin: isAdminUser(req),
+      master: updated,
+    }) });
 
     if (pending) {
       flushOutbound()
@@ -758,14 +770,15 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
     }
     baseOccurrenceFor(master, req.params.recurrenceId);
 
-    const checks = [];
-    if (req.body.title !== undefined) checks.push(str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }));
-    if (req.body.description !== undefined) checks.push(str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }));
-    if (req.body.start_datetime !== undefined) checks.push(datetime(req.body.start_datetime, 'Startdatum'));
-    if (req.body.end_datetime !== undefined) checks.push(datetime(req.body.end_datetime, 'Enddatum'));
-    if (req.body.color !== undefined) checks.push(color(req.body.color, 'Farbe'));
-    if (req.body.location !== undefined) checks.push(str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }));
-    const errors = collectErrors(checks);
+    const validated = {
+      title: req.body.title === undefined ? null : str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }),
+      description: req.body.description === undefined ? null : str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }),
+      start_datetime: req.body.start_datetime === undefined ? null : datetime(req.body.start_datetime, 'Startdatum'),
+      end_datetime: req.body.end_datetime === undefined ? null : datetime(req.body.end_datetime, 'Enddatum'),
+      color: req.body.color === undefined ? null : color(req.body.color, 'Farbe'),
+      location: req.body.location === undefined ? null : str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }),
+    };
+    const errors = collectErrors(Object.values(validated).filter(Boolean));
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     const vIcon = req.body.icon !== undefined ? eventIcon(req.body.icon) : undefined;
@@ -814,7 +827,9 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
       'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
       'location', 'color', 'visibility', 'countdown',
     ]) {
-      if (Object.hasOwn(req.body, field)) changes[field] = req.body[field];
+      if (Object.hasOwn(req.body, field)) {
+        changes[field] = validated[field] ? validated[field].value : req.body[field];
+      }
     }
     if (Object.hasOwn(req.body, 'visibility')) {
       changes.visibility = normalizeVisibility(req.body.visibility, master.visibility);
@@ -908,15 +923,16 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     }
     const selectedBase = baseOccurrenceFor(master, req.params.recurrenceId);
 
-    const checks = [];
-    if (req.body.title !== undefined) checks.push(str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }));
-    if (req.body.description !== undefined) checks.push(str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }));
-    if (req.body.start_datetime !== undefined) checks.push(datetime(req.body.start_datetime, 'Startdatum'));
-    if (req.body.end_datetime !== undefined) checks.push(datetime(req.body.end_datetime, 'Enddatum'));
-    if (req.body.color !== undefined) checks.push(color(req.body.color, 'Farbe'));
-    if (req.body.location !== undefined) checks.push(str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }));
-    if (req.body.recurrence_rule !== undefined) checks.push(rrule(req.body.recurrence_rule, 'Wiederholung'));
-    const errors = collectErrors(checks);
+    const validated = {
+      title: req.body.title === undefined ? null : str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }),
+      description: req.body.description === undefined ? null : str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }),
+      start_datetime: req.body.start_datetime === undefined ? null : datetime(req.body.start_datetime, 'Startdatum'),
+      end_datetime: req.body.end_datetime === undefined ? null : datetime(req.body.end_datetime, 'Enddatum'),
+      color: req.body.color === undefined ? null : color(req.body.color, 'Farbe'),
+      location: req.body.location === undefined ? null : str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }),
+      recurrence_rule: req.body.recurrence_rule === undefined ? null : rrule(req.body.recurrence_rule, 'Wiederholung'),
+    };
+    const errors = collectErrors(Object.values(validated).filter(Boolean));
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     const vIcon = req.body.icon !== undefined ? eventIcon(req.body.icon) : undefined;
     if (req.body.icon !== undefined && !vIcon) {
@@ -946,9 +962,9 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
 
     assertSuccessorHasOccurrence({
       ...master,
-      start_datetime: req.body.start_datetime ?? selectedBase.start_datetime,
+      start_datetime: validated.start_datetime?.value ?? selectedBase.start_datetime,
       recurrence_rule: Object.hasOwn(req.body, 'recurrence_rule')
-        ? req.body.recurrence_rule
+        ? validated.recurrence_rule.value
         : master.recurrence_rule,
     });
 
@@ -979,7 +995,9 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
       'location', 'color', 'visibility', 'countdown', 'recurrence_rule',
     ]) {
-      if (Object.hasOwn(req.body, field)) changes[field] = req.body[field];
+      if (Object.hasOwn(req.body, field)) {
+        changes[field] = validated[field] ? validated[field].value : req.body[field];
+      }
     }
     if (Object.hasOwn(req.body, 'visibility')) {
       changes.visibility = normalizeVisibility(req.body.visibility, master.visibility);

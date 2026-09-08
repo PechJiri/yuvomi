@@ -19,7 +19,7 @@ const { withoutBlockComments } = await import('./source-text.js');
 
 const recurrenceScope = await import('../public/utils/recurrence-scope.js');
 const { truncateRuleBefore, shiftSeriesStart, shiftEndForStart,
-        isLocalRecurringSeries, isExternalRecurringSeries,
+        isLocalRecurringSeries, isExternalRecurringSeries, canOverrideCalendarOccurrence,
         followingMeansWholeSeries } = recurrenceScope;
 const { expandRecurringEvents } = await import('../server/services/calendar-events.js');
 
@@ -149,6 +149,7 @@ test('isLocalRecurringSeries: eine rein lokale Serie', () => {
   assert.equal(isLocalRecurringSeries({
     recurrence_rule: RULE,
     external_source: 'local',
+    is_local_recurring_series: true,
     can_override_occurrence: true,
   }), true);
 });
@@ -158,6 +159,7 @@ test('isLocalRecurringSeries: linked child without its own rule uses server capa
     recurrence_rule: null,
     series_id: 41,
     recurrence_id: '2026-10-31',
+    is_local_recurring_series: true,
     can_override_occurrence: true,
   }), true);
 });
@@ -188,8 +190,21 @@ test('isLocalRecurringSeries: client does not override a negative server capabil
   assert.equal(isLocalRecurringSeries({
     recurrence_rule: RULE,
     external_source: 'local',
+    is_local_recurring_series: true,
     can_override_occurrence: false,
-  }), false);
+  }), true);
+});
+
+test('canOverrideCalendarOccurrence remains actor-specific for a non-owner local series', () => {
+  const visibleNonOwnerSeries = {
+    recurrence_rule: RULE,
+    external_source: 'local',
+    is_local_recurring_series: true,
+    can_override_occurrence: false,
+  };
+  assert.equal(isLocalRecurringSeries(visibleNonOwnerSeries), true);
+  assert.equal(isExternalRecurringSeries(visibleNonOwnerSeries), false);
+  assert.equal(canOverrideCalendarOccurrence(visibleNonOwnerSeries), false);
 });
 
 test('isExternalRecurringSeries ist das Gegenstück, nicht die Verneinung', () => {
@@ -197,7 +212,7 @@ test('isExternalRecurringSeries ist das Gegenstück, nicht die Verneinung', () =
   // aber auch nicht extern-wiederkehrend - er darf keine Rückfrage auslösen.
   const single   = { external_source: 'caldav', calendar_ref_id: 7 };
   const external = { recurrence_rule: RULE, external_source: 'caldav', calendar_ref_id: 7, can_override_occurrence: false };
-  const local    = { recurrence_rule: RULE, external_source: 'local', can_override_occurrence: true };
+  const local    = { recurrence_rule: RULE, external_source: 'local', is_local_recurring_series: true, can_override_occurrence: true };
 
   assert.equal(isExternalRecurringSeries(single),   false, 'Einzeltermin würde nachfragen');
   assert.equal(isExternalRecurringSeries(external), true,  'fremde Serie fragt nicht nach');
