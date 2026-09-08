@@ -116,7 +116,7 @@ function orphanConflictCount(error) {
 /** Retries a series mutation only for the exact orphan count the user saw. */
 export async function withCalendarOrphanConfirmation(request, confirmCount) {
   let confirmedCount;
-  while (true) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       return await request(confirmedCount);
     } catch (error) {
@@ -126,6 +126,13 @@ export async function withCalendarOrphanConfirmation(request, confirmCount) {
       confirmedCount = currentCount;
     }
   }
+  throw new Error('Calendar override conflict changed too many times; reload and try again.');
+}
+
+/** Sends exactly one atomic server request for a recurring delete. */
+export function requestCalendarOccurrenceDelete({ api, event, scope, keepalive = false }) {
+  const target = calendarOccurrenceDeleteTarget(event, scope);
+  return api.delete(target.path, { keepalive });
 }
 
 /** Sends exactly one atomic server request for a recurring edit attempt. */

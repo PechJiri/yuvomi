@@ -35,9 +35,10 @@ import {
 import {
   expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
 } from '../server/services/calendar-events.js';
-import { expandAndResolveEventRows } from '../server/services/calendar-event-reader.js';
+import { expandAndResolveEventRows, eventProjectionSql } from '../server/services/calendar-event-reader.js';
 
 const { serializeEvent, serializeEvents } = await import('../server/routes/calendar/helpers.js');
+const { __test: appleCalendarTest } = await import('../server/services/apple-calendar.js');
 
 test('calendar expansion stays independent from occurrence reader orchestration', () => {
   const source = readFileSync(
@@ -58,10 +59,25 @@ test('calendar expansion, resolution and reader orchestration import concurrentl
   assert.equal(typeof reader.expandAndResolveEventRows, 'function');
 });
 
+test('event projection reads calendar columns once per database connection', () => {
+  const database = new DatabaseSync(':memory:');
+  database.exec('CREATE TABLE calendar_events (id INTEGER PRIMARY KEY, title TEXT)');
+  const originalPrepare = database.prepare.bind(database);
+  let pragmaReads = 0;
+  database.prepare = (sql) => {
+    if (/PRAGMA table_info\(calendar_events\)/i.test(String(sql))) pragmaReads += 1;
+    return originalPrepare(sql);
+  };
+  assert.equal(eventProjectionSql(database, 'a'), 'a.id,\n           a.title');
+  assert.equal(eventProjectionSql(database, 'b'), 'b.id,\n           b.title');
+  assert.equal(pragmaReads, 1);
+});
+
 function createDatabase() {
   const database = new DatabaseSync(':memory:');
   database.exec('PRAGMA foreign_keys = ON;');
   database.exec(MIGRATIONS_SQL[1]);
+  database.exec(MIGRATIONS_SQL[44]); // search index rebuilt by migration 190
   database.exec(MIGRATIONS_SQL[26]); // family document ACLs
   database.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
   database.exec(MIGRATIONS_SQL[174]); // generated name-day event owner
@@ -316,13 +332,29 @@ test('linked occurrence helpers preserve the original series and expansion ident
   assert.equal(isLinkedOccurrence({ ...linked, overridden_fields: '["unknown"]' }), false);
 });
 
-test('local-series eligibility separates authorization from classification', () => {
+test('visible members get the same local-series occurrence rights as whole-series edits', () => {
   const database = createDatabase();
   const eligible = database.prepare('SELECT * FROM calendar_events WHERE id = ?')
     .get(insertSeries(database));
   assert.deepEqual(isEligibleLocalSeries(database, eligible, 1, false), { eligible: true, reason: null });
-  assert.deepEqual(isEligibleLocalSeries(database, eligible, 2, false), { eligible: false, reason: 'not_authorized' });
+  assert.deepEqual(isEligibleLocalSeries(database, eligible, 2, false), { eligible: true, reason: null });
   assert.deepEqual(isEligibleLocalSeries(database, eligible, 2, true), { eligible: true, reason: null });
+
+  const privateSeries = database.prepare('SELECT * FROM calendar_events WHERE id = ?')
+    .get(insertSeries(database, { visibility: 'private' }));
+  assert.deepEqual(isEligibleLocalSeries(database, privateSeries, 2, false), {
+    eligible: false, reason: 'not_authorized',
+  });
+  assert.deepEqual(isEligibleLocalSeries(database, privateSeries, 2, true), {
+    eligible: false, reason: 'not_authorized',
+  }, 'admin status must not bypass event visibility');
+  const assignedSeries = database.prepare('SELECT * FROM calendar_events WHERE id = ?')
+    .get(insertSeries(database, { visibility: 'assignees' }));
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)')
+    .run(assignedSeries.id, 2);
+  assert.deepEqual(isEligibleLocalSeries(database, assignedSeries, 2, false), {
+    eligible: true, reason: null,
+  });
 
   for (const invalid of [
     { recurrence_rule: null },
@@ -365,6 +397,21 @@ test('local recurring series with an Outlook push link is ineligible without an 
     eligible: false,
     reason: 'ineligible_series',
   });
+});
+
+test('Apple outbound collector sends the master but never its linked replacement standalone', () => {
+  const database = createDatabase();
+  const masterId = Number(insertSeries(database, { title: 'Apple master' }));
+  insertEvent(database, {
+    title: 'Apple linked child',
+    recurrence_parent_id: masterId,
+    recurrence_id: '2026-11-30',
+    overridden_fields: '["title"]',
+  });
+
+  const outbound = appleCalendarTest.collectLocalOutboundEvents(database);
+  assert.equal(outbound.some((event) => Number(event.id) === masterId), true);
+  assert.equal(outbound.some((event) => Number(event.recurrence_parent_id) === masterId), false);
 });
 
 test('Outlook auto-sync eligibility follows visible event ownership and assignments', () => {
@@ -658,6 +705,31 @@ test('resolveOccurrence loads its master and resolveEventRows handles multiple p
   assert.equal(resolveOccurrence(database, rows[0]).series_id, firstParent);
 });
 
+test('resolveEventRows degrades an unreachable linked child to a flagged standalone event', () => {
+  const database = createDatabase();
+  const parentId = Number(insertSeries(database, {
+    title: 'Changed series',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY;COUNT=1',
+  }));
+  const childId = Number(insertEvent(database, {
+    title: 'Still useful occurrence',
+    start_datetime: '2026-10-09T11:00:00',
+    recurrence_parent_id: parentId,
+    recurrence_id: '2026-10-09',
+    overridden_fields: '["title","start_datetime"]',
+  }));
+  const childRow = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(childId);
+
+  const resolved = resolveEventRows(database, [childRow])[0];
+  assert.equal(resolved.id, childId);
+  assert.equal(resolved.title, 'Still useful occurrence');
+  assert.equal(resolved.start_datetime, '2026-10-09T11:00:00');
+  assert.equal(resolved.recurrence_parent_id, null);
+  assert.equal(resolved.is_occurrence_override, false);
+  assert.equal(resolved.occurrence_override_unreachable, true);
+});
+
 test('single and batch resolution inherit real parent assignment presentation', () => {
   const database = createDatabase();
   const parentId = Number(insertSeries(database, {
@@ -802,12 +874,12 @@ test('serializeEvent appends recurrence metadata and owner identities', () => {
   }
 });
 
-test('serializeEvent exposes capability for a series without changing legacy row shape', () => {
+test('serializeEvent exposes visibility-equivalent capability without changing legacy row shape', () => {
   const database = createDatabase();
   const masterId = Number(insertSeries(database));
   const master = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(masterId);
   const serializedMaster = serializeEvent(master, { database, actorId: 1, isAdmin: false });
-  const serializedUnauthorized = serializeEvent(master, { database, actorId: 2, isAdmin: false });
+  const serializedVisibleMember = serializeEvent(master, { database, actorId: 2, isAdmin: false });
   const legacy = {
     id: 99,
     title: 'Standalone',
@@ -838,8 +910,8 @@ test('serializeEvent exposes capability for a series without changing legacy row
     reminder_owner_id: masterId,
     reminder_anchor_start: '2026-10-31T09:00:00',
   });
-  assert.equal(serializedUnauthorized.can_override_occurrence, false);
-  assert.equal(serializedUnauthorized.is_local_recurring_series, true);
+  assert.equal(serializedVisibleMember.can_override_occurrence, true);
+  assert.equal(serializedVisibleMember.is_local_recurring_series, true);
   for (const key of [
     'recurrence_parent_id', 'recurrence_id', 'overridden_fields', 'series_id',
     'is_occurrence_override', 'is_local_recurring_series', 'can_override_occurrence', 'assignment_owner_id',
@@ -932,6 +1004,30 @@ test('occurrence upsert is idempotent and stores one child with one EXDATE', () 
     SELECT COUNT(*) AS count FROM calendar_event_exceptions
     WHERE event_id = ? AND exception_date = ?
   `).get(seriesId, '2026-10-02').count, 1);
+});
+
+test('node:sqlite transaction fallback nests through a savepoint', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+
+  database.exec('BEGIN');
+  upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { title: 'Nested override' },
+  });
+  database.exec('ROLLBACK');
+
+  assert.equal(database.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
+  ).get(seriesId).count, 0);
+  assert.equal(database.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_event_exceptions WHERE event_id = ?'
+  ).get(seriesId).count, 0);
 });
 
 test('occurrence child and EXDATE roll back together', () => {

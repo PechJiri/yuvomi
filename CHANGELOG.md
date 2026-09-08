@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one (retry, the customize toggle, a weather refresh, a wall timer) now stops after its pending
   requests instead of rebuilding the surface a second time, so an older response can no longer
   overwrite a newer one. Third-party modules get the same `signal` in their render context.
+- **Editing one occurrence of a local recurring event now keeps it linked to its series** (#975).
+  The edited occurrence keeps all three series scopes when reopened, follows later series changes
+  for fields that were not deliberately changed, and keeps its original recurrence slot even when
+  moved to another date. The replacement and its skipped original slot are saved atomically, and
+  the read-only ICS feed now exports the replacement with standard `RECURRENCE-ID` semantics.
+  Provider-synced and generated series keep their existing behavior, and historic detached edits
+  are left unchanged rather than guessed back into a series.
 - **Birthdays no longer vanish from the calendar when you filter by person** (#1054). The person
   filter and "Assigned to me" keep an entry only if a selected person is assigned to it, and a
   birthday belongs to a contact, not to a household member - so any person selection emptied the
@@ -358,13 +365,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Editing one occurrence of a local recurring event now keeps it linked to its series** (#975).
-  The edited occurrence keeps all three series scopes when reopened, follows later series changes
-  for fields that were not deliberately changed, and keeps its original recurrence slot even when
-  moved to another date. The replacement and its skipped original slot are saved atomically, and
-  the read-only ICS feed now exports the replacement with standard `RECURRENCE-ID` semantics.
-  Provider-synced and generated series keep their existing behavior, and historic detached edits
-  are left unchanged rather than guessed back into a series.
 - **Calendar deletions no longer reappear while their five-second Undo action is pending.**
   Moving between months, weeks or days now reapplies pending removals over each freshly loaded
   range. Undo restores the latest server row exactly once instead of duplicating it, and a completed

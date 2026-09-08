@@ -2581,6 +2581,59 @@ test('Wetter: ohne Tageswerte bleibt die Hoch/Tief-Zeile weg statt leer zu stehe
   );
 });
 
+test('Dashboard serialisiert linked occurrences ohne rohe Persistenzfelder', async () => {
+  const { get } = await import('../server/db.js');
+  const { default: dashboardRouter } = await import('../server/routes/dashboard.js');
+  const routeDb = get();
+  const owner = routeDb.prepare(`
+    INSERT INTO users (username, display_name, password_hash, avatar_color, role)
+    VALUES ('dashboard-occurrence-review', 'Occurrence Reviewer', 'x', '#007AFF', 'member')
+  `).run().lastInsertRowid;
+  const slot = addLocalDays(today, 1);
+  const moved = addLocalDays(today, 2);
+  const masterId = routeDb.prepare(`
+    INSERT INTO calendar_events
+      (title, start_datetime, end_datetime, recurrence_rule, created_by, visibility)
+    VALUES ('Dashboard review master', ?, ?, 'FREQ=DAILY;COUNT=3', ?, 'all')
+  `).run(`${slot}T09:00:00`, `${slot}T10:00:00`, owner).lastInsertRowid;
+  const childId = routeDb.prepare(`
+    INSERT INTO calendar_events
+      (title, start_datetime, end_datetime, created_by, visibility,
+       recurrence_parent_id, recurrence_id, overridden_fields)
+    VALUES ('Dashboard review child', ?, ?, ?, 'all', ?, ?,
+            '["title","start_datetime","end_datetime","assignments"]')
+  `).run(`${moved}T11:00:00`, `${moved}T12:00:00`, owner, masterId, slot).lastInsertRowid;
+  routeDb.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)')
+    .run(childId, owner);
+  routeDb.prepare('INSERT INTO calendar_event_exceptions (event_id, exception_date) VALUES (?, ?)')
+    .run(masterId, slot);
+
+  const app = express();
+  app.use((req, _res, next) => {
+    req.authUserId = owner;
+    req.session = { userId: owner, role: 'member' };
+    next();
+  });
+  app.use('/', dashboardRouter);
+  const server = app.listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const body = await (await fetch(`http://127.0.0.1:${server.address().port}/?events_scope=mine`)).json();
+    const child = body.upcomingEvents.find((event) => Number(event.id) === Number(childId));
+    nodeAssert.ok(child, 'linked occurrence musí být v dashboard odpovědi');
+    nodeAssert.equal(child.series_id, Number(masterId));
+    nodeAssert.equal(child.recurrence_id, slot);
+    nodeAssert.equal(child.is_occurrence_override, true);
+    nodeAssert.equal(child.can_override_occurrence, true);
+    for (const key of ['recurrence_parent_id', 'recurrence_identity', 'overridden_fields']) {
+      nodeAssert.equal(Object.hasOwn(child, key), false, `${key} nesmí uniknout z API`);
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    routeDb.prepare('DELETE FROM users WHERE id = ?').run(owner);
+  }
+});
+
 // --------------------------------------------------------
 // Ergebnis
 // --------------------------------------------------------

@@ -35,9 +35,15 @@ export const BODY_FREE_EVENT_COLUMNS = Object.freeze([
   'target_outlook_account_id', 'target_outlook_calendar_id', 'color_modified',
 ]);
 
+const eventColumnCache = new WeakMap();
+
 export function eventProjectionSql(database, alias = 'e', columns = RESOLVER_EVENT_COLUMNS) {
-  const available = new Set(database.prepare('PRAGMA table_info(calendar_events)').all()
-    .map((column) => column.name));
+  let available = eventColumnCache.get(database);
+  if (!available) {
+    available = new Set(database.prepare('PRAGMA table_info(calendar_events)').all()
+      .map((column) => column.name));
+    eventColumnCache.set(database, available);
+  }
   const selected = columns.filter((column) => available.has(column));
   if (selected.length === 0) throw new Error('calendar_events has no readable projection columns');
   return selected.map((column) => `${alias}.${column}`).join(',\n           ');
@@ -119,18 +125,26 @@ export function expandAndResolveEventRows(database, rows, from, to, options = {}
 
 /**
  * Loads upcoming calendar rows for the dashboard, calendar route, and MCP.
- * A null windowDays value preserves MCP's unbounded "from today" contract.
+ * windowDays bounds recurrence expansion before the final result limit.
  */
 export function getUpcomingEvents(d, {
   userId = null, limit = 5, windowDays = 90, fromToday = false, assignedTo = null,
   includeBirthdays = true, now = new Date(),
 } = {}) {
-  const tz = householdTimeZone(d);
+  const tz      = householdTimeZone(d);
   const nowDate = todayKey(d, now);
+  // fromToday: ganztägige Sichtbarkeit heutiger Termine (Dashboard-Widget) -
+  // gerechnet wird ab Mitternacht der Haushaltszone, nicht ab Mitternacht UTC.
   const filterFromMs = fromToday
     ? new Date(localToUTC(`${nowDate}T00:00:00`, tz)).getTime()
     : now.getTime();
+  // Fenster: heute bis +windowDays voraus (für Wiederholungs-Expansion)
   const future = windowDays === null ? '9999-12-31' : shiftDateKey(nowDate, windowDays);
+  // Untere SQL-Grenze einen Tag früher als das Ergebnisfenster (#824): `DATE()`
+  // liest einen Instant als UTC-Kalendertag, und westlich von UTC liegt ein
+  // Abendtermin von heute dort schon auf morgen - er fiele aus einer Grenze
+  // heraus, die exakt auf `nowDate` sitzt. Geklammert wird danach exakt, über
+  // den Instant-Vergleich unten, deshalb blendet der Rand nichts Zusätzliches ein.
   const sqlFrom = shiftDateKey(nowDate, -1);
 
   const rawEvents = d.prepare(`
@@ -138,6 +152,8 @@ export function getUpcomingEvents(d, {
            u_assigned.display_name AS assigned_name,
            u_assigned.avatar_color AS assigned_color,
            ec.name  AS cal_name,
+           -- Zwei Toepfe fuer dieselbe geerbte Farbe: CalDAV/Google ueber
+           -- calendar_ref_id, ICS-Abos ueber subscription_id (#891).
            COALESCE(ec.color, isub.color) AS cal_color,
            COALESCE(bd.name, nd.name) AS birthday_name,
            bd.birth_date AS birthday_date,
@@ -168,6 +184,13 @@ export function getUpcomingEvents(d, {
 
   return expandAndResolveEventRows(d, rawEvents, sqlFrom, future, { lightweight: true })
     .filter((event) => {
+      // Verglichen werden ZEITPUNKTE, nicht Strings. In start_datetime liegen
+      // zwei Formen nebeneinander - zonenlose Wanduhrzeit (lokal angelegt) und
+      // Instants mit Offset oder 'Z' (synchronisiert) -, und lexikografisch ist
+      // '2026-08-21T21:00' kleiner als '2026-08-22T00:00:00.000Z', obwohl der
+      // Termin noch eine Stunde vor uns liegt. Genau so verschwanden westlich
+      // von UTC die Abendtermine aus dem Übersichts-Widget (#829).
+      // Ganztägige Termine beginnen um Mitternacht der Haushaltszone.
       const startMs = storedToInstantMs(
         event.all_day ? event.start_datetime.slice(0, 10) : event.start_datetime,
         tz,
@@ -175,12 +198,32 @@ export function getUpcomingEvents(d, {
       return startMs !== null && startMs >= filterFromMs;
     })
     .filter((event) => {
+      // „NUR MEINE" HEISST HIER DASSELBE WIE IM KALENDERMODUL (#814): zugewiesen,
+      // nicht etwa „unzugewiesen zählt auch mit". Das Modul filtert clientseitig
+      // über `assigned_users.some(u => u.id === me)` (public/pages/calendar.js,
+      // `belongsToMe`), und zwei Auslegungen desselben Satzes an zwei Orten wären
+      // schlimmer als der eine Fall, über den man streiten kann.
+      //
+      // VOR der Deckelung, nicht danach: gefiltert würde sonst innerhalb der
+      // fünf, die ohnehin schon feststehen, und ein Widget mit „nur meine" zeigte
+      // je nach Fremdterminen mal fünf und mal keinen (dieselbe Lehre wie #647).
       if (!assignedTo) return true;
       const assigned = event.assigned_users_json
         ? JSON.parse(event.assigned_users_json)
         : [];
       return assigned.some((user) => Number(user.id) === Number(assignedTo));
     })
+    /* GEBURTSTAGE ABWAEHLEN (#927) - und zwar hier, VOR der Deckelung, aus
+     * demselben Grund wie „nur meine" eine Zeile darueber: gefiltert wuerde
+     * sonst innerhalb der fuenf, die ohnehin schon feststehen, und wer die
+     * Geburtstage abwaehlt, saehe im August drei Termine statt fuenf.
+     *
+     * ERKANNT WIRD DER GEBURTSTAG AM JOIN, NICHT AM TITEL: `birthday_name`
+     * kommt aus dem LEFT JOIN auf `birthdays` und ist genau dann gesetzt, wenn
+     * der Termin aus dem Geburtstagsmodul stammt. Der Titel ist in der
+     * Datensprache des Haushalts gespeichert (#524) - ein Vergleich auf
+     * „Geburtstag: " haette in jedem anderssprachigen Haushalt nichts
+     * gefunden. Dieselbe Bedingung wie `isVisibleLayer` im Kalendermodul. */
     .filter((event) => includeBirthdays || !event.birthday_name)
     .slice(0, limit);
 }

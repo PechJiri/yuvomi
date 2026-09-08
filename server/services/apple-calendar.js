@@ -34,6 +34,14 @@ import { nearestIcalColorName } from '../utils/ical-color.js';
 
 const APPLE_COLOR = '#FC3C44';
 
+function collectLocalOutboundEvents(database) {
+  return database.prepare(`
+    SELECT * FROM calendar_events
+    WHERE external_source = 'local' AND external_calendar_id IS NULL
+      AND recurrence_parent_id IS NULL
+  `).all();
+}
+
 // --------------------------------------------------------
 // Externe Kalender-Metadaten upserten
 // --------------------------------------------------------
@@ -490,10 +498,7 @@ async function runSync() {
   // Outbound: lokal → iCloud (erster verfügbarer Kalender)
   // --------------------------------------------------------
   const defaultCal = syncCalendars[0];
-  const localEvents = db.get().prepare(`
-    SELECT * FROM calendar_events
-    WHERE external_source = 'local' AND external_calendar_id IS NULL
-  `).all();
+  const localEvents = collectLocalOutboundEvents(db.get());
 
   // Einmal je Lauf: die Zone, an der naive Zeiten haengen (#938).
   const householdZone = householdTimeZone(db.get());
@@ -547,4 +552,4 @@ export { sync, flushOutbound, getStatus, saveCredentials, clearCredentials,
 // Nur fuer Tests: der ICS-Builder ist der einzige Weg, auf dem ein rein lokaler
 // Termin zum Anbieter kommt, und der Sync-Pfad drumherum ist zu gross, um ihn
 // dafuer nachzustellen.
-export const __test = { buildICS };
+export const __test = { buildICS, collectLocalOutboundEvents };

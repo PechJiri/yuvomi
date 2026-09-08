@@ -203,8 +203,7 @@ function updateAccount(accountId, { name, autoSyncCalendarId, ownerUserId } = {}
     assertAutoSyncActivationSafe(conn, proposedAutoSyncCalendarId, proposedOwnerUserId);
   }
   values.push(accountId);
-  conn.exec('BEGIN');
-  try {
+  conn.transaction(() => {
     if (calendarToEnable) {
       conn.prepare(`
         UPDATE outlook_calendar_selection SET enabled = 1
@@ -212,11 +211,7 @@ function updateAccount(accountId, { name, autoSyncCalendarId, ownerUserId } = {}
       `).run(accountId, calendarToEnable);
     }
     conn.prepare(`UPDATE outlook_accounts SET ${updates.join(', ')} WHERE id = ?`).run(...values);
-    conn.exec('COMMIT');
-  } catch (err) {
-    conn.exec('ROLLBACK');
-    throw err;
-  }
+  })();
   return { success: true };
 }
 
@@ -357,11 +352,6 @@ async function handleCallback(code, fetchImpl = fetch) {
 
   let accountId;
   if (existing) {
-    assertAutoSyncActivationSafe(
-      db.get(),
-      existing.auto_sync_calendar_id,
-      existing.owner_user_id
-    );
     db.get().prepare(`
       UPDATE outlook_accounts
       SET email = ?, access_token = ?, refresh_token = ?, token_expiry = ?,

@@ -153,6 +153,18 @@ function recurrenceSlotProp(prop, master, dateKey, feedZone) {
   return stampProp(prop, dateKey + timeSuffix, feedZone);
 }
 
+// EXDATEs may outlive a changed/imported rule and therefore cannot require a
+// successful occurrence expansion. For TZID series, keep the master's local
+// wall-clock time and put it on the persisted exception date in O(1).
+function exceptionSlotProp(master, dateKey, feedZone) {
+  if (master.all_day) return `EXDATE;VALUE=DATE:${formatDate(dateKey)}`;
+  if (usesTzid(master)) {
+    const wallTime = formatWall(master.start_datetime, master.tzid).slice(9);
+    return `EXDATE;TZID=${master.tzid}:${formatDate(dateKey)}T${wallTime}`;
+  }
+  return recurrenceSlotProp('EXDATE', master, dateKey, feedZone);
+}
+
 function buildVEvent(
   ev,
   dtstamp,
@@ -205,7 +217,7 @@ function buildVEvent(
   if (!recurrenceMaster && ev.recurrence_rule
       && Array.isArray(ev.exception_dates) && ev.exception_dates.length) {
     for (const exDate of ev.exception_dates) {
-      lines.push(recurrenceSlotProp('EXDATE', ev, exDate, feedZone));
+      lines.push(exceptionSlotProp(ev, exDate, feedZone));
     }
   }
   lines.push('END:VEVENT');
@@ -255,6 +267,15 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
     .filter((event) => !isRecurrenceExpired(event.recurrence_rule, windowStart)
       || referencedMasterIds.has(Number(event.id)));
 
+  // RFC 5545 represents a replaced occurrence with RECURRENCE-ID. Emitting an
+  // EXDATE for that same slot would remove the replacement in strict clients.
+  const linkedSlotsByMaster = new Map();
+  for (const event of rows.filter(isLinkedOccurrence)) {
+    const parentId = Number(event.recurrence_parent_id);
+    if (!linkedSlotsByMaster.has(parentId)) linkedSlotsByMaster.set(parentId, new Set());
+    linkedSlotsByMaster.get(parentId).add(event.recurrence_id);
+  }
+
   // Instanz-Ausnahmen (EXDATE, #489) für die wiederkehrenden Events des Feeds laden.
   const recurringIds = rows.filter(ev => ev.recurrence_rule).map(ev => ev.id);
   if (recurringIds.length) {
@@ -267,7 +288,11 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
       if (!byEvent.has(r.event_id)) byEvent.set(r.event_id, []);
       byEvent.get(r.event_id).push(r.exception_date);
     }
-    for (const ev of rows) ev.exception_dates = byEvent.get(ev.id) || [];
+    for (const ev of rows) {
+      const linkedSlots = linkedSlotsByMaster.get(Number(ev.id));
+      ev.exception_dates = (byEvent.get(ev.id) || [])
+        .filter((dateKey) => !linkedSlots?.has(dateKey));
+    }
   }
 
   const resolvedRows = resolveProjectedEventRows(conn, rows, { lightweight: true });

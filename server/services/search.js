@@ -11,7 +11,6 @@ import {
   expandRecurringEvents, loadEventExceptions,
 } from './calendar-events.js';
 import { eventProjectionSql, resolveProjectedEventRows } from './calendar-event-reader.js';
-import { visibilityWhere } from './visibility.js';
 
 export const SEARCH_LIMIT = 5;
 

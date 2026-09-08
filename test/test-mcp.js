@@ -44,6 +44,7 @@ db.exec(`
 `);
 db.exec(MIGRATIONS_SQL[85]);  // calendar_event_exceptions
 db.exec(MIGRATIONS_SQL[174]); // generated birthday/name-day joins
+db.exec(MIGRATIONS_SQL[44]); // search index rebuilt by migration 190
 db.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides
 db.exec(MIGRATIONS_SQL[41]);  // tasks.start_date (geplante Aufgaben)
 db.exec(MIGRATIONS_SQL[74]);  // access_permissions (Modulrechte, #467)
@@ -342,7 +343,7 @@ test('tools/call list_upcoming_events: enthält das neue Event', async () => {
   assert.ok(events.some((e) => e.title === 'Zahnarzt'));
 });
 
-test('tools/call list_upcoming_events: bleibt ab heute ohne 90-Tage-Obergrenze', async () => {
+test('tools/call list_upcoming_events: reicht über 90 Tage, bleibt aber auf zwei Jahre begrenzt', async () => {
   const beyondDashboardWindow = new Date();
   beyondDashboardWindow.setUTCDate(beyondDashboardWindow.getUTCDate() + 120);
   const dateKey = beyondDashboardWindow.toISOString().slice(0, 10);
@@ -354,6 +355,18 @@ test('tools/call list_upcoming_events: bleibt ab heute ohne 90-Tage-Obergrenze',
 
   const events = parseContent(await toolCall('list_upcoming_events', { limit: 100 }));
   assert.ok(events.some((event) => Number(event.id) === Number(id)), 'Termin nach 120 Tagen fehlt');
+
+  const beyondBound = new Date();
+  beyondBound.setUTCDate(beyondBound.getUTCDate() + 800);
+  const beyondKey = beyondBound.toISOString().slice(0, 10);
+  const farId = db.prepare(`
+    INSERT INTO calendar_events
+      (title, start_datetime, end_datetime, all_day, created_by, external_source, visibility)
+    VALUES ('MCP außerhalb horizontu', ?, ?, 0, ?, 'local', 'all')
+  `).run(`${beyondKey}T09:00:00`, `${beyondKey}T10:00:00`, uid).lastInsertRowid;
+  const bounded = parseContent(await toolCall('list_upcoming_events', { limit: 100 }));
+  assert.ok(!bounded.some((event) => Number(event.id) === Number(farId)),
+    'Termin za dvouletým horizontem se nesmí před LIMIT expandovat');
 });
 
 test('tools/call list_upcoming_events liest keine großen attachment_data-Bodies', async () => {

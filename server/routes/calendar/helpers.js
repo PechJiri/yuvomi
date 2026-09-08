@@ -12,7 +12,7 @@ import {
   fanOutEventReminders, dropInheritedEventReminders, eventAuthorId,
 } from '../../services/event-reminder-fanout.js';
 import {
-  buildRecurrenceCapabilityMap, classifyLocalSeries, isLinkedOccurrence,
+  buildRecurrenceCapabilityMap, classifyLocalSeries, isEligibleLocalSeries, isLinkedOccurrence,
   parseOverrideFields, recurrenceIdFor, seriesIdFor,
 } from '../../services/calendar-occurrence-overrides.js';
 
@@ -312,9 +312,12 @@ function recurrenceMetadata(event, context) {
     canOverride = capability.canOverrideOccurrence;
   } else if (context?.database && master) {
     const classification = classifyLocalSeries(context.database, master);
+    const eligibility = isEligibleLocalSeries(
+      context.database, master, context.actorId,
+    );
     isLocalRecurringSeries = classification.eligible;
-    canOverride = classification.eligible
-      && (context.isAdmin === true || Number(master.created_by) === Number(context.actorId));
+    // Same visibility rights as a whole-series edit, without a creator-only tier.
+    canOverride = eligibility.eligible;
   }
 
   let fields = [];
@@ -393,7 +396,7 @@ export function serializeEvents(events, context) {
   const capabilitiesBySeriesId = buildRecurrenceCapabilityMap(
     context.database,
     events,
-    { actorId: context.actorId ?? null, isAdmin: context.isAdmin === true },
+    { actorId: context.actorId ?? null },
   );
   const bulkContext = { ...context, capabilitiesBySeriesId };
   return events.map((event) => serializeEvent(event, bulkContext));

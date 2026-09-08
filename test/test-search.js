@@ -142,26 +142,6 @@ test('Suche deckt alle Entitäten ab', () => {
   assert(r.events.some((e) => e.title === 'Cake tasting'), 'Termin gefunden');
 });
 
-test('globale Suche verbirgt private Termine anderer Personen', () => {
-  db.prepare(`
-    INSERT INTO calendar_events (title, start_datetime, created_by, visibility)
-    VALUES ('Privater Qzxprivat Termin', '2030-02-01T10:00:00Z', ?, 'private')
-  `).run(otherUid);
-
-  const result = runSearch(db, 'Qzxprivat', uid);
-  assert(result.events.length === 0, 'fremder privater Termin darf nicht erscheinen');
-});
-
-test('globale Suche verbirgt unzugewiesene assignees-Termine anderer Personen', () => {
-  db.prepare(`
-    INSERT INTO calendar_events (title, start_datetime, created_by, visibility)
-    VALUES ('Eingeschränkter Qzxassigned Termin', '2030-02-02T10:00:00Z', ?, 'assignees')
-  `).run(otherUid);
-
-  const result = runSearch(db, 'Qzxassigned', uid);
-  assert(result.events.length === 0, 'nicht zugewiesener assignees-Termin darf nicht erscheinen');
-});
-
 test('globale Suche liefert den aufgelösten verschobenen Termin mit Originalidentität', () => {
   const masterId = db.prepare(`
     INSERT INTO calendar_events

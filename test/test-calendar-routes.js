@@ -1134,7 +1134,7 @@ test('POST /:id/exceptions — 403 fremd + 201 EXDATE angelegt', async () => {
 // Linked local occurrence mutations (#975)
 // ════════════════════════════════════════════════════════════════════════════════
 
-test('PUT /:seriesId/occurrences/:recurrenceId authorizes creator and admin only', async () => {
+test('PUT /:seriesId/occurrences/:recurrenceId uses whole-series visibility rights', async () => {
   const seriesId = insertEvent({
     title: 'Occurrence auth',
     start_datetime: '2046-01-01T09:00:00',
@@ -1151,11 +1151,12 @@ test('PUT /:seriesId/occurrences/:recurrenceId authorizes creator and admin only
   assert.equal(creator.body.data.series_id, seriesId);
   assert.equal(creator.body.data.recurrence_id, '2046-01-02');
 
-  const forbidden = await call('PUT', `/${seriesId}/occurrences/2046-01-02`, {
+  const visibleMember = await call('PUT', `/${seriesId}/occurrences/2046-01-02`, {
     actor: TOM,
     body: { title: 'Non-owner override' },
   });
-  assert.equal(forbidden.status, 403);
+  assert.equal(visibleMember.status, 200);
+  assert.equal(visibleMember.body.data.title, 'Non-owner override');
 
   const admin = await call('PUT', `/${seriesId}/occurrences/2046-01-02`, {
     actor: ADMIN,
@@ -1168,12 +1169,12 @@ test('PUT /:seriesId/occurrences/:recurrenceId authorizes creator and admin only
   ).get(seriesId).count, 1);
 });
 
-test('generic child-id PUT and DELETE cannot bypass occurrence ownership or metadata', async () => {
+test('generic child-id PUT and DELETE cannot bypass occurrence routing or metadata', async () => {
   for (const method of ['PUT', 'DELETE']) {
     for (const [label, requestActor, expectedStatus, expectedReason] of [
       ['creator', MARIA, 400, 'calendar_occurrence_route_required'],
       ['admin', ADMIN, 400, 'calendar_occurrence_route_required'],
-      ['visible non-owner', TOM, 403, 'not_authorized'],
+      ['visible non-owner', TOM, 400, 'calendar_occurrence_route_required'],
     ]) {
       const seriesId = insertEvent({
         title: `Direct child ${method} ${label}`,
@@ -1252,9 +1253,7 @@ test('all occurrence operations hide invisible series before ownership checks', 
     });
     assignEvent(assignedId, MARIA.id);
     const assigned = await call(method, route(assignedId), { actor: MARIA, body });
-    assert.equal(assigned.status, 403, `${label} visible assignee`);
-    assert.equal(assigned.body.code, 403, `${label} assignee code`);
-    assert.equal(assigned.body.reason, 'not_authorized', `${label} assignee reason`);
+    assert.equal(assigned.status, successStatus, `${label} visible assignee`);
 
     const creatorId = insertEvent({
       title: `${label} creator`,
@@ -2466,7 +2465,7 @@ test('visible non-owner keeps generic whole-series edit and delete authorization
   assert.equal(afterChild.body.data.series_id, seriesId);
   assert.equal(afterChild.body.data.recurrence_id, '2046-10-12');
   assert.equal(afterChild.body.data.is_local_recurring_series, true);
-  assert.equal(afterChild.body.data.can_override_occurrence, false);
+  assert.equal(afterChild.body.data.can_override_occurrence, true);
   assert.equal(db.prepare('SELECT title FROM calendar_events WHERE id = ?').get(childId).title,
     'Shared non-owner occurrence');
 

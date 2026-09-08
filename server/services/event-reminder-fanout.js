@@ -61,7 +61,12 @@ function assigneesOf(database, eventId, exceptUserId) {
  *
  * @returns {number} Anzahl der angelegten Zeilen (fuer Tests und Protokoll)
  */
-export function fanOutEventReminders(database, eventId, authorId) {
+export function fanOutEventReminders(
+  database,
+  eventId,
+  authorId,
+  { dropDerivedWhenOwn = false } = {},
+) {
   const remindAts = templateReminders(database, eventId, authorId);
   const targets   = assigneesOf(database, eventId, authorId);
   if (!targets.length) return 0;
@@ -88,7 +93,7 @@ export function fanOutEventReminders(database, eventId, authorId) {
   let written = 0;
   for (const userId of targets) {
     if (ownRow.get(eventId, userId)) {
-      dropDerived.run(eventId, userId, authorId);
+      if (dropDerivedWhenOwn) dropDerived.run(eventId, userId, authorId);
       continue;
     }
     const have = derivedOf.all(eventId, userId, authorId).map((r) => r.remind_at).join('|');

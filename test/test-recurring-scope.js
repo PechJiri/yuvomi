@@ -373,6 +373,20 @@ test('following save keeps validated successor sync targets and reminder offsets
   }]);
 });
 
+test('recurring delete sends the selected server target and keepalive option', async () => {
+  const calls = [];
+  await recurrenceScope.requestCalendarOccurrenceDelete({
+    api: { delete: async (path, options) => { calls.push({ path, options }); } },
+    event: { series_id: 41, recurrence_id: '2026-10-31' },
+    scope: 'this',
+    keepalive: true,
+  });
+  assert.deepEqual(calls, [{
+    path: '/calendar/41/occurrences/2026-10-31',
+    options: { keepalive: true },
+  }]);
+});
+
 test('orphan confirmation retries the exact count the user confirmed', async () => {
   const attempts = [];
   const confirmations = [];
@@ -424,6 +438,23 @@ test('a stale orphan count requires a fresh confirmation before another retry', 
   assert.deepEqual(attempts, [undefined, 2, 3]);
   assert.deepEqual(confirmations, [2, 3]);
   assert.equal(result.data.id, 41);
+});
+
+test('orphan confirmation stops after three changing conflicts', async () => {
+  let count = 0;
+  await assert.rejects(
+    recurrenceScope.withCalendarOrphanConfirmation(async () => {
+      const error = new Error('conflict');
+      error.status = 409;
+      error.data = {
+        conflict: 'calendar_override_orphans',
+        orphaned_override_count: ++count,
+      };
+      throw error;
+    }, async () => true),
+    /changed too many times/,
+  );
+  assert.equal(count, 3);
 });
 
 // --------------------------------------------------------

@@ -6,7 +6,7 @@
 
 import { api } from '/api.js';
 import { renderRRuleFields, bindRRuleEvents, getRRuleValues, recurrenceRow } from '/rrule-ui.js';
-import { openModal as openSharedModal, closeModal, confirmModal, advancedSection, wireBlurValidation, reportFieldError } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, confirmModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError } from '/components/modal.js';
 import { attachOverlay } from '/utils/overlay-history.js';
 import { openDetailView, visibilityRow, assignedRow } from '/components/detail-view.js';
 import { stagger, wireScrollFade, scheduleUndoableDelete } from '/utils/ux.js';
@@ -22,6 +22,7 @@ import {
   isExternalRecurringSeries,
   isLocalRecurringSeries,
   requestCalendarOccurrenceMutation,
+  requestCalendarOccurrenceDelete,
   requiresWholeSeriesConfirmation,
   shiftEndForStart,
   shiftSeriesStart,
@@ -4581,14 +4582,14 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
 }
 
 function confirmCalendarOverrideOrphans(count) {
-  return confirmModal(t('calendar.overrideOrphanConfirmTitle', { count }), {
+  return confirmOverModal(t('calendar.overrideOrphanConfirmTitle', { count }), {
     detail: t('calendar.overrideOrphanConfirmDetail'),
     confirmLabel: t('calendar.overrideOrphanConfirmAction'),
   });
 }
 
 function confirmLocalWholeSeriesEdit(event) {
-  return confirmModal(t('calendar.editWholeSeriesOnlyTitle'), {
+  return confirmOverModal(t('calendar.editWholeSeriesOnlyTitle'), {
     detail: t('calendar.editWholeSeriesOnlyDetail', { title: event.title }),
     confirmLabel: t('calendar.editWholeSeriesOnlyConfirm'),
   });
@@ -5058,7 +5059,6 @@ function recurringDeleteChoice(event) {
  * das erste der Serie, verschwindet sie ganz. Optimistisch + Undo.
  */
 async function deleteThisAndFollowing(event) {
-  const target = calendarOccurrenceDeleteTarget(event, 'following');
   scheduleCalendarDeleteWithUndo({
     state,
     deleteScope: {
@@ -5069,7 +5069,9 @@ async function deleteThisAndFollowing(event) {
     },
     message: t('calendar.deletedToast'),
     schedule: scheduleUndoableDelete,
-    requestDelete: ({ keepalive }) => api.delete(target.path, { keepalive }),
+    requestDelete: ({ keepalive }) => requestCalendarOccurrenceDelete({
+      api, event, scope: 'following', keepalive,
+    }),
     isViewActive: () => Boolean(_container?.isConnected),
     reloadEvents: reloadCalendarRangeAfterDelete,
     handleError: (err) => window.yuvomi?.showToast(
@@ -5085,7 +5087,6 @@ async function deleteThisAndFollowing(event) {
  * Entfernung und Undo-Toast wie beim regulären Löschen.
  */
 async function deleteSingleOccurrence(event) {
-  const target = calendarOccurrenceDeleteTarget(event, 'this');
   scheduleCalendarDeleteWithUndo({
     state,
     deleteScope: {
@@ -5096,7 +5097,9 @@ async function deleteSingleOccurrence(event) {
     },
     message: t('calendar.deletedToast'),
     schedule: scheduleUndoableDelete,
-    requestDelete: ({ keepalive }) => api.delete(target.path, { keepalive }),
+    requestDelete: ({ keepalive }) => requestCalendarOccurrenceDelete({
+      api, event, scope: 'this', keepalive,
+    }),
     isViewActive: () => Boolean(_container?.isConnected),
     reloadEvents: reloadCalendarRangeAfterDelete,
     handleError: (err) => window.yuvomi?.showToast(

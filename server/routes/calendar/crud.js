@@ -499,7 +499,6 @@ function rejectLinkedOccurrenceResource(res, event, req) {
     db.get(),
     parent,
     getUserId(req),
-    isAdminUser(req),
   );
   if (!eligibility.eligible) {
     const unauthorized = eligibility.reason === 'not_authorized';
@@ -842,7 +841,6 @@ router.put('/:id', async (req, res) => {
         db.get(),
         event,
         getUserId(req),
-        isAdminUser(req),
       ).eligible;
     if (linkedOverrideCount > 0
         || Object.hasOwn(req.body, 'confirmed_orphan_count')
@@ -972,7 +970,7 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
         { status: 404, code: 'calendar_series_not_found' },
       ));
     }
-    const eligibility = isEligibleLocalSeries(db.get(), master, actorId, isAdmin);
+    const eligibility = isEligibleLocalSeries(db.get(), master, actorId);
     if (!eligibility.eligible) {
       const unauthorized = eligibility.reason === 'not_authorized';
       return sendCalendarOccurrenceError(res, new CalendarOccurrenceError(
@@ -1115,7 +1113,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
         { status: 404, code: 'calendar_series_not_found' },
       ));
     }
-    const eligibility = isEligibleLocalSeries(db.get(), master, actorId, isAdmin);
+    const eligibility = isEligibleLocalSeries(db.get(), master, actorId);
     if (!eligibility.eligible) {
       const unauthorized = eligibility.reason === 'not_authorized';
       return sendCalendarOccurrenceError(res, new CalendarOccurrenceError(

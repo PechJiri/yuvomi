@@ -65,6 +65,9 @@ d2.exec(`CREATE TABLE users (
   created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '');`);
 d2.exec(MIGRATIONS_SQL[10]);
 d2.exec(MIGRATIONS_SQL[11]);
+d2.exec(`CREATE VIRTUAL TABLE search_index USING fts5(
+  entity UNINDEXED, entity_id UNINDEXED, title, body
+);`); // migration 190 rebuilds the event slice
 d2.exec(MIGRATIONS_SQL[27]); // legacy calendar attachment bodies
 d2.exec(MIGRATIONS_SQL[61]);
 d2.exec("ALTER TABLE calendar_events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'all';");
@@ -219,7 +222,7 @@ test('buildFeed: EXDATE mit VALUE=DATE für Ganztags-Serie (#489)', () => {
   assert(ics.includes('EXDATE;VALUE=DATE:20260309'), 'EXDATE (Ganztags) fehlt: ' + ics);
 });
 
-test('buildFeed: Ganztags-Override nutzt Master-UID und denselben VALUE=DATE-Slot wie EXDATE', () => {
+test('buildFeed: Ganztags-Override nutzt Master-UID und RECURRENCE-ID ohne gepaarte EXDATE', () => {
   const masterId = d2.prepare(`
     INSERT INTO calendar_events
       (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,created_by)
@@ -240,7 +243,7 @@ test('buildFeed: Ganztags-Override nutzt Master-UID und denselben VALUE=DATE-Slo
   assert(child, 'Replacement-VEVENT fehlt: ' + ics);
   assert(master.includes(`UID:event-${masterId}@yuvomi`), 'Master-UID falsch: ' + master);
   assert(master.includes('RRULE:FREQ=DAILY;COUNT=4'), 'Master-RRULE fehlt: ' + master);
-  assert(master.includes('EXDATE;VALUE=DATE:20260802'), 'Master-EXDATE falsch: ' + master);
+  assert(!master.includes('EXDATE;VALUE=DATE:20260802'), 'Linked slot darf nicht zugleich EXDATE sein: ' + master);
   assert(child.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss Master-UID nutzen: ' + child);
   assert(!child.includes(`UID:event-${childId}@yuvomi`), 'Replacement darf keine Child-UID nutzen: ' + child);
   assert(child.includes('RECURRENCE-ID;VALUE=DATE:20260802'), 'RECURRENCE-ID passt nicht zum EXDATE-Slot: ' + child);
@@ -248,7 +251,7 @@ test('buildFeed: Ganztags-Override nutzt Master-UID und denselben VALUE=DATE-Slo
   assert(!child.includes('RRULE:'), 'Replacement darf keine RRULE tragen: ' + child);
 });
 
-test('buildFeed: naiver Override teilt Master-UID und Feed-Zonen-Slot mit EXDATE', () => {
+test('buildFeed: naiver Override nutzt Master-UID und Feed-Zonen-Slot ohne gepaarte EXDATE', () => {
   const masterId = d2.prepare(`
     INSERT INTO calendar_events
       (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,created_by)
@@ -265,7 +268,7 @@ test('buildFeed: naiver Override teilt Master-UID und Feed-Zonen-Slot mit EXDATE
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);
   const master = eventBlock(ics, 'OverrideFloatingMaster');
   const child = eventBlock(ics, 'OverrideFloatingMoved');
-  assert(master?.includes('EXDATE;TZID=Europe/Madrid:20260902T093000'), 'Master-EXDATE falsch: ' + master);
+  assert(!master?.includes('EXDATE;TZID=Europe/Madrid:20260902T093000'), 'Linked slot darf nicht zugleich EXDATE sein: ' + master);
   assert(child, 'Replacement-VEVENT fehlt: ' + ics);
   assert(child.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss Master-UID nutzen: ' + child);
   assert(!child.includes(`UID:event-${childId}@yuvomi`), 'Replacement darf keine Child-UID nutzen: ' + child);
@@ -275,7 +278,7 @@ test('buildFeed: naiver Override teilt Master-UID und Feed-Zonen-Slot mit EXDATE
   assert(!child.includes('RRULE:'), 'Replacement darf keine RRULE tragen: ' + child);
 });
 
-test('buildFeed: TZID-Override teilt Master-UID und zonengleichen Slot mit EXDATE', () => {
+test('buildFeed: TZID-Override nutzt Master-UID und zonengleichen Slot ohne gepaarte EXDATE', () => {
   const masterId = d2.prepare(`
     INSERT INTO calendar_events
       (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,tzid,created_by)
@@ -292,7 +295,7 @@ test('buildFeed: TZID-Override teilt Master-UID und zonengleichen Slot mit EXDAT
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);
   const master = eventBlock(ics, 'OverrideTzidMaster');
   const child = eventBlock(ics, 'OverrideTzidMoved');
-  assert(master?.includes('EXDATE;TZID=Europe/Berlin:20261025T100000'), 'Master-EXDATE falsch: ' + master);
+  assert(!master?.includes('EXDATE;TZID=Europe/Berlin:'), 'Linked slot darf nicht zugleich EXDATE sein: ' + master);
   assert(child, 'Replacement-VEVENT fehlt: ' + ics);
   assert(child.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss Master-UID nutzen: ' + child);
   assert(!child.includes(`UID:event-${childId}@yuvomi`), 'Replacement darf keine Child-UID nutzen: ' + child);
@@ -319,7 +322,7 @@ test('buildFeed: TZID-Override nutzt bei positivem Mitternachtsversatz den Basis
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);
   const master = eventBlock(ics, 'OverrideTokyoMaster');
   const child = eventBlock(ics, 'OverrideTokyoMoved');
-  assert(master?.includes('EXDATE;TZID=Asia/Tokyo:20260108T080000'), 'EXDATE muss den lokalen Basis-Instant nutzen: ' + master);
+  assert(!master?.includes('EXDATE;TZID=Asia/Tokyo:'), 'Linked slot darf nicht zugleich EXDATE sein: ' + master);
   assert(child?.includes('RECURRENCE-ID;TZID=Asia/Tokyo:20260108T080000'), 'RECURRENCE-ID muss den lokalen Basis-Instant nutzen: ' + child);
 });
 
@@ -340,7 +343,7 @@ test('buildFeed: TZID-Override nutzt bei negativem Mitternachtsversatz den DST-B
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);
   const master = eventBlock(ics, 'OverrideLosAngelesMaster');
   const child = eventBlock(ics, 'OverrideLosAngelesMoved');
-  assert(master?.includes('EXDATE;TZID=America/Los_Angeles:20260308T183000'), 'EXDATE muss den DST-korrigierten Basis-Instant nutzen: ' + master);
+  assert(!master?.includes('EXDATE;TZID=America/Los_Angeles:'), 'Linked slot darf nicht zugleich EXDATE sein: ' + master);
   assert(child?.includes('RECURRENCE-ID;TZID=America/Los_Angeles:20260308T183000'), 'RECURRENCE-ID muss den DST-korrigierten Basis-Instant nutzen: ' + child);
 });
 
@@ -364,7 +367,7 @@ test('buildFeed: verschobener Ersatz behält seinen abgelaufenen Master im Feed'
   assert(master, 'referenzierter abgelaufener Master fehlt: ' + ics);
   assert(master.includes(`UID:event-${masterId}@yuvomi`), 'Master-UID fehlt: ' + master);
   assert(master.includes('RRULE:FREQ=DAILY;UNTIL=20250102'), 'Master-RRULE fehlt: ' + master);
-  assert(master.includes('EXDATE;VALUE=DATE:20250102'), 'Master-EXDATE fehlt: ' + master);
+  assert(!master.includes('EXDATE;VALUE=DATE:20250102'), 'Linked slot darf nicht zugleich EXDATE sein: ' + master);
   assert(child?.includes(`UID:event-${masterId}@yuvomi`), 'Replacement muss die Master-UID nutzen: ' + child);
   assert(child.includes('RECURRENCE-ID;VALUE=DATE:20250102'), 'Replacement-Slot fehlt: ' + child);
 });
@@ -643,6 +646,14 @@ test('buildFeed: EXDATE einer TZID-Serie trägt TZID + lokale Zeit', () => {
   d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2025-12-19')`).run(id);
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);
   assert(ics.includes('EXDATE;TZID=Europe/Berlin:20251219T072500'), 'EXDATE;TZID (lokal) fehlt: ' + ics);
+  d2.prepare(`DELETE FROM calendar_events WHERE id = ?`).run(id);
+});
+
+test('buildFeed: unerreichbare TZID-EXDATE bleibt exportierbar statt den Feed zu beenden', () => {
+  const id = d2.prepare(`INSERT INTO calendar_events (title,start_datetime,all_day,external_source,recurrence_rule,tzid,created_by) VALUES ('LegacyTZEx','2025-09-26T05:25:00Z',0,'apple','FREQ=WEEKLY;COUNT=1',?, ?)`).run('Europe/Berlin', u1).lastInsertRowid;
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2025-12-20')`).run(id);
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  assert(ics.includes('EXDATE;TZID=Europe/Berlin:20251220T072500'), 'historische EXDATE muss erhalten bleiben: ' + ics);
   d2.prepare(`DELETE FROM calendar_events WHERE id = ?`).run(id);
 });
 

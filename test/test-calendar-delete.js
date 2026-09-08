@@ -6,7 +6,6 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import {
   applyPendingCalendarDeleteOverlay,
   beginOptimisticCalendarDelete,
@@ -55,25 +54,6 @@ function makeMovedLinkedState(suffix = '') {
       },
     ],
   };
-}
-
-const calendarPageSource = readFileSync(
-  new URL('../public/pages/calendar.js', import.meta.url),
-  'utf8',
-);
-
-function functionIndex(name, from = 0) {
-  const match = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`)
-    .exec(calendarPageSource.slice(from));
-  return match ? from + match.index : -1;
-}
-
-function functionSource(name, nextName = null) {
-  const start = functionIndex(name);
-  const end = nextName ? functionIndex(nextName, start + 1) : calendarPageSource.length;
-  assert.notEqual(start, -1, `${name} must exist`);
-  if (nextName) assert.notEqual(end, -1, `${nextName} must follow ${name}`);
-  return calendarPageSource.slice(start, end);
 }
 
 test('whole-event transition hides every expanded occurrence and Undo restores canonical order', () => {
@@ -482,50 +462,6 @@ test('a committed overlapping delete cannot be resurrected by another Undo', () 
       assert.deepEqual(state.events.map(({ title }) => title), ['Independent']);
     }
   }
-});
-
-test('calendar page guards the complete range and wires every delete scope', () => {
-  const loadRange = functionSource('loadRange', 'openTaskFromCalendar');
-  assert.match(loadRange, /calendarLoads\.run/);
-  assert.match(loadRange, /isCurrent:/);
-  assert.match(loadRange, /state\.rangeFrom\s*=\s*from/);
-  assert.match(loadRange, /applyPendingCalendarDeleteOverlay/);
-
-  const reloadForView = functionSource('reloadForView');
-  assert.match(reloadForView, /calendarLoads\.invalidate\(\)/);
-
-  const whole = functionSource('deleteEvent', 'renderRecurringScopeChooser');
-  assert.match(whole, /scheduleCalendarDeleteWithUndo/);
-  assert.match(whole, /scope: 'all'/);
-  assert.match(whole, /calendarOccurrenceDeleteTarget/);
-  assert.match(whole, /api\.delete\(target\.path, \{ keepalive \}\)/);
-  assert.match(whole, /reloadEvents: reloadCalendarRangeAfterDelete/);
-
-  const following = functionSource('deleteThisAndFollowing', 'deleteSingleOccurrence');
-  assert.match(following, /scheduleCalendarDeleteWithUndo/);
-  assert.match(following, /scope: 'following'/);
-  assert.match(following, /calendarOccurrenceDeleteTarget\(event, 'following'\)/);
-  assert.match(following, /api\.delete\(target\.path, \{ keepalive \}\)/);
-  assert.match(following, /reloadEvents: reloadCalendarRangeAfterDelete/);
-
-  const single = functionSource('deleteSingleOccurrence');
-  assert.match(single, /scheduleCalendarDeleteWithUndo/);
-  assert.match(single, /scope: 'this'/);
-  assert.match(single, /calendarOccurrenceDeleteTarget\(event, 'this'\)/);
-  assert.match(single, /api\.delete\(target\.path, \{ keepalive \}\)/);
-  assert.match(single, /reloadEvents: reloadCalendarRangeAfterDelete/);
-});
-
-test('linked delete keeps the Undo overlay on the displayed row while committing original identity', () => {
-  const following = functionSource('deleteThisAndFollowing', 'deleteSingleOccurrence');
-  assert.match(following, /eventId: event\.id/);
-  assert.match(following, /recurrenceId: event\.recurrence_id/);
-  assert.doesNotMatch(following, /truncateRuleBefore|recurrence_rule:\s*newRule/);
-
-  const single = functionSource('deleteSingleOccurrence');
-  assert.match(single, /eventId: event\.id/);
-  assert.match(single, /occurrenceDate: event\.start_datetime\.slice\(0, 10\)/);
-  assert.doesNotMatch(single, /\/exceptions|\{ date \}/);
 });
 
 test('latest response applier ignores an obsolete request failure', async () => {

@@ -545,6 +545,16 @@ describe('Outlook auto-sync', () => {
     outlook.updateAccount(accountA, { autoSyncCalendarId: 'yuvomi-cal-A' });
   });
 
+  it('updateAccount participates in an existing transaction', () => {
+    db.transaction(() => {
+      outlook.updateAccount(accountA, { ownerUserId: anna });
+    })();
+    assert.equal(
+      db.prepare('SELECT owner_user_id FROM outlook_accounts WHERE id = ?').get(accountA).owner_user_id,
+      Number(anna),
+    );
+  });
+
   it('updateAccount lehnt Auto-Sync-Aktivierung bei sichtbaren verknüpften Ausnahmen atomar ab', () => {
     const accountId = db.prepare(`
       INSERT INTO outlook_accounts
@@ -580,7 +590,7 @@ describe('Outlook auto-sync', () => {
     db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
   });
 
-  it('handleCallback reaktiviert konfigurierten Auto-Sync nicht über verknüpfte Ausnahmen hinweg', async () => {
+  it('handleCallback erneuert Tokens trotz verknüpfter Ausnahmen und löscht needs_reauth', async () => {
     const accountId = db.prepare(`
       INSERT INTO outlook_accounts
         (name, ms_user_id, email, access_token, refresh_token, token_expiry,
@@ -611,18 +621,18 @@ describe('Outlook auto-sync', () => {
           mail: 'new@example.com',
         });
       }
+      if (call.method === 'GET' && call.url.includes('/me/calendars?')) {
+        return jsonRes(200, { value: [{ id: 'reauth-cal', name: 'Reauth', canEdit: true }] });
+      }
       throw new Error(`Unexpected request: ${call.method} ${call.url}`);
     });
 
-    await assert.rejects(
-      outlook.handleCallback('reauth-code', fetchImpl),
-      (err) => err.code === 'outlook_auto_sync_overrides' && err.linkedOverrideCount === 1
-    );
+    await outlook.handleCallback('reauth-code', fetchImpl);
     const stored = db.prepare(`
       SELECT needs_reauth, access_token, refresh_token FROM outlook_accounts WHERE id = ?
     `).get(accountId);
-    assert.deepEqual(stored, { needs_reauth: 1, access_token: 'old-access', refresh_token: 'old-refresh' });
-    assert.equal(fetchImpl.calls.length, 2, 'Kalenderliste wird nach dem Konflikt nicht geladen');
+    assert.deepEqual(stored, { needs_reauth: 0, access_token: 'new-access', refresh_token: 'new-refresh' });
+    assert.equal(fetchImpl.calls.length, 3, 'po obnovení tokenů se znovu načte výběr kalendářů');
 
     db.prepare('DELETE FROM calendar_events WHERE id = ?').run(masterId);
     db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);

@@ -28,8 +28,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 );`);
 db.exec(MIGRATIONS_SQL[1]);
 db.exec(MIGRATIONS_SQL[44]); // FTS5-Index + Event-Trigger (nur Titel/Beschreibung)
-db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
-db.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides
 
 console.log('\n[Calendar-Search-Test] FTS über Titel/Beschreibung/Ort (#471)\n');
 
@@ -70,6 +68,8 @@ test('vor Migration 76 ist der Ort nicht indexiert', () => {
 
 // Migration 76 anwenden: Trigger neu, Ort in den Body, Bestandszeilen backfillen.
 db.exec(MIGRATIONS_SQL[76]);
+db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
+db.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides + occurrence-aware FTS
 
 test('Migration 76 backfillt bestehende Termine mit ihrem Ort', () => {
   const hits = search('Zahnarztpraxis');
@@ -160,6 +160,36 @@ test('Kalender-Suche löst einen verschobenen FTS-Treffer gegen den aktuellen Ma
   assert(result[0].start_datetime === '2030-06-10T11:00:00', 'verschobener Start fehlt');
   assert(result[0].series_id === Number(masterId), 'Serien-ID fehlt');
   assert(result[0].recurrence_id === '2030-06-01', 'Original-Slot fehlt');
+});
+
+test('vererbter Child-Text dupliziert den Master nicht, expliziter Titel bleibt auffindbar', () => {
+  const masterId = db.prepare(`
+    INSERT INTO calendar_events (title, start_datetime, recurrence_rule, created_by)
+    VALUES ('Qzxshared series', '2031-01-01T09:00:00', 'FREQ=DAILY;COUNT=4', ?)
+  `).run(uid).lastInsertRowid;
+  for (const [slot, start] of [
+    ['2031-01-02', '2031-01-02T11:00:00'],
+    ['2031-01-03', '2031-01-03T11:00:00'],
+  ]) {
+    db.prepare(`
+      INSERT INTO calendar_events
+        (title, start_datetime, recurrence_parent_id, recurrence_id, overridden_fields, created_by)
+      VALUES ('Qzxshared series', ?, ?, ?, '["start_datetime"]', ?)
+    `).run(start, masterId, slot, uid);
+  }
+  const titledChild = db.prepare(`
+    INSERT INTO calendar_events
+      (title, start_datetime, recurrence_parent_id, recurrence_id, overridden_fields, created_by)
+    VALUES ('Qzxexplicit child', '2031-01-04T11:00:00', ?, '2031-01-04',
+            '["title","start_datetime"]', ?)
+  `).run(masterId, uid).lastInsertRowid;
+
+  const shared = search('Qzxshared');
+  assert(shared.length === 1 && shared[0].id === Number(masterId),
+    `sdílený zděděný titul má vrátit jen master, přišlo ${shared.length}`);
+  const explicit = search('Qzxexplicit');
+  assert(explicit.length === 1 && explicit[0].id === Number(titledChild),
+    'explicitně změněný child titul musí zůstat dohledatelný');
 });
 
 console.log(`\n[Calendar-Search-Test] ${passed} bestanden, ${failed} fehlgeschlagen\n`);

@@ -13,6 +13,9 @@ import {
   dropInheritedEventReminders, eventAuthorId, fanOutEventReminders,
 } from './event-reminder-fanout.js';
 import { utcToWall } from '../utils/timezone.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('CalendarOccurrenceOverrides');
 
 export const OVERRIDE_FIELDS = Object.freeze([
   'title',
@@ -282,9 +285,35 @@ export function resolveEventRows(database, rows, { loadMasters = loadOccurrenceM
 
   const masters = loadMasters(database, parentIds);
   const mastersById = new Map(masters.map((master) => [Number(master.id), master]));
-  return rows.map((row) => isLinkedOccurrence(row)
-    ? resolveOccurrence(database, row, mastersById.get(Number(row.recurrence_parent_id)))
-    : row);
+  return rows.map((row) => {
+    if (!isLinkedOccurrence(row)) return row;
+    try {
+      return resolveOccurrence(database, row, mastersById.get(Number(row.recurrence_parent_id)));
+    } catch (error) {
+      if (!(error instanceof CalendarOccurrenceError)
+          || error.code !== 'invalid_recurrence_id') throw error;
+      log.warn('Linked calendar occurrence is no longer reachable; serving it standalone.', {
+        eventId: row.id,
+        recurrenceParentId: row.recurrence_parent_id,
+        recurrenceId: row.recurrence_id,
+        error: error.message,
+      });
+      return {
+        ...row,
+        recurrence_parent_id: null,
+        recurrence_id: null,
+        overridden_fields: null,
+        recurrence_rule: null,
+        series_id: Number(row.id),
+        is_occurrence_override: false,
+        occurrence_override_unreachable: true,
+        assignment_owner_id: Number(row.id),
+        attachment_owner_id: Number(row.id),
+        reminder_owner_id: Number(row.id),
+        reminder_anchor_start: row.start_datetime,
+      };
+    }
+  });
 }
 
 /** Loads linked replacements by series owner and their displayed overlap. */
@@ -460,10 +489,19 @@ export function classifyLocalSeries(database, row) {
   return classifyLocalSeriesBatch(database, [row]).get(Number(row.id));
 }
 
+function actorCanSeeSeries(database, row, actorId) {
+  // Visibility deliberately has no admin bypass (#474). Occurrence mutations
+  // must use the same policy as the whole-series routes that loaded the row.
+  if (Number(row.created_by) === Number(actorId) || row.visibility === 'all') return true;
+  if (row.visibility !== 'assignees') return false;
+  return !!database.prepare(`
+    SELECT 1 FROM event_assignments WHERE event_id = ? AND user_id = ?
+  `).get(row.id, actorId);
+}
+
 /** Builds request-local capability metadata once per distinct recurring master. */
 export function buildRecurrenceCapabilityMap(database, events, {
   actorId = null,
-  isAdmin = false,
 } = {}) {
   const mastersById = new Map();
   for (const event of events ?? []) {
@@ -493,18 +531,20 @@ export function buildRecurrenceCapabilityMap(database, events, {
       master,
       isLocalRecurringSeries: classification.eligible,
       canOverrideOccurrence: classification.eligible
-        && (isAdmin || Number(master.created_by) === Number(actorId)),
+        && actorCanSeeSeries(database, master, actorId),
     });
   }
   return capabilities;
 }
 
-/** Adds actor authorization to the structural occurrence-capability classification. */
-export function isEligibleLocalSeries(database, row, actorId, isAdmin) {
+/** Returns structural eligibility; route visibility supplies actor authorization. */
+export function isEligibleLocalSeries(database, row, actorId) {
   const classification = classifyLocalSeries(database, row);
   if (!classification.eligible) return classification;
-  if (!isAdmin && row.created_by !== actorId) return { eligible: false, reason: 'not_authorized' };
-  return { eligible: true, reason: null };
+  if (!actorCanSeeSeries(database, row, actorId)) {
+    return { eligible: false, reason: 'not_authorized' };
+  }
+  return classification;
 }
 
 const SCALAR_OVERRIDE_FIELDS = Object.freeze([
@@ -512,15 +552,22 @@ const SCALAR_OVERRIDE_FIELDS = Object.freeze([
   'color', 'icon', 'visibility', 'countdown',
 ]);
 
+let fallbackTransactionId = 0;
+
 function runTransaction(database, work) {
   if (typeof database.transaction === 'function') return database.transaction(work)();
-  database.exec('BEGIN');
+  // node:sqlite fixtures do not expose better-sqlite3's transaction helper.
+  // SAVEPOINT preserves identical atomicity and remains valid inside an outer
+  // transaction, unlike a raw BEGIN/COMMIT fallback.
+  const savepoint = `calendar_occurrence_${++fallbackTransactionId}`;
+  database.exec(`SAVEPOINT ${savepoint}`);
   try {
     const result = work();
-    database.exec('COMMIT');
+    database.exec(`RELEASE SAVEPOINT ${savepoint}`);
     return result;
   } catch (error) {
-    database.exec('ROLLBACK');
+    database.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    database.exec(`RELEASE SAVEPOINT ${savepoint}`);
     throw error;
   }
 }
@@ -537,7 +584,7 @@ function loadSeriesForMutation(database, seriesId, actorId, isAdmin, authorizeAc
     });
   }
   const eligibility = authorizeActor
-    ? isEligibleLocalSeries(database, master, actorId, isAdmin)
+    ? isEligibleLocalSeries(database, master, actorId)
     : classifyLocalSeries(database, master);
   if (!eligibility.eligible) {
     const unauthorized = eligibility.reason === 'not_authorized';
@@ -763,7 +810,7 @@ function replaceAssignments(database, eventId, userIds) {
   const removed = before.filter((userId) => !userIds.includes(userId));
   dropInheritedEventReminders(database, eventId, removed);
   const authorId = eventAuthorId(database, eventId);
-  if (authorId !== null) fanOutEventReminders(database, eventId, authorId);
+  if (authorId !== null) fanOutEventReminders(database, eventId, authorId, { dropDerivedWhenOwn: true });
 }
 
 function replaceReminders(database, eventId, actorId, anchorStart, offsets) {
@@ -1000,7 +1047,7 @@ export function upsertOccurrenceOverride(database, {
     if (remindersMayDiffer) {
       pruneInheritedRemindersToAssignments(database, childId, effectiveAssignments);
     }
-    if (remindersMayDiffer) fanOutEventReminders(database, childId, master.created_by);
+    if (remindersMayDiffer) fanOutEventReminders(database, childId, master.created_by, { dropDerivedWhenOwn: true });
 
     if (remindersMayDiffer && sameReminderState(
       reminderState(database, childId, materialized.start_datetime),
@@ -1494,7 +1541,7 @@ export function splitSeries(database, {
         canonicalOffsets(requestedReminderOffsets),
       );
     }
-    fanOutEventReminders(database, successorId, master.created_by);
+    fanOutEventReminders(database, successorId, master.created_by, { dropDerivedWhenOwn: true });
     const insertException = database.prepare(`
       INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date)
       VALUES (?, ?)
@@ -1650,7 +1697,7 @@ function materializeDetachedChild(database, child, master, {
       targetAnchor: resolved.start_datetime,
     });
   }
-  fanOutEventReminders(database, child.id, master.created_by);
+  fanOutEventReminders(database, child.id, master.created_by, { dropDerivedWhenOwn: true });
   const inheritsAttachment = !fields.includes('attachment')
     && attachmentDocumentExists(database, resolved.attachment_document_id);
   const detachedAttachment = inheritsAttachment
@@ -1883,7 +1930,7 @@ export function updateSeriesWithOverrides(database, {
         anchor,
         canonicalOffsets(requestedReminderOffsets),
       );
-      fanOutEventReminders(database, master.id, master.created_by);
+      fanOutEventReminders(database, master.id, master.created_by, { dropDerivedWhenOwn: true });
     }
     const updated = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(master.id);
     if (createdAttachment !== undefined) {
