@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The schedule overview now sets its blocks in the same size as the calendar** (#1065). A block
+  in the overview carries what a calendar tile carries - a title plus one line of time and custom
+  field - but stood two type steps smaller than one, in narrower columns, which made a school
+  timetable hard to read at a glance. It now uses the same `--text-xs` the calendar uses. The
+  height was already there: a 45-minute lesson is 42px tall on the condensed hour scale, and two
+  lines cost about 35px including padding; measured across 60 blocks, none clips in either
+  direction. Putting the custom field on a third line of its own, as the report asked, would need
+  about 51px per block and therefore a taller hour scale - that is a change to the scale, not to
+  the block, and is not part of this fix.
+
 ## [2.65.1] - 2026-09-08
 
 ### Security
