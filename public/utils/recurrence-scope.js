@@ -32,6 +32,11 @@ export function canOverrideCalendarOccurrence(event) {
   return event?.can_override_occurrence === true;
 }
 
+/** Whether this actor must acknowledge that only whole-series actions are available. */
+export function requiresWholeSeriesConfirmation(event) {
+  return isLocalRecurringSeries(event) && !canOverrideCalendarOccurrence(event);
+}
+
 /**
  * Das Gegenstück: wiederkehrend, aber einem anderen Kalender gehörend. Genau
  * dieser Fall löscht mehr, als der angetippte Termin vermuten lässt, und muss

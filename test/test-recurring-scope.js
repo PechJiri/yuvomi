@@ -20,7 +20,7 @@ const { withoutBlockComments } = await import('./source-text.js');
 const recurrenceScope = await import('../public/utils/recurrence-scope.js');
 const { truncateRuleBefore, shiftSeriesStart, shiftEndForStart,
         isLocalRecurringSeries, isExternalRecurringSeries, canOverrideCalendarOccurrence,
-        followingMeansWholeSeries } = recurrenceScope;
+        followingMeansWholeSeries, requiresWholeSeriesConfirmation } = recurrenceScope;
 const { expandRecurringEvents } = await import('../server/services/calendar-events.js');
 
 // Der Server-Validator, gegen den gekürzte Regeln bestehen müssen.
@@ -205,6 +205,24 @@ test('canOverrideCalendarOccurrence remains actor-specific for a non-owner local
   assert.equal(isLocalRecurringSeries(visibleNonOwnerSeries), true);
   assert.equal(isExternalRecurringSeries(visibleNonOwnerSeries), false);
   assert.equal(canOverrideCalendarOccurrence(visibleNonOwnerSeries), false);
+});
+
+test('a structurally local series without occurrence authority requires a whole-series confirmation', () => {
+  const localNonOwnerSeries = {
+    recurrence_rule: RULE,
+    is_local_recurring_series: true,
+    can_override_occurrence: false,
+  };
+  assert.equal(requiresWholeSeriesConfirmation(localNonOwnerSeries), true);
+  assert.equal(requiresWholeSeriesConfirmation({
+    ...localNonOwnerSeries,
+    can_override_occurrence: true,
+  }), false);
+  assert.equal(requiresWholeSeriesConfirmation({
+    recurrence_rule: RULE,
+    is_local_recurring_series: false,
+    can_override_occurrence: false,
+  }), false);
 });
 
 test('isExternalRecurringSeries ist das Gegenstück, nicht die Verneinung', () => {
@@ -428,6 +446,33 @@ test('Eine fremde Serie wird nur gelöscht, wenn sie bestätigt wurde', () => {
   );
 });
 
+test('a local series without occurrence authority confirms edit and delete as whole-series actions', () => {
+  const deleteBody = requestDeleteEventBody();
+  const restrictedBranch = deleteBody.slice(deleteBody.indexOf('!canOverrideCalendarOccurrence('));
+  assert.match(
+    restrictedBranch,
+    /if\s*\(\s*await\s+confirmLocalWholeSeriesDelete\(event\)\s*\)\s*await\s+deleteEvent\(event\)/,
+    'restricted local series deletion is not conditional on the whole-series confirmation',
+  );
+
+  const saveStart = calendarSrc.indexOf('async function saveEvent(');
+  const saveEnd = calendarSrc.indexOf('\n}', saveStart);
+  const saveBody = calendarSrc.slice(saveStart, saveEnd);
+  assert.match(saveBody, /requiresWholeSeriesConfirmation\(event\)/);
+  assert.match(saveBody, /await\s+confirmLocalWholeSeriesEdit\(event\)/);
+
+  const renderStart = calendarSrc.indexOf('function buildEventModalContent(');
+  const renderEnd = calendarSrc.indexOf('\n}', renderStart);
+  const renderBody = calendarSrc.slice(renderStart, renderEnd);
+  assert.match(renderBody, /requiresWholeSeriesConfirmation\(event\)/);
+  assert.match(renderBody, /calendar\.wholeSeriesOnlyNotice/);
+  assert.match(
+    renderBody,
+    /isLocalRecurringSeries\(event\)\s*&&\s*canOverrideCalendarOccurrence\(event\)[\s\S]*renderRecurringScopeChooser/,
+    'occurrence scope chooser is not guarded by occurrence authority',
+  );
+});
+
 test('Jede fremde Serie bekommt die Auskunft, die auf sie zutrifft', () => {
   // Drei Faelle, drei verschiedene Wahrheiten. Nur bei Google, CalDAV und Apple
   // greift die Loeschung bis zur Quelle durch. Ein Geburtstagstermin ist das
@@ -484,6 +529,35 @@ test('Die Schlüssel beider Rückfragen stehen in allen Locales', () => {
   }
   const cs = JSON.parse(readFileSync(new URL('cs.json', dir), 'utf-8')).calendar;
   assert.equal(cs.deleteNameDayEventTitle, 'Odstranit svátek?');
+});
+
+test('whole-series-only warnings are meaningful in every locale and use no dash punctuation', () => {
+  const keys = [
+    'wholeSeriesOnlyNotice',
+    'editWholeSeriesOnlyTitle',
+    'editWholeSeriesOnlyDetail',
+    'editWholeSeriesOnlyConfirm',
+    'deleteWholeSeriesOnlyTitle',
+    'deleteWholeSeriesOnlyDetail',
+    'deleteWholeSeriesOnlyConfirm',
+  ];
+  const dir = new URL('../public/locales/', import.meta.url);
+  const locales = readdirSync(dir).filter((file) => file.endsWith('.json'));
+  assert.equal(locales.length, 24);
+  for (const file of locales) {
+    const cal = JSON.parse(readFileSync(new URL(file, dir), 'utf-8')).calendar;
+    for (const key of keys) {
+      assert.ok(typeof cal?.[key] === 'string' && cal[key].trim().length >= 4,
+        `${file}: calendar.${key} fehlt oder ist bedeutungslos`);
+      assert.doesNotMatch(cal[key], /[\u2010-\u2015]/, `${file}: calendar.${key} contains dash punctuation`);
+    }
+    assert.ok(cal.editWholeSeriesOnlyDetail.includes('{{title}}'), `${file}: edit detail omits title`);
+    assert.ok(cal.deleteWholeSeriesOnlyDetail.includes('{{title}}'), `${file}: delete detail omits title`);
+  }
+
+  const de = JSON.parse(readFileSync(new URL('de.json', dir), 'utf-8')).calendar;
+  assert.equal(de.editWholeSeriesOnlyTitle, 'Ganze Serie bearbeiten?');
+  assert.equal(de.deleteWholeSeriesOnlyTitle, 'Ganze Serie löschen?');
 });
 
 test('truncateRuleBefore behaelt "am letzten Tag des Monats" (#960)', async () => {

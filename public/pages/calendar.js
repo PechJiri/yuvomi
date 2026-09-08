@@ -22,6 +22,7 @@ import {
   isExternalRecurringSeries,
   isLocalRecurringSeries,
   requestCalendarOccurrenceMutation,
+  requiresWholeSeriesConfirmation,
   shiftEndForStart,
   shiftSeriesStart,
 } from '/utils/recurrence-scope.js';
@@ -4560,6 +4561,12 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
       ? renderRecurringScopeChooser('modal-edit', event.start_datetime.slice(0, 10))
       : ''}
 
+    ${isEdit && requiresWholeSeriesConfirmation(event) ? `
+      <p class="form-hint field-hint--warn" id="modal-whole-series-only" role="status">
+        <i data-lucide="alert-triangle" aria-hidden="true"></i>
+        <span>${t('calendar.wholeSeriesOnlyNotice')}</span>
+      </p>` : ''}
+
     ${renderCalendarReminderSection(reminder, event, isEdit ? [] : state.defaultReminders)}
 
     <div class="modal-panel__footer modal-panel__footer--plain">
@@ -4577,6 +4584,21 @@ function confirmCalendarOverrideOrphans(count) {
   return confirmModal(t('calendar.overrideOrphanConfirmTitle', { count }), {
     detail: t('calendar.overrideOrphanConfirmDetail'),
     confirmLabel: t('calendar.overrideOrphanConfirmAction'),
+  });
+}
+
+function confirmLocalWholeSeriesEdit(event) {
+  return confirmModal(t('calendar.editWholeSeriesOnlyTitle'), {
+    detail: t('calendar.editWholeSeriesOnlyDetail', { title: event.title }),
+    confirmLabel: t('calendar.editWholeSeriesOnlyConfirm'),
+  });
+}
+
+function confirmLocalWholeSeriesDelete(event) {
+  return confirmModal(t('calendar.deleteWholeSeriesOnlyTitle'), {
+    detail: t('calendar.deleteWholeSeriesOnlyDetail', { title: event.title }),
+    confirmLabel: t('calendar.deleteWholeSeriesOnlyConfirm'),
+    danger: true,
   });
 }
 
@@ -4648,6 +4670,10 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
     reportFieldError(endField, t('calendar.endBeforeStart'));
     return;
   }
+
+  if (mode === 'edit'
+      && requiresWholeSeriesConfirmation(event)
+      && !await confirmLocalWholeSeriesEdit(event)) return;
 
   saveBtn.disabled    = true;
   saveBtn.textContent = '…';
@@ -4982,7 +5008,7 @@ async function requestDeleteEvent(event) {
     return;
   }
   if (!canOverrideCalendarOccurrence(event)) {
-    await deleteEvent(event);
+    if (await confirmLocalWholeSeriesDelete(event)) await deleteEvent(event);
     return;
   }
   const choice = await recurringDeleteChoice(event);
