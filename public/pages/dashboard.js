@@ -2569,12 +2569,12 @@ async function loadTaskCategories() {
   return taskCategoriesCache;
 }
 
-async function loadNoteCategories() {
+async function loadNoteCategories(getCategories = (path) => api.get(path)) {
   try {
-    const res = await api.get('/notes/categories');
-    return Array.isArray(res?.data) ? res.data : [];
+    const res = await getCategories('/notes/categories');
+    return Array.isArray(res?.data) ? res.data : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -2651,14 +2651,21 @@ async function openExtensionWidgetOptions(id, meta, current = {}) {
 }
 
 /** Der Optionen-Dialog eines Widgets. Aufloesen mit den neuen Optionen oder null. */
-async function openWidgetOptions(id, current = {}) {
+async function openWidgetOptions(id, current = {}, { loadNotes = loadNoteCategories } = {}) {
   const extMeta = getExtensionWidgetMeta(id);
   if (extMeta?.optionsSchema) return openExtensionWidgetOptions(id, extMeta, current);
 
   const options = { ...current };
   const categories = id === 'tasks'
     ? await loadTaskCategories()
-    : id === 'notes' ? await loadNoteCategories() : [];
+    : id === 'notes' ? await loadNotes() : [];
+  // A missing catalog is different from a valid empty catalog. Closing with
+  // null makes the caller preserve current options instead of saving `{}` and
+  // silently erasing an existing category filter after a transient failure.
+  if (id === 'notes' && categories === null) {
+    window.yuvomi?.showToast(t('dashboard.loadError'), 'danger');
+    return null;
+  }
 
   const body = id === 'calendar'
     ? `
@@ -4786,7 +4793,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
   }
 }
 
-export const __test = { buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderScheduleWidget, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, renderDashboardOverview, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWallWeather, relativeDateLabel };
+export const __test = { buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderScheduleWidget, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, renderDashboardOverview, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWallWeather, relativeDateLabel, openWidgetOptions };
 
 // `signal` ist der Controller des Aufbaus, der die Wetterkarte gezeichnet hat
 // (#976/#977). Vorher las diese Funktion das Modul-Feld `_fabController` -

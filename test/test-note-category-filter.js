@@ -187,6 +187,7 @@ test('permission module rerender keeps capability controls in the editor', () =>
 test('notes UI keeps the approved category filter and editor contracts', () => {
   const source = readFileSync(new URL('../public/pages/notes.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../public/styles/notes.css', import.meta.url), 'utf8');
+  const layoutCss = readFileSync(new URL('../public/styles/layout.css', import.meta.url), 'utf8');
   assert.match(source, /data-clear-categories/);
   assert.match(source, /assignedCategoryIds/);
   assert.match(source, /role="combobox"/);
@@ -207,6 +208,8 @@ test('notes UI keeps the approved category filter and editor contracts', () => {
   assert.match(source.match(/async function reloadNotes\(\)[\s\S]*?\n\}/)?.[0] || '', /renderNotesAndFilters\(\)/);
   assert.match(css, /\.notes-filters[\s\S]*overflow-x:\s*auto/);
   assert.match(css, /notes-filter-group--categories[\s\S]*overflow-x:\s*auto/);
+  assert.match(layoutCss, /html\[data-module-readonly\][^\{]*\.notes-manage-categories[^{]*\{\s*display:\s*none\s*!important/,
+    'read-only Notes must not offer a category manager whose mutations will be rejected');
 });
 
 test('combobox keyboard handling stays inside the picker and keeps virtual focus', () => {
