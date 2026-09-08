@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A "last day of the month" series now leaves Yuvomi with a start date its own rule accepts**
+  (#986). A series created from a mid-month date stores `DTSTART` as entered - say 15 January -
+  together with `RRULE:FREQ=MONTHLY;BYMONTHDAY=-1`. Internally that is unambiguous, and the calendar
+  never shows the 15th. Outbound it was not: RFC 5545 3.8.5.3 calls the recurrence set of an
+  unsynchronized `DTSTART` *undefined*, so a subscribing client was free to render the 15th **and**
+  every month end - one occurrence more than Yuvomi shows. Every outbound path (ICS feed, CalDAV,
+  Apple, Google, Outlook) now emits the first date the rule actually matches.
+
+  The end moves with it. `end_datetime` is an absolute timestamp, not an offset: leaving it behind
+  would have produced an event that ends before it starts. It shifts by the same number of days, so
+  the duration and the stored time format survive untouched.
+
+  Two things stay exactly as they were. An **imported** series is handed back word for word (#756) -
+  a foreign calendar may carry an unsynchronized `DTSTART` on purpose, and Yuvomi is not the referee
+  on a round trip. And a `BYDAY` rule is left alone (#549), where a start on a weekend is a
+  deliberate, older decision. The transformation is read-only at the point of serialization: the
+  stored value never changes, which is what made the write-time attempt in #984 unworkable.
+
 ### Added
 
 - **A budget entry can name who is responsible for it** (#1057, first cut). One or more household

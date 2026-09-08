@@ -17,6 +17,7 @@ const log = createLogger('Outlook');
 import crypto from 'node:crypto';
 import * as db from '../db.js';
 import { parseRRule } from './recurrence.js';
+import { outboundEvent } from './outbound-dtstart.js';
 import { visibilityWhere } from './visibility.js';
 import { householdTimeZone } from '../utils/timezone.js';
 
@@ -539,7 +540,10 @@ function toGraphDateTime(dt, tz = outlookTimeZone()) {
  * sind, löst eine Zuweisungs-Änderung über den Content-Hash ein PATCH aus.
  * Kein Teilnehmer-/Reminder-/Farb-Mapping (PoC-Umfang).
  */
-function localEventToGraph(event, assigneeNames = [], tz = outlookTimeZone()) {
+function localEventToGraph(rawEvent, assigneeNames = [], tz = outlookTimeZone()) {
+  // Wie bei Google (#986): erst begradigen, dann ableiten - der Anker fuer
+  // rruleToGraphRecurrence haengt am selben Startdatum.
+  const event = outboundEvent(rawEvent);
   const allDay = !!event.all_day;
   const subject = assigneeNames.length
     ? `${event.title} (${assigneeNames.join(', ')})`
