@@ -120,7 +120,23 @@ export function calendarPaths() {
       get: op({ summary: 'List connected Outlook accounts', tag: 'Calendar', admin: true }),
     },
     '/api/v1/calendar/outlook/accounts/{id}': {
-      put: op({ summary: 'Update Outlook account (name, auto-sync calendar, owner)', tag: 'Calendar', admin: true, params: [idParam()], stateChanging: true, requestBody: jsonBody(null) }),
+      put: op({
+        summary: 'Update Outlook account (name, auto-sync calendar, owner)',
+        tag: 'Calendar',
+        admin: true,
+        params: [idParam()],
+        stateChanging: true,
+        requestBody: jsonBody(null),
+        responses: {
+          200: { description: 'Outlook account updated' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          409: {
+            description: 'Auto-sync activation conflicts with recurring series that have linked occurrence overrides',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/OutlookAutoSyncOverrideConflict' } } },
+          },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
       delete: op({ summary: 'Disconnect and delete Outlook account', tag: 'Calendar', admin: true, params: [idParam()], stateChanging: true }),
     },
     '/api/v1/calendar/outlook/accounts/{id}/calendars': {
@@ -143,7 +159,7 @@ export function calendarPaths() {
         ],
         stateChanging: true,
         description: 'Creates or updates a linked replacement for one original slot of an eligible local-only series. Scalar fields, assignments, attachments, and `reminder_offsets` are compared with the expanded series defaults. Saving no actual difference restores the normal series occurrence.',
-        requestBody: jsonBody('#/components/schemas/CalendarOccurrenceMutation'),
+        requestBody: jsonBody('#/components/schemas/CalendarOccurrenceOnlyMutation'),
         responses: {
           200: {
             description: 'Resolved calendar occurrence',
@@ -185,7 +201,7 @@ export function calendarPaths() {
         ],
         stateChanging: true,
         description: 'Truncates the original series before the selected original slot, creates a successor series, and reparents later linked replacements and deletion exceptions atomically.',
-        requestBody: jsonBody('#/components/schemas/CalendarOccurrenceMutation'),
+        requestBody: jsonBody('#/components/schemas/CalendarOccurrenceFollowingMutation'),
         responses: {
           200: {
             description: 'First occurrence updated as the whole series',

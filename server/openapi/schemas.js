@@ -11,6 +11,62 @@ const noteInputProperties = {
   category_ids: { type: 'array', maxItems: 50, uniqueItems: true, items: { type: 'integer', minimum: 1 } },
 };
 
+const calendarOccurrenceProperties = {
+  series_id: { type: 'integer', minimum: 1 },
+  recurrence_id: { type: 'string', format: 'date' },
+  is_occurrence_override: { type: 'boolean' },
+  is_local_recurring_series: { type: 'boolean' },
+  can_override_occurrence: { type: 'boolean' },
+  assignment_owner_id: { type: 'integer', minimum: 1 },
+  attachment_owner_id: { type: 'integer', minimum: 1 },
+  reminder_owner_id: { type: 'integer', minimum: 1 },
+  reminder_anchor_start: { $ref: '#/components/schemas/CalendarDateOrDateTime' },
+};
+
+const calendarOccurrenceMutationProperties = {
+  title: { type: 'string', maxLength: 200 },
+  description: { type: ['string', 'null'], maxLength: 5000 },
+  start_datetime: { $ref: '#/components/schemas/CalendarDateOrDateTime' },
+  end_datetime: {
+    oneOf: [
+      { $ref: '#/components/schemas/CalendarDateOrDateTime' },
+      { type: 'null' },
+    ],
+  },
+  all_day: { type: 'boolean' },
+  location: { type: ['string', 'null'], maxLength: 200 },
+  color: { type: ['string', 'null'], pattern: '^#[0-9A-Fa-f]{6}$' },
+  icon: { type: 'string' },
+  assigned_to: {
+    oneOf: [
+      { type: 'integer', minimum: 1 },
+      {
+        type: 'array',
+        uniqueItems: true,
+        items: { type: 'integer', minimum: 1 },
+      },
+      { type: 'null' },
+    ],
+  },
+  visibility: { type: 'string', enum: ['all', 'assignees', 'private'] },
+  countdown: { type: 'boolean' },
+  attachment_name: { type: ['string', 'null'] },
+  attachment_data: {
+    type: ['string', 'null'],
+    description: 'A base64 data URL for a replacement attachment, or null to remove it.',
+  },
+  remove_attachment: { type: 'boolean' },
+  document_folder_name: { type: 'string' },
+  document_name: { type: 'string' },
+  document_description: { type: ['string', 'null'] },
+  reminder_offsets: {
+    type: 'array',
+    maxItems: 5,
+    uniqueItems: true,
+    items: { type: 'integer', minimum: 0 },
+  },
+};
+
 export const schemas = {
         ApiError: {
           type: 'object',
@@ -29,6 +85,16 @@ export const schemas = {
             code: { type: 'integer', const: 409 },
             conflict: { type: 'string', const: 'calendar_override_orphans' },
             orphaned_override_count: { type: 'integer', minimum: 0 },
+          },
+        },
+        OutlookAutoSyncOverrideConflict: {
+          type: 'object',
+          required: ['error', 'code', 'conflict', 'linked_override_count'],
+          properties: {
+            error: { type: 'string' },
+            code: { type: 'integer', const: 409 },
+            conflict: { type: 'string', const: 'outlook_auto_sync_overrides' },
+            linked_override_count: { type: 'integer', minimum: 1 },
           },
         },
         NoteCategory: {
@@ -460,10 +526,24 @@ export const schemas = {
           required: ['data'],
         },
         CalendarDateOrDateTime: {
-          description: 'A calendar date or local/offset date-time accepted by calendar mutations.',
+          description: 'A calendar date or date-time accepted by calendar mutations.',
           oneOf: [
-            { type: 'string', format: 'date' },
-            { type: 'string', format: 'date-time' },
+            {
+              type: 'string',
+              format: 'date',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+              description: 'Date-only value in YYYY-MM-DD form.',
+            },
+            {
+              type: 'string',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?$',
+              description: 'Yuvomi local wall-clock value. Seconds and fractional seconds are optional and are normalized to YYYY-MM-DDTHH:MM.',
+            },
+            {
+              type: 'string',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:?\\d{2})$',
+              description: 'Accepted UTC or numeric-offset input. Seconds, fractional seconds, and the offset are normalized to YYYY-MM-DDTHH:MM.',
+            },
           ],
         },
         CalendarEvent: {
@@ -490,6 +570,7 @@ export const schemas = {
               type: ['string', 'null'],
               description: 'Legacy attachment data URL. Null for attachments linked through attachment_document_id.',
             },
+            ...calendarOccurrenceProperties,
           },
           required: [
             'id',
@@ -513,17 +594,7 @@ export const schemas = {
             { $ref: '#/components/schemas/CalendarEvent' },
             {
               type: 'object',
-              properties: {
-                series_id: { type: 'integer', minimum: 1 },
-                recurrence_id: { type: 'string', format: 'date' },
-                is_occurrence_override: { type: 'boolean' },
-                is_local_recurring_series: { type: 'boolean' },
-                can_override_occurrence: { type: 'boolean' },
-                assignment_owner_id: { type: 'integer', minimum: 1 },
-                attachment_owner_id: { type: 'integer', minimum: 1 },
-                reminder_owner_id: { type: 'integer', minimum: 1 },
-                reminder_anchor_start: { $ref: '#/components/schemas/CalendarDateOrDateTime' },
-              },
+              properties: calendarOccurrenceProperties,
               required: [
                 'series_id',
                 'recurrence_id',
@@ -545,49 +616,17 @@ export const schemas = {
           },
           required: ['data'],
         },
-        CalendarOccurrenceMutation: {
+        CalendarOccurrenceOnlyMutation: {
           type: 'object',
-          description: 'Editable occurrence fields. Omitted fields inherit their current or series value.',
+          description: 'Editable fields for one occurrence. Omitted fields inherit their current or series value.',
+          properties: calendarOccurrenceMutationProperties,
+        },
+        CalendarOccurrenceFollowingMutation: {
+          type: 'object',
+          description: 'Editable fields for a successor series. Omitted fields inherit from the original series.',
           properties: {
-            title: { type: 'string', maxLength: 200 },
-            description: { type: ['string', 'null'], maxLength: 5000 },
-            start_datetime: { $ref: '#/components/schemas/CalendarDateOrDateTime' },
-            end_datetime: {
-              oneOf: [
-                { $ref: '#/components/schemas/CalendarDateOrDateTime' },
-                { type: 'null' },
-              ],
-            },
-            all_day: { type: 'boolean' },
-            location: { type: ['string', 'null'], maxLength: 200 },
-            color: { type: ['string', 'null'], pattern: '^#[0-9A-Fa-f]{6}$' },
-            icon: { type: 'string' },
-            assigned_to: {
-              oneOf: [
-                { type: 'integer', minimum: 1 },
-                {
-                  type: 'array',
-                  uniqueItems: true,
-                  items: { type: 'integer', minimum: 1 },
-                },
-                { type: 'null' },
-              ],
-            },
-            visibility: { type: 'string', enum: ['all', 'assignees', 'private'] },
-            countdown: { type: 'boolean' },
-            attachment_name: { type: ['string', 'null'] },
-            attachment_data: {
-              type: ['string', 'null'],
-              description: 'A base64 data URL for a replacement attachment, or null to remove it.',
-            },
-            remove_attachment: { type: 'boolean' },
+            ...calendarOccurrenceMutationProperties,
             recurrence_rule: { type: ['string', 'null'], maxLength: 300 },
-            reminder_offsets: {
-              type: 'array',
-              maxItems: 5,
-              uniqueItems: true,
-              items: { type: 'integer', minimum: 0 },
-            },
             confirmed_orphan_count: { type: 'integer', minimum: 0 },
           },
         },

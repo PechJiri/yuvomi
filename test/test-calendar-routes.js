@@ -1421,8 +1421,12 @@ test('Outlook account activation reports linked override conflicts with an exact
   db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
 
   assert.equal(response.status, 409);
-  assert.equal(response.body.conflict, 'outlook_auto_sync_overrides');
-  assert.equal(response.body.linked_override_count, existingLinkedCandidateCount + 1);
+  assert.deepEqual(response.body, {
+    error: 'Outlook auto-sync cannot be activated while matching recurring series have linked occurrence overrides.',
+    code: 409,
+    conflict: 'outlook_auto_sync_overrides',
+    linked_override_count: existingLinkedCandidateCount + 1,
+  });
   assert.equal(stored, null);
 });
 
