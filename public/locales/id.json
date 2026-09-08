@@ -3759,7 +3759,9 @@
         "completedOn": "Selesai pada {{date}}",
         "completedToast": "Langganan selesai.",
         "endsAfter": "Tersisa {{count}} pembayaran",
-        "logoTypeError": "Gunakan gambar PNG, JPEG, WebP, atau SVG."
+        "logoTypeError": "Gunakan gambar PNG, JPEG, WebP, atau SVG.",
+        "accountUsernameLabel": "Terdaftar atas nama",
+        "accountUsernameHint": "Alamat email atau nama pengguna. Bukan kolom kata sandi - Yuvomi tidak menyimpan kata sandi."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Inventaris Yuvomi",
         "removeBookingAction": "Hapus \"{{title}}\"",
-        "photoTooLarge": "Foto masih terlalu besar setelah diperkecil."
+        "photoTooLarge": "Foto masih terlalu besar setelah diperkecil.",
+        "accountUsernameLabel": "Terdaftar atas nama",
+        "accountUsernameHint": "Alamat email atau nama pengguna. Bukan kolom kata sandi - Yuvomi tidak menyimpan kata sandi."
     },
     "documentAttach": {
         "label": "Lampiran",

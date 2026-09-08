@@ -3759,7 +3759,9 @@
         "completedOn": "تکمیل در {{date}}",
         "completedToast": "اشتراک تکمیل شد.",
         "endsAfter": "{{count}} پرداخت باقی‌مانده",
-        "logoTypeError": "لطفاً از تصویر PNG، JPEG، WebP یا SVG استفاده کنید."
+        "logoTypeError": "لطفاً از تصویر PNG، JPEG، WebP یا SVG استفاده کنید.",
+        "accountUsernameLabel": "ثبت‌شده با",
+        "accountUsernameHint": "نشانی رایانامه یا نام کاربری. این قسمت گذرواژه نیست - Yuvomi گذرواژه ذخیره نمی‌کند."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "اموال Yuvomi",
         "removeBookingAction": "حذف «{{title}}»",
-        "photoTooLarge": "عکس پس از کوچک‌سازی هنوز بیش از حد بزرگ است."
+        "photoTooLarge": "عکس پس از کوچک‌سازی هنوز بیش از حد بزرگ است.",
+        "accountUsernameLabel": "ثبت‌شده با",
+        "accountUsernameHint": "نشانی رایانامه یا نام کاربری. این قسمت گذرواژه نیست - Yuvomi گذرواژه ذخیره نمی‌کند."
     },
     "documentAttach": {
         "label": "پیوست‌ها",

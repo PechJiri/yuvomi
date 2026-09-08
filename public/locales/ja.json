@@ -3759,7 +3759,9 @@
         "completedOn": "{{date}}に完了",
         "completedToast": "サブスクリプションが完了しました。",
         "endsAfter": "残り{{count}}回の支払い",
-        "logoTypeError": "PNG、JPEG、WebP、SVG画像を使用してください。"
+        "logoTypeError": "PNG、JPEG、WebP、SVG画像を使用してください。",
+        "accountUsernameLabel": "登録先アカウント",
+        "accountUsernameHint": "メールアドレスまたはユーザー名。パスワード欄ではありません。Yuvomi はパスワードを保存しません。"
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi 持ち物",
         "removeBookingAction": "「{{title}}」を外す",
-        "photoTooLarge": "縮小後も写真が大きすぎます。"
+        "photoTooLarge": "縮小後も写真が大きすぎます。",
+        "accountUsernameLabel": "登録先アカウント",
+        "accountUsernameHint": "メールアドレスまたはユーザー名。パスワード欄ではありません。Yuvomi はパスワードを保存しません。"
     },
     "documentAttach": {
         "label": "添付",

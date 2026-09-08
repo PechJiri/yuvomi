@@ -453,6 +453,33 @@ try {
     const datedRenew = await jsonReq('POST', `/${dated.body.data.id}/renew`, {});
     assert.equal(datedRenew.body.data.status, 'completed');
 
+    // --- account_username (#1004): Kontoangabe ohne das Geheimnis ---
+    // Anders als im Inventar liegt das Feld hier in einer Zeile, die owner_id
+    // und visibility schon traegt - es braucht also keine eigene Sichtbarkeit,
+    // nur Speichern, Lesen und eine Laengengrenze.
+    const withAccount = await jsonReq('POST', '', {
+      name: 'Streaming', amount: 9.99, currency: 'EUR', billing_cycle: 'monthly',
+      cycle_interval: 1, next_payment_date: '2027-03-01', account_username: 'kino@example.org',
+    });
+    assert.equal(withAccount.status, 201);
+    assert.equal(withAccount.body.data.account_username, 'kino@example.org');
+    const accountId = withAccount.body.data.id;
+
+    const accountChanged = await jsonReq('PUT', `/${accountId}`, { account_username: 'neu@example.org' });
+    assert.equal(accountChanged.body.data.account_username, 'neu@example.org');
+
+    const accountCleared = await jsonReq('PUT', `/${accountId}`, { account_username: '' });
+    assert.equal(accountCleared.body.data.account_username, null, 'Leer heisst nicht gesetzt');
+
+    assert.equal(
+      (await jsonReq('PUT', `/${accountId}`, { account_username: 'x'.repeat(201) })).status, 400,
+      'Kontoangabe ueber 200 Zeichen wird abgelehnt',
+    );
+    assert.equal(
+      (await jsonReq('PUT', `/${accountId}`, { account_username: 'x'.repeat(200) })).status, 200,
+      'genau 200 Zeichen sind erlaubt',
+    );
+
     const removedNotificationsResponse = await fetch(`${baseUrl}/notification-agents`);
     assert.equal(removedNotificationsResponse.status, 404);
   } finally {

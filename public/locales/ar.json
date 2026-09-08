@@ -3759,7 +3759,9 @@
         "completedOn": "اكتمل في {{date}}",
         "completedToast": "اكتمل الاشتراك.",
         "endsAfter": "المتبقّي: {{count}} دفعة",
-        "logoTypeError": "استخدم صورة PNG أو JPEG أو WebP أو SVG."
+        "logoTypeError": "استخدم صورة PNG أو JPEG أو WebP أو SVG.",
+        "accountUsernameLabel": "مسجَّل باسم",
+        "accountUsernameHint": "عنوان بريد إلكتروني أو اسم مستخدم. ليس حقل كلمة مرور - لا يحفظ Yuvomi كلمات المرور."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "مقتنيات Yuvomi",
         "removeBookingAction": "إزالة \"{{title}}\"",
-        "photoTooLarge": "ما زالت الصورة كبيرة جدًا بعد التصغير."
+        "photoTooLarge": "ما زالت الصورة كبيرة جدًا بعد التصغير.",
+        "accountUsernameLabel": "مسجَّل باسم",
+        "accountUsernameHint": "عنوان بريد إلكتروني أو اسم مستخدم. ليس حقل كلمة مرور - لا يحفظ Yuvomi كلمات المرور."
     },
     "documentAttach": {
         "label": "المرفقات",

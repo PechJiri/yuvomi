@@ -3759,7 +3759,9 @@
         "completedOn": "Voltooid op {{date}}",
         "completedToast": "Abonnement voltooid.",
         "endsAfter": "Nog {{count}} betalingen",
-        "logoTypeError": "Gebruik een PNG-, JPEG-, WebP- of SVG-afbeelding."
+        "logoTypeError": "Gebruik een PNG-, JPEG-, WebP- of SVG-afbeelding.",
+        "accountUsernameLabel": "Geregistreerd op",
+        "accountUsernameHint": "E-mailadres of gebruikersnaam. Geen wachtwoordveld - Yuvomi bewaart geen wachtwoorden."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi inventaris",
         "removeBookingAction": "\"{{title}}\" verwijderen",
-        "photoTooLarge": "De foto is na verkleinen nog steeds te groot."
+        "photoTooLarge": "De foto is na verkleinen nog steeds te groot.",
+        "accountUsernameLabel": "Geregistreerd op",
+        "accountUsernameHint": "E-mailadres of gebruikersnaam. Geen wachtwoordveld - Yuvomi bewaart geen wachtwoorden."
     },
     "documentAttach": {
         "label": "Bijlagen",

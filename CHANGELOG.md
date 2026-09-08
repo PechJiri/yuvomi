@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Inventory items and subscriptions can record the account they are registered under** (#1004).
+  One field per module: the e-mail address or username a device or a service runs on. It is
+  deliberately **not** a password field and never will be - a username without its password is a
+  phone-book entry, which is why it can live unencrypted in the normal database and be searched
+  like any other text. The permanent boundary is in `docs/SCOPE.md`, section 2, and the field's own
+  hint says so where it is filled in.
+
+  On inventory the field is household-wide, and that is a decision rather than an oversight:
+  `inventory_items` carries neither an owner nor a visibility, access is decided once per member at
+  module level (#467), and an owner-scoped field would have meant inventing an ownership model for
+  the whole module just to hold one column. The reporter chose that himself - account names are
+  usually e-mail addresses, and anyone already trusted on the network has seen those. On
+  subscriptions the column sits in a row that already has `owner_id` and `visibility`, so it
+  follows both without extra work. Inventory's own search matches on it too, since "where is the
+  device that runs on this address" is the question the field exists for.
+
+
 - **Planned meals show their recipe's picture, for recipes mirrored from Mealie or Tandoor**
   (#1059, step one). The thumbnail proxy has existed since the provider sync landed, but only the
   recipe list used it; the meal planner and the "today's meals" tile rendered text. Both now show

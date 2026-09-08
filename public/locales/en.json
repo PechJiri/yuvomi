@@ -3759,7 +3759,9 @@
         "completedOn": "Completed on {{date}}",
         "completedToast": "Subscription completed.",
         "endsAfter": "{{count}} payments left",
-        "logoTypeError": "Use a PNG, JPEG, WebP or SVG image."
+        "logoTypeError": "Use a PNG, JPEG, WebP or SVG image.",
+        "accountUsernameLabel": "Registered under",
+        "accountUsernameHint": "E-mail address or username. Not a password field - Yuvomi does not store passwords."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi Inventory",
         "removeBookingAction": "Remove \"{{title}}\"",
-        "photoTooLarge": "Photo is still too large after resizing."
+        "photoTooLarge": "Photo is still too large after resizing.",
+        "accountUsernameLabel": "Registered under",
+        "accountUsernameHint": "E-mail address or username. Not a password field - Yuvomi does not store passwords."
     },
     "documentAttach": {
         "label": "Attachments",

@@ -3759,7 +3759,9 @@
         "completedOn": "{{date}} tarihinde tamamlandı",
         "completedToast": "Abonelik tamamlandı.",
         "endsAfter": "{{count}} ödeme kaldı",
-        "logoTypeError": "PNG, JPEG, WebP veya SVG resmi kullanın."
+        "logoTypeError": "PNG, JPEG, WebP veya SVG resmi kullanın.",
+        "accountUsernameLabel": "Şu adla kayıtlı",
+        "accountUsernameHint": "E-posta adresi veya kullanıcı adı. Parola alanı değildir - Yuvomi parola saklamaz."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi Envanter",
         "removeBookingAction": "\"{{title}}\" kaldır",
-        "photoTooLarge": "Fotoğraf yeniden boyutlandırmadan sonra hâlâ çok büyük."
+        "photoTooLarge": "Fotoğraf yeniden boyutlandırmadan sonra hâlâ çok büyük.",
+        "accountUsernameLabel": "Şu adla kayıtlı",
+        "accountUsernameHint": "E-posta adresi veya kullanıcı adı. Parola alanı değildir - Yuvomi parola saklamaz."
     },
     "documentAttach": {
         "label": "Ekler",

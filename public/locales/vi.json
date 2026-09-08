@@ -3759,7 +3759,9 @@
         "completedOn": "Hoàn tất vào {{date}}",
         "completedToast": "Đã hoàn tất gói đăng ký.",
         "endsAfter": "Còn {{count}} lần thanh toán",
-        "logoTypeError": "Sử dụng ảnh PNG, JPEG, WebP hoặc SVG."
+        "logoTypeError": "Sử dụng ảnh PNG, JPEG, WebP hoặc SVG.",
+        "accountUsernameLabel": "Đăng ký dưới tên",
+        "accountUsernameHint": "Địa chỉ e-mail hoặc tên đăng nhập. Đây không phải ô mật khẩu - Yuvomi không lưu mật khẩu."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Tài sản Yuvomi",
         "removeBookingAction": "Gỡ \"{{title}}\"",
-        "photoTooLarge": "Ảnh vẫn quá lớn sau khi thay đổi kích thước."
+        "photoTooLarge": "Ảnh vẫn quá lớn sau khi thay đổi kích thước.",
+        "accountUsernameLabel": "Đăng ký dưới tên",
+        "accountUsernameHint": "Địa chỉ e-mail hoặc tên đăng nhập. Đây không phải ô mật khẩu - Yuvomi không lưu mật khẩu."
     },
     "documentAttach": {
         "label": "Tệp đính kèm",

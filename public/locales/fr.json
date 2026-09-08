@@ -3759,7 +3759,9 @@
         "completedOn": "Terminé le {{date}}",
         "completedToast": "Abonnement terminé.",
         "endsAfter": "Encore {{count}} paiements",
-        "logoTypeError": "Utilisez une image PNG, JPEG, WebP ou SVG."
+        "logoTypeError": "Utilisez une image PNG, JPEG, WebP ou SVG.",
+        "accountUsernameLabel": "Enregistré sous",
+        "accountUsernameHint": "Adresse e-mail ou nom d'utilisateur. Ce n'est pas un champ de mot de passe - Yuvomi n'enregistre aucun mot de passe."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}} : {{name}}",
         "icsCalendarName": "Inventaire Yuvomi",
         "removeBookingAction": "Retirer « {{title}} »",
-        "photoTooLarge": "La photo reste trop volumineuse après redimensionnement."
+        "photoTooLarge": "La photo reste trop volumineuse après redimensionnement.",
+        "accountUsernameLabel": "Enregistré sous",
+        "accountUsernameHint": "Adresse e-mail ou nom d'utilisateur. Ce n'est pas un champ de mot de passe - Yuvomi n'enregistre aucun mot de passe."
     },
     "documentAttach": {
         "label": "Pièces jointes",

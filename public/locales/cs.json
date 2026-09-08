@@ -3759,7 +3759,9 @@
         "completedOn": "Dokončeno {{date}}",
         "completedToast": "Předplatné dokončeno.",
         "endsAfter": "Zbývá {{count}} plateb",
-        "logoTypeError": "Použijte prosím obrázek ve formátu PNG, JPEG, WebP nebo SVG."
+        "logoTypeError": "Použijte prosím obrázek ve formátu PNG, JPEG, WebP nebo SVG.",
+        "accountUsernameLabel": "Registrováno na",
+        "accountUsernameHint": "E-mailová adresa nebo uživatelské jméno. Není to pole pro heslo - Yuvomi hesla neukládá."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Inventář Yuvomi",
         "removeBookingAction": "Odebrat „{{title}}“",
-        "photoTooLarge": "Fotografie je po zmenšení stále příliš velká."
+        "photoTooLarge": "Fotografie je po zmenšení stále příliš velká.",
+        "accountUsernameLabel": "Registrováno na",
+        "accountUsernameHint": "E-mailová adresa nebo uživatelské jméno. Není to pole pro heslo - Yuvomi hesla neukládá."
     },
     "documentAttach": {
         "label": "Přílohy",

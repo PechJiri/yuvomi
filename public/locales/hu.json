@@ -3759,7 +3759,9 @@
         "completedOn": "Befejezve: {{date}}",
         "completedToast": "Előfizetés befejezve.",
         "endsAfter": "Még {{count}} fizetés",
-        "logoTypeError": "Használjon PNG, JPEG, WebP vagy SVG képet."
+        "logoTypeError": "Használjon PNG, JPEG, WebP vagy SVG képet.",
+        "accountUsernameLabel": "Regisztrálva erre",
+        "accountUsernameHint": "E-mail-cím vagy felhasználónév. Ez nem jelszómező - a Yuvomi nem tárol jelszavakat."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi leltár",
         "removeBookingAction": "„{{title}}” eltávolítása",
-        "photoTooLarge": "A fotó még mindig túl nagy az átméretezés után."
+        "photoTooLarge": "A fotó még mindig túl nagy az átméretezés után.",
+        "accountUsernameLabel": "Regisztrálva erre",
+        "accountUsernameHint": "E-mail-cím vagy felhasználónév. Ez nem jelszómező - a Yuvomi nem tárol jelszavakat."
     },
     "documentAttach": {
         "label": "Mellékletek",

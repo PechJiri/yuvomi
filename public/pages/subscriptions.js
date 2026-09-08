@@ -942,6 +942,12 @@ export function openSubscriptionModal(subscription = null) {
       <section class="subscription-form__section">
         <h3><i data-lucide="panel-top" aria-hidden="true"></i>${t('subscriptions.serviceDetails')}</h3>
         <div class="form-group">
+          <label class="form-label" for="subscription-account">${t('subscriptions.accountUsernameLabel')}</label>
+          <input class="form-input" type="text" id="subscription-account" maxlength="200"
+                 autocomplete="off" spellcheck="false" value="${esc(subscription?.account_username || '')}">
+          <p class="form-hint">${t('subscriptions.accountUsernameHint')}</p>
+        </div>
+        <div class="form-group">
           <label class="form-label" for="subscription-notes">${t('subscriptions.notesLabel')}</label>
           <textarea class="form-input" id="subscription-notes" rows="3">${esc(subscription?.notes || '')}</textarea>
         </div>
@@ -1215,6 +1221,9 @@ async function saveSubscription(panel, existing, searchedLogoData = null) {
       brand_color: panel.querySelector('#subscription-color').value,
       logo_data: logoData,
       notes: panel.querySelector('#subscription-notes').value.trim() || null,
+      // Konto/Benutzername des Dienstes (#1004) - unverschluesselt und
+      // absichtlich KEIN Passwortfeld; die Grenze steht in docs/SCOPE.md.
+      account_username: panel.querySelector('#subscription-account').value.trim() || null,
       enabled: panel.querySelector('#subscription-enabled').checked,
       end_type: endType,
       end_date: endDate,

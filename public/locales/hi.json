@@ -3759,7 +3759,9 @@
         "completedOn": "{{date}} को पूर्ण",
         "completedToast": "सदस्यता पूर्ण हुई।",
         "endsAfter": "{{count}} भुगतान शेष",
-        "logoTypeError": "PNG, JPEG, WebP या SVG चित्र इस्तेमाल करें।"
+        "logoTypeError": "PNG, JPEG, WebP या SVG चित्र इस्तेमाल करें।",
+        "accountUsernameLabel": "इसके नाम पंजीकृत",
+        "accountUsernameHint": "ईमेल पता या उपयोगकर्ता नाम। यह पासवर्ड फ़ील्ड नहीं है - Yuvomi पासवर्ड सहेजता नहीं है।"
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi इन्वेंटरी",
         "removeBookingAction": "\"{{title}}\" हटाएँ",
-        "photoTooLarge": "आकार बदलने के बाद भी फ़ोटो बहुत बड़ा है।"
+        "photoTooLarge": "आकार बदलने के बाद भी फ़ोटो बहुत बड़ा है।",
+        "accountUsernameLabel": "इसके नाम पंजीकृत",
+        "accountUsernameHint": "ईमेल पता या उपयोगकर्ता नाम। यह पासवर्ड फ़ील्ड नहीं है - Yuvomi पासवर्ड सहेजता नहीं है।"
     },
     "documentAttach": {
         "label": "अनुलग्नक",

@@ -3759,7 +3759,9 @@
         "completedOn": "Avslutad {{date}}",
         "completedToast": "Prenumeration avslutad.",
         "endsAfter": "{{count}} betalningar kvar",
-        "logoTypeError": "Använd en PNG-, JPEG-, WebP- eller SVG-bild."
+        "logoTypeError": "Använd en PNG-, JPEG-, WebP- eller SVG-bild.",
+        "accountUsernameLabel": "Registrerad på",
+        "accountUsernameHint": "E-postadress eller användarnamn. Inget lösenordsfält - Yuvomi lagrar inga lösenord."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi inventarier",
         "removeBookingAction": "Ta bort \"{{title}}\"",
-        "photoTooLarge": "Fotot är fortfarande för stort efter storleksändring."
+        "photoTooLarge": "Fotot är fortfarande för stort efter storleksändring.",
+        "accountUsernameLabel": "Registrerad på",
+        "accountUsernameHint": "E-postadress eller användarnamn. Inget lösenordsfält - Yuvomi lagrar inga lösenord."
     },
     "documentAttach": {
         "label": "Bilagor",

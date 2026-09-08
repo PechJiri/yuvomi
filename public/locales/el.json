@@ -3759,7 +3759,9 @@
         "completedOn": "Ολοκληρώθηκε στις {{date}}",
         "completedToast": "Η συνδρομή ολοκληρώθηκε.",
         "endsAfter": "Απομένουν {{count}} πληρωμές",
-        "logoTypeError": "Χρησιμοποιήστε εικόνα PNG, JPEG, WebP ή SVG."
+        "logoTypeError": "Χρησιμοποιήστε εικόνα PNG, JPEG, WebP ή SVG.",
+        "accountUsernameLabel": "Καταχωρημένο ως",
+        "accountUsernameHint": "Διεύθυνση e-mail ή όνομα χρήστη. Δεν είναι πεδίο κωδικού - το Yuvomi δεν αποθηκεύει κωδικούς."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Απογραφή Yuvomi",
         "removeBookingAction": "Αφαίρεση του «{{title}}»",
-        "photoTooLarge": "Η φωτογραφία παραμένει πολύ μεγάλη μετά την αλλαγή μεγέθους."
+        "photoTooLarge": "Η φωτογραφία παραμένει πολύ μεγάλη μετά την αλλαγή μεγέθους.",
+        "accountUsernameLabel": "Καταχωρημένο ως",
+        "accountUsernameHint": "Διεύθυνση e-mail ή όνομα χρήστη. Δεν είναι πεδίο κωδικού - το Yuvomi δεν αποθηκεύει κωδικούς."
     },
     "documentAttach": {
         "label": "Συνημμένα",

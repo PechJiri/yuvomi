@@ -3759,7 +3759,9 @@
         "completedOn": "Завершено {{date}}",
         "completedToast": "Підписку завершено.",
         "endsAfter": "Залишилось {{count}} платежів",
-        "logoTypeError": "Використайте зображення PNG, JPEG, WebP або SVG."
+        "logoTypeError": "Використайте зображення PNG, JPEG, WebP або SVG.",
+        "accountUsernameLabel": "Зареєстровано на",
+        "accountUsernameHint": "Адреса електронної пошти або ім'я користувача. Це не поле пароля - Yuvomi не зберігає паролі."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Інвентар Yuvomi",
         "removeBookingAction": "Прибрати «{{title}}»",
-        "photoTooLarge": "Фото все ще завелике після зміни розміру."
+        "photoTooLarge": "Фото все ще завелике після зміни розміру.",
+        "accountUsernameLabel": "Зареєстровано на",
+        "accountUsernameHint": "Адреса електронної пошти або ім'я користувача. Це не поле пароля - Yuvomi не зберігає паролі."
     },
     "documentAttach": {
         "label": "Вкладення",

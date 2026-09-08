@@ -3759,7 +3759,9 @@
         "completedOn": "于 {{date}} 完成",
         "completedToast": "订阅已完成。",
         "endsAfter": "还剩 {{count}} 次付款",
-        "logoTypeError": "请使用 PNG、JPEG、WebP 或 SVG 图片。"
+        "logoTypeError": "请使用 PNG、JPEG、WebP 或 SVG 图片。",
+        "accountUsernameLabel": "注册账号",
+        "accountUsernameHint": "电子邮箱地址或用户名。这不是密码字段，Yuvomi 不保存密码。"
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}：{{name}}",
         "icsCalendarName": "Yuvomi 物品",
         "removeBookingAction": "移除“{{title}}”",
-        "photoTooLarge": "缩放后照片仍然太大。"
+        "photoTooLarge": "缩放后照片仍然太大。",
+        "accountUsernameLabel": "注册账号",
+        "accountUsernameHint": "电子邮箱地址或用户名。这不是密码字段，Yuvomi 不保存密码。"
     },
     "documentAttach": {
         "label": "附件",

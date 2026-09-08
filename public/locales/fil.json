@@ -3759,7 +3759,9 @@
         "completedOn": "Natapos noong {{date}}",
         "completedToast": "Natapos ang subscription.",
         "endsAfter": "{{count}} bayad na lang ang natitira",
-        "logoTypeError": "Gumamit ng larawang PNG, JPEG, WebP o SVG."
+        "logoTypeError": "Gumamit ng larawang PNG, JPEG, WebP o SVG.",
+        "accountUsernameLabel": "Nakarehistro sa",
+        "accountUsernameHint": "Email address o username. Hindi ito password field - hindi nag-iimbak ng password ang Yuvomi."
     },
     "health": {
         "tabs": {
@@ -4676,7 +4678,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Imbentaryo ng Yuvomi",
         "removeBookingAction": "Alisin ang \"{{title}}\"",
-        "photoTooLarge": "Masyado pa ring malaki ang larawan pagkatapos bawasan ang laki."
+        "photoTooLarge": "Masyado pa ring malaki ang larawan pagkatapos bawasan ang laki.",
+        "accountUsernameLabel": "Nakarehistro sa",
+        "accountUsernameHint": "Email address o username. Hindi ito password field - hindi nag-iimbak ng password ang Yuvomi."
     },
     "documentAttach": {
         "label": "Mga kalakip",
