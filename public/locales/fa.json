@@ -608,7 +608,15 @@
         "toPantryNothing": "چیزی به انبار افزوده نشد. «به انبار» را دوباره باز کنید و مقدارها را بررسی کنید.",
         "reorderHandle": "تغییر ترتیب: {{name}}",
         "reorderHandleHint": "برای مرتب‌سازی بکشید یا از کلیدهای جهت‌نما استفاده کنید",
-        "reorderPosition": "جایگاه {{index}} از {{total}}"
+        "reorderPosition": "جایگاه {{index}} از {{total}}",
+        "priceLabel": "قیمت",
+        "storeLabel": "فروشگاه",
+        "storePlaceholder": "انتخاب کنید یا بنویسید",
+        "manageStores": "مدیریت فروشگاه‌ها",
+        "storesHint": "فروشگاه‌هایی که از آن‌ها خرید می‌کنید. قیمت بدون فروشگاه تنها نیمی از پرسش را پاسخ می‌دهد.",
+        "storeDeleteConfirm": "فروشگاه «{{name}}» حذف شود؟",
+        "storeDeleteConfirmDetail": "کالاهای این فروشگاه و قیمتشان باقی می‌مانند - فقط انتساب فروشگاه خالی می‌شود. جایگزینی برای فروشگاه وجود ندارد.",
+        "addStore": "فروشگاه جدید"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} وعده برنامه‌ریزی شد.",

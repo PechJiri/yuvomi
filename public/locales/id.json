@@ -608,7 +608,15 @@
         "toPantryNothing": "Tidak ada yang ditambahkan ke penyimpanan. Buka \"Ke penyimpanan\" lagi dan periksa jumlahnya.",
         "reorderHandle": "Ubah urutan: {{name}}",
         "reorderHandleHint": "Seret atau gunakan tombol panah untuk mengurutkan",
-        "reorderPosition": "Posisi {{index}} dari {{total}}"
+        "reorderPosition": "Posisi {{index}} dari {{total}}",
+        "priceLabel": "Harga",
+        "storeLabel": "Toko",
+        "storePlaceholder": "Pilih atau ketik",
+        "manageStores": "Kelola toko",
+        "storesHint": "Toko tempat kalian berbelanja. Harga tanpa toko hanya menjawab separuh.",
+        "storeDeleteConfirm": "Hapus toko “{{name}}”?",
+        "storeDeleteConfirmDetail": "Barang dari toko ini tetap ada, harganya juga - hanya penetapan tokonya yang menjadi kosong. Tidak ada toko pengganti di sini.",
+        "addStore": "Toko baru"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} makanan direncanakan.",

@@ -596,7 +596,15 @@
         "toPantryNothing": "لم تُضف أي عناصر إلى المخزن. افتح «إلى المخزن» مرة أخرى وتحقق من الكميات.",
         "reorderHandle": "تغيير الترتيب: {{name}}",
         "reorderHandleHint": "اسحب أو استخدم مفاتيح الأسهم لإعادة الترتيب",
-        "reorderPosition": "الموضع {{index}} من {{total}}"
+        "reorderPosition": "الموضع {{index}} من {{total}}",
+        "priceLabel": "السعر",
+        "storeLabel": "المتجر",
+        "storePlaceholder": "اختر أو اكتب",
+        "manageStores": "إدارة المتاجر",
+        "storesHint": "المتاجر التي تتسوقون منها. السعر بدون متجر يجيب نصف السؤال فقط.",
+        "storeDeleteConfirm": "حذف المتجر ‏«{{name}}»؟",
+        "storeDeleteConfirmDetail": "تبقى عناصر هذا المتجر كما هي ويبقى سعرها أيضاً - يصبح حقل المتجر فارغاً فقط. لا يوجد متجر بديل هنا.",
+        "addStore": "متجر جديد"
     },
     "meals": {
         "randomizeSuccess_few": "تم تخطيط {{count}} وجبات.",

@@ -19,6 +19,8 @@ import '/components/category-manager.js';
 import { findPageFab } from '/utils/fab.js';
 import { setBulkPill, clearBulkPill, bulkPillLayer } from '/utils/bulk-pill.js';
 import { makeSortable } from '/utils/sortable.js';
+import { amountPlaceholder, centsToAmountInput, amountInputToCents } from '/utils/money.js';
+
 
 // --------------------------------------------------------
 // Konstanten
@@ -44,6 +46,8 @@ const state = {
   items:         [],
   activeList:    null,
   categories:    [],   // { id, name, icon, sort_order }[]
+  stores:        [],   // verwaltete Laeden fuer den Preis am Artikel (#1003)
+  currency:      'EUR',// Haushaltswaehrung, nur fuer die Preisdarstellung
   /** Zwei getrennte Ladewege, zwei getrennte Fehler - sie haben verschiedene
    *  Wiederholungen: die Listen holt die ganze Seite neu, die Artikel nur die
    *  aktive Liste. Ein gemeinsames Feld hätte den einen Fehler mit der
@@ -398,6 +402,7 @@ function renderTabs(container) {
           { action: 'import-meals', label: t('shopping.importMeals'), icon: 'utensils' },
           { action: 'send-list', label: t('shopping.sendList'), icon: 'mail' },
           { action: 'manage-categories', label: t('shopping.manageCategories'), icon: 'tags' },
+          { action: 'manage-stores', label: t('shopping.manageStores'), icon: 'store' },
           { action: 'delete-list', label: t('shopping.deleteListLabel'), icon: 'trash', id: state.activeList.id, danger: true },
         ],
       })}
@@ -1416,6 +1421,45 @@ function openItemDetails(itemId, container) {
             </select>
           </div>
         </div>
+        ${/* PREIS UND LADEN (#1003).
+            *
+            * NICHT ALS ZWANGSDIALOG BEIM ABHAKEN. Das Ticket sagt "erfasst,
+            * wenn man abhakt - da ist die Zahl bekannt", und das stimmt; ein
+            * Dialog, der sich bei JEDEM Haken oeffnet, waere im Laden aber
+            * unertraeglich: das Abhaken ist die schnellste Geste der App und
+            * bleibt es. Die Felder stehen deshalb hier, wo der Artikel ohnehin
+            * geoeffnet wird - nachtragen statt unterbrechen.
+            *
+            * Betont bei einem abgehakten Artikel: dann ist die Frage aktuell. */ ''}
+        <div class="pantry-form-row">
+          <div class="form-group">
+            <label class="form-label" for="item-details-price">${t('shopping.priceLabel')}</label>
+            <input class="form-input" type="text" id="item-details-price" inputmode="decimal"
+                   placeholder="${esc(amountPlaceholder(state.currency))}"
+                   value="${item.price_cents != null ? esc(centsToAmountInput(item.price_cents, state.currency)) : ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="item-details-store">${t('shopping.storeLabel')}</label>
+            ${/* COMBOBOX, KEIN SELECT (#1003).
+                *
+                * Eine reine Auswahlliste ist bei einem frischen Haushalt leer und
+                * bleibt es: der erste Laden muesste anderswo entstehen. Ein Knopf
+                * daneben hilft hier nicht - das geteilte Modal kennt bewusst kein
+                * Stacking (siehe modal.js), ein Manager darueber raeumte dieses
+                * Formular samt getippter Eingaben weg.
+                *
+                * Also tippen oder waehlen: die Liste kommt als datalist dazu, und
+                * ein unbekannter Name legt beim Speichern den Laden an. Umbenennen
+                * und Loeschen liegen im Listenmenue, wo der Manager ein Dialog
+                * erster Ebene sein darf. */ ''}
+            <input class="form-input" type="text" id="item-details-store" list="item-details-store-options"
+                   autocomplete="off" placeholder="${esc(t('shopping.storePlaceholder'))}"
+                   value="${esc(state.stores.find((st) => st.id === item.store_id)?.name ?? '')}">
+            <datalist id="item-details-store-options">
+              ${state.stores.map((st) => `<option value="${esc(st.name)}"></option>`).join('')}
+            </datalist>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label" for="item-details-url">${t('shopping.urlLabel')}</label>
           <input class="form-input" type="url" id="item-details-url" inputmode="url"
@@ -1459,14 +1503,44 @@ function openItemDetails(itemId, container) {
           reportFieldError(nameEl, t('common.nameRequired'));
           return;
         }
-        const payload = {
-          name,
-          quantity: qtyEl.value.trim() || null,
-          category: catEl.value,
-          notes: notesEl.value.trim() || null,
-          url: urlEl.value.trim() || null,
-        };
+        const priceEl = panel.querySelector('#item-details-price');
+        const storeEl = panel.querySelector('#item-details-store');
+        // Der Preis kommt als Text herein und geht als ganze Cent hinaus: Geld
+        // als Gleitkomma summiert sich sichtbar falsch, und die Historie, die
+        // spaeter darauf aufbaut, addiert genau solche Zahlen. Ein leeres Feld
+        // heisst "kein Preis", nicht "null Cent".
+        const priceRoh = priceEl?.value.trim() ?? '';
+        const priceCents = priceRoh === '' ? null : amountInputToCents(priceRoh, state.currency);
+        if (priceRoh !== '' && priceCents === null) {
+          reportFieldError(priceEl, t('budget.validAmountRequired'));
+          return;
+        }
         try {
+          // Der Laden kommt als Name herein, die Zeile speichert eine ID. Ein
+          // Name, den es noch nicht gibt, entsteht hier - der Server gibt bei
+          // einem schon vorhandenen Namen dieselbe Zeile zurueck (COLLATE
+          // NOCASE), zwei Schreibweisen werden also nicht zu zwei Laeden.
+          const storeName = storeEl?.value.trim() ?? '';
+          let storeId = null;
+          if (storeName) {
+            const bekannt = state.stores.find((st) => st.name.toLowerCase() === storeName.toLowerCase());
+            if (bekannt) {
+              storeId = bekannt.id;
+            } else {
+              const angelegt = await api.post('/shopping/stores', { name: storeName });
+              state.stores.push(angelegt.data);
+              storeId = angelegt.data.id;
+            }
+          }
+          const payload = {
+            name,
+            quantity: qtyEl.value.trim() || null,
+            category: catEl.value,
+            notes: notesEl.value.trim() || null,
+            url: urlEl.value.trim() || null,
+            price_cents: priceCents,
+            store_id: storeId,
+          };
           const data = await api.patch(`/shopping/items/${item.id}`, payload);
           const categoryChanged = data.data.category !== item.category;
           Object.assign(item, data.data);
@@ -1923,6 +1997,25 @@ async function loadCategories() {
   }
 }
 
+/* Laeden und Waehrung fuer das Preisfeld (#1003).
+ *
+ * Beide Ausfaelle sind still und harmlos: ohne Laeden bleibt die Auswahl leer
+ * (der Preis laesst sich trotzdem eintragen), ohne Waehrung gilt EUR. Ein
+ * Einkaufszettel, der wegen eines Nebenfeldes gar nicht aufgeht, waere der
+ * schlechtere Tausch. */
+async function loadStores() {
+  try {
+    const data   = await api.get('/shopping/stores');
+    state.stores = data.data ?? [];
+  } catch {
+    state.stores = [];
+  }
+  try {
+    const prefs    = await api.get('/preferences');
+    state.currency = prefs.data?.currency ?? 'EUR';
+  } catch { /* EUR bleibt */ }
+}
+
 async function loadItems(listId) {
   const data       = await api.get(`/shopping/${listId}/items`);
   state.items      = data.data ?? [];
@@ -2049,6 +2142,11 @@ function wireListContentEvents(container) {
       openCategoryManager(container);
     }
 
+    // ---- Laeden verwalten (#1003) ----
+    if (action === 'manage-stores') {
+      openStoreManager(container);
+    }
+
     if (action === 'import-meals') {
       openMealPlanImport(container);
     }
@@ -2165,6 +2263,65 @@ function wireListContentEvents(container) {
  * @param {object}  [opts]
  * @param {boolean} [opts.fromDeepLink] true, wenn via ?manage=categories geöffnet
  */
+/**
+ * Laeden verwalten (#1003) - derselbe Manager wie fuer die Kategorien.
+ *
+ * Eine eigene Komponente waere die zweite Bauart fuer dieselbe Sache: eine
+ * kurze, benannte Liste anlegen, umbenennen, loeschen. Der Manager kann das
+ * bereits und braucht nur einen anderen `basePath`; deshalb hat der Server oben
+ * ein PUT bekommen, das die Form spricht, die diese Komponente erwartet.
+ *
+ * Er haengt im Listenmenue und nicht im Artikel-Dialog: das geteilte Modal
+ * kennt kein Stacking, ein Manager ueber dem Formular raeumte es weg. Angelegt
+ * wird ein Laden deshalb beim Speichern des Artikels (siehe Combobox oben),
+ * umbenannt und geloescht hier.
+ * @param {Element} container Seiten-Container
+ */
+function openStoreManager(container) {
+  // Die Arbeit haengt am Ereignis, nicht am Schliessen: `confirmOverModal`
+  // raeumt beim Loeschen das Modal darunter gleich mit ab, das
+  // `category-manager-changed` kommt also erst DANACH. Ein in onClose
+  // ausgewerteter Merker stuende hier auf false, und `state.stores` boete
+  // weiter einen Laden an, den es nicht mehr gibt - die naechste Speicherung
+  // liefe in die 400-Antwort des Servers (gemessen 08.09.).
+  const onChanged = async () => {
+    await Promise.all([loadStores(), loadItems(state.activeListId)]);
+    updateItemsList(container);
+  };
+
+  openModal({
+    title: t('shopping.manageStores'),
+    content: '<yuvomi-category-manager></yuvomi-category-manager>',
+    onSave: (panel) => {
+      const manager = panel.querySelector('yuvomi-category-manager');
+      if (!manager) return;
+      manager.addEventListener('category-manager-changed', onChanged);
+      manager.configure({
+        basePath: '/shopping/stores',
+        titleKey: 'shopping.manageStores',
+        hintKey: 'shopping.storesHint',
+        // Der Standard liest "Neue Kategorie" - in einem Dialog mit dem Titel
+        // "Laeden verwalten" waere das derselbe Bruch wie beim Vorrat.
+        addPlaceholderKey: 'shopping.addStore',
+        // Frage UND Folgentext: der Standard fragte "Kategorie ... loeschen?"
+        // in einem Dialog, der "Laeden verwalten" heisst. Der Fremdschluessel
+        // steht ausserdem auf SET NULL, nicht auf einer Ersatzzuordnung wie bei
+        // den Kategorien dieses Moduls.
+        deleteConfirmKey: 'shopping.storeDeleteConfirm',
+        deleteDetailKey: 'shopping.storeDeleteConfirmDetail',
+      });
+    },
+    // Bewusst KEIN onClose, das den Listener abmeldet: gemessen kommt das
+    // Ereignis des Loeschens erst, wenn das Element schon aus dem Dokument ist
+    // (confirmOverModal raeumt das Modal darunter mit ab, api.delete laeuft
+    // danach weiter). Wer beim Schliessen abmeldet, verpasst genau die
+    // Aenderung, die state.stores veralten laesst - und der Artikel-Dialog boete
+    // danach einen Laden an, den der Server nicht mehr kennt (400 beim
+    // Speichern). Das Element entsteht je Oeffnen neu und wird mit dem Overlay
+    // verworfen; der Listener geht mit ihm.
+  });
+}
+
 async function openCategoryManager(container, { fromDeepLink = false } = {}) {
   const { openModal } = await import('/components/modal.js');
 
@@ -2241,7 +2398,7 @@ export async function render(container, { user }) {
     // loadCategories() und loadLists() fangen selbst; der äußere catch ist das
     // Netz für alles Unerwartete und bildet es auf denselben Fehlerzustand ab,
     // statt die Ausnahme in den globalen Fehlerbildschirm laufen zu lassen.
-    await Promise.all([loadCategories(), loadLists()]);
+    await Promise.all([loadCategories(), loadStores(), loadLists()]);
     if (!state.listsError && state.lists.length) {
       const listParam = parseInt(new URLSearchParams(window.location.search).get('list'), 10) || null;
       const target = listParam && state.lists.find((l) => l.id === listParam);

@@ -529,3 +529,64 @@ test('DELETE /categories/:catId: letzte Kategorie kann nicht gelöscht werden', 
 });
 
 test.after(() => server.close());
+
+// --------------------------------------------------------
+// Preis und Laden am Artikel (#1003, erster Schnitt)
+// --------------------------------------------------------
+
+test('POST /stores: derselbe Laden zweimal ist kein Fehler, sondern schon da', async () => {
+  const erst = await call('POST', '/stores', { name: 'REWE' });
+  assert.equal(erst.status, 201);
+  const nochmal = await call('POST', '/stores', { name: 'rewe' });
+  assert.equal(nochmal.status, 200, 'gleicher Name in anderer Schreibweise gibt die vorhandene Zeile');
+  assert.equal(nochmal.body.data.id, erst.body.data.id);
+});
+
+test('PATCH /items: Preis in Cent und Laden werden gespeichert', async () => {
+  const store = (await call('POST', '/stores', { name: 'Aldi' })).body.data;
+  const list = (await call('POST', '/', { name: 'Preisliste' })).body.data;
+  const item = (await call('POST', `/${list.id}/items`, { name: 'Butter' })).body.data;
+
+  const r = await call('PATCH', `/items/${item.id}`, { is_checked: 1, price_cents: 249, store_id: store.id });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.price_cents, 249);
+  assert.equal(r.body.data.store_id, store.id);
+});
+
+test('PATCH /items: ohne die Felder bleibt der Preis stehen, null loescht ihn', async () => {
+  // Der wichtigere Fall ist der erste: ein Teil-Update, etwa das Umsortieren
+  // oder ein neuer Name, darf einen bezahlten Preis nicht abraeumen.
+  const list = (await call('POST', '/', { name: 'Preisliste 2' })).body.data;
+  const item = (await call('POST', `/${list.id}/items`, { name: 'Milch' })).body.data;
+  await call('PATCH', `/items/${item.id}`, { price_cents: 129 });
+
+  const ohne = await call('PATCH', `/items/${item.id}`, { name: 'Milch 1,5%' });
+  assert.equal(ohne.body.data.price_cents, 129, 'ohne Feld unveraendert');
+
+  const leer = await call('PATCH', `/items/${item.id}`, { price_cents: null });
+  assert.equal(leer.body.data.price_cents, null, 'null loescht');
+});
+
+test('PATCH /items: unsinniger Preis und unbekannter Laden werden abgelehnt', async () => {
+  const list = (await call('POST', '/', { name: 'Preisliste 3' })).body.data;
+  const item = (await call('POST', `/${list.id}/items`, { name: 'Brot' })).body.data;
+  assert.equal((await call('PATCH', `/items/${item.id}`, { price_cents: -1 })).status, 400);
+  assert.equal((await call('PATCH', `/items/${item.id}`, { price_cents: 1.5 })).status, 400);
+  assert.equal((await call('PATCH', `/items/${item.id}`, { store_id: 999999 })).status, 400);
+});
+
+test('DELETE /stores/:id laesst den bezahlten Preis stehen', async () => {
+  // Was einmal bezahlt wurde, bleibt wahr - auch wenn der Laden aus der
+  // verwalteten Liste verschwindet. Der Fremdschluessel steht deshalb auf
+  // SET NULL und nicht auf CASCADE.
+  const store = (await call('POST', '/stores', { name: 'Tegut' })).body.data;
+  const list = (await call('POST', '/', { name: 'Preisliste 4' })).body.data;
+  const item = (await call('POST', `/${list.id}/items`, { name: 'Kaese' })).body.data;
+  await call('PATCH', `/items/${item.id}`, { price_cents: 399, store_id: store.id });
+
+  assert.equal((await call('DELETE', `/stores/${store.id}`)).status, 204);
+
+  const nachher = (await call('GET', `/${list.id}/items`)).body.data.find((i) => i.id === item.id);
+  assert.equal(nachher.price_cents, 399, 'der Preis bleibt');
+  assert.equal(nachher.store_id, null, 'nur der Laden ist weg');
+});

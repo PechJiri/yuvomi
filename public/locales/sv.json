@@ -596,7 +596,15 @@
         "toPantryNothing": "Inget lades till i skafferiet. Öppna \"Till skafferiet\" igen och kontrollera mängderna.",
         "reorderHandle": "Ändra ordning: {{name}}",
         "reorderHandleHint": "Dra eller använd piltangenterna för att sortera",
-        "reorderPosition": "Position {{index}} av {{total}}"
+        "reorderPosition": "Position {{index}} av {{total}}",
+        "priceLabel": "Pris",
+        "storeLabel": "Butik",
+        "storePlaceholder": "Välj eller skriv",
+        "manageStores": "Hantera butiker",
+        "storesHint": "Butikerna ni handlar i. Ett pris utan butik svarar bara till hälften.",
+        "storeDeleteConfirm": "Ta bort butiken ”{{name}}”?",
+        "storeDeleteConfirmDetail": "Varorna från den här butiken blir kvar, priset också - bara butikskopplingen blir tom. Någon ersättningsbutik finns inte.",
+        "addStore": "Ny butik"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} måltider planerade.",

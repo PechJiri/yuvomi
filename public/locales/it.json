@@ -596,7 +596,15 @@
         "toPantryNothing": "Non è stato aggiunto nulla alla dispensa. Riapri «In dispensa» e controlla le quantità.",
         "reorderHandle": "Riordina: {{name}}",
         "reorderHandleHint": "Trascina o usa i tasti freccia per riordinare",
-        "reorderPosition": "Posizione {{index}} di {{total}}"
+        "reorderPosition": "Posizione {{index}} di {{total}}",
+        "priceLabel": "Prezzo",
+        "storeLabel": "Negozio",
+        "storePlaceholder": "Scegli o digita",
+        "manageStores": "Gestisci negozi",
+        "storesHint": "I negozi in cui fate la spesa. Un prezzo senza negozio risponde solo a metà.",
+        "storeDeleteConfirm": "Eliminare il negozio «{{name}}»?",
+        "storeDeleteConfirmDetail": "Gli articoli di questo negozio restano, e anche il loro prezzo: solo l'assegnazione del negozio resta vuota. Qui non c'è un negozio sostitutivo.",
+        "addStore": "Nuovo negozio"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} pasti pianificati.",

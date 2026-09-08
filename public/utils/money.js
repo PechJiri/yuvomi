@@ -228,6 +228,40 @@ export function toDecimalString(value) {
 }
 
 /**
+ * Betrag in ganzen Einheiten (Cent, Yen, Fils) als Wert für ein Eingabefeld.
+ *
+ * Der Einkauf speichert Preise als ganze Zahl, weil die Kaufhistorie sie
+ * addiert und Geld in einem Gleitkomma sich sichtbar falsch summiert. Zwischen
+ * Feld und Datenbank liegt damit eine Umrechnung, und sie gehört hierher: der
+ * Trenner kommt aus der eingestellten Region, sonst zeigte ein Feld "2.49"
+ * unter einem Platzhalter, der "0,00" verspricht.
+ *
+ * Ohne Tausendergruppierung, denn `toDecimalString` weist gruppierte Eingaben
+ * ab - ein Wert, der so nicht wieder hereinkäme, darf auch nicht hinaus.
+ */
+export function centsToAmountInput(cents, currency) {
+  const digits = currencyFractionDigits(currency);
+  return getNumberFormat({
+    useGrouping: false, minimumFractionDigits: digits, maximumFractionDigits: digits,
+  }).format(Number(cents) / 10 ** digits);
+}
+
+/**
+ * Eingabe -> ganze Einheiten, oder null bei Unsinn.
+ *
+ * Über `toDecimalString`, nicht über ein eigenes `replace(',', '.')`: das nähme
+ * unter en-US aus "1,000" die Zahl 1 und unter ar/fa die östlichen Ziffern
+ * überhaupt nicht an. Beides fällt nicht auf - der Preis wäre nur falsch.
+ */
+export function amountInputToCents(text, currency) {
+  const norm = toDecimalString(text);
+  if (!/^\d+(\.\d+)?$/.test(norm)) return null;
+  const digits = currencyFractionDigits(currency);
+  const cents = Math.round(Number(norm) * 10 ** digits);
+  return Number.isFinite(cents) ? cents : null;
+}
+
+/**
  * Ein bestehendes Betragsfeld auf eine Währung nachziehen: Platzhalter,
  * Schrittweite und - bei Pflichtfeldern - Untergrenze in einem Zug.
  *

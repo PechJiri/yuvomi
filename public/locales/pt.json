@@ -596,7 +596,15 @@
         "toPantryNothing": "Nada foi adicionado à despensa. Abre «Para a despensa» outra vez e verifica as quantidades.",
         "reorderHandle": "Reordenar: {{name}}",
         "reorderHandleHint": "Arraste ou use as teclas de seta para reordenar",
-        "reorderPosition": "Posição {{index}} de {{total}}"
+        "reorderPosition": "Posição {{index}} de {{total}}",
+        "priceLabel": "Preço",
+        "storeLabel": "Loja",
+        "storePlaceholder": "Escolha ou escreva",
+        "manageStores": "Gerir lojas",
+        "storesHint": "As lojas onde compram. Um preço sem loja responde só a metade.",
+        "storeDeleteConfirm": "Eliminar a loja “{{name}}”?",
+        "storeDeleteConfirmDetail": "Os itens desta loja permanecem, e o preço também - apenas a atribuição de loja fica vazia. Aqui não há loja substituta.",
+        "addStore": "Nova loja"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} refeições planeadas.",

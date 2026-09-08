@@ -596,7 +596,15 @@
         "toPantryNothing": "भंडार में कुछ नहीं जोड़ा गया. „भंडार में\" फिर खोलें और मात्रा जाँचें.",
         "reorderHandle": "क्रम बदलें: {{name}}",
         "reorderHandleHint": "क्रम बदलने के लिए खींचें या तीर कुंजियों का उपयोग करें",
-        "reorderPosition": "{{total}} में से स्थान {{index}}"
+        "reorderPosition": "{{total}} में से स्थान {{index}}",
+        "priceLabel": "मूल्य",
+        "storeLabel": "दुकान",
+        "storePlaceholder": "चुनें या लिखें",
+        "manageStores": "दुकानें प्रबंधित करें",
+        "storesHint": "वे दुकानें जहाँ आप खरीदते हैं। दुकान के बिना कीमत आधा ही उत्तर देती है।",
+        "storeDeleteConfirm": "दुकान “{{name}}” हटाएँ?",
+        "storeDeleteConfirmDetail": "इस दुकान की चीज़ें और उनकी कीमत बनी रहती हैं - सिर्फ़ दुकान का चुनाव खाली हो जाता है। यहाँ कोई वैकल्पिक दुकान नहीं मिलती।",
+        "addStore": "नई दुकान"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} भोजन योजनाबद्ध किए गए।",

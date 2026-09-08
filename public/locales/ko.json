@@ -608,7 +608,15 @@
         "toPantryNothing": "식료품 저장고에 아무것도 추가되지 않았습니다. \"저장고로\"를 다시 열어 수량을 확인하세요.",
         "reorderHandle": "순서 변경: {{name}}",
         "reorderHandleHint": "끌거나 화살표 키로 순서를 변경하세요",
-        "reorderPosition": "{{total}}개 중 {{index}}번째"
+        "reorderPosition": "{{total}}개 중 {{index}}번째",
+        "priceLabel": "가격",
+        "storeLabel": "상점",
+        "storePlaceholder": "선택하거나 입력",
+        "manageStores": "상점 관리",
+        "storesHint": "장을 보는 상점입니다. 상점 없는 가격은 절반만 답합니다.",
+        "storeDeleteConfirm": "상점 “{{name}}”을(를) 삭제할까요?",
+        "storeDeleteConfirmDetail": "이 상점의 항목과 가격은 그대로 남고, 상점 지정만 비워집니다. 대체 상점은 채워지지 않습니다.",
+        "addStore": "새 상점"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}}개의 식사가 계획되었습니다.",

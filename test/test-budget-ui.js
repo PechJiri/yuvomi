@@ -717,6 +717,35 @@ test('nur der Trenner der Region wird zum Dezimalpunkt', () => {
   assert.match(impl, /\\\\d\{3\}/, 'erkannt wird das Muster (drei Ziffern), nicht das blosse Zeichen');
 });
 
+test('die Cent-Umrechnung nutzt dieselbe Umschrift wie die Betragsfelder', () => {
+  // Der Einkauf speichert Preise als ganze Cent (#1003) und brauchte dafuer
+  // zwei Umrechnungen. Als sie in pages/shopping.js standen, war die eine ein
+  // `replace(',', '.')`: unter en-US wird "1,000" damit zur Zahl 1, unter ar/fa
+  // kaeme eine Eingabe in oestlichen Ziffern ueberhaupt nicht an. Die Regel
+  // dafuer steht schon in toDecimalString - eine zweite Fassung daneben ist
+  // genau die Dopplung, gegen die dieses Modul angelegt wurde.
+  const clean = withoutComments(money);
+  assert.match(clean, /export function centsToAmountInput/, 'centsToAmountInput fehlt in utils/money.js');
+  assert.match(clean, /export function amountInputToCents/, 'amountInputToCents fehlt in utils/money.js');
+
+  const rein = clean.match(/export function amountInputToCents[\s\S]*?\n\}/)[0];
+  assert.match(rein, /toDecimalString\(/, 'die Eingabe muss durch toDecimalString laufen');
+
+  // Ohne useGrouping:false schriebe das Feld "1.234,56" - und genau das weist
+  // toDecimalString beim naechsten Speichern ab. Der Wert kaeme also nicht
+  // wieder herein, den das Feld selbst gezeigt hat.
+  const raus = clean.match(/export function centsToAmountInput[\s\S]*?\n\}/)[0];
+  assert.match(raus, /useGrouping:\s*false/, 'der Ausgabewert darf nicht gruppiert sein');
+
+  // Gemessen wird der Preispfad, nicht jedes Komma der Datei: shopping.js
+  // zerlegt auch Mengenangaben ("1,5 kg"), und das ist kein Geldbetrag.
+  const einkauf = withoutComments(read('../public/pages/shopping.js'));
+  assert.doesNotMatch(einkauf, /function (centsToInput|inputToCents)\b/,
+    'shopping.js rechnet Preise wieder selbst um');
+  assert.match(einkauf, /amountInputToCents\(priceRoh/,
+    'der Preis muss durch amountInputToCents laufen');
+});
+
 test('ein Abo darf null kosten', () => {
   // Gratis-Tarife sind ein gültiger Bestand: validatePayload weist erst
   // amount < 0 ab, das Schema prüft CHECK(amount >= 0). Eine Untergrenze aus

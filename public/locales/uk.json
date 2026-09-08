@@ -596,7 +596,15 @@
         "toPantryNothing": "До запасів нічого не додано. Відкрий «До запасів» знову і перевір кількість.",
         "reorderHandle": "Змінити порядок: {{name}}",
         "reorderHandleHint": "Перетягніть або скористайтеся стрілками для сортування",
-        "reorderPosition": "Позиція {{index}} з {{total}}"
+        "reorderPosition": "Позиція {{index}} з {{total}}",
+        "priceLabel": "Ціна",
+        "storeLabel": "Магазин",
+        "storePlaceholder": "Оберіть або введіть",
+        "manageStores": "Керування магазинами",
+        "storesHint": "Магазини, де ви купуєте. Ціна без магазину відповідає лише наполовину.",
+        "storeDeleteConfirm": "Видалити магазин «{{name}}»?",
+        "storeDeleteConfirmDetail": "Товари цього магазину залишаться разом із ціною - порожнім стане лише поле магазину. Заміни магазину тут немає.",
+        "addStore": "Новий магазин"
     },
     "meals": {
         "randomizeSuccess_few": "Заплановано {{count}} прийоми їжі.",

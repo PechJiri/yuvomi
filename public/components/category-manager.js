@@ -6,7 +6,7 @@
  *
  * Verhalten:
  *   - configure({ basePath, groups, supportsSubcategories, labelResolver, titleKey, hintKey,
- *                 deleteDetailKey, subDeleteDetailKey })
+ *                 deleteConfirmKey, deleteDetailKey, subDeleteDetailKey })
  *   - Lädt via api.get(basePath); mutiert über post/put/patch/delete relativ zu basePath
  *   - Dispatcht nach jeder Mutation `category-manager-changed`
  *   - Zeigt Server-Guard-Fehler (in-use/last) als Toast
@@ -57,6 +57,10 @@ class CategoryManagerElement extends HTMLElement {
     // Vorrat laesst sie unzugeordnet zurueck. Ein geteilter Folgentext waere
     // fuer zwei der fuenf Aufrufer schlicht falsch - dieselbe Falle wie beim
     // Platzhalter oben, nur folgenreicher.
+    // Auch die FRAGE gehoert dem Aufrufer, nicht nur die Folgenbeschreibung:
+    // wer Laeden verwaltet, liest sonst "Kategorie „Rewe" loeschen?" in einem
+    // Dialog, der "Laeden verwalten" heisst.
+    this._deleteConfirmKey = 'category.deleteConfirm';
     this._deleteDetailKey = 'category.deleteConfirmDetail';
     this._subDeleteDetailKey = 'category.deleteSubConfirmDetail';
     // OPT-IN: nur wer eine Palette mitgibt, bekommt die Farbwahl. Fuenf der
@@ -78,6 +82,7 @@ class CategoryManagerElement extends HTMLElement {
     if (opts.hintKey) this._hintKey = opts.hintKey;
     if (opts.addPlaceholderKey) this._addPlaceholderKey = opts.addPlaceholderKey;
     if (Array.isArray(opts.colors)) this._colors = opts.colors;
+    if (opts.deleteConfirmKey) this._deleteConfirmKey = opts.deleteConfirmKey;
     if (opts.deleteDetailKey) this._deleteDetailKey = opts.deleteDetailKey;
     if (opts.subDeleteDetailKey) this._subDeleteDetailKey = opts.subDeleteDetailKey;
     this._renderShell();
@@ -716,7 +721,7 @@ class CategoryManagerElement extends HTMLElement {
     if (!cat) return;
     const { confirmOverModal } = await import('/components/modal.js');
     const confirmed = await confirmOverModal(
-      t('category.deleteConfirm', { name: this._labelResolver(cat) }),
+      t(this._deleteConfirmKey, { name: this._labelResolver(cat) }),
       { danger: true, confirmLabel: t('common.delete'), detail: t(this._deleteDetailKey) }
     );
     if (!confirmed) return;

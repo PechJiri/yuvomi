@@ -16,6 +16,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 global.HTMLElement = class HTMLElement {};
 global.customElements = { define() {}, get() { return undefined; } };
@@ -387,4 +388,32 @@ test('updateCheckedActions: eine veraltete Frist nach dem Verlassen der Seite bl
   await new Promise((r) => setTimeout(r, 40));
   assert.equal(__test.getPillPhaseForTest(), 'visible',
     'eine Frist ohne lebende Wurzel darf weder den Zustand noch die geteilte Schicht anfassen');
+});
+
+// --------------------------------------------------------
+// Laden-Verwaltung (#1003)
+// --------------------------------------------------------
+
+test('der Laden-Manager meldet sich beim Schliessen NICHT vom Aenderungs-Ereignis ab', () => {
+  // Gemessen am 08.09.2026 im laufenden Browser: beim Loeschen raeumt
+  // `confirmOverModal` das Modal darunter mit ab, und `api.delete` laeuft
+  // danach weiter - `category-manager-changed` kommt also erst, wenn das
+  // Element schon aus dem Dokument ist (imDom: false in der Sonde). Wer beim
+  // Schliessen abmeldet, verpasst genau diese Aenderung: `state.stores` boete
+  // danach einen Laden an, den der Server nicht mehr kennt, und das naechste
+  // Speichern liefe in dessen 400-Antwort.
+  //
+  // Als Textprobe und nicht als Verhaltenstest, weil der Ablauf am echten
+  // Modal-Stack haengt (Suspend/Resume ueber zwei Overlays) - der Stub dieser
+  // Suite bildet ihn nicht ab. Der Nachweis liegt in der Messung, hier steht
+  // nur die Sperre gegen den Rueckfall.
+  const src = readFileSync(new URL('../public/pages/shopping.js', import.meta.url), 'utf8');
+  const fn = src.match(/function openStoreManager\(container\)[\s\S]*?\n\}/);
+  assert.ok(fn, 'openStoreManager nicht gefunden');
+  assert.doesNotMatch(fn[0], /removeEventListener\(\s*'category-manager-changed'/,
+    'openStoreManager meldet sich wieder ab und verpasst damit das Loeschen');
+  // Die Auffrischung muss im Ereignis stehen, nicht in onClose: onClose laeuft,
+  // bevor der Server ueberhaupt geantwortet hat.
+  assert.match(fn[0], /const onChanged = async \(\) => \{[\s\S]*?loadStores\(\)/,
+    'die Auffrischung gehoert in den Ereignis-Handler');
 });

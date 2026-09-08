@@ -66,6 +66,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A shopping item can carry a price and the shop it was bought at** (#1003, first cut). Both sit
+  in the item dialog, where the item is already open - the checkbox stays the fastest gesture in the
+  app and gains no second step. The price is stored in whole minor units (cents, yen, fils) rather
+  than as a decimal: the purchase history this is groundwork for adds these numbers up, and money in
+  a floating point sums visibly wrong.
+
+  The shop is a **managed list**, not free text on the row: two spellings of the same shop would
+  split that history in half. The field is a combobox - choose an existing shop or type a new one,
+  which is created on save - so the first shop in a fresh household has a place to come from without
+  a second dialog over the first. Renaming and deleting live under "Manage shops" in the list menu,
+  the same component that manages the categories. Deleting a shop keeps the prices and only clears
+  the assignment: what was once paid stays true.
+
+  What is not here yet is the matching of an item to its earlier purchases - whether the same list
+  text is enough or something more stable is needed. Until that is decided, a price is a note on the
+  item, and no history is derived from it.
+
 - **A budget entry can name who is responsible for it** (#1057, first cut). One or more household
   members marked as looking after an entry - "who handles the water bill" - picked in the entry
   dialog and shown as avatars on the row. **It moves no money.** Marking someone responsible

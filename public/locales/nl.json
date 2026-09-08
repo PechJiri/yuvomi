@@ -596,7 +596,15 @@
         "toPantryNothing": "Er is niets aan de voorraad toegevoegd. Open \"Naar de voorraad\" opnieuw en controleer de hoeveelheden.",
         "reorderHandle": "Volgorde wijzigen: {{name}}",
         "reorderHandleHint": "Sleep of gebruik de pijltoetsen om te sorteren",
-        "reorderPosition": "Positie {{index}} van {{total}}"
+        "reorderPosition": "Positie {{index}} van {{total}}",
+        "priceLabel": "Prijs",
+        "storeLabel": "Winkel",
+        "storePlaceholder": "Kiezen of typen",
+        "manageStores": "Winkels beheren",
+        "storesHint": "De winkels waar jullie kopen. Een prijs zonder winkel beantwoordt maar de helft.",
+        "storeDeleteConfirm": "Winkel “{{name}}” verwijderen?",
+        "storeDeleteConfirmDetail": "Artikelen van deze winkel blijven staan, hun prijs ook - alleen de winkeltoewijzing is daarna leeg. Een vervangende winkel is er niet.",
+        "addStore": "Nieuwe winkel"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} maaltijden gepland.",

@@ -596,7 +596,15 @@
         "toPantryNothing": "Rien n'a été ajouté au garde-manger. Ouvrez à nouveau « Vers le garde-manger » et vérifiez les quantités.",
         "reorderHandle": "Réorganiser : {{name}}",
         "reorderHandleHint": "Faites glisser ou utilisez les flèches pour réorganiser",
-        "reorderPosition": "Position {{index}} sur {{total}}"
+        "reorderPosition": "Position {{index}} sur {{total}}",
+        "priceLabel": "Prix",
+        "storeLabel": "Magasin",
+        "storePlaceholder": "Choisir ou saisir",
+        "manageStores": "Gérer les magasins",
+        "storesHint": "Les magasins où vous faites vos courses. Un prix sans magasin ne répond qu'à moitié.",
+        "storeDeleteConfirm": "Supprimer le magasin « {{name}} » ?",
+        "storeDeleteConfirmDetail": "Les articles de ce magasin sont conservés, leur prix aussi - seule l'affectation au magasin devient vide. Il n'y a pas de magasin de remplacement.",
+        "addStore": "Nouveau magasin"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} repas planifiés.",

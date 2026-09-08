@@ -608,7 +608,15 @@
         "toPantryNothing": "Walang naidagdag sa paminggalan. Buksan ulit ang \"Sa paminggalan\" at suriin ang mga dami.",
         "reorderHandle": "Ayusin ang pagkakasunod: {{name}}",
         "reorderHandleHint": "I-drag o gamitin ang arrow keys para mag-ayos",
-        "reorderPosition": "Posisyon {{index}} ng {{total}}"
+        "reorderPosition": "Posisyon {{index}} ng {{total}}",
+        "priceLabel": "Presyo",
+        "storeLabel": "Tindahan",
+        "storePlaceholder": "Pumili o mag-type",
+        "manageStores": "Pamahalaan ang mga tindahan",
+        "storesHint": "Ang mga tindahang pinamimilihan ninyo. Ang presyo na walang tindahan ay kalahating sagot lamang.",
+        "storeDeleteConfirm": "Burahin ang tindahang “{{name}}”?",
+        "storeDeleteConfirmDetail": "Mananatili ang mga bagay ng tindahang ito pati ang presyo nila - ang takda ng tindahan lang ang mawawalan ng laman. Walang kapalit na tindahan dito.",
+        "addStore": "Bagong tindahan"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} na pagkain ang naplano.",
