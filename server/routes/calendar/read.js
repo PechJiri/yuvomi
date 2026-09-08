@@ -41,11 +41,16 @@ router.get('/', (req, res) => {
              u_assigned.display_name AS assigned_name,
              u_assigned.avatar_color AS assigned_color,
              u_created.display_name  AS creator_name,
-             ec.name  AS cal_name,
-             -- Die geerbte Kalenderfarbe kommt aus zwei Toepfen: CalDAV/Google
+             -- Name UND geerbte Farbe kommen aus zwei Toepfen: CalDAV/Google
              -- ueber calendar_ref_id, ICS-Abos ueber subscription_id (sie haben
              -- keinen external_calendars-Eintrag). Beide sind dasselbe - eine
-             -- Farbe, die fuer JEDEN Termin der Quelle gilt (#891).
+             -- Eigenschaft, die fuer JEDEN Termin der Quelle gilt (#891).
+             --
+             -- DER NAME FOLGTE DER FARBE ERST NICHT (#1064): er las allein
+             -- ec.name und blieb damit bei jedem Abo-Termin NULL, waehrend die
+             -- Zeile darunter dessen Farbe laengst auslieferte. Der Termin trug
+             -- sichtbar die Farbe seiner Quelle und konnte sie nirgends nennen.
+             COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,
@@ -162,11 +167,16 @@ router.get('/search', (req, res) => {
              u_assigned.display_name AS assigned_name,
              u_assigned.avatar_color AS assigned_color,
              u_created.display_name  AS creator_name,
-             ec.name  AS cal_name,
-             -- Die geerbte Kalenderfarbe kommt aus zwei Toepfen: CalDAV/Google
+             -- Name UND geerbte Farbe kommen aus zwei Toepfen: CalDAV/Google
              -- ueber calendar_ref_id, ICS-Abos ueber subscription_id (sie haben
              -- keinen external_calendars-Eintrag). Beide sind dasselbe - eine
-             -- Farbe, die fuer JEDEN Termin der Quelle gilt (#891).
+             -- Eigenschaft, die fuer JEDEN Termin der Quelle gilt (#891).
+             --
+             -- DER NAME FOLGTE DER FARBE ERST NICHT (#1064): er las allein
+             -- ec.name und blieb damit bei jedem Abo-Termin NULL, waehrend die
+             -- Zeile darunter dessen Farbe laengst auslieferte. Der Termin trug
+             -- sichtbar die Farbe seiner Quelle und konnte sie nirgends nennen.
+             COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,

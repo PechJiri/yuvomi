@@ -48,9 +48,13 @@ router.get('/:id', (req, res) => {
              u_assigned.display_name AS assigned_name,
              u_assigned.avatar_color AS assigned_color,
              u_created.display_name  AS creator_name,
-             -- Dieselbe geerbte Farbe wie im Lesepfad, damit jede Antwort dieses
-             -- Moduls dasselbe Event-Objekt liefert: CalDAV/Google ueber
-             -- calendar_ref_id, ICS-Abos ueber subscription_id (#891).
+             -- Derselbe Name und dieselbe geerbte Farbe wie im Lesepfad, damit
+             -- jede Antwort dieses Moduls dasselbe Event-Objekt liefert:
+             -- CalDAV/Google ueber calendar_ref_id, ICS-Abos ueber
+             -- subscription_id (#891). Der Name fehlte hier ganz (#1064): die
+             -- Zusage dieser Zeilen galt nur der Farbe, und ein frisch
+             -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
+             COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,
@@ -198,9 +202,13 @@ router.post('/', async (req, res) => {
              u_assigned.display_name AS assigned_name,
              u_assigned.avatar_color AS assigned_color,
              u_created.display_name  AS creator_name,
-             -- Dieselbe geerbte Farbe wie im Lesepfad, damit jede Antwort dieses
-             -- Moduls dasselbe Event-Objekt liefert: CalDAV/Google ueber
-             -- calendar_ref_id, ICS-Abos ueber subscription_id (#891).
+             -- Derselbe Name und dieselbe geerbte Farbe wie im Lesepfad, damit
+             -- jede Antwort dieses Moduls dasselbe Event-Objekt liefert:
+             -- CalDAV/Google ueber calendar_ref_id, ICS-Abos ueber
+             -- subscription_id (#891). Der Name fehlte hier ganz (#1064): die
+             -- Zusage dieser Zeilen galt nur der Farbe, und ein frisch
+             -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
+             COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
              ${ASSIGNED_USERS_SQL}
       FROM calendar_events e
@@ -555,9 +563,13 @@ router.put('/:id', async (req, res) => {
              u_assigned.display_name AS assigned_name,
              u_assigned.avatar_color AS assigned_color,
              u_created.display_name  AS creator_name,
-             -- Dieselbe geerbte Farbe wie im Lesepfad, damit jede Antwort dieses
-             -- Moduls dasselbe Event-Objekt liefert: CalDAV/Google ueber
-             -- calendar_ref_id, ICS-Abos ueber subscription_id (#891).
+             -- Derselbe Name und dieselbe geerbte Farbe wie im Lesepfad, damit
+             -- jede Antwort dieses Moduls dasselbe Event-Objekt liefert:
+             -- CalDAV/Google ueber calendar_ref_id, ICS-Abos ueber
+             -- subscription_id (#891). Der Name fehlte hier ganz (#1064): die
+             -- Zusage dieser Zeilen galt nur der Farbe, und ein frisch
+             -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
+             COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
              ${ASSIGNED_USERS_SQL}
       FROM calendar_events e

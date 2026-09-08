@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An event from a subscribed calendar now names its source everywhere an event is read**
+  (groundwork for #1064). A subscribed event already inherited its subscription's colour, but the
+  name came from `external_calendars` alone: the calendar list, the search and the dashboard all
+  read `cal_name` as null for it, so it showed up in the subscription's colour without ever saying
+  which subscription that was. The detail endpoint went further and did not select the column at
+  all, for any event - its own comment promised "the same event object as the read path", and that
+  promise held for the colour only, so a freshly created or edited event came back without its
+  calendar name. All six queries now read the name from both sources, the way the colour already
+  did. An event with no source keeps `cal_name: null`.
+
 - **The schedule overview now sets its blocks in the same size as the calendar** (#1065). A block
   in the overview carries what a calendar tile carries - a title plus one line of time and custom
   field - but stood two type steps smaller than one, in narrower columns, which made a school
