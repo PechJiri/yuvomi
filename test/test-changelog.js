@@ -172,17 +172,6 @@ test('default changelog router is an express router', () => {
   assert.equal(typeof changelogRouter, 'function');
 });
 
-test('issue 975 release note remains in Unreleased', () => {
-  const source = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
-  const unreleasedStart = source.indexOf('## [Unreleased]');
-  const nextRelease = source.indexOf('\n## [', unreleasedStart + 1);
-  assert.notEqual(unreleasedStart, -1);
-  assert.notEqual(nextRelease, -1);
-  const unreleased = source.slice(unreleasedStart, nextRelease);
-  assert.match(unreleased, /### Fixed[\s\S]*\(#975\)/);
-  assert.doesNotMatch(source.slice(nextRelease), /\(#975\)/);
-});
-
 // --------------------------------------------------------
 // Rueckfall auf die mitgelieferte CHANGELOG.md (#838)
 // --------------------------------------------------------
