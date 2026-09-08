@@ -226,6 +226,11 @@ test('calendar occurrence endpoints expose route-specific requests and occurrenc
   assert.deepEqual(Object.keys(onlyMutation.properties), sharedFields);
   assert.deepEqual(Object.keys(followingMutation.properties), [
     ...sharedFields,
+    'target_google_calendar_id',
+    'target_caldav_account_id',
+    'target_caldav_calendar_url',
+    'target_outlook_account_id',
+    'target_outlook_calendar_id',
     'recurrence_rule',
     'confirmed_orphan_count',
   ]);

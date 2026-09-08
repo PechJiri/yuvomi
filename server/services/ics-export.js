@@ -6,7 +6,9 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { householdTimeZone, isValidTimeZone } from '../utils/timezone.js';
+import {
+  householdTimeZone, isValidTimeZone, localToUTC, utcToWall,
+} from '../utils/timezone.js';
 import { formatWall, vtimezoneFor } from '../utils/vtimezone.js';
 import { rruleLine } from './recurrence.js';
 import {
@@ -154,13 +156,18 @@ function recurrenceSlotProp(prop, master, dateKey, feedZone) {
 }
 
 // EXDATEs may outlive a changed/imported rule and therefore cannot require a
-// successful occurrence expansion. For TZID series, keep the master's local
-// wall-clock time and put it on the persisted exception date in O(1).
+// successful occurrence expansion. Reconstruct the same instant as the
+// recurrence expander in O(1): ordinary TZID series retain their wall clock
+// across DST, while series whose local and stored date differ retain the UTC
+// suffix that defines their persisted recurrence identity.
 function exceptionSlotProp(master, dateKey, feedZone) {
   if (master.all_day) return `EXDATE;VALUE=DATE:${formatDate(dateKey)}`;
   if (usesTzid(master)) {
-    const wallTime = formatWall(master.start_datetime, master.tzid).slice(9);
-    return `EXDATE;TZID=${master.tzid}:${formatDate(dateKey)}T${wallTime}`;
+    const wall = utcToWall(master.start_datetime, master.tzid);
+    const instant = wall?.date === master.start_datetime.slice(0, 10)
+      ? localToUTC(`${dateKey}T${wall.time}`, master.tzid)
+      : dateKey + master.start_datetime.slice(10);
+    return `EXDATE;TZID=${master.tzid}:${formatWall(instant, master.tzid)}`;
   }
   return recurrenceSlotProp('EXDATE', master, dateKey, feedZone);
 }
@@ -267,35 +274,35 @@ function buildFeed(conn, userId, now = new Date(), tz = householdTimeZone(conn))
     .filter((event) => !isRecurrenceExpired(event.recurrence_rule, windowStart)
       || referencedMasterIds.has(Number(event.id)));
 
-  // RFC 5545 represents a replaced occurrence with RECURRENCE-ID. Emitting an
-  // EXDATE for that same slot would remove the replacement in strict clients.
-  const linkedSlotsByMaster = new Map();
-  for (const event of rows.filter(isLinkedOccurrence)) {
-    const parentId = Number(event.recurrence_parent_id);
-    if (!linkedSlotsByMaster.has(parentId)) linkedSlotsByMaster.set(parentId, new Set());
-    linkedSlotsByMaster.get(parentId).add(event.recurrence_id);
-  }
-
   // Instanz-Ausnahmen (EXDATE, #489) für die wiederkehrenden Events des Feeds laden.
   const recurringIds = rows.filter(ev => ev.recurrence_rule).map(ev => ev.id);
+  const exceptionsByEvent = new Map();
   if (recurringIds.length) {
     const placeholders = recurringIds.map(() => '?').join(',');
     const exRows = conn.prepare(
       `SELECT event_id, exception_date FROM calendar_event_exceptions WHERE event_id IN (${placeholders})`
     ).all(...recurringIds);
-    const byEvent = new Map();
     for (const r of exRows) {
-      if (!byEvent.has(r.event_id)) byEvent.set(r.event_id, []);
-      byEvent.get(r.event_id).push(r.exception_date);
-    }
-    for (const ev of rows) {
-      const linkedSlots = linkedSlotsByMaster.get(Number(ev.id));
-      ev.exception_dates = (byEvent.get(ev.id) || [])
-        .filter((dateKey) => !linkedSlots?.has(dateKey));
+      if (!exceptionsByEvent.has(r.event_id)) exceptionsByEvent.set(r.event_id, []);
+      exceptionsByEvent.get(r.event_id).push(r.exception_date);
     }
   }
 
   const resolvedRows = resolveProjectedEventRows(conn, rows, { lightweight: true });
+  // RFC 5545 represents a reachable replacement with RECURRENCE-ID, so its
+  // master must not also emit EXDATE. A child that degraded to standalone is
+  // deliberately absent here: its original master slot remains excluded.
+  const linkedSlotsByMaster = new Map();
+  for (const event of resolvedRows.filter((row) => row.is_occurrence_override)) {
+    const parentId = Number(event.series_id);
+    if (!linkedSlotsByMaster.has(parentId)) linkedSlotsByMaster.set(parentId, new Set());
+    linkedSlotsByMaster.get(parentId).add(event.recurrence_id);
+  }
+  for (const event of resolvedRows) {
+    const linkedSlots = linkedSlotsByMaster.get(Number(event.id));
+    event.exception_dates = (exceptionsByEvent.get(event.id) || [])
+      .filter((dateKey) => !linkedSlots?.has(dateKey));
+  }
   // Keep recurrence context even when an old master itself falls outside the
   // rolling feed window but one of its moved replacements is displayed now.
   const mastersById = new Map(queriedRows

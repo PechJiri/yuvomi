@@ -36,9 +36,17 @@ const APPLE_COLOR = '#FC3C44';
 
 function collectLocalOutboundEvents(database) {
   return database.prepare(`
-    SELECT * FROM calendar_events
-    WHERE external_source = 'local' AND external_calendar_id IS NULL
-      AND recurrence_parent_id IS NULL
+    SELECT e.* FROM calendar_events e
+    WHERE e.external_source = 'local' AND e.external_calendar_id IS NULL
+      AND e.recurrence_parent_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM calendar_events child
+        WHERE child.recurrence_parent_id = e.id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM calendar_event_exceptions exception
+        WHERE exception.event_id = e.id
+      )
   `).all();
 }
 

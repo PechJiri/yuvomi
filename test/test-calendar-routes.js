@@ -28,7 +28,7 @@
  *          - PUT /:id         partielle Updates, Anhang ersetzen/entfernen, COALESCE
  *                             der Sync-Ziele, user_modified bei externem Event
  *          - reset/exceptions ICS-Reset-Gate, EXDATE-Einzellöschung (#489) inkl.
- *                             Extern-Sperre + Owner-Gate
+ *                             Extern-Sperre + identischer Sichtbarkeit wie Serien
  *          - DELETE /:id      404 + 204
  *
  *        Systemuhr: GET / immer mit explizitem Fenster (2035); /upcoming per
@@ -1120,14 +1120,33 @@ test('POST /:id/exceptions — 404 + 400 keine Serie + 400 extern', async () => 
   assert.equal((await call('POST', `/${extern}/exceptions`, { body: { date: '2042-02-04' } })).status, 400, 'externe Serie gesperrt');
 });
 
-test('POST /:id/exceptions — 403 fremd + 201 EXDATE angelegt', async () => {
+test('POST /:id/exceptions — sichtbare Nicht-Eigentümer dürfen wie bei der ganzen Serie ändern', async () => {
   const serie = insertEvent({ title: 'EXC-OK', start_datetime: '2042-03-01T09:00', recurrence_rule: 'FREQ=DAILY', created_by: MARIA.id });
-  assert.equal((await call('POST', `/${serie}/exceptions`, { actor: TOM, body: { date: '2042-03-05' } })).status, 403);
-  const ok = await call('POST', `/${serie}/exceptions`, { actor: MARIA, body: { date: '2042-03-05' } });
+  const ok = await call('POST', `/${serie}/exceptions`, { actor: TOM, body: { date: '2042-03-05' } });
   assert.equal(ok.status, 201);
   assert.equal(ok.body.data.exception_date, '2042-03-05');
   const row = db.prepare('SELECT COUNT(*) AS n FROM calendar_event_exceptions WHERE event_id=? AND exception_date=?').get(serie, '2042-03-05');
   assert.equal(row.n, 1);
+});
+
+test('POST /:id/exceptions — fremde private Serie bleibt auch für Admin unsichtbar', async () => {
+  const serie = insertEvent({
+    title: 'EXC-PRIVATE',
+    start_datetime: '2042-04-01T09:00',
+    recurrence_rule: 'FREQ=DAILY',
+    created_by: MARIA.id,
+    visibility: 'private',
+  });
+  for (const requestActor of [TOM, ADMIN]) {
+    const response = await call('POST', `/${serie}/exceptions`, {
+      actor: requestActor,
+      body: { date: '2042-04-02' },
+    });
+    assert.equal(response.status, 404);
+  }
+  assert.equal(db.prepare(
+    'SELECT COUNT(*) AS count FROM calendar_event_exceptions WHERE event_id = ?'
+  ).get(serie).count, 0);
 });
 
 // ════════════════════════════════════════════════════════════════════════════════

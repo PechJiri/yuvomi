@@ -43,7 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moved to another date. The replacement and its skipped original slot are saved atomically, and
   the read-only ICS feed now exports the replacement with standard `RECURRENCE-ID` semantics.
   Provider-synced and generated series keep their existing behavior, and historic detached edits
-  are left unchanged rather than guessed back into a series.
+  are left unchanged rather than guessed back into a series. iCloud auto-sync leaves a still-local
+  series with linked or deletion-only occurrence state local instead of uploading an incomplete
+  master or a replacement as an unrelated event.
 - **Birthdays no longer vanish from the calendar when you filter by person** (#1054). The person
   filter and "Assigned to me" keep an entry only if a selected person is assigned to it, and a
   birthday belongs to a contact, not to a household member - so any person selection emptied the

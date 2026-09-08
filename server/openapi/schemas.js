@@ -67,6 +67,14 @@ const calendarOccurrenceMutationProperties = {
   },
 };
 
+const calendarProviderTargetProperties = {
+  target_google_calendar_id: { type: ['string', 'null'], maxLength: 2048 },
+  target_caldav_account_id: { type: ['integer', 'null'], minimum: 1 },
+  target_caldav_calendar_url: { type: ['string', 'null'], maxLength: 2048 },
+  target_outlook_account_id: { type: ['integer', 'null'], minimum: 1 },
+  target_outlook_calendar_id: { type: ['string', 'null'], maxLength: 2048 },
+};
+
 export const schemas = {
         ApiError: {
           type: 'object',
@@ -626,6 +634,7 @@ export const schemas = {
           description: 'Editable fields for a successor series. Omitted fields inherit from the original series.',
           properties: {
             ...calendarOccurrenceMutationProperties,
+            ...calendarProviderTargetProperties,
             recurrence_rule: { type: ['string', 'null'], maxLength: 300 },
             confirmed_orphan_count: { type: 'integer', minimum: 0 },
           },

@@ -399,8 +399,9 @@ test('local recurring series with an Outlook push link is ineligible without an 
   });
 });
 
-test('Apple outbound collector sends the master but never its linked replacement standalone', () => {
+test('Apple outbound collector leaves linked and deletion-only occurrence state local', () => {
   const database = createDatabase();
+  const plainId = Number(insertSeries(database, { title: 'Apple plain local series' }));
   const masterId = Number(insertSeries(database, { title: 'Apple master' }));
   insertEvent(database, {
     title: 'Apple linked child',
@@ -408,9 +409,20 @@ test('Apple outbound collector sends the master but never its linked replacement
     recurrence_id: '2026-11-30',
     overridden_fields: '["title"]',
   });
+  database.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date)
+    VALUES (?, '2026-11-30')
+  `).run(masterId);
+  const deletionOnlyId = Number(insertSeries(database, { title: 'Apple deletion-only series' }));
+  database.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id, exception_date)
+    VALUES (?, '2026-11-30')
+  `).run(deletionOnlyId);
 
   const outbound = appleCalendarTest.collectLocalOutboundEvents(database);
-  assert.equal(outbound.some((event) => Number(event.id) === masterId), true);
+  assert.equal(outbound.some((event) => Number(event.id) === plainId), true);
+  assert.equal(outbound.some((event) => Number(event.id) === masterId), false);
+  assert.equal(outbound.some((event) => Number(event.id) === deletionOnlyId), false);
   assert.equal(outbound.some((event) => Number(event.recurrence_parent_id) === masterId), false);
 });
 

@@ -1381,20 +1381,19 @@ router.post('/:id/exceptions', (req, res) => {
     if (!DATE_RE.test(date || ''))
       return res.status(400).json({ error: 'date muss YYYY-MM-DD sein.', code: 400 });
 
-    const event = db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(id);
+    const event = loadVisibleEvent(id, req);
     if (!event) return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
-    if (!event.recurrence_rule)
-      return res.status(400).json({ error: 'Termin ist keine Serie.', code: 400 });
-    // Nur rein lokale Serien: extern synchronisierte (Google/Apple/CalDAV via
-    // calendar_ref_id, ICS-Abo via subscription_id) würden beim nächsten Sync
-    // wiederkehren; deren EXDATE-Propagierung ist bewusst out of scope (#489).
-    if (event.external_source !== 'local' || event.calendar_ref_id || event.subscription_id)
-      return res.status(400).json({ error: 'Externe Serien können nicht einzeln ausgenommen werden.', code: 400 });
-
-    const userId  = getUserId(req);
-    const isAdmin = isAdminUser(req);
-    if (!isAdmin && event.created_by !== userId)
-      return res.status(403).json({ error: 'Nicht autorisiert.', code: 403 });
+    const eligibility = isEligibleLocalSeries(db.get(), event, getUserId(req));
+    if (!eligibility.eligible) {
+      const notSeries = !event.recurrence_rule;
+      return res.status(400).json({
+        error: notSeries
+          ? 'Termin ist keine Serie.'
+          : 'Diese Serie kann keine einzelnen Ausnahmen verwenden.',
+        code: 400,
+        reason: eligibility.reason,
+      });
+    }
 
     db.get().prepare(
       'INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date) VALUES (?, ?)'

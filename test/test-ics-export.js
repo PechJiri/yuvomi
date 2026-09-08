@@ -426,6 +426,40 @@ test('buildFeed: linked private and assignee-only series remain household-feed e
   }
 });
 
+test('buildFeed: unreachable linked child degrades standalone and keeps the master EXDATE', () => {
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,
+       visibility,created_by)
+    VALUES ('UnreachableFeedMaster','2026-11-01T09:00','2026-11-01T10:00',0,
+            'local','FREQ=MONTHLY;COUNT=2','all',?)
+  `).run(u1).lastInsertRowid;
+  const childId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,visibility,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('UnreachableFeedChild','2026-11-08T11:00','2026-11-08T12:00',0,
+            'local','all',?,?,?,?)
+  `).run(u1, masterId, '2026-11-02', JSON.stringify([
+    'title', 'start_datetime', 'end_datetime',
+  ])).lastInsertRowid;
+  d2.prepare(`
+    INSERT INTO calendar_event_exceptions (event_id,exception_date)
+    VALUES (?, '2026-11-02')
+  `).run(masterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  const master = eventBlock(ics, 'UnreachableFeedMaster');
+  const child = eventBlock(ics, 'UnreachableFeedChild');
+  assert(master?.includes('EXDATE;TZID=Europe/Madrid:20261102T090000'),
+    'unreachable replacement must not resurrect the excluded master slot: ' + master);
+  assert(child?.includes(`UID:event-${childId}@yuvomi`),
+    'unreachable child must retain its standalone identity: ' + child);
+  assert(!child?.includes('RECURRENCE-ID'),
+    'unreachable child must not claim a recurrence slot the rule cannot reach: ' + child);
+  d2.prepare('DELETE FROM calendar_events WHERE id = ?').run(masterId);
+});
+
 test('buildFeed resolves linked rows without reading legacy attachment bodies', () => {
   const largeAttachment = 'A'.repeat(1024 * 1024);
   const masterId = d2.prepare(`
@@ -646,6 +680,22 @@ test('buildFeed: EXDATE einer TZID-Serie trägt TZID + lokale Zeit', () => {
   d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2025-12-19')`).run(id);
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);
   assert(ics.includes('EXDATE;TZID=Europe/Berlin:20251219T072500'), 'EXDATE;TZID (lokal) fehlt: ' + ics);
+  d2.prepare(`DELETE FROM calendar_events WHERE id = ?`).run(id);
+});
+
+test('buildFeed: TZID-EXDATE nutzt bei positivem Mitternachtsversatz denselben Slot wie die Expansion', () => {
+  const id = d2.prepare(`INSERT INTO calendar_events (title,start_datetime,all_day,external_source,recurrence_rule,tzid,created_by) VALUES ('TokyoTZEx','2026-01-06T23:00:00Z',0,'apple','FREQ=DAILY;COUNT=4',?, ?)`).run('Asia/Tokyo', u1).lastInsertRowid;
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-01-07')`).run(id);
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  assert(ics.includes('EXDATE;TZID=Asia/Tokyo:20260108T080000'), 'EXDATE muss den lokalen Basis-Instant nutzen: ' + ics);
+  d2.prepare(`DELETE FROM calendar_events WHERE id = ?`).run(id);
+});
+
+test('buildFeed: TZID-EXDATE nutzt bei negativem Mitternachtsversatz den DST-korrigierten Slot', () => {
+  const id = d2.prepare(`INSERT INTO calendar_events (title,start_datetime,all_day,external_source,recurrence_rule,tzid,created_by) VALUES ('LosAngelesTZEx','2026-03-08T01:30:00Z',0,'apple','FREQ=DAILY;COUNT=4',?, ?)`).run('America/Los_Angeles', u1).lastInsertRowid;
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-03-09')`).run(id);
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  assert(ics.includes('EXDATE;TZID=America/Los_Angeles:20260308T183000'), 'EXDATE muss den DST-korrigierten Basis-Instant nutzen: ' + ics);
   d2.prepare(`DELETE FROM calendar_events WHERE id = ?`).run(id);
 });
 
