@@ -178,7 +178,8 @@ test('issue 975 release note remains in Unreleased', () => {
   const nextRelease = source.indexOf('\n## [', unreleasedStart + 1);
   assert.notEqual(unreleasedStart, -1);
   assert.notEqual(nextRelease, -1);
-  assert.match(source.slice(unreleasedStart, nextRelease), /\(#975\)/);
+  const unreleased = source.slice(unreleasedStart, nextRelease);
+  assert.match(unreleased, /### Fixed[\s\S]*\(#975\)/);
   assert.doesNotMatch(source.slice(nextRelease), /\(#975\)/);
 });
 

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Fixed
 
 - **Editing one occurrence of a local recurring event now keeps it linked to its series** (#975).
   The edited occurrence keeps all three series scopes when reopened, follows later series changes
