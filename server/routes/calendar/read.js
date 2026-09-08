@@ -13,7 +13,7 @@ import {
 import { buildMatchQuery, resolveEventSearchRows } from '../../services/search.js';
 import { visibilityWhere } from '../../services/visibility.js';
 import {
-  VALID_SOURCES, ASSIGNED_USERS_SQL, getUserId, isAdminUser, serializeEvent,
+  VALID_SOURCES, ASSIGNED_USERS_SQL, getUserId, isAdminUser, serializeEvents,
 } from './helpers.js';
 import { shiftDateKey, todayKey } from '../../utils/timezone.js';
 
@@ -103,8 +103,10 @@ router.get('/', (req, res) => {
       actorId: getUserId(req),
       isAdmin: isAdminUser(req),
     };
-    const events = expandAndResolveEventRows(database, rawEvents, from, to)
-      .map((event) => serializeEvent(event, serialization));
+    const events = serializeEvents(
+      expandAndResolveEventRows(database, rawEvents, from, to),
+      serialization,
+    );
     res.json({ data: events, from, to });
   } catch (err) {
     log.error('', err);
@@ -122,15 +124,14 @@ router.get('/upcoming', (req, res) => {
   try {
     const limit    = Math.min(parseInt(req.query.limit, 10) || 5, 20);
     const database = db.get();
-    const expanded = hydrateEventAttachmentBodies(
+    const expanded = serializeEvents(hydrateEventAttachmentBodies(
       database,
       getUpcomingEvents(database, { userId: getUserId(req), limit }),
-    )
-      .map((event) => serializeEvent(event, {
-        database,
-        actorId: getUserId(req),
-        isAdmin: isAdminUser(req),
-      }));
+    ), {
+      database,
+      actorId: getUserId(req),
+      isAdmin: isAdminUser(req),
+    });
 
     res.json({ data: expanded });
   } catch (err) {
@@ -215,11 +216,11 @@ router.get('/search', (req, res) => {
     const resolved = resolveEventSearchRows(database, rows, today, future);
 
     res.json({
-      data: resolved.map((event) => serializeEvent(event, {
+      data: serializeEvents(resolved, {
         database,
         actorId: userId,
         isAdmin: isAdminUser(req),
-      })),
+      }),
       total,
     });
   } catch (err) {

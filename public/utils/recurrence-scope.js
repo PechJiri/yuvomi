@@ -140,14 +140,16 @@ export function requestCalendarOccurrenceMutation({
   const target = calendarOccurrenceMutationTarget(event, scope);
   const payload = { ...body };
   if (target.carriesReminderOffsets) {
-    for (const seriesOwnedField of [
-      'target_google_calendar_id',
-      'target_caldav_account_id',
-      'target_caldav_calendar_url',
-      'target_outlook_account_id',
-      'target_outlook_calendar_id',
-    ]) delete payload[seriesOwnedField];
-    if (scope === 'this') delete payload.recurrence_rule;
+    if (scope === 'this') {
+      for (const seriesOwnedField of [
+        'target_google_calendar_id',
+        'target_caldav_account_id',
+        'target_caldav_calendar_url',
+        'target_outlook_account_id',
+        'target_outlook_calendar_id',
+      ]) delete payload[seriesOwnedField];
+      delete payload.recurrence_rule;
+    }
     payload.reminder_offsets = reminderOffsets;
   }
   return withCalendarOrphanConfirmation(

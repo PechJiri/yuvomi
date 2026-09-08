@@ -935,7 +935,18 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       location: req.body.location === undefined ? null : str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }),
       recurrence_rule: req.body.recurrence_rule === undefined ? null : rrule(req.body.recurrence_rule, 'Wiederholung'),
     };
-    const errors = collectErrors(Object.values(validated).filter(Boolean));
+    const caldavProvided = req.body.target_caldav_account_id !== undefined
+      || req.body.target_caldav_calendar_url !== undefined;
+    const googleProvided = req.body.target_google_calendar_id !== undefined;
+    const outlookProvided = req.body.target_outlook_account_id !== undefined
+      || req.body.target_outlook_calendar_id !== undefined;
+    const vCaldav = caldavProvided ? caldavTarget(req.body) : null;
+    const vGoogle = googleProvided ? googleTarget(req.body) : null;
+    const vOutlook = outlookProvided ? outlookTarget(req.body) : null;
+    const errors = collectErrors([
+      ...Object.values(validated).filter(Boolean),
+      ...[vCaldav, vGoogle, vOutlook].filter(Boolean),
+    ]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     const vIcon = req.body.icon !== undefined ? eventIcon(req.body.icon) : undefined;
     if (req.body.icon !== undefined && !vIcon) {
@@ -1033,6 +1044,15 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     }
     if (Object.hasOwn(req.body, 'visibility')) {
       changes.visibility = normalizeVisibility(req.body.visibility, master.visibility);
+    }
+    if (caldavProvided) {
+      changes.target_caldav_account_id = vCaldav.value.accountId;
+      changes.target_caldav_calendar_url = vCaldav.value.calendarUrl;
+    }
+    if (googleProvided) changes.target_google_calendar_id = vGoogle.value;
+    if (outlookProvided) {
+      changes.target_outlook_account_id = vOutlook.value.accountId;
+      changes.target_outlook_calendar_id = vOutlook.value.calendarId;
     }
     if (vIcon !== undefined) changes.icon = vIcon;
     const result = splitSeries(db.get(), {

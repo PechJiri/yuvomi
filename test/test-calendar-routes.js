@@ -2115,6 +2115,108 @@ test('whole-series outbound transition confirms detachment before setting the ta
   `).get().recurrence_parent_id, null);
 });
 
+test('following route validates and persists a selected target with exact future-child detachment', async () => {
+  const seriesId = insertEvent({
+    title: 'Following target route',
+    start_datetime: '2046-11-10T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  await call('PUT', `/${seriesId}/occurrences/2046-11-11`, {
+    body: { title: 'Selected successor' },
+  });
+  const future = await call('PUT', `/${seriesId}/occurrences/2046-11-12`, {
+    body: { title: 'Future detached child' },
+  });
+  const path = `/${seriesId}/occurrences/2046-11-11/following`;
+  const body = { target_google_calendar_id: 'family@test' };
+
+  const conflict = await call('PUT', path, { body });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.orphaned_override_count, 1);
+  const confirmed = await call('PUT', path, {
+    body: { ...body, confirmed_orphan_count: 1 },
+  });
+  assert.equal(confirmed.status, 201);
+  assert.equal(confirmed.body.data.target_google_calendar_id, 'family@test');
+  assert.equal(db.prepare('SELECT target_google_calendar_id FROM calendar_events WHERE id = ?')
+    .get(seriesId).target_google_calendar_id, null);
+  assert.equal(db.prepare('SELECT recurrence_parent_id FROM calendar_events WHERE id = ?')
+    .get(future.body.data.id).recurrence_parent_id, null);
+});
+
+test('first-slot following target selection delegates through exact detachment confirmation', async () => {
+  const seriesId = insertEvent({
+    title: 'First target delegation',
+    start_datetime: '2046-11-15T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  const future = await call('PUT', `/${seriesId}/occurrences/2046-11-16`, {
+    body: { title: 'First target detached child' },
+  });
+  const path = `/${seriesId}/occurrences/2046-11-15/following`;
+
+  const conflict = await call('PUT', path, {
+    body: { target_outlook_account_id: 9, target_outlook_calendar_id: 'calendar-9' },
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.orphaned_override_count, 1);
+  const confirmed = await call('PUT', path, {
+    body: {
+      target_outlook_account_id: 9,
+      target_outlook_calendar_id: 'calendar-9',
+      confirmed_orphan_count: 1,
+    },
+  });
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.body.data.id, seriesId);
+  assert.equal(confirmed.body.data.target_outlook_account_id, 9);
+  assert.equal(confirmed.body.data.target_outlook_calendar_id, 'calendar-9');
+  assert.equal(db.prepare('SELECT recurrence_parent_id FROM calendar_events WHERE id = ?')
+    .get(future.body.data.id).recurrence_parent_id, null);
+});
+
+test('following route accepts explicit target clear and rejects malformed provider pairs before splitting', async () => {
+  const cases = [
+    { target_google_calendar_id: 'x'.repeat(2049) },
+    { target_caldav_account_id: 7 },
+    { target_outlook_account_id: 8 },
+  ];
+  for (const body of cases) {
+    const seriesId = insertEvent({
+      title: 'Invalid target split',
+      start_datetime: '2046-11-20T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+    });
+    const response = await call('PUT', `/${seriesId}/occurrences/2046-11-21/following`, { body });
+    assert.equal(response.status, 400);
+    assert.equal(db.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+      .get(seriesId).recurrence_rule, 'FREQ=DAILY');
+  }
+
+  const clearSeriesId = insertEvent({
+    title: 'Explicit local successor',
+    start_datetime: '2046-11-25T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  });
+  const cleared = await call('PUT', `/${clearSeriesId}/occurrences/2046-11-26/following`, {
+    body: {
+      target_google_calendar_id: null,
+      target_caldav_account_id: null,
+      target_caldav_calendar_url: null,
+      target_outlook_account_id: null,
+      target_outlook_calendar_id: null,
+    },
+  });
+  assert.equal(cleared.status, 201);
+  for (const field of [
+    'target_google_calendar_id',
+    'target_caldav_account_id',
+    'target_caldav_calendar_url',
+    'target_outlook_account_id',
+    'target_outlook_calendar_id',
+  ]) assert.equal(cleared.body.data[field], null, `${field} was not cleared`);
+});
+
 // ════════════════════════════════════════════════════════════════════════════════
 // DELETE /:id
 // ════════════════════════════════════════════════════════════════════════════════

@@ -935,7 +935,7 @@
         "editWholeSeriesOnlyDetail": "Wenn du „{{title}}“ speicherst, werden alle Termine der Serie geändert.",
         "editWholeSeriesOnlyConfirm": "Serie speichern",
         "deleteWholeSeriesOnlyTitle": "Ganze Serie löschen?",
-        "deleteWholeSeriesOnlyDetail": "Wenn du „{{title}}“ löschst, werden alle Termine der Serie gelöscht.",
+        "deleteWholeSeriesOnlyDetail": "Wenn du „{{title}}“ löschst, werden alle Termine der Serie unwiderruflich gelöscht.",
         "deleteWholeSeriesOnlyConfirm": "Serie löschen",
         "detailWhen": "Zeit",
         "detailCalendar": "Kalender",

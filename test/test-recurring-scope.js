@@ -341,6 +341,38 @@ test('only-this save sends one atomic request with offsets and no series-owned f
   assert.equal(response.data.id, 99);
 });
 
+test('following save keeps validated successor sync targets and reminder offsets', async () => {
+  const calls = [];
+  await recurrenceScope.requestCalendarOccurrenceMutation({
+    api: { put: async (path, body) => { calls.push({ path, body }); return { data: { id: 42 } }; } },
+    event: { series_id: 41, recurrence_id: '2026-10-31' },
+    scope: 'following',
+    body: {
+      title: 'Synced successor',
+      target_google_calendar_id: null,
+      target_caldav_account_id: 7,
+      target_caldav_calendar_url: 'https://dav.test/family/',
+      target_outlook_account_id: null,
+      target_outlook_calendar_id: null,
+    },
+    reminderOffsets: [15],
+    confirmCount: async () => true,
+  });
+
+  assert.deepEqual(calls, [{
+    path: '/calendar/41/occurrences/2026-10-31/following',
+    body: {
+      title: 'Synced successor',
+      target_google_calendar_id: null,
+      target_caldav_account_id: 7,
+      target_caldav_calendar_url: 'https://dav.test/family/',
+      target_outlook_account_id: null,
+      target_outlook_calendar_id: null,
+      reminder_offsets: [15],
+    },
+  }]);
+});
+
 test('orphan confirmation retries the exact count the user confirmed', async () => {
   const attempts = [];
   const confirmations = [];

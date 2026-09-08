@@ -12,8 +12,8 @@ import {
   fanOutEventReminders, dropInheritedEventReminders, eventAuthorId,
 } from '../../services/event-reminder-fanout.js';
 import {
-  classifyLocalSeries, isEligibleLocalSeries, isLinkedOccurrence, parseOverrideFields,
-  recurrenceIdFor, seriesIdFor,
+  buildRecurrenceCapabilityMap, classifyLocalSeries, isLinkedOccurrence,
+  parseOverrideFields, recurrenceIdFor, seriesIdFor,
 } from '../../services/calendar-occurrence-overrides.js';
 
 export const VALID_SOURCES  = ['local', 'google', 'apple', 'ics'];
@@ -298,7 +298,8 @@ function recurrenceMetadata(event, context) {
   if (!recurring || (!context && !hasResolvedMetadata)) return null;
 
   const seriesId = Number(event.series_id ?? seriesIdFor(event));
-  let master = context?.master ?? null;
+  const capability = context?.capabilitiesBySeriesId?.get(seriesId) ?? null;
+  let master = context?.master ?? capability?.master ?? null;
   if (!master && linked && context?.database) {
     master = context.database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(seriesId);
   }
@@ -306,14 +307,14 @@ function recurrenceMetadata(event, context) {
 
   let canOverride = Boolean(event.can_override_occurrence);
   let isLocalRecurringSeries = Boolean(event.is_local_recurring_series);
-  if (context?.database && master) {
-    isLocalRecurringSeries = classifyLocalSeries(context.database, master).eligible;
-    canOverride = isEligibleLocalSeries(
-      context.database,
-      master,
-      context.actorId ?? null,
-      context.isAdmin === true,
-    ).eligible;
+  if (capability) {
+    isLocalRecurringSeries = capability.isLocalRecurringSeries;
+    canOverride = capability.canOverrideOccurrence;
+  } else if (context?.database && master) {
+    const classification = classifyLocalSeries(context.database, master);
+    isLocalRecurringSeries = classification.eligible;
+    canOverride = classification.eligible
+      && (context.isAdmin === true || Number(master.created_by) === Number(context.actorId));
   }
 
   let fields = [];
@@ -383,6 +384,19 @@ export function serializeEvent(event, context = null) {
     housekeeping_visit_id: event.housekeeping_visit_id ?? null,
     ...(metadata ?? {}),
   };
+}
+
+/** Serializes a result set with one capability classification per master. */
+export function serializeEvents(events, context) {
+  if (!Array.isArray(events) || events.length === 0) return [];
+  if (!context?.database) return events.map((event) => serializeEvent(event, context));
+  const capabilitiesBySeriesId = buildRecurrenceCapabilityMap(
+    context.database,
+    events,
+    { actorId: context.actorId ?? null, isAdmin: context.isAdmin === true },
+  );
+  const bulkContext = { ...context, capabilitiesBySeriesId };
+  return events.map((event) => serializeEvent(event, bulkContext));
 }
 
 export function sendStorageError(res, error, fallbackMessage) {

@@ -301,30 +301,25 @@ export function loadLinkedOverrides(database, parentIds, from = null, to = null)
   `).all(...params);
 }
 
-function hasColumn(database, table, column) {
-  return database.prepare(`PRAGMA table_info(${table})`).all().some((entry) => entry.name === column);
-}
+const schemaColumnsByDatabase = new WeakMap();
 
-function hasGeneratedOwner(database, eventId) {
-  const owners = [
-    ['birthdays', 'calendar_event_id'],
-    ['birthdays', 'name_day_calendar_event_id'],
-    ['housekeeping_work_sessions', 'calendar_event_id'],
-  ];
-
-  for (const [table, column] of owners) {
-    if (!hasColumn(database, table, column)) continue;
-    const owner = database.prepare(`SELECT 1 FROM ${table} WHERE ${column} = ? LIMIT 1`).get(eventId);
-    if (owner) return true;
+function tableColumns(database, table) {
+  let databaseCache = schemaColumnsByDatabase.get(database);
+  if (!databaseCache) {
+    databaseCache = new Map();
+    schemaColumnsByDatabase.set(database, databaseCache);
   }
-  return false;
+  if (!databaseCache.has(table)) {
+    databaseCache.set(
+      table,
+      new Set(database.prepare(`PRAGMA table_info(${table})`).all().map((entry) => entry.name)),
+    );
+  }
+  return databaseCache.get(table);
 }
 
-function hasOutlookLink(database, eventId) {
-  if (!hasColumn(database, 'outlook_event_links', 'event_id')) return false;
-  return Boolean(database.prepare(
-    'SELECT 1 FROM outlook_event_links WHERE event_id = ? LIMIT 1'
-  ).get(eventId));
+function hasColumn(database, table, column) {
+  return tableColumns(database, table).has(column);
 }
 
 function hasConfiguredOutlookAutoSyncTarget(database, row, assignments) {
@@ -354,9 +349,8 @@ function hasConfiguredOutlookAutoSyncTarget(database, row, assignments) {
   ));
 }
 
-/** Classifies persisted series ownership independently of the requesting actor. */
-export function classifyLocalSeries(database, row) {
-  const ineligible = !row?.recurrence_rule
+function structurallyIneligible(row) {
+  return !row?.recurrence_rule
     || row.external_source !== 'local'
     || row.external_calendar_id != null
     || row.calendar_ref_id != null
@@ -367,13 +361,132 @@ export function classifyLocalSeries(database, row) {
     || row.target_caldav_calendar_url != null
     || row.target_outlook_account_id != null
     || row.target_outlook_calendar_id != null
-    || row.recurrence_parent_id != null
-    || hasGeneratedOwner(database, row.id)
-    || hasOutlookLink(database, row.id)
-    || hasConfiguredOutlookAutoSyncTarget(database, row);
+    || row.recurrence_parent_id != null;
+}
 
-  if (ineligible) return { eligible: false, reason: 'ineligible_series' };
-  return { eligible: true, reason: null };
+/** Classifies distinct persisted masters with shared schema and ownership queries. */
+export function classifyLocalSeriesBatch(database, rows) {
+  const masters = [...new Map((rows ?? [])
+    .filter((row) => row && Number.isInteger(Number(row.id)))
+    .map((row) => [Number(row.id), row])).values()];
+  const result = new Map(masters.map((row) => [
+    Number(row.id),
+    structurallyIneligible(row)
+      ? { eligible: false, reason: 'ineligible_series' }
+      : null,
+  ]));
+  const candidates = masters.filter((row) => result.get(Number(row.id)) === null);
+  if (candidates.length === 0) return result;
+
+  const ids = candidates.map((row) => Number(row.id));
+  const placeholders = ids.map(() => '?').join(',');
+  const disqualified = new Set();
+  const generatedOwnerColumns = [
+    ['birthdays', 'calendar_event_id'],
+    ['birthdays', 'name_day_calendar_event_id'],
+    ['housekeeping_work_sessions', 'calendar_event_id'],
+  ].filter(([table, column]) => hasColumn(database, table, column));
+  if (generatedOwnerColumns.length > 0) {
+    const unions = generatedOwnerColumns.map(([table, column]) =>
+      `SELECT ${column} AS event_id FROM ${table} WHERE ${column} IN (${placeholders})`);
+    const params = generatedOwnerColumns.flatMap(() => ids);
+    for (const row of database.prepare(unions.join('\nUNION\n')).all(...params)) {
+      disqualified.add(Number(row.event_id));
+    }
+  }
+  if (hasColumn(database, 'outlook_event_links', 'event_id')) {
+    for (const row of database.prepare(`
+      SELECT DISTINCT event_id FROM outlook_event_links
+      WHERE event_id IN (${placeholders})
+    `).all(...ids)) disqualified.add(Number(row.event_id));
+  }
+
+  const autoSyncColumns = [
+    ['outlook_accounts', 'auto_sync_calendar_id'],
+    ['outlook_accounts', 'owner_user_id'],
+    ['calendar_events', 'visibility'],
+    ['calendar_events', 'created_by'],
+    ['event_assignments', 'event_id'],
+    ['event_assignments', 'user_id'],
+  ];
+  if (autoSyncColumns.every(([table, column]) => hasColumn(database, table, column))) {
+    const accountOwners = database.prepare(`
+      SELECT owner_user_id FROM outlook_accounts
+      WHERE auto_sync_calendar_id IS NOT NULL AND owner_user_id IS NOT NULL
+    `).all().map((row) => Number(row.owner_user_id));
+    if (accountOwners.length > 0) {
+      const assignments = new Map();
+      for (const row of database.prepare(`
+        SELECT event_id, user_id FROM event_assignments
+        WHERE event_id IN (${placeholders})
+      `).all(...ids)) {
+        if (!assignments.has(Number(row.event_id))) assignments.set(Number(row.event_id), new Set());
+        assignments.get(Number(row.event_id)).add(Number(row.user_id));
+      }
+      for (const row of candidates) {
+        const assigned = assignments.get(Number(row.id)) ?? new Set();
+        if (accountOwners.some((ownerId) => row.visibility === 'all'
+          || Number(row.created_by) === ownerId
+          || (row.visibility === 'assignees' && assigned.has(ownerId)))) {
+          disqualified.add(Number(row.id));
+        }
+      }
+    }
+  }
+
+  for (const row of candidates) {
+    result.set(Number(row.id), disqualified.has(Number(row.id))
+      ? { eligible: false, reason: 'ineligible_series' }
+      : { eligible: true, reason: null });
+  }
+  return result;
+}
+
+/** Classifies persisted series ownership independently of the requesting actor. */
+export function classifyLocalSeries(database, row) {
+  if (!row || !Number.isInteger(Number(row.id))) {
+    return { eligible: false, reason: 'ineligible_series' };
+  }
+  return classifyLocalSeriesBatch(database, [row]).get(Number(row.id));
+}
+
+/** Builds request-local capability metadata once per distinct recurring master. */
+export function buildRecurrenceCapabilityMap(database, events, {
+  actorId = null,
+  isAdmin = false,
+} = {}) {
+  const mastersById = new Map();
+  for (const event of events ?? []) {
+    const linked = event?.is_occurrence_override === true || isLinkedOccurrence(event);
+    if (!linked && !event?.recurrence_rule) continue;
+    const seriesId = Number(event.series_id ?? seriesIdFor(event));
+    if (!Number.isInteger(seriesId) || seriesId < 1) continue;
+    if (!linked && Number(event.id) === seriesId) mastersById.set(seriesId, event);
+    else if (!mastersById.has(seriesId)) mastersById.set(seriesId, null);
+  }
+  const missing = [...mastersById].filter(([, master]) => !master).map(([id]) => id);
+  if (missing.length > 0) {
+    const loaded = database.prepare(`
+      SELECT * FROM calendar_events WHERE id IN (${missing.map(() => '?').join(',')})
+    `).all(...missing);
+    for (const master of loaded) mastersById.set(Number(master.id), master);
+  }
+
+  const masters = [...mastersById.values()].filter(Boolean);
+  const classifications = classifyLocalSeriesBatch(database, masters);
+  const capabilities = new Map();
+  for (const [seriesId, master] of mastersById) {
+    if (!master) continue;
+    const classification = classifications.get(seriesId)
+      ?? { eligible: false, reason: 'ineligible_series' };
+    capabilities.set(seriesId, {
+      master,
+      isLocalRecurringSeries: classification.eligible,
+      canOverrideOccurrence: classification.eligible
+        && (isAdmin || Number(master.created_by) === Number(actorId)),
+    });
+  }
+  return capabilities;
 }
 
 /** Adds actor authorization to the structural occurrence-capability classification. */
@@ -934,8 +1047,10 @@ function insertSeriesRow(database, source) {
       title, description, start_datetime, end_datetime, all_day, location,
       color, icon, assigned_to, created_by, external_source, recurrence_rule,
       visibility, countdown, attachment_name, attachment_mime, attachment_size,
-      attachment_data, attachment_document_id, tzid
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      attachment_data, attachment_document_id, tzid, target_google_calendar_id,
+      target_caldav_account_id, target_caldav_calendar_url,
+      target_outlook_account_id, target_outlook_calendar_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     source.title,
     source.description ?? null,
@@ -956,6 +1071,11 @@ function insertSeriesRow(database, source) {
     source.attachment_data ?? null,
     source.attachment_document_id ?? null,
     source.tzid ?? null,
+    source.target_google_calendar_id ?? null,
+    source.target_caldav_account_id ?? null,
+    source.target_caldav_calendar_url ?? null,
+    source.target_outlook_account_id ?? null,
+    source.target_outlook_calendar_id ?? null,
   ).lastInsertRowid);
 }
 
@@ -1100,6 +1220,15 @@ export function splitSeries(database, {
     for (const field of SCALAR_OVERRIDE_FIELDS) {
       if (Object.hasOwn(changes, field)) successorValues[field] = normalizeScalar(field, changes[field]);
     }
+    for (const field of [
+      'target_google_calendar_id',
+      'target_caldav_account_id',
+      'target_caldav_calendar_url',
+      'target_outlook_account_id',
+      'target_outlook_calendar_id',
+    ]) {
+      if (Object.hasOwn(changes, field)) successorValues[field] = changes[field] ?? null;
+    }
     successorValues.recurrence_rule = Object.hasOwn(changes, 'recurrence_rule')
       && changes.recurrence_rule !== master.recurrence_rule
       ? changes.recurrence_rule
@@ -1110,17 +1239,20 @@ export function splitSeries(database, {
     successorValues.created_by = master.created_by;
 
     assertSuccessorHasOccurrence(successorValues);
-    for (const child of children) {
-      if (selectedChild && Number(child.id) === Number(selectedChild.id)) continue;
-      try {
-        baseOccurrenceFor(successorValues, child.recurrence_id);
-      } catch {
-        throw new CalendarOccurrenceError(
-          'A linked occurrence cannot belong to the successor recurrence rule.',
-          { status: 400, code: 'invalid_successor_override' },
-        );
-      }
+    const futureChildren = children.filter((child) =>
+      !selectedChild || Number(child.id) !== Number(selectedChild.id));
+    const orphans = classifyOrphans(
+      futureChildren,
+      successorValues,
+      hasOutboundTarget(successorValues),
+    );
+    const confirmationSupplied = confirmedOrphanCount !== undefined;
+    if ((orphans.length > 0 || confirmationSupplied)
+        && confirmedOrphanCount !== orphans.length) {
+      throw orphanConflict(orphans.length);
     }
+    const orphanIds = new Set(orphans.map((child) => Number(child.id)));
+    const orphanRecurrenceIds = new Set(orphans.map((child) => child.recurrence_id));
     const futureExceptions = database.prepare(`
       SELECT exception_date FROM calendar_event_exceptions
       WHERE event_id = ? AND exception_date >= ?
@@ -1128,6 +1260,7 @@ export function splitSeries(database, {
     `).all(master.id, recurrenceId);
     const transferableExceptions = futureExceptions.filter((exception) => {
       if (exception.exception_date === recurrenceId) return false;
+      if (orphanRecurrenceIds.has(exception.exception_date)) return false;
       try {
         baseOccurrenceFor(successorValues, exception.exception_date);
         return true;
@@ -1173,6 +1306,7 @@ export function splitSeries(database, {
       : attachmentValues(createdAttachment);
     Object.assign(successorValues, successorAttachment);
 
+    for (const child of orphans) materializeDetachedChild(database, child, master);
     database.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
       .run(truncateRuleBefore(master.recurrence_rule, recurrenceId), master.id);
     const successorId = insertSeriesRow(database, successorValues);
@@ -1220,6 +1354,7 @@ export function splitSeries(database, {
       successorAssignments,
     );
     for (const child of children) {
+      if (orphanIds.has(Number(child.id))) continue;
       if (selectedChild && Number(child.id) === Number(selectedChild.id)) {
         deleteEventReminders(database, [child.id]);
         database.prepare('DELETE FROM calendar_events WHERE id = ?').run(child.id);
@@ -1240,6 +1375,7 @@ export function splitSeries(database, {
     return {
       series: loadProjectedEvent(database, successorId),
       wholeSeries: false,
+      orphanedOverrideCount: orphans.length,
     };
   });
 }
