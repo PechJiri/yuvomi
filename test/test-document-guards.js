@@ -693,6 +693,13 @@ const SHAPE_EXEMPT = new Map([
   ['rewards-widget-row', 'Zeile: Rang im Belohnungs-Widget'],
   ['rw-standing__id', 'Zeile: Oeffner einer Mitglieds-Zeile'],
   ['documents-folder-item__select', 'Zeile: Ordner in der Dokumentenliste'],
+  // Der Chip traegt seit 031597b1 (Juli 2026) role="button" und dieselbe flache
+  // Bar wie .month-day__event, dessen Zelle sein Traeger ist (calendar.css:
+  // "FLACHE BAR, WIE .month-day__event"). Ein Ereignisbalken ist kein Knopf und
+  // wird nicht gemessen; die Aufgabe daneben ist einer - eine Kapsel neben
+  // einer Bar waeren zwei Formen in EINER Zeilenliste. Gefunden vom Handlauf
+  // des Releases v2.65.0, dem ersten vollen Lauf seit dem Eintrag.
+  ['cal-task-chip', 'Zeile: Aufgabe in der Eintragsliste einer Kalenderzelle, gleiche Bar wie .month-day__event'],
 ]);
 
 test('Sonde 3 - es gibt EINE Buttonform, und die Ausnahmen sind Kategorien', async () => {
