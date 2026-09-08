@@ -8,6 +8,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
+import { freshTestDbPath } from './tmp-db.js';
+
+freshTestDbPath('calendar-occurrence-overrides');
+
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import {
   baseOccurrenceFor,
@@ -31,7 +35,8 @@ import {
   expandRecurringEvents, MAX_EXPANSION_ITERATIONS,
 } from '../server/services/calendar-events.js';
 import { expandAndResolveEventRows } from '../server/services/calendar-event-reader.js';
-import { serializeEvent } from '../server/routes/calendar/helpers.js';
+
+const { serializeEvent } = await import('../server/routes/calendar/helpers.js');
 
 test('calendar expansion stays independent from occurrence reader orchestration', () => {
   const source = readFileSync(

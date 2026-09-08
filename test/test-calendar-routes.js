@@ -1193,7 +1193,9 @@ test('occurrence PUT distinguishes missing, ineligible and invalid original slot
   assert.equal(invalid.status, 400);
   assert.equal(invalid.body.code, 400);
   assert.equal(invalid.body.reason, 'invalid_recurrence_id');
+});
 
+test('occurrence PUT refuses every provider-owned, imported, generated and outbound-targeted series', async () => {
   const subscriptionId = db.prepare(`
     INSERT INTO ics_subscriptions (name, url, color, created_by, shared)
     VALUES ('Occurrence boundary', 'https://example.test/occurrence.ics', '#123456', 1, 0)
@@ -1209,14 +1211,16 @@ test('occurrence PUT distinguishes missing, ineligible and invalid original slot
   const classifications = [
     ['Google provider', (id) => db.prepare("UPDATE calendar_events SET external_source = 'google' WHERE id = ?").run(id)],
     ['Apple provider', (id) => db.prepare("UPDATE calendar_events SET external_source = 'apple' WHERE id = ?").run(id)],
-    ['ICS provider', (id) => db.prepare("UPDATE calendar_events SET external_source = 'ics' WHERE id = ?").run(id)],
-    ['imported UID', (id) => db.prepare("UPDATE calendar_events SET external_calendar_id = 'uid::20460202' WHERE id = ?").run(id)],
-    ['external object', (id) => db.prepare("UPDATE calendar_events SET external_object_url = 'https://dav.test/event.ics' WHERE id = ?").run(id)],
-    ['calendar reference', (id) => db.prepare('UPDATE calendar_events SET calendar_ref_id = ? WHERE id = ?').run(calendarRefId, id)],
-    ['subscription', (id) => db.prepare('UPDATE calendar_events SET subscription_id = ? WHERE id = ?').run(subscriptionId, id)],
+    ['CalDAV provider', (id) => db.prepare("UPDATE calendar_events SET external_source = 'caldav' WHERE id = ?").run(id)],
+    ['ICS subscription source', (id) => db.prepare("UPDATE calendar_events SET external_source = 'ics', subscription_id = ? WHERE id = ?").run(subscriptionId, id)],
+    ['ICS imported UID', (id) => db.prepare("UPDATE calendar_events SET external_calendar_id = 'uid::20460202' WHERE id = ?").run(id)],
+    ['provider object URL', (id) => db.prepare("UPDATE calendar_events SET external_object_url = 'https://dav.test/event.ics' WHERE id = ?").run(id)],
+    ['provider calendar reference', (id) => db.prepare('UPDATE calendar_events SET calendar_ref_id = ? WHERE id = ?').run(calendarRefId, id)],
     ['Google target', (id) => db.prepare("UPDATE calendar_events SET target_google_calendar_id = 'family@test' WHERE id = ?").run(id)],
-    ['CalDAV target', (id) => db.prepare("UPDATE calendar_events SET target_caldav_account_id = 1, target_caldav_calendar_url = 'https://dav.test/cal/' WHERE id = ?").run(id)],
-    ['Outlook target', (id) => db.prepare("UPDATE calendar_events SET target_outlook_account_id = 1, target_outlook_calendar_id = 'outlook-cal' WHERE id = ?").run(id)],
+    ['CalDAV account target', (id) => db.prepare('UPDATE calendar_events SET target_caldav_account_id = 1 WHERE id = ?').run(id)],
+    ['CalDAV calendar target', (id) => db.prepare("UPDATE calendar_events SET target_caldav_calendar_url = 'https://dav.test/cal/' WHERE id = ?").run(id)],
+    ['Outlook account target', (id) => db.prepare('UPDATE calendar_events SET target_outlook_account_id = 1 WHERE id = ?').run(id)],
+    ['Outlook calendar target', (id) => db.prepare("UPDATE calendar_events SET target_outlook_calendar_id = 'outlook-cal' WHERE id = ?").run(id)],
     ['birthday owner', (id) => db.prepare(`
       INSERT INTO birthdays (name, birth_date, calendar_event_id, created_by)
       VALUES ('Boundary birthday', '2000-02-02', ?, 1)
@@ -1261,6 +1265,9 @@ test('occurrence PUT distinguishes missing, ineligible and invalid original slot
     assert.equal(db.prepare(
       'SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?'
     ).get(seriesId).count, 0, label);
+    assert.equal(db.prepare(
+      'SELECT COUNT(*) AS count FROM calendar_event_exceptions WHERE event_id = ?'
+    ).get(seriesId).count, 0, `${label} EXDATE`);
   }
 });
 
