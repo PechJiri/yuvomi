@@ -127,6 +127,104 @@ async function cleanupCalendarUploads(uploads) {
   if (firstError) throw firstError;
 }
 
+function validateOccurrenceAssignments(database, value) {
+  if (value === undefined) return { value: undefined, error: null };
+  if (value === null) return { value: [], error: null };
+  const ids = Array.isArray(value) ? value : [value];
+  if (ids.some((id) => !Number.isInteger(id) || id < 1)) {
+    return { value: null, error: 'assigned_to must contain positive integer user IDs.' };
+  }
+  if (new Set(ids).size !== ids.length) {
+    return { value: null, error: 'assigned_to must not contain duplicate user IDs.' };
+  }
+  if (ids.length > 0) {
+    const found = database.prepare(`
+      SELECT COUNT(*) AS count FROM users WHERE id IN (${ids.map(() => '?').join(',')})
+    `).get(...ids).count;
+    if (Number(found) !== ids.length) {
+      return { value: null, error: 'assigned_to contains an unknown user ID.' };
+    }
+  }
+  return { value: ids, error: null };
+}
+
+function validateOccurrenceMutationBody(database, body, { following = false } = {}) {
+  const values = {};
+  const errors = [];
+  const validateString = (field, label, options = {}) => {
+    if (!Object.hasOwn(body, field)) return;
+    const nullable = options.nullable === true;
+    if (body[field] === null && nullable) {
+      values[field] = null;
+      return;
+    }
+    if (typeof body[field] !== 'string') {
+      errors.push(`${field} must be a string${nullable ? ' or null' : ''}.`);
+      return;
+    }
+    const result = str(body[field], label, {
+      max: options.max,
+      required: options.required !== false,
+    });
+    if (result.error) errors.push(result.error);
+    else values[field] = result.value;
+  };
+  const validateDateTime = (field, label, { nullable = false } = {}) => {
+    if (!Object.hasOwn(body, field)) return;
+    if (body[field] === null && nullable) {
+      values[field] = null;
+      return;
+    }
+    if (typeof body[field] !== 'string' || body[field].trim() === '') {
+      errors.push(`${field} must be a non-empty calendar date or date-time${nullable ? ', or null' : ''}.`);
+      return;
+    }
+    const result = datetime(body[field], label, true);
+    if (result.error) errors.push(result.error);
+    else values[field] = result.value;
+  };
+
+  validateString('title', 'Titel', { max: MAX_TITLE });
+  validateString('description', 'Beschreibung', { max: MAX_TEXT, required: false, nullable: true });
+  validateDateTime('start_datetime', 'Startdatum');
+  validateDateTime('end_datetime', 'Enddatum', { nullable: true });
+  validateString('location', 'Ort', { max: MAX_TITLE, required: false, nullable: true });
+
+  if (Object.hasOwn(body, 'color')) {
+    if (body.color !== null && typeof body.color !== 'string') {
+      errors.push('color must be a string or null.');
+    } else {
+      const result = color(body.color, 'Farbe');
+      if (result.error) errors.push(result.error);
+      else values.color = result.value;
+    }
+  }
+  if (following && Object.hasOwn(body, 'recurrence_rule')) {
+    if (body.recurrence_rule !== null && typeof body.recurrence_rule !== 'string') {
+      errors.push('recurrence_rule must be a string or null.');
+    } else {
+      const result = rrule(body.recurrence_rule, 'Wiederholung');
+      if (result.error) errors.push(result.error);
+      else values.recurrence_rule = result.value;
+    }
+  }
+  for (const field of ['all_day', 'countdown']) {
+    if (Object.hasOwn(body, field)) {
+      if (typeof body[field] !== 'boolean') errors.push(`${field} must be a boolean.`);
+      else values[field] = body[field];
+    }
+  }
+  if (Object.hasOwn(body, 'visibility')) {
+    if (!['all', 'assignees', 'private'].includes(body.visibility)) {
+      errors.push('visibility must be one of: all, assignees, private.');
+    } else values.visibility = body.visibility;
+  }
+  const assignments = validateOccurrenceAssignments(database, body.assigned_to);
+  if (assignments.error) errors.push(assignments.error);
+
+  return { values, assignments: assignments.value, errors };
+}
+
 // --------------------------------------------------------
 // GET /api/v1/calendar/:id
 // Einzelnen Termin abrufen.
@@ -862,15 +960,8 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
     }
     baseOccurrenceFor(master, req.params.recurrenceId);
 
-    const validated = {
-      title: req.body.title === undefined ? null : str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }),
-      description: req.body.description === undefined ? null : str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }),
-      start_datetime: req.body.start_datetime === undefined ? null : datetime(req.body.start_datetime, 'Startdatum'),
-      end_datetime: req.body.end_datetime === undefined ? null : datetime(req.body.end_datetime, 'Enddatum'),
-      color: req.body.color === undefined ? null : color(req.body.color, 'Farbe'),
-      location: req.body.location === undefined ? null : str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }),
-    };
-    const errors = collectErrors(Object.values(validated).filter(Boolean));
+    const mutation = validateOccurrenceMutationBody(db.get(), req.body);
+    const { values: validated, errors } = mutation;
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     const vIcon = req.body.icon !== undefined ? eventIcon(req.body.icon) : undefined;
@@ -883,8 +974,9 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
     if (req.body.reminder_offsets !== undefined
         && (!Array.isArray(req.body.reminder_offsets)
           || req.body.reminder_offsets.length > 5
+          || new Set(req.body.reminder_offsets).size !== req.body.reminder_offsets.length
           || req.body.reminder_offsets.some((value) =>
-            !Number.isInteger(Number(value)) || Number(value) < 0))) {
+            !Number.isInteger(value) || value < 0))) {
       return res.status(400).json({
         error: 'reminder_offsets must be an array of at most 5 non-negative integers.',
         code: 400,
@@ -920,11 +1012,8 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
       'location', 'color', 'visibility', 'countdown',
     ]) {
       if (Object.hasOwn(req.body, field)) {
-        changes[field] = validated[field] ? validated[field].value : req.body[field];
+        changes[field] = validated[field];
       }
-    }
-    if (Object.hasOwn(req.body, 'visibility')) {
-      changes.visibility = normalizeVisibility(req.body.visibility, master.visibility);
     }
     if (vIcon !== undefined) changes.icon = vIcon;
 
@@ -934,9 +1023,7 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
       actorId,
       isAdmin,
       changes,
-      assignments: req.body.assigned_to === undefined
-        ? undefined
-        : parseAssignedTo(req.body.assigned_to),
+      assignments: mutation.assignments,
       attachment: removalRequested ? null : undefined,
       createAttachment: replacementRequested
         ? () => ({
@@ -955,7 +1042,7 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
         : undefined,
       reminderOffsets: req.body.reminder_offsets === undefined
         ? undefined
-        : [...new Set(req.body.reminder_offsets.map(Number))],
+        : [...new Set(req.body.reminder_offsets)],
     });
 
     res.json({
@@ -1016,15 +1103,8 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     }
     const selectedBase = baseOccurrenceFor(master, req.params.recurrenceId);
 
-    const validated = {
-      title: req.body.title === undefined ? null : str(req.body.title, 'Titel', { max: MAX_TITLE, required: false }),
-      description: req.body.description === undefined ? null : str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }),
-      start_datetime: req.body.start_datetime === undefined ? null : datetime(req.body.start_datetime, 'Startdatum'),
-      end_datetime: req.body.end_datetime === undefined ? null : datetime(req.body.end_datetime, 'Enddatum'),
-      color: req.body.color === undefined ? null : color(req.body.color, 'Farbe'),
-      location: req.body.location === undefined ? null : str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }),
-      recurrence_rule: req.body.recurrence_rule === undefined ? null : rrule(req.body.recurrence_rule, 'Wiederholung'),
-    };
+    const mutation = validateOccurrenceMutationBody(db.get(), req.body, { following: true });
+    const { values: validated } = mutation;
     const caldavProvided = req.body.target_caldav_account_id !== undefined
       || req.body.target_caldav_calendar_url !== undefined;
     const googleProvided = req.body.target_google_calendar_id !== undefined;
@@ -1033,10 +1113,10 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     const vCaldav = caldavProvided ? caldavTarget(req.body) : null;
     const vGoogle = googleProvided ? googleTarget(req.body) : null;
     const vOutlook = outlookProvided ? outlookTarget(req.body) : null;
-    const errors = collectErrors([
-      ...Object.values(validated).filter(Boolean),
+    const errors = [
+      ...mutation.errors,
       ...[vCaldav, vGoogle, vOutlook].filter(Boolean),
-    ]);
+    ].flatMap((result) => typeof result === 'string' ? [result] : (result.error ? [result.error] : []));
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     const vIcon = req.body.icon !== undefined ? eventIcon(req.body.icon) : undefined;
     if (req.body.icon !== undefined && !vIcon) {
@@ -1056,8 +1136,9 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     if (req.body.reminder_offsets !== undefined
         && (!Array.isArray(req.body.reminder_offsets)
           || req.body.reminder_offsets.length > 5
+          || new Set(req.body.reminder_offsets).size !== req.body.reminder_offsets.length
           || req.body.reminder_offsets.some((value) =>
-            !Number.isInteger(Number(value)) || Number(value) < 0))) {
+            !Number.isInteger(value) || value < 0))) {
       return res.status(400).json({
         error: 'reminder_offsets must be an array of at most 5 non-negative integers.',
         code: 400,
@@ -1066,9 +1147,9 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
 
     assertSuccessorHasOccurrence({
       ...master,
-      start_datetime: validated.start_datetime?.value ?? selectedBase.start_datetime,
+      start_datetime: validated.start_datetime ?? selectedBase.start_datetime,
       recurrence_rule: Object.hasOwn(req.body, 'recurrence_rule')
-        ? validated.recurrence_rule.value
+        ? validated.recurrence_rule
         : master.recurrence_rule,
     });
 
@@ -1100,11 +1181,8 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       'location', 'color', 'visibility', 'countdown', 'recurrence_rule',
     ]) {
       if (Object.hasOwn(req.body, field)) {
-        changes[field] = validated[field] ? validated[field].value : req.body[field];
+        changes[field] = validated[field];
       }
-    }
-    if (Object.hasOwn(req.body, 'visibility')) {
-      changes.visibility = normalizeVisibility(req.body.visibility, master.visibility);
     }
     if (caldavProvided) {
       changes.target_caldav_account_id = vCaldav.value.accountId;
@@ -1122,9 +1200,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       actorId,
       isAdmin,
       changes,
-      assignments: req.body.assigned_to === undefined
-        ? undefined
-        : parseAssignedTo(req.body.assigned_to),
+      assignments: mutation.assignments,
       attachment: removalRequested ? null : undefined,
       createAttachment: replacementRequested
         ? () => ({
@@ -1143,7 +1219,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
         : undefined,
       reminderOffsets: req.body.reminder_offsets === undefined
         ? undefined
-        : [...new Set(req.body.reminder_offsets.map(Number))],
+        : [...new Set(req.body.reminder_offsets)],
       confirmedOrphanCount: req.body.confirmed_orphan_count,
     };
     const result = await runWithAttachmentClonePlan(

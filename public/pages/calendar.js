@@ -4724,10 +4724,10 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
 
     const body = {
       title, description, start_datetime, end_datetime,
-      all_day: allday ? 1 : 0,
+      all_day: !!allday,
       location, color, icon, assigned_to,
       visibility: overlay.querySelector('#modal-visibility')?.value || 'all',
-      countdown: overlay.querySelector('#modal-countdown')?.checked ? 1 : 0,
+      countdown: !!overlay.querySelector('#modal-countdown')?.checked,
       recurrence_rule: rrule.recurrence_rule,
       target_google_calendar_id,
       target_caldav_account_id,

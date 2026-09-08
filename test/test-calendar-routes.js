@@ -2095,6 +2095,136 @@ test('occurrence and split responses preserve assignment primary order and proje
   }
 });
 
+test('first-visible following edits preserve off-rule DTSTART and reminder anchors', async () => {
+  for (const fixture of [
+    {
+      label: 'month end',
+      start: '2046-01-15T09:00:00',
+      end: '2046-01-15T10:00:00',
+      recurrenceId: '2046-01-31',
+      displayedStart: '2046-01-31T09:00:00',
+      displayedEnd: '2046-01-31T10:00:00',
+      rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+    },
+    {
+      label: 'weekday',
+      start: '2046-01-03T09:00:00',
+      end: '2046-01-03T10:00:00',
+      recurrenceId: '2046-01-08',
+      displayedStart: '2046-01-08T09:00:00',
+      displayedEnd: '2046-01-08T10:00:00',
+      rule: 'FREQ=WEEKLY;BYDAY=MO',
+    },
+  ]) {
+    const seriesId = Number(insertEvent({
+      title: `Off-rule ${fixture.label}`,
+      start_datetime: fixture.start,
+      end_datetime: fixture.end,
+      recurrence_rule: fixture.rule,
+    }));
+    db.prepare(`
+      INSERT INTO reminders (entity_type, entity_id, remind_at, created_by)
+      VALUES ('event', ?, ?, ?)
+    `).run(seriesId, fixture.start.replace('09:00:00', '08:00:00'), ADMIN.id);
+
+    const response = await call(
+      'PUT',
+      `/${seriesId}/occurrences/${fixture.recurrenceId}/following`,
+      { body: {
+        start_datetime: fixture.displayedStart,
+        end_datetime: fixture.displayedEnd,
+        recurrence_rule: fixture.rule,
+      } },
+    );
+    assert.equal(response.status, 200, fixture.label);
+    assert.deepEqual({ ...db.prepare(`
+      SELECT start_datetime, end_datetime FROM calendar_events WHERE id = ?
+    `).get(seriesId) }, {
+      start_datetime: fixture.start,
+      end_datetime: fixture.end,
+    }, `${fixture.label}: persisted anchor`);
+    assert.equal(db.prepare(`
+      SELECT remind_at FROM reminders WHERE entity_type = 'event' AND entity_id = ?
+    `).get(seriesId).remind_at, fixture.start.replace('09:00:00', '08:00:00'),
+    `${fixture.label}: reminder anchor`);
+
+    const edited = await call(
+      'PUT',
+      `/${seriesId}/occurrences/${fixture.recurrenceId}/following`,
+      { body: {
+        start_datetime: fixture.displayedStart.replace('09:00:00', '11:00:00'),
+        end_datetime: fixture.displayedEnd.replace('10:00:00', '12:00:00'),
+        recurrence_rule: fixture.rule,
+      } },
+    );
+    assert.equal(edited.status, 200, `${fixture.label}: edited`);
+    assert.deepEqual({ ...db.prepare(`
+      SELECT start_datetime, end_datetime FROM calendar_events WHERE id = ?
+    `).get(seriesId) }, {
+      start_datetime: fixture.start.replace('09:00:00', '11:00:00'),
+      end_datetime: fixture.end.replace('10:00:00', '12:00:00'),
+    }, `${fixture.label}: edited anchor delta`);
+    assert.equal(db.prepare(`
+      SELECT remind_at FROM reminders WHERE entity_type = 'event' AND entity_id = ?
+    `).get(seriesId).remind_at, fixture.start.replace('09:00:00', '10:00:00'),
+    `${fixture.label}: edited reminder anchor`);
+  }
+});
+
+test('occurrence mutation routes reject schema-invalid values before persistence', async () => {
+  const invalidBodies = [
+    { title: null },
+    { title: '   ' },
+    { start_datetime: null },
+    { start_datetime: '' },
+    { end_datetime: '' },
+    { all_day: 'false' },
+    { countdown: 1 },
+    { assigned_to: 0 },
+    { assigned_to: '3' },
+    { assigned_to: [TOM.id, TOM.id] },
+    { assigned_to: [999999] },
+    { reminder_offsets: [30, 30] },
+  ];
+  for (const suffix of ['', '/following']) {
+    for (const body of invalidBodies) {
+      const seriesId = Number(insertEvent({
+        title: 'Strict occurrence input',
+        start_datetime: '2046-06-01T09:00:00',
+        end_datetime: '2046-06-01T10:00:00',
+        recurrence_rule: 'FREQ=DAILY',
+      }));
+      const response = await call('PUT', `/${seriesId}/occurrences/2046-06-02${suffix}`, {
+        body,
+      });
+      assert.equal(response.status, 400, `${suffix || '/only'} ${JSON.stringify(body)}`);
+      assert.equal(db.prepare(`
+        SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?
+      `).get(seriesId).count, 0);
+    }
+  }
+});
+
+test('a partial occurrence move cannot persist an inverted interval or disappear from reads', async () => {
+  const seriesId = Number(insertEvent({
+    title: 'Interval guard',
+    start_datetime: '2046-07-01T09:00:00',
+    end_datetime: '2046-07-01T10:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  const response = await call('PUT', `/${seriesId}/occurrences/2046-07-02`, {
+    body: { start_datetime: '2046-07-03T11:00:00' },
+  });
+  assert.equal(response.status, 400);
+  assert.equal(db.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?
+  `).get(seriesId).count, 0);
+
+  const range = await call('GET', '/?from=2046-07-02&to=2046-07-02');
+  assert.ok(range.body.data.some((event) => Number(event.series_id) === seriesId
+    && event.recurrence_id === '2046-07-02'));
+});
+
 test('DELETE occurrence scopes keep only-this suppression and truncate following state', async () => {
   const onlyId = insertEvent({
     title: 'Delete only',

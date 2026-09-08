@@ -557,6 +557,18 @@ function normalizeScalar(field, value) {
   return value;
 }
 
+function assertValidEffectiveInterval(values) {
+  if (!values.end_datetime) return;
+  const start = wallTimeMs(values.start_datetime);
+  const end = wallTimeMs(values.end_datetime);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    throw new CalendarOccurrenceError(
+      'end_datetime must not precede the effective start_datetime.',
+      { status: 400, code: 'invalid_occurrence_interval' },
+    );
+  }
+}
+
 function sameScalar(left, right) {
   return (left ?? null) === (right ?? null);
 }
@@ -682,16 +694,31 @@ function wallTimeMs(value) {
   return Date.parse(zoned ? normalized : `${normalized}Z`);
 }
 
-function reminderOffsets(database, eventId, actorId, anchorStart) {
-  const anchor = wallTimeMs(anchorStart);
-  if (!Number.isFinite(anchor)) return [];
-  return [...new Set(database.prepare(`
-    SELECT remind_at FROM reminders
-    WHERE entity_type = 'event' AND entity_id = ? AND created_by = ? AND dismissed = 0
-  `).all(eventId, actorId).map((row) =>
-    Math.round((anchor - wallTimeMs(row.remind_at)) / 60000)
-  ).filter((offset) => Number.isInteger(offset) && offset >= 0))]
-    .sort((left, right) => left - right);
+function shiftedDateTimeLike(value, shiftMs) {
+  const shifted = new Date(wallTimeMs(value) + shiftMs).toISOString();
+  const source = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(source)) return shifted.slice(0, 10);
+  if (/Z$/.test(source)) return shifted.replace('.000Z', 'Z');
+  return shifted.slice(0, /:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(source) ? 19 : 16);
+}
+
+function firstSlotSeriesChanges(master, selected, changes) {
+  const normalized = { ...changes };
+  const slotShift = wallTimeMs(master.start_datetime) - wallTimeMs(selected.start_datetime);
+  for (const field of ['start_datetime', 'end_datetime']) {
+    if (!Object.hasOwn(changes, field) || changes[field] === null) continue;
+    const selectedValue = selected[field];
+    const masterValue = master[field];
+    if (selectedValue && masterValue) {
+      normalized[field] = shiftedDateTimeLike(
+        masterValue,
+        wallTimeMs(changes[field]) - wallTimeMs(selectedValue),
+      );
+    } else if (Number.isFinite(slotShift)) {
+      normalized[field] = shiftedDateTimeLike(changes[field], slotShift);
+    }
+  }
+  return normalized;
 }
 
 function reminderState(database, eventId, anchorStart) {
@@ -753,6 +780,31 @@ function replaceReminders(database, eventId, actorId, anchorStart, offsets) {
   }
 }
 
+function copyReminderState(database, sourceId, targetId, sourceAnchor, targetAnchor) {
+  const sourceStart = wallTimeMs(sourceAnchor);
+  const targetStart = wallTimeMs(targetAnchor);
+  const shift = targetStart - sourceStart;
+  if (!Number.isFinite(shift)) return;
+  const insert = database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, ?, ?, ?, ?)
+  `);
+  for (const row of database.prepare(`
+    SELECT remind_at, dismissed, created_by, assigned_from
+    FROM reminders WHERE entity_type = 'event' AND entity_id = ?
+  `).all(sourceId)) {
+    const shifted = new Date(wallTimeMs(row.remind_at) + shift).toISOString();
+    insert.run(
+      targetId,
+      /Z$/.test(String(row.remind_at)) ? shifted : shifted.slice(0, 19),
+      row.dismissed,
+      row.created_by,
+      row.assigned_from,
+    );
+  }
+}
+
 /**
  * Creates or updates one local replacement and its EXDATE in one transaction.
  * `changes` is already validated route data; omitted properties retain the
@@ -784,6 +836,7 @@ export function upsertOccurrenceOverride(database, {
         materialized[field] = normalizeScalar(field, changes[field]);
       }
     }
+    assertValidEffectiveInterval(materialized);
 
     const baseAssignments = canonicalIds(assignmentIds(database, master.id));
     const currentAssignments = existingFields.includes('assignments')
@@ -812,13 +865,8 @@ export function upsertOccurrenceOverride(database, {
       ? currentAttachment
       : attachmentValues(createdAttachment);
 
-    const baseReminderOffsets = reminderOffsets(database, master.id, actorId, master.start_datetime);
-    const currentReminderOffsets = existingFields.includes('reminders')
-      ? reminderOffsets(database, existing.id, actorId, current.start_datetime)
-      : baseReminderOffsets;
-    const effectiveReminderOffsets = requestedReminderOffsets === undefined
-      ? currentReminderOffsets
-      : canonicalOffsets(requestedReminderOffsets);
+    const remindersWereOwned = existingFields.includes('reminders');
+    const remindersMayDiffer = remindersWereOwned || requestedReminderOffsets !== undefined;
 
     const scalarDifferences = new Set(SCALAR_OVERRIDE_FIELDS.filter((field) =>
       !sameScalar(materialized[field], base[field])
@@ -828,12 +876,11 @@ export function upsertOccurrenceOverride(database, {
       baseAssignments,
     ) || effectivePrimary !== basePrimary;
     const attachmentDiffers = !sameAttachment(effectiveAttachment, baseAttachment);
-    const remindersDiffer = !sameNumberSet(effectiveReminderOffsets, baseReminderOffsets);
-    const fields = OVERRIDE_FIELDS.filter((field) =>
+    let fields = OVERRIDE_FIELDS.filter((field) =>
       scalarDifferences.has(field)
       || (field === 'assignments' && assignmentsDiffer)
       || (field === 'attachment' && attachmentDiffers)
-      || (field === 'reminders' && remindersDiffer)
+      || (field === 'reminders' && remindersMayDiffer)
     );
     if (fields.length === 0) {
       if (existing) {
@@ -916,18 +963,46 @@ export function upsertOccurrenceOverride(database, {
     }
 
     replaceAssignments(database, childId, effectiveAssignments);
-    if (remindersDiffer) {
+    if (remindersWereOwned) {
+      shiftOwnedReminders(database, childId, current.start_datetime, materialized.start_datetime);
+    } else if (remindersMayDiffer) {
+      deleteEventReminders(database, [childId]);
+      copyReminderState(
+        database,
+        master.id,
+        childId,
+        master.start_datetime,
+        materialized.start_datetime,
+      );
+    }
+    if (requestedReminderOffsets !== undefined) {
       replaceReminders(
         database,
         childId,
         actorId,
         materialized.start_datetime,
-        effectiveReminderOffsets,
+        canonicalOffsets(requestedReminderOffsets),
       );
-    } else if (existingFields.includes('reminders')) {
-      replaceReminders(database, childId, actorId, materialized.start_datetime, []);
     }
-    if (actorId === master.created_by) fanOutEventReminders(database, childId, actorId);
+    if (remindersMayDiffer) fanOutEventReminders(database, childId, master.created_by);
+
+    if (remindersMayDiffer && sameReminderState(
+      reminderState(database, childId, materialized.start_datetime),
+      reminderState(database, master.id, master.start_datetime),
+    )) {
+      deleteEventReminders(database, [childId]);
+      fields = fields.filter((field) => field !== 'reminders');
+      if (fields.length === 0) {
+        database.prepare('DELETE FROM calendar_events WHERE id = ?').run(childId);
+        database.prepare(`
+          DELETE FROM calendar_event_exceptions
+          WHERE event_id = ? AND exception_date = ?
+        `).run(master.id, recurrenceId);
+        return { event: base, restored: true };
+      }
+      database.prepare('UPDATE calendar_events SET overridden_fields = ? WHERE id = ?')
+        .run(JSON.stringify(fields), childId);
+    }
 
     database.prepare(`
       INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date)
@@ -1147,7 +1222,10 @@ function refreshReparentedChild(database, child, oldResolved, successor, success
   const effectiveAssignments = oldFields.includes('assignments')
     ? canonicalIds(assignmentIds(database, child.id))
     : successorAssignments;
-  if (!sameNumberSet(effectiveAssignments, successorAssignments)) fields.push('assignments');
+  const childPrimary = assignmentPrimary(child, effectiveAssignments);
+  const successorPrimary = assignmentPrimary(successor, successorAssignments);
+  if (!sameNumberSet(effectiveAssignments, successorAssignments)
+      || childPrimary !== successorPrimary) fields.push('assignments');
   const effectiveAttachment = oldFields.includes('attachment')
     ? attachmentValues(child)
     : attachmentValues(successor);
@@ -1233,11 +1311,13 @@ export function splitSeries(database, {
   const initialMaster = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
   const initialSelected = baseOccurrenceFor(initialMaster, recurrenceId);
   if (initialSelected.is_series_start) {
+    const normalizedChanges = firstSlotSeriesChanges(initialMaster, initialSelected, changes);
+    assertValidEffectiveInterval({ ...initialMaster, ...normalizedChanges });
     const result = updateSeriesWithOverrides(database, {
       seriesId,
       actorId,
       isAdmin,
-      changes,
+      changes: normalizedChanges,
       assignments,
       attachment,
       createAttachment,
@@ -1282,6 +1362,7 @@ export function splitSeries(database, {
     successorValues.overridden_fields = null;
     successorValues.created_by = master.created_by;
 
+    assertValidEffectiveInterval(successorValues);
     assertSuccessorHasOccurrence(successorValues);
     const futureChildren = children.filter((child) =>
       !selectedChild || Number(child.id) !== Number(selectedChild.id));
