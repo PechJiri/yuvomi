@@ -21,10 +21,10 @@ import { queueEventDeletion, markEventOutbound, flushOutbound } from '../../serv
 import {
   assertSuccessorHasOccurrence,
   baseOccurrenceFor,
+  CalendarAttachmentCloneRequiredError,
   CalendarOccurrenceError,
   deleteOccurrence,
   isEligibleLocalSeries,
-  parseOverrideFields,
   splitSeries,
   truncateSeries,
   upsertOccurrenceOverride,
@@ -49,6 +49,83 @@ import {
 
 const log = createLogger('Calendar');
 const router = express.Router();
+
+async function runWithAttachmentClonePlan(database, actorId, stagedClones, operation) {
+  try {
+    return operation({});
+  } catch (error) {
+    if (!(error instanceof CalendarAttachmentCloneRequiredError)) throw error;
+
+    const contents = new Map();
+    const prepared = [];
+    for (const request of error.requests) {
+      const sourceDocument = database.prepare('SELECT * FROM family_documents WHERE id = ?')
+        .get(request.sourceDocumentId);
+      if (!sourceDocument) throw new Error('Attachment clone source document no longer exists.');
+      if (!contents.has(request.sourceDocumentId)) {
+        contents.set(request.sourceDocumentId, await readDocumentContent(sourceDocument));
+      }
+      const content = contents.get(request.sourceDocumentId);
+      const staged = await stageDocumentUpload({
+        buffer: content.buffer,
+        mime: content.mime,
+        category: sourceDocument.category,
+        originalName: sourceDocument.original_name,
+      });
+      stagedClones.push(staged);
+      prepared.push({ request, sourceDocument, staged, used: false });
+    }
+
+    const consume = (owner, childId, sourceDocumentId) => {
+      const clone = prepared.find((entry) => !entry.used
+        && entry.request.owner === owner
+        && (owner !== 'detached' || Number(entry.request.childId) === Number(childId))
+        && Number(entry.request.sourceDocumentId) === Number(sourceDocumentId));
+      if (!clone) throw new Error('No staged attachment clone matches the detached owner.');
+      clone.used = true;
+      return {
+        ...clone.request.attachment,
+        attachment_document_id: cloneAttachmentDocument(
+          database,
+          clone.sourceDocument,
+          clone.staged,
+          actorId,
+        ),
+      };
+    };
+
+    const result = operation({
+      cloneAttachment: (sourceDocumentId) =>
+        consume('successor', null, sourceDocumentId),
+      cloneDetachedAttachment: (childId, sourceDocumentId) =>
+        consume('detached', childId, sourceDocumentId),
+    });
+    for (const clone of prepared) {
+      const index = stagedClones.indexOf(clone.staged);
+      if (index >= 0) stagedClones.splice(index, 1);
+      if (!clone.used) {
+        try {
+          await cleanupStagedUpload(clone.staged);
+        } catch (cleanupError) {
+          log.warn('Unused attachment clone cleanup failed after calendar commit:', cleanupError);
+        }
+      }
+    }
+    return result;
+  }
+}
+
+async function cleanupCalendarUploads(uploads) {
+  let firstError = null;
+  for (const staged of [...new Set(uploads.filter(Boolean))]) {
+    try {
+      await cleanupStagedUpload(staged);
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (firstError) throw firstError;
+}
 
 // --------------------------------------------------------
 // GET /api/v1/calendar/:id
@@ -327,6 +404,7 @@ function rejectLinkedOccurrenceResource(res, event, req) {
 // --------------------------------------------------------
 router.put('/:id', async (req, res) => {
   let stagedUpload;
+  const stagedClones = [];
   try {
     const id    = parseInt(req.params.id, 10);
     const event = loadVisibleEvent(id, req);
@@ -672,19 +750,26 @@ router.put('/:id', async (req, res) => {
         seriesChanges.visibility = normalizeVisibility(req.body.visibility, event.visibility);
       }
       if (req.body.countdown !== undefined) seriesChanges.countdown = req.body.countdown ? 1 : 0;
-      updateSeriesWithOverrides(db.get(), {
-        seriesId: id,
-        actorId: getUserId(req),
-        isAdmin: isAdminUser(req),
-        changes: seriesChanges,
-        assignments: assignedTouched ? userIds : undefined,
-        confirmedOrphanCount: req.body.confirmed_orphan_count,
-        applyUpdate,
-        authorizeActor: false,
-      });
+      await runWithAttachmentClonePlan(
+        db.get(),
+        event.created_by,
+        stagedClones,
+        (cloneOptions) => updateSeriesWithOverrides(db.get(), {
+          seriesId: id,
+          actorId: getUserId(req),
+          isAdmin: isAdminUser(req),
+          changes: seriesChanges,
+          assignments: assignedTouched ? userIds : undefined,
+          confirmedOrphanCount: req.body.confirmed_orphan_count,
+          applyUpdate,
+          authorizeActor: false,
+          ...cloneOptions,
+        }),
+      );
     } else {
       db.get().transaction(applyUpdate)();
     }
+    stagedUpload = null;
 
     const updated = db.get().prepare(`
       SELECT e.*,
@@ -721,17 +806,18 @@ router.put('/:id', async (req, res) => {
         .catch((e) => log.warn('Änderung vorgemerkt, Sofortversuch fehlgeschlagen:', e.message));
     }
   } catch (err) {
-    if (err instanceof CalendarOccurrenceError && !stagedUpload) {
+    const staged = [stagedUpload, ...stagedClones].filter(Boolean);
+    if (err instanceof CalendarOccurrenceError && staged.length === 0) {
       return sendCalendarOccurrenceError(res, err);
     }
-    if (err instanceof StorageError && !stagedUpload) {
+    if (err instanceof StorageError && staged.length === 0) {
       log.error('PUT /:id storage error:', err);
       return sendStorageError(res, err, 'Calendar attachment storage upload failed.');
     }
     log.error('', err);
-    if (stagedUpload) {
+    if (staged.length > 0) {
       try {
-        await cleanupStagedUpload(stagedUpload);
+        await cleanupCalendarUploads(staged);
       } catch (cleanupError) {
         log.error('PUT /:id cleanup error after database failure:', cleanupError);
         return sendStorageError(
@@ -905,6 +991,7 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
 
 router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) => {
   let stagedUpload;
+  const stagedClones = [];
   try {
     const seriesId = parseInt(req.params.seriesId, 10);
     const actorId = getUserId(req);
@@ -1004,35 +1091,6 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       });
     }
 
-    let inheritedAttachmentClone = null;
-    if (!replacementRequested
-        && !removalRequested
-        && !selectedBase.is_series_start
-        && master.attachment_document_id) {
-      const selectedChild = db.get().prepare(`
-        SELECT overridden_fields FROM calendar_events
-        WHERE recurrence_parent_id = ? AND recurrence_id = ?
-      `).get(seriesId, req.params.recurrenceId);
-      const selectedOwnsAttachment = selectedChild
-        ? parseOverrideFields(selectedChild.overridden_fields).includes('attachment')
-        : false;
-      if (!selectedOwnsAttachment) {
-        const sourceDocument = db.get().prepare(
-          'SELECT * FROM family_documents WHERE id = ?'
-        ).get(master.attachment_document_id);
-        if (sourceDocument) {
-          const content = await readDocumentContent(sourceDocument);
-          stagedUpload = await stageDocumentUpload({
-            buffer: content.buffer,
-            mime: content.mime,
-            category: sourceDocument.category,
-            originalName: sourceDocument.original_name,
-          });
-          inheritedAttachmentClone = { sourceDocument };
-        }
-      }
-    }
-
     const changes = {};
     for (const field of [
       'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
@@ -1055,7 +1113,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       changes.target_outlook_calendar_id = vOutlook.value.calendarId;
     }
     if (vIcon !== undefined) changes.icon = vIcon;
-    const result = splitSeries(db.get(), {
+    const commonOptions = {
       seriesId,
       recurrenceId: req.params.recurrenceId,
       actorId,
@@ -1080,25 +1138,18 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
             ),
           })
         : undefined,
-      cloneAttachment: inheritedAttachmentClone
-        ? () => ({
-            attachment_name: master.attachment_name,
-            attachment_mime: master.attachment_mime,
-            attachment_size: master.attachment_size,
-            attachment_data: null,
-            attachment_document_id: cloneAttachmentDocument(
-              db.get(),
-              inheritedAttachmentClone.sourceDocument,
-              stagedUpload,
-              master.created_by,
-            ),
-          })
-        : undefined,
       reminderOffsets: req.body.reminder_offsets === undefined
         ? undefined
         : [...new Set(req.body.reminder_offsets.map(Number))],
       confirmedOrphanCount: req.body.confirmed_orphan_count,
-    });
+    };
+    const result = await runWithAttachmentClonePlan(
+      db.get(),
+      master.created_by,
+      stagedClones,
+      (cloneOptions) => splitSeries(db.get(), { ...commonOptions, ...cloneOptions }),
+    );
+    stagedUpload = null;
     res.status(result.wholeSeries ? 200 : 201).json({
       data: serializeEvent(result.series, {
         database: db.get(),
@@ -1107,16 +1158,17 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
       }),
     });
   } catch (err) {
-    if (err instanceof CalendarOccurrenceError && !stagedUpload) {
+    const staged = [stagedUpload, ...stagedClones].filter(Boolean);
+    if (err instanceof CalendarOccurrenceError && staged.length === 0) {
       return sendCalendarOccurrenceError(res, err);
     }
-    if (err instanceof StorageError && !stagedUpload) {
+    if (err instanceof StorageError && staged.length === 0) {
       return sendStorageError(res, err, 'Calendar attachment storage upload failed.');
     }
     log.error('PUT occurrence following failed:', err);
-    if (stagedUpload) {
+    if (staged.length > 0) {
       try {
-        await cleanupStagedUpload(stagedUpload);
+        await cleanupCalendarUploads(staged);
       } catch (cleanupError) {
         return sendStorageError(
           res,

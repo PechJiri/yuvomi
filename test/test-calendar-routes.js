@@ -1702,6 +1702,229 @@ test('following route copies inherited attachment bytes into an independently ow
     .get(originalDocumentId).content_data), originalBytes);
 });
 
+test('first-slot target detachment clones inherited attachments for every standalone orphan', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { deleteDocumentContent, readDocumentContent } = await import(
+    '../server/services/document-storage.js'
+  );
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yuvomi-orphan-clones-'));
+  const previousEnabled = process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+  const previousPath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = 'true';
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = dir;
+  const originalBytes = Buffer.from('independent orphan attachment');
+
+  try {
+    const created = await call('POST', '/', {
+      actor: MARIA,
+      body: {
+        title: 'Outbound orphan source',
+        start_datetime: '2054-08-01T09:00:00',
+        recurrence_rule: 'FREQ=DAILY',
+        visibility: 'private',
+        assigned_to: [MARIA.id],
+        attachment_name: 'orphan-source.txt',
+        attachment_data: `data:text/plain;base64,${originalBytes.toString('base64')}`,
+      },
+    });
+    assert.equal(created.status, 201);
+    const seriesId = Number(created.body.data.id);
+    const originalDocumentId = Number(created.body.data.attachment_document_id);
+    db.prepare("UPDATE family_documents SET visibility = 'private' WHERE id = ?")
+      .run(originalDocumentId);
+
+    const familyChild = await call('PUT', `/${seriesId}/occurrences/2054-08-02`, {
+      actor: MARIA,
+      body: {
+        title: 'Family detached child',
+        visibility: 'all',
+        assigned_to: [MARIA.id],
+      },
+    });
+    const restrictedChild = await call('PUT', `/${seriesId}/occurrences/2054-08-03`, {
+      actor: MARIA,
+      body: {
+        title: 'Restricted detached child',
+        visibility: 'assignees',
+        assigned_to: [TOM.id],
+      },
+    });
+    assert.equal(familyChild.status, 200);
+    assert.equal(restrictedChild.status, 200);
+
+    const conflict = await call('PUT', `/${seriesId}/occurrences/2054-08-01/following`, {
+      actor: MARIA,
+      body: { target_google_calendar_id: 'family@example.test' },
+    });
+    assert.equal(conflict.status, 409);
+    assert.equal(conflict.body.orphaned_override_count, 2);
+
+    const detached = await call('PUT', `/${seriesId}/occurrences/2054-08-01/following`, {
+      actor: MARIA,
+      body: {
+        target_google_calendar_id: 'family@example.test',
+        confirmed_orphan_count: 2,
+      },
+    });
+    assert.equal(detached.status, 200);
+
+    const familyEvent = db.prepare('SELECT * FROM calendar_events WHERE id = ?')
+      .get(familyChild.body.data.id);
+    const restrictedEvent = db.prepare('SELECT * FROM calendar_events WHERE id = ?')
+      .get(restrictedChild.body.data.id);
+    const documentIds = [
+      originalDocumentId,
+      Number(familyEvent.attachment_document_id),
+      Number(restrictedEvent.attachment_document_id),
+    ];
+    assert.equal(new Set(documentIds).size, 3);
+    assert.deepEqual(db.prepare(`
+      SELECT id, visibility FROM family_documents
+      WHERE id IN (?, ?, ?) ORDER BY id
+    `).all(...documentIds).map((row) => ({ ...row })), [
+      { id: originalDocumentId, visibility: 'private' },
+      { id: Number(familyEvent.attachment_document_id), visibility: 'family' },
+      { id: Number(restrictedEvent.attachment_document_id), visibility: 'restricted' },
+    ]);
+    assert.deepEqual(db.prepare(`
+      SELECT user_id FROM family_document_access
+      WHERE document_id = ? ORDER BY user_id
+    `).all(restrictedEvent.attachment_document_id).map((row) => Number(row.user_id)), [TOM.id]);
+
+    const storedDocuments = documentIds.map((id) => db.prepare(
+      'SELECT * FROM family_documents WHERE id = ?'
+    ).get(id));
+    assert.equal(new Set(storedDocuments.map((document) => document.storage_key)).size, 3);
+    for (const document of storedDocuments) {
+      const content = await readDocumentContent(document);
+      assert.deepEqual(content.buffer, originalBytes);
+    }
+
+    await deleteDocumentContent(storedDocuments[1]);
+    db.prepare('DELETE FROM family_documents WHERE id = ?').run(storedDocuments[1].id);
+    assert.equal(db.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+      .get(familyEvent.id).attachment_document_id, null);
+    assert.equal(db.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+      .get(seriesId).attachment_document_id, originalDocumentId);
+    assert.equal(db.prepare('SELECT attachment_document_id FROM calendar_events WHERE id = ?')
+      .get(restrictedEvent.id).attachment_document_id, restrictedEvent.attachment_document_id);
+    for (const document of [storedDocuments[0], storedDocuments[2]]) {
+      const content = await readDocumentContent(document);
+      assert.deepEqual(content.buffer, originalBytes);
+    }
+  } finally {
+    if (previousEnabled === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+    else process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = previousEnabled;
+    if (previousPath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousPath;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('whole-series target detachment also clones an inherited orphan attachment', async () => {
+  const originalBytes = Buffer.from('whole-series orphan attachment');
+  const created = await call('POST', '/', {
+    actor: MARIA,
+    body: {
+      title: 'Whole-series orphan source',
+      start_datetime: '2055-08-10T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+      assigned_to: [MARIA.id],
+      attachment_name: 'whole-series-source.txt',
+      attachment_data: `data:text/plain;base64,${originalBytes.toString('base64')}`,
+    },
+  });
+  assert.equal(created.status, 201);
+  const seriesId = Number(created.body.data.id);
+  const originalDocumentId = Number(created.body.data.attachment_document_id);
+  const child = await call('PUT', `/${seriesId}/occurrences/2055-08-11`, {
+    actor: MARIA,
+    body: { title: 'Whole-series detached child' },
+  });
+  assert.equal(child.status, 200);
+
+  const response = await call('PUT', `/${seriesId}`, {
+    actor: MARIA,
+    body: {
+      target_google_calendar_id: 'whole-series@example.test',
+      confirmed_orphan_count: 1,
+    },
+  });
+  assert.equal(response.status, 200);
+  const orphan = db.prepare('SELECT * FROM calendar_events WHERE id = ?').get(child.body.data.id);
+  assert.equal(orphan.recurrence_parent_id, null);
+  assert.notEqual(Number(orphan.attachment_document_id), originalDocumentId);
+  assert.deepEqual(Buffer.from(db.prepare(`
+    SELECT content_data FROM family_documents WHERE id = ?
+  `).get(orphan.attachment_document_id).content_data), originalBytes);
+});
+
+test('following orphan-clone rollback removes every staged storage copy', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yuvomi-orphan-rollback-'));
+  const previousEnabled = process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+  const previousPath = process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+  process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = 'true';
+  process.env.DOCUMENT_STORAGE_LOCAL_PATH = dir;
+
+  try {
+    const created = await call('POST', '/', {
+      actor: MARIA,
+      body: {
+        title: 'Orphan rollback source',
+        start_datetime: '2057-09-01T09:00:00',
+        recurrence_rule: 'FREQ=DAILY',
+        assigned_to: [MARIA.id],
+        attachment_name: 'rollback-source.txt',
+        attachment_data: `data:text/plain;base64,${Buffer.from('rollback clones').toString('base64')}`,
+      },
+    });
+    assert.equal(created.status, 201);
+    const seriesId = Number(created.body.data.id);
+    const child = await call('PUT', `/${seriesId}/occurrences/2057-09-03`, {
+      actor: MARIA,
+      body: { title: 'Inherited rollback child' },
+    });
+    assert.equal(child.status, 200);
+    db.exec(`
+      CREATE TRIGGER fail_second_orphan_document_clone
+      BEFORE INSERT ON family_documents
+      WHEN NEW.original_name = 'rollback-source.txt'
+        AND (SELECT COUNT(*) FROM family_documents
+             WHERE original_name = 'rollback-source.txt') >= 2
+      BEGIN SELECT RAISE(ABORT, 'orphan document rollback probe'); END;
+    `);
+
+    const response = await call('PUT', `/${seriesId}/occurrences/2057-09-02/following`, {
+      actor: MARIA,
+      body: {
+        recurrence_rule: 'FREQ=WEEKLY;BYDAY=SU',
+        confirmed_orphan_count: 1,
+      },
+    });
+    assert.equal(response.status, 500);
+    const entries = await fs.readdir(dir, { withFileTypes: true, recursive: true });
+    assert.equal(entries.filter((entry) => entry.isFile()).length, 1);
+    assert.equal(db.prepare(`
+      SELECT COUNT(*) AS count FROM family_documents
+      WHERE original_name = 'rollback-source.txt'
+    `).get().count, 1);
+    assert.equal(db.prepare('SELECT recurrence_parent_id FROM calendar_events WHERE id = ?')
+      .get(child.body.data.id).recurrence_parent_id, seriesId);
+  } finally {
+    db.exec('DROP TRIGGER IF EXISTS fail_second_orphan_document_clone;');
+    if (previousEnabled === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_ENABLED;
+    else process.env.DOCUMENT_STORAGE_LOCAL_ENABLED = previousEnabled;
+    if (previousPath === undefined) delete process.env.DOCUMENT_STORAGE_LOCAL_PATH;
+    else process.env.DOCUMENT_STORAGE_LOCAL_PATH = previousPath;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('occurrence and split responses preserve assignment primary order and projections', async () => {
   db.prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run('#FF9500', TOM.id);
   const cases = [

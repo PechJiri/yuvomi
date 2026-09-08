@@ -50,6 +50,15 @@ export class CalendarOccurrenceError extends Error {
   }
 }
 
+/** Internal two-phase signal: storage copies must be staged before the write transaction. */
+export class CalendarAttachmentCloneRequiredError extends Error {
+  constructor(requests) {
+    super('Independent attachment copies must be staged before detaching recurrence owners.');
+    this.name = 'CalendarAttachmentCloneRequiredError';
+    this.requests = requests;
+  }
+}
+
 function invalidOverrideFields(message) {
   return new CalendarOccurrenceError(message, {
     status: 400,
@@ -611,6 +620,39 @@ function attachmentValues(source) {
 
 function sameAttachment(left, right) {
   return ATTACHMENT_PROPERTIES.every((property) => sameScalar(left[property], right[property]));
+}
+
+function attachmentDocumentExists(database, documentId) {
+  return Number(documentId) > 0
+    && hasColumn(database, 'family_documents', 'id')
+    && Boolean(database.prepare('SELECT 1 FROM family_documents WHERE id = ?').get(documentId));
+}
+
+function detachedAttachmentCloneRequests(database, children, master) {
+  const sourceDocumentId = Number(master.attachment_document_id);
+  if (!attachmentDocumentExists(database, sourceDocumentId)) return [];
+  return children
+    .filter((child) => !parseOverrideFields(child.overridden_fields).includes('attachment'))
+    .map((child) => ({
+      owner: 'detached',
+      childId: Number(child.id),
+      sourceDocumentId,
+      attachment: attachmentValues(master),
+    }));
+}
+
+function independentAttachmentValues(database, cloned, sourceDocumentId, claimedDocumentIds) {
+  const values = attachmentValues(cloned);
+  const documentId = Number(values.attachment_document_id);
+  if (!Number.isInteger(documentId)
+      || documentId < 1
+      || documentId === Number(sourceDocumentId)
+      || claimedDocumentIds.has(documentId)
+      || !attachmentDocumentExists(database, documentId)) {
+    throw new Error('Attachment clone callback must create a distinct document row.');
+  }
+  claimedDocumentIds.add(documentId);
+  return values;
 }
 
 function syncOwnedAttachmentAccess(database, documentId, visibility, userIds) {
@@ -1184,6 +1226,7 @@ export function splitSeries(database, {
   attachment,
   createAttachment,
   cloneAttachment,
+  cloneDetachedAttachment,
   reminderOffsets: requestedReminderOffsets,
   confirmedOrphanCount,
 }) {
@@ -1198,6 +1241,7 @@ export function splitSeries(database, {
       assignments,
       attachment,
       createAttachment,
+      cloneDetachedAttachment,
       reminderOffsets: requestedReminderOffsets,
       confirmedOrphanCount,
     });
@@ -1281,23 +1325,42 @@ export function splitSeries(database, {
         ? assignmentPrimary(selectedChild, successorAssignments)
         : assignmentPrimary(master, successorAssignments)
       : requestedAssignments[0] ?? null;
-    const createdAttachment = typeof createAttachment === 'function'
-      ? createAttachment()
-      : attachment;
     const inheritedDocumentId = !selectedFields.includes('attachment')
       ? Number(master.attachment_document_id)
       : null;
-    const inheritedDocumentExists = inheritedDocumentId > 0
-      && hasColumn(database, 'family_documents', 'id')
-      && Boolean(database.prepare('SELECT 1 FROM family_documents WHERE id = ?')
-        .get(inheritedDocumentId));
-    if (createdAttachment === undefined
-        && inheritedDocumentExists
-        && typeof cloneAttachment !== 'function') {
-      throw new Error('An inherited attachment document requires an independent clone.');
+    const inheritedDocumentExists = attachmentDocumentExists(database, inheritedDocumentId);
+    const detachedCloneRequests = detachedAttachmentCloneRequests(database, orphans, master);
+    const cloneRequests = [];
+    const successorInheritsDocument = createAttachment === undefined
+      && attachment === undefined
+      && inheritedDocumentExists;
+    if (successorInheritsDocument && typeof cloneAttachment !== 'function') {
+      cloneRequests.push({
+        owner: 'successor',
+        sourceDocumentId: inheritedDocumentId,
+        attachment: attachmentValues(master),
+      });
     }
+    if (detachedCloneRequests.length > 0 && typeof cloneDetachedAttachment !== 'function') {
+      cloneRequests.push(...detachedCloneRequests);
+    }
+    if (cloneRequests.length > 0) {
+      throw new CalendarAttachmentCloneRequiredError(cloneRequests);
+    }
+    const claimedDocumentIds = new Set([
+      Number(master.attachment_document_id),
+      ...children.map((child) => Number(child.attachment_document_id)),
+    ].filter((documentId) => Number.isInteger(documentId) && documentId > 0));
+    const createdAttachment = typeof createAttachment === 'function'
+      ? createAttachment()
+      : attachment;
     const clonedAttachment = createdAttachment === undefined && inheritedDocumentExists
-      ? cloneAttachment(inheritedDocumentId)
+      ? independentAttachmentValues(
+          database,
+          cloneAttachment(inheritedDocumentId),
+          inheritedDocumentId,
+          claimedDocumentIds,
+        )
       : undefined;
     const successorAttachment = createdAttachment === undefined
       ? selectedFields.includes('attachment')
@@ -1306,7 +1369,12 @@ export function splitSeries(database, {
       : attachmentValues(createdAttachment);
     Object.assign(successorValues, successorAttachment);
 
-    for (const child of orphans) materializeDetachedChild(database, child, master);
+    for (const child of orphans) {
+      materializeDetachedChild(database, child, master, {
+        cloneDetachedAttachment,
+        claimedDocumentIds,
+      });
+    }
     database.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
       .run(truncateRuleBefore(master.recurrence_rule, recurrenceId), master.id);
     const successorId = insertSeriesRow(database, successorValues);
@@ -1465,11 +1533,17 @@ function copyResolvedReminderState(database, {
   }
 }
 
-function materializeDetachedChild(database, child, master) {
+function materializeDetachedChild(database, child, master, {
+  cloneDetachedAttachment,
+  claimedDocumentIds,
+} = {}) {
   const fields = parseOverrideFields(child.overridden_fields);
   const resolved = resolveOccurrence(database, child, master);
+  const effectiveAssignments = fields.includes('assignments')
+    ? canonicalIds(assignmentIds(database, child.id))
+    : canonicalIds(assignmentIds(database, master.id));
   if (!fields.includes('assignments')) {
-    replaceAssignments(database, child.id, canonicalIds(assignmentIds(database, master.id)));
+    replaceAssignments(database, child.id, effectiveAssignments);
   }
   if (!fields.includes('reminders')) {
     copyResolvedReminderState(database, {
@@ -1480,6 +1554,16 @@ function materializeDetachedChild(database, child, master) {
     });
     fanOutEventReminders(database, child.id, master.created_by);
   }
+  const inheritsAttachment = !fields.includes('attachment')
+    && attachmentDocumentExists(database, resolved.attachment_document_id);
+  const detachedAttachment = inheritsAttachment
+    ? independentAttachmentValues(
+        database,
+        cloneDetachedAttachment(child.id, Number(resolved.attachment_document_id)),
+        resolved.attachment_document_id,
+        claimedDocumentIds,
+      )
+    : attachmentValues(resolved);
   database.prepare(`
     UPDATE calendar_events
     SET title = ?, description = ?, start_datetime = ?, end_datetime = ?,
@@ -1500,13 +1584,21 @@ function materializeDetachedChild(database, child, master) {
     resolved.assigned_to ?? null,
     resolved.visibility ?? 'all',
     resolved.countdown ? 1 : 0,
-    resolved.attachment_name ?? null,
-    resolved.attachment_mime ?? null,
-    resolved.attachment_size ?? null,
-    resolved.attachment_data ?? null,
-    resolved.attachment_document_id ?? null,
+    detachedAttachment.attachment_name,
+    detachedAttachment.attachment_mime,
+    detachedAttachment.attachment_size,
+    detachedAttachment.attachment_data,
+    detachedAttachment.attachment_document_id,
     child.id,
   );
+  if (inheritsAttachment) {
+    syncOwnedAttachmentAccess(
+      database,
+      detachedAttachment.attachment_document_id,
+      resolved.visibility,
+      effectiveAssignments,
+    );
+  }
   database.prepare(`
     DELETE FROM calendar_event_exceptions
     WHERE event_id = ? AND exception_date = ?
@@ -1606,6 +1698,7 @@ export function updateSeriesWithOverrides(database, {
   assignments,
   attachment,
   createAttachment,
+  cloneDetachedAttachment,
   reminderOffsets: requestedReminderOffsets,
   confirmedOrphanCount,
   applyUpdate,
@@ -1637,7 +1730,21 @@ export function updateSeriesWithOverrides(database, {
       throw orphanConflict(orphans.length);
     }
 
-    for (const child of orphans) materializeDetachedChild(database, child, current);
+    const detachedCloneRequests = detachedAttachmentCloneRequests(database, orphans, current);
+    if (detachedCloneRequests.length > 0 && typeof cloneDetachedAttachment !== 'function') {
+      throw new CalendarAttachmentCloneRequiredError(detachedCloneRequests);
+    }
+    const claimedDocumentIds = new Set([
+      Number(current.attachment_document_id),
+      ...children.map((child) => Number(child.attachment_document_id)),
+    ].filter((documentId) => Number.isInteger(documentId) && documentId > 0));
+
+    for (const child of orphans) {
+      materializeDetachedChild(database, child, current, {
+        cloneDetachedAttachment,
+        claimedDocumentIds,
+      });
+    }
     if (typeof applyUpdate === 'function') applyUpdate(database, current);
     else applySeriesChanges(database, master.id, changes);
     const updatedAnchor = database.prepare(

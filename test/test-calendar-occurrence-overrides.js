@@ -15,6 +15,7 @@ freshTestDbPath('calendar-occurrence-overrides');
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import {
   baseOccurrenceFor,
+  CalendarAttachmentCloneRequiredError,
   CalendarOccurrenceError,
   deleteOccurrence,
   isEligibleLocalSeries,
@@ -1426,6 +1427,163 @@ test('confirmed following split detaches only incompatible children with attachm
     SELECT exception_date FROM calendar_event_exceptions
     WHERE event_id = ? ORDER BY exception_date
   `).all(seriesId).map((row) => row.exception_date), []);
+});
+
+test('confirmed split gives every inherited orphan an independent attachment ACL and lifecycle', () => {
+  const database = createDatabase();
+  const insertDocument = ({ name, visibility, storageKey }) => Number(database.prepare(`
+    INSERT INTO family_documents
+      (name, description, category, status, visibility, original_name, mime_type,
+       file_size, content_data, storage_provider, storage_key, created_by)
+    VALUES (?, 'clone probe', 'other', 'active', ?, ?, 'text/plain',
+            12, 'source bytes', 'local', ?, 1)
+  `).run(name, visibility, `${name}.txt`, storageKey).lastInsertRowid);
+  const sourceDocumentId = insertDocument({
+    name: 'Inherited source',
+    visibility: 'private',
+    storageKey: 'source-key',
+  });
+  const childOwnedDocumentId = insertDocument({
+    name: 'Child owned',
+    visibility: 'family',
+    storageKey: 'child-owned-key',
+  });
+  const seriesId = Number(insertSeries(database, {
+    title: 'Inherited orphan documents',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+    assigned_to: 1,
+    visibility: 'private',
+  }));
+  database.prepare(`
+    UPDATE calendar_events
+    SET attachment_name = 'source.txt', attachment_mime = 'text/plain',
+        attachment_size = 12, attachment_document_id = ?
+    WHERE id = ?
+  `).run(sourceDocumentId, seriesId);
+  database.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, 1)')
+    .run(seriesId);
+
+  const familyOrphan = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-03',
+    actorId: 1,
+    changes: { title: 'Family orphan', visibility: 'all' },
+    assignments: [2],
+  }).event;
+  const restrictedOrphan = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-04',
+    actorId: 1,
+    changes: { title: 'Restricted orphan', visibility: 'assignees' },
+    assignments: [3],
+  }).event;
+  const ownedOrphan = upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-05',
+    actorId: 1,
+    changes: { title: 'Owned orphan', visibility: 'all' },
+    attachment: {
+      attachment_name: 'child-owned.txt',
+      attachment_mime: 'text/plain',
+      attachment_size: 12,
+      attachment_data: null,
+      attachment_document_id: childOwnedDocumentId,
+    },
+  }).event;
+
+  const clonedByOwner = new Map();
+  const cloneDocument = (owner, inheritedDocumentId) => {
+    const source = database.prepare('SELECT * FROM family_documents WHERE id = ?')
+      .get(inheritedDocumentId);
+    const documentId = insertDocument({
+      name: `${owner} clone`,
+      visibility: source.visibility,
+      storageKey: `${owner}-clone-key`,
+    });
+    clonedByOwner.set(owner, documentId);
+    return {
+      attachment_name: 'source.txt',
+      attachment_mime: 'text/plain',
+      attachment_size: 12,
+      attachment_data: null,
+      attachment_document_id: documentId,
+    };
+  };
+
+  assert.throws(() => splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { recurrence_rule: 'FREQ=WEEKLY;BYDAY=FR' },
+    confirmedOrphanCount: 3,
+    cloneAttachment: (sourceId) => cloneDocument('successor', sourceId),
+  }), (error) => {
+    assert.equal(error instanceof CalendarAttachmentCloneRequiredError, true);
+    assert.deepEqual(error.requests.map((request) => ({
+      owner: request.owner,
+      childId: request.childId,
+      sourceDocumentId: request.sourceDocumentId,
+    })), [
+      { owner: 'detached', childId: Number(familyOrphan.id), sourceDocumentId },
+      { owner: 'detached', childId: Number(restrictedOrphan.id), sourceDocumentId },
+    ]);
+    return true;
+  });
+  assert.equal(clonedByOwner.size, 0);
+
+  const result = splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-02',
+    actorId: 1,
+    changes: { recurrence_rule: 'FREQ=WEEKLY;BYDAY=FR' },
+    confirmedOrphanCount: 3,
+    cloneAttachment: (sourceId) => cloneDocument('successor', sourceId),
+    cloneDetachedAttachment: (childId, sourceId) => cloneDocument(`orphan-${childId}`, sourceId),
+  });
+
+  const attachmentIdFor = (eventId) => Number(database.prepare(`
+    SELECT attachment_document_id FROM calendar_events WHERE id = ?
+  `).get(eventId).attachment_document_id);
+  const familyDocumentId = attachmentIdFor(familyOrphan.id);
+  const restrictedDocumentId = attachmentIdFor(restrictedOrphan.id);
+  const successorDocumentId = attachmentIdFor(result.series.id);
+  assert.equal(attachmentIdFor(seriesId), sourceDocumentId);
+  assert.equal(successorDocumentId, clonedByOwner.get('successor'));
+  assert.equal(familyDocumentId, clonedByOwner.get(`orphan-${familyOrphan.id}`));
+  assert.equal(restrictedDocumentId, clonedByOwner.get(`orphan-${restrictedOrphan.id}`));
+  assert.equal(attachmentIdFor(ownedOrphan.id), childOwnedDocumentId);
+  assert.equal(new Set([
+    sourceDocumentId,
+    successorDocumentId,
+    familyDocumentId,
+    restrictedDocumentId,
+    childOwnedDocumentId,
+  ]).size, 5);
+
+  assert.deepEqual(database.prepare(`
+    SELECT id, visibility FROM family_documents
+    WHERE id IN (?, ?, ?) ORDER BY id
+  `).all(sourceDocumentId, familyDocumentId, restrictedDocumentId).map((row) => ({ ...row })), [
+    { id: sourceDocumentId, visibility: 'private' },
+    { id: familyDocumentId, visibility: 'family' },
+    { id: restrictedDocumentId, visibility: 'restricted' },
+  ]);
+  assert.deepEqual(database.prepare(`
+    SELECT user_id FROM family_document_access WHERE document_id = ? ORDER BY user_id
+  `).all(restrictedDocumentId).map((row) => Number(row.user_id)), [3]);
+
+  database.prepare('DELETE FROM family_documents WHERE id = ?').run(familyDocumentId);
+  assert.equal(database.prepare('SELECT id FROM family_documents WHERE id = ?')
+    .get(familyDocumentId), undefined);
+  for (const [eventId, expectedDocumentId] of [
+    [seriesId, sourceDocumentId],
+    [result.series.id, successorDocumentId],
+    [restrictedOrphan.id, restrictedDocumentId],
+    [ownedOrphan.id, childOwnedDocumentId],
+  ]) {
+    assert.equal(attachmentIdFor(eventId), expectedDocumentId);
+  }
 });
 
 test('confirmed following detachment rolls back orphan materialization and EXDATE cleanup atomically', () => {
