@@ -85,11 +85,45 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
     // dieselbe Antwort bekommen, sonst ist der Schutz halb.
     const zonenUnsicher = !!event.tzid && !tzAware;
 
+    /* IN DER EREIGNISZONE RECHNEN, WENN UTC-TAG UND LOKALER TAG AUSEINANDERGEHEN
+     * (#985).
+     *
+     * Bis hierher lief die Schleife auf UTC-Tagen und setzte `BYMONTHDAY` aus,
+     * sobald die beiden nicht uebereinstimmten - die Serie lief dann auf ihrem
+     * festen UTC-Tag weiter. Dieser feste Versatz trifft den lokalen
+     * Monatsletzten nur, solange der UTC-Offset gleich bleibt; ueber eine
+     * Sommerzeitumstellung hinweg tut er es nicht mehr. Gemessen an einer New
+     * Yorker Serie um 23:30 lokal: nach der Maerz-Umstellung lagen ALLE
+     * folgenden Vorkommen auf dem Ersten statt auf dem Monatsletzten.
+     *
+     * Also wird die REGEL auf dem lokalen Datum fortgeschrieben, und je
+     * Vorkommen wird nach UTC zurueckgerechnet. `BYMONTHDAY` gilt dabei wieder,
+     * denn jetzt ist das Datum, auf dem gerechnet wird, dasselbe, das die Regel
+     * meint.
+     *
+     * WAS WEITER AM UTC-TAG HAENGT, und das ist der Grund fuer die zwei Daten
+     * nebeneinander: EXDATE-Ausnahmen sind beim Import auf das UTC-Datum
+     * normalisiert (`formatICSDate(...).slice(0, 10)` in ics-parser.js), und das
+     * Anzeigefenster [from, to] wird ebenso in UTC-Tagen gefuehrt. Wer nur die
+     * Schleifenvariable umstellt, laesst genau bei diesen Terminen die
+     * Ausnahmen ins Leere laufen - dieselben Termine, um die es hier geht.
+     */
+    const lokalRechnen = zonenUnsicher && !!wall && !isAllDay;
+
     // DTSTART ist zugleich Startpunkt und ANKER: ohne ihn leitet nextOccurrence
     // den gemeinten Tag aus dem vorigen Vorkommen ab, und eine Klemmung in einem
     // kurzen Monat wuerde damit festgeschrieben (#978).
-    const seriesStart = event.start_datetime.slice(0, 10);
-    let currentDate = seriesStart; // YYYY-MM-DD
+    const seriesStartUtc = event.start_datetime.slice(0, 10);
+    const seriesStart = lokalRechnen ? wall.date : seriesStartUtc;
+
+    /** Der UTC-Zeitpunkt eines Vorkommens - im lokalen Modus zurueckgerechnet. */
+    const instantFuer = (tag) => (lokalRechnen
+      ? localToUTC(`${tag}T${wall.time}`, event.tzid)
+      : (tzAware ? localToUTC(`${tag}T${wall.time}`, event.tzid) : tag + timeSuffix));
+    /** Der UTC-TAG eines Vorkommens - fuer Fenster, EXDATE und Ausgabe. */
+    const utcTagFuer = (tag) => (lokalRechnen ? String(instantFuer(tag)).slice(0, 10) : tag);
+
+    let currentDate = seriesStart; // YYYY-MM-DD, lokal oder UTC je nach Modus
     let iterations  = 0;
     const MAX_ITER  = 1000; // Sicherheitsgrenze
     const exceptions = exceptionsByEvent?.get(event.id) ?? null; // ausgenommene Instanz-Daten (#489)
@@ -117,8 +151,8 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
       // liegen als vor Ort (#549 nutzt dieselbe Unterscheidung fuer die
       // Uhrzeit). Die Monatsletzten-Pruefung wird dort ausgesetzt, statt ein
       // Vorkommen still zu verlieren.
-      if (!matchesRRuleByday(currentDate, event.recurrence_rule, { utcDiffersFromLocal: zonenUnsicher })) {
-        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: zonenUnsicher });
+      if (!matchesRRuleByday(currentDate, event.recurrence_rule, { utcDiffersFromLocal: lokalRechnen ? false : zonenUnsicher })) {
+        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: lokalRechnen ? false : zonenUnsicher });
         if (!next || next <= currentDate) break;
         currentDate = next;
         continue;
@@ -127,8 +161,10 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
       if (maxCount !== null && occurrence >= maxCount) break;
       occurrence++;
 
-      if (exceptions?.has(currentDate)) {
-        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: zonenUnsicher });
+      // Gegen den UTC-TAG, nicht gegen den lokalen: so sind die Ausnahmen beim
+      // Import abgelegt worden (#985).
+      if (exceptions?.has(utcTagFuer(currentDate))) {
+        const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: lokalRechnen ? false : zonenUnsicher });
         if (!next || next <= currentDate) break;
         currentDate = next;
         continue;
@@ -143,7 +179,7 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
       }
 
       if (currentDate >= from || instanceEnd >= from) {
-        const newStart = tzAware ? localToUTC(`${currentDate}T${wall.time}`, event.tzid) : currentDate + timeSuffix;
+        const newStart = instantFuer(currentDate);
         let newEnd = event.end_datetime;
         if (durationMs !== null) {
           if (isAllDay) {
@@ -166,7 +202,7 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
           ...event,
           start_datetime:       newStart,
           end_datetime:         newEnd,
-          is_recurring_instance: currentDate !== event.start_datetime.slice(0, 10) ? 1 : 0,
+          is_recurring_instance: utcTagFuer(currentDate) !== seriesStartUtc ? 1 : 0,
           // "IST DAS DER ERSTE TERMIN DER SERIE?" IST NICHT "WEICHT ER VOM
           // GESPEICHERTEN DATUM AB?" - seit ein Start auf der Regel liegen darf,
           // ohne ihr Raster zu treffen (#960), sind das zwei Fragen. Ein Termin
@@ -182,7 +218,7 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
         });
       }
 
-      const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: zonenUnsicher });
+      const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: lokalRechnen ? false : zonenUnsicher });
       if (!next || next <= currentDate) break;
       currentDate = next;
     }

@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A month-end series in its own timezone no longer drifts across a DST change** (#985). A series
+  imported over CalDAV or ICS carries the timezone it was created in. Its recurrence was computed on
+  **UTC** days, and where the UTC day and the local day disagree - a late-evening event, say 23:30 in
+  New York, stored as 04:30Z the next day - the month-end rule was suspended and the series ran on
+  its fixed UTC day instead. That fixed offset tracks the local month end only while the UTC offset
+  stays put. From the March transition onwards it does not: measured on a New York series at 23:30,
+  every following occurrence landed on the 1st instead of the last day of the month - not one missed
+  date, all of them.
+
+  The recurrence now advances on the event's **local** date and converts back to UTC per occurrence,
+  so `BYMONTHDAY` applies again to the date it actually means, and the local time of day stays put
+  across the transition. Events without their own timezone - everything created in Yuvomi - are
+  unaffected and take the same path as before.
+
+  Two dates now run side by side, deliberately: the rule advances locally, while the display window,
+  the `EXDATE` exceptions and the emitted instance stay on the **UTC** day. Exceptions are
+  normalized to the UTC day on import, so comparing them against the local one would have made them
+  miss exactly the events this fix is about.
+
 - **A "last day of the month" series now leaves Yuvomi with a start date its own rule accepts**
   (#986). A series created from a mid-month date stores `DTSTART` as entered - say 15 January -
   together with `RRULE:FREQ=MONTHLY;BYMONTHDAY=-1`. Internally that is unambiguous, and the calendar

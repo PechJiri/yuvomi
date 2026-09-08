@@ -326,13 +326,70 @@ test('eine Serie mit eigener Zone verliert ihr Monatsende nicht', () => {
     assert(d === letzter, `${tag} ist lokal nicht der Monatsletzte (${letzter}.)`);
   }
 
-  // WAS DIESER TEST NICHT ZEIGT - und was er deshalb nicht beweisen soll: der
-  // feste UTC-Tag traegt nur, solange die Sommerzeitumstellung ihn nicht ueber
-  // Mitternacht schiebt. 20:00 New Yorker Zeit hat dafuer vier Stunden Luft.
-  // Bei 23:30 hat es keine mehr: der Zeitstempel liegt dann bei 04:30Z, und
-  // nach der Umstellung auf EDT ergibt das lokal den 1. April statt des
-  // 31. Maerz. Das braucht die Rechnung in der Ereigniszone mit Rueckrechnung
-  // je Vorkommen und ist ein eigener Vorgang, kein Nachziehen hier.
+  // Was dieser Test allein NICHT zeigte, stand hier lange als Kommentar und hat
+  // seit #985 seinen eigenen Test direkt darunter: 20:00 New Yorker Zeit hat
+  // vier Stunden Luft bis Mitternacht, 23:30 hat keine mehr.
+});
+
+test('eine Serie spaet abends behaelt ihr Monatsende ueber die Zeitumstellung', () => {
+  // #985. Lokal 2026-01-31 23:30 New York liegt als 2026-02-01T04:30Z in der
+  // Spalte. Solange der Offset UTC-5 bleibt, trifft dieser feste UTC-Tag den
+  // lokalen Monatsletzten von selbst; ab der Maerz-Umstellung auf UTC-4 faellt
+  // 04:30Z hinter die lokale Mitternacht, und die Serie lief auf dem Ersten
+  // weiter statt auf dem Letzten - gemessen: 01.04., 01.05., 01.06. Nicht ein
+  // verpasstes Vorkommen, sondern alle folgenden.
+  const ev = {
+    id: 43, tzid: 'America/New_York',
+    start_datetime: '2026-02-01T04:30:00Z', end_datetime: '2026-02-01T05:00:00Z',
+    all_day: 0, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  };
+  const inst = expandRecurringEvents([ev], '2026-01-01', '2026-06-30');
+  assert(inst.length >= 5, `mindestens fuenf Vorkommen erwartet, bekommen ${inst.length}`);
+
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  for (const e of inst) {
+    const lokal = fmt.format(new Date(e.start_datetime));
+    const [tag, zeit] = lokal.split(', ');
+    const [y, m, d] = tag.split('-').map(Number);
+    const letzter = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    assert(d === letzter, `${tag} ist lokal nicht der Monatsletzte (${letzter}.)`);
+    // UND DIE UHRZEIT BLEIBT STEHEN. Ohne die Rueckrechnung je Vorkommen waere
+    // der lokale Termin nach der Umstellung um eine Stunde verrutscht - richtig
+    // am Tag, falsch auf der Uhr.
+    assert(zeit === '23:30', `${lokal}: die lokale Uhrzeit muss 23:30 bleiben`);
+  }
+});
+
+test('eine Ausnahme greift auch bei einer Serie, die lokal gerechnet wird', () => {
+  // #985, die andere Haelfte: seit die Regel auf dem LOKALEN Datum
+  // fortschreitet, laufen zwei Daten nebeneinander. EXDATE-Ausnahmen sind beim
+  // Import auf das UTC-Datum normalisiert (ics-parser.js reduziert sie mit
+  // `formatICSDate(...).slice(0, 10)`), also muss der Vergleich am UTC-Tag
+  // haengen und nicht am lokalen. Gegen den lokalen geprueft liefe die Ausnahme
+  // genau bei den Terminen ins Leere, um die es hier ueberhaupt geht.
+  const ev = {
+    id: 44, tzid: 'America/New_York',
+    start_datetime: '2026-02-01T04:30:00Z', end_datetime: '2026-02-01T05:00:00Z',
+    all_day: 0, recurrence_rule: 'FREQ=MONTHLY;BYMONTHDAY=-1',
+  };
+  // Lokal der 31. Maerz 23:30, als UTC-Zeitstempel der 1. April - und in dieser
+  // Form liegt die Ausnahme in der Tabelle.
+  const ausnahmen = new Map([[44, new Set(['2026-04-01'])]]);
+
+  const ohne = expandRecurringEvents([ev], '2026-01-01', '2026-06-30');
+  const mit  = expandRecurringEvents([ev], '2026-01-01', '2026-06-30', ausnahmen);
+  assert(mit.length === ohne.length - 1,
+    `die Ausnahme muss genau ein Vorkommen entfernen (ohne ${ohne.length}, mit ${mit.length})`);
+
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const tage = mit.map((e) => fmt.format(new Date(e.start_datetime)));
+  assert(!tage.includes('2026-03-31'), `der ausgenommene 31. Maerz steht noch drin: ${tage.join(', ')}`);
+  assert(tage.includes('2026-04-30'), 'die uebrigen Vorkommen muessen bleiben');
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
