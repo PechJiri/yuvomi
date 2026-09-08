@@ -1472,7 +1472,8 @@
         "loanPaidInstallmentsLabel": "Rate già pagate",
         "loanPaidInstallmentsHint": "Per un prestito già in corso. Queste rate vengono registrate ma non contabilizzate nel budget.",
         "loanPaymentTypeLocked": "Entrata o uscita segue il tipo di prestito e si modifica lì.",
-        "planHistoricNote": "Misurato sul tuo piano attuale. Yuvomi non conserva quale fosse il piano in un mese precedente."
+        "planHistoricNote": "Misurato sul tuo piano attuale. Yuvomi non conserva quale fosse il piano in un mese precedente.",
+        "recurringEditSeriesHint": "La prima registrazione della serie è anche il suo modello - titolo, importo, categoria e conto cambiano anche lì, anche se è nel passato."
     },
     "settings": {
         "healthCycleEnableLabel": "Mostra la scheda ciclo",

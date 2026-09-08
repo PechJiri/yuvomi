@@ -2367,6 +2367,13 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
               title: t('budget.recurringSeriesScope'),
               thisLabel: t('budget.recurringThisOnly'),
               seriesLabel: t('budget.recurringEditSeries'),
+              // #1035: das Original der Serie ist Vorlage UND erste Buchung, und
+              // `PUT /budget/:id/series` schreibt Titel, Betrag, Kategorie und
+              // Konto auf genau diese Zeile - ohne Datumsschnitt
+              // (`WHERE id = ?`, routes/budget/entries.js). Bis die beiden
+              // Bedeutungen getrennt sind, sagt es wenigstens der Dialog, an
+              // dem die Wahl faellt.
+              note: t('budget.recurringEditSeriesHint'),
             });
             if (scope === null) { openBudgetModal({ mode: 'edit', entry }); return; }
             if (scope === 'series') {
@@ -3164,8 +3171,13 @@ async function deleteEntry(id) {
 /**
  * Zeigt ein Modal mit zwei Wahloptionen für wiederkehrende Einträge.
  * Gibt 'this' | 'series' | null (abgebrochen) zurück.
+ *
+ * `note` steht ÜBER den Knöpfen, nicht darunter: der Hinweis soll gelesen
+ * werden, bevor die Wahl fällt, und die gestapelten Knöpfe sind das Ende des
+ * Dialogs. Optional, weil ihn nur das Bearbeiten braucht - beim Löschen sagt
+ * „Gesamte Serie löschen" schon alles.
  */
-function recurringChoiceModal({ title, thisLabel, seriesLabel, seriesDanger = false }) {
+function recurringChoiceModal({ title, thisLabel, seriesLabel, seriesDanger = false, note = '' }) {
   return new Promise((resolve) => {
     let resolved = false;
     function finish(value) {
@@ -3178,6 +3190,7 @@ function recurringChoiceModal({ title, thisLabel, seriesLabel, seriesDanger = fa
       title,
       size: 'sm',
       content: `
+        ${note ? `<p class="form-hint">${esc(note)}</p>` : ''}
         <div class="modal-actions modal-actions--stack">
           <button type="button" class="btn btn--secondary" id="rcs-this">${thisLabel}</button>
           <button type="button" class="btn ${seriesDanger ? 'btn--danger' : 'btn--primary'}" id="rcs-series">${seriesLabel}</button>

@@ -1484,7 +1484,8 @@
         "loanPaidInstallmentsLabel": "Cicilan yang sudah dibayar",
         "loanPaidInstallmentsHint": "Untuk pinjaman yang sudah berjalan. Cicilan ini dicatat, tetapi tidak dibukukan ke anggaran.",
         "loanPaymentTypeLocked": "Pemasukan atau pengeluaran mengikuti jenis pinjaman dan diubah di sana.",
-        "planHistoricNote": "Diukur terhadap rencana Anda saat ini. Yuvomi tidak menyimpan berapa rencana pada bulan sebelumnya."
+        "planHistoricNote": "Diukur terhadap rencana Anda saat ini. Yuvomi tidak menyimpan berapa rencana pada bulan sebelumnya.",
+        "recurringEditSeriesHint": "Entri pertama dalam seri ini sekaligus templatnya - judul, jumlah, kategori, dan akun ikut berubah di sana, meskipun sudah lewat."
     },
     "settings": {
         "healthCycleEnableLabel": "Tampilkan tab siklus",

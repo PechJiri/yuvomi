@@ -1484,7 +1484,8 @@
         "loanPaidInstallmentsLabel": "Mga hulog na nabayaran na",
         "loanPaidInstallmentsHint": "Para sa utang na tumatakbo na. Naitatala ang mga hulog na ito ngunit hindi ibinibilang sa badyet.",
         "loanPaymentTypeLocked": "Ang kita o gastos ay sumusunod sa uri ng utang at doon binabago.",
-        "planHistoricNote": "Sinusukat laban sa iyong kasalukuyang plano. Hindi itinatala ng Yuvomi kung ano ang plano noong nakaraang buwan."
+        "planHistoricNote": "Sinusukat laban sa iyong kasalukuyang plano. Hindi itinatala ng Yuvomi kung ano ang plano noong nakaraang buwan.",
+        "recurringEditSeriesHint": "Ang unang entry ng serye ay siya ring template nito - nagbabago rin doon ang pamagat, halaga, kategorya at account, kahit nakaraan na ito."
     },
     "settings": {
         "healthCycleEnableLabel": "Ipakita ang tab ng siklo",

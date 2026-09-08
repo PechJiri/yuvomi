@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The recurring-payment dialog now says that editing a series also rewrites its first booking**
+  (#1035). A series original is two things at once: the template every future occurrence is built
+  from, and the first hand-entered booking. `PUT /budget/:id/series` writes title, amount, category
+  and account to that one row with no date predicate, so raising the rent for all future months
+  also rewrites what the very first month says - a booking that may be years old. Separating the
+  two meanings of that row needs a migration and a decision about what `recurrence_parent_id IS
+  NULL` should mean afterwards; until then the dialog where the choice is made states what happens.
+  The delete dialog is unchanged: "Delete entire series" already says it.
+
 ### Fixed
 
 - **An event from a subscribed calendar now names its source everywhere an event is read**
