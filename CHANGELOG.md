@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Global search no longer surfaces other members' private calendar events.** The search box
+- **Global search no longer surfaces other members' private calendar events
+  (GHSA-gjpr-85rg-587c).** The search box
   at the top of the app queries every module at once, and its calendar bucket applied only the
   module-access check: a member could type a word and get the title and date of another member's
   private appointment, or of an event from a subscribed calendar that was never shared - while the
