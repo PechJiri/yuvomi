@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.1] - 2026-09-08
+
 ### Security
 
 - **Global search no longer surfaces other members' private calendar events
@@ -17,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   calendar's own search has filtered both since #474. The global search now applies the same two
   clauses as the calendar search, so the two return the same hits for the same word, which is what
   #471 intended. Found while reviewing #1055.
+
+### Changed
+
+- **Updated the production dependency `nodemailer` to 10** (#1048). It carries the password-reset
+  and invitation mails; the SMTP settings are unchanged.
 
 ### Fixed
 
