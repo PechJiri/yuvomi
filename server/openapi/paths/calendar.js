@@ -1,5 +1,10 @@
 import { op, jsonBody, idParam, stringPathParam } from '../helpers.js';
 
+const apiError = (description) => ({
+  description,
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } },
+});
+
 export function calendarPaths() {
   return {
     '/api/v1/calendar': {
@@ -147,7 +152,7 @@ export function calendarPaths() {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
-          404: { description: 'Calendar series not found' },
+          404: apiError('Calendar series not found'),
           500: { $ref: '#/components/responses/InternalServerError' },
         },
       }),
@@ -165,7 +170,7 @@ export function calendarPaths() {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
-          404: { description: 'Calendar series not found' },
+          404: apiError('Calendar series not found'),
           500: { $ref: '#/components/responses/InternalServerError' },
         },
       }),
@@ -193,7 +198,7 @@ export function calendarPaths() {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
-          404: { description: 'Calendar series not found' },
+          404: apiError('Calendar series not found'),
           409: {
             description: 'Linked occurrence replacements require exact-count orphan confirmation',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarOverrideOrphanConflict' } } },
@@ -215,7 +220,7 @@ export function calendarPaths() {
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
           403: { $ref: '#/components/responses/Forbidden' },
-          404: { description: 'Calendar series not found' },
+          404: apiError('Calendar series not found'),
           500: { $ref: '#/components/responses/InternalServerError' },
         },
       }),

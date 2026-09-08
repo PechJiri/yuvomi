@@ -137,3 +137,34 @@ test('calendar occurrence conflicts and split successes have exact schemas', () 
     orphaned_override_count: { type: 'integer', minimum: 0 },
   });
 });
+
+test('calendar occurrence errors consistently document numeric API codes', () => {
+  const spec = buildOpenApiSpec({}, 'test');
+  const occurrencePaths = [
+    spec.paths['/api/v1/calendar/{seriesId}/occurrences/{recurrenceId}'],
+    spec.paths['/api/v1/calendar/{seriesId}/occurrences/{recurrenceId}/following'],
+  ];
+  const sharedResponses = {
+    400: '#/components/responses/BadRequest',
+    401: '#/components/responses/Unauthorized',
+    403: '#/components/responses/Forbidden',
+    500: '#/components/responses/InternalServerError',
+  };
+
+  for (const operations of occurrencePaths) {
+    for (const operation of [operations.put, operations.delete]) {
+      for (const [status, responseRef] of Object.entries(sharedResponses)) {
+        assert.equal(operation.responses[status].$ref, responseRef);
+      }
+      assert.equal(
+        operation.responses[404].content['application/json'].schema.$ref,
+        '#/components/schemas/ApiError',
+      );
+    }
+  }
+  assert.equal(spec.components.schemas.ApiError.properties.code.type, 'integer');
+  assert.equal(
+    spec.components.schemas.CalendarOverrideOrphanConflict.properties.code.type,
+    'integer',
+  );
+});
