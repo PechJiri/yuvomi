@@ -143,11 +143,11 @@ export function calendarPaths() {
         ],
         stateChanging: true,
         description: 'Creates or updates a linked replacement for one original slot of an eligible local-only series. Scalar fields, assignments, attachments, and `reminder_offsets` are compared with the expanded series defaults. Saving no actual difference restores the normal series occurrence.',
-        requestBody: jsonBody(null),
+        requestBody: jsonBody('#/components/schemas/CalendarOccurrenceMutation'),
         responses: {
           200: {
             description: 'Resolved calendar occurrence',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarEventResponse' } } },
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarOccurrenceResponse' } } },
           },
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },
@@ -185,15 +185,15 @@ export function calendarPaths() {
         ],
         stateChanging: true,
         description: 'Truncates the original series before the selected original slot, creates a successor series, and reparents later linked replacements and deletion exceptions atomically.',
-        requestBody: jsonBody(null),
+        requestBody: jsonBody('#/components/schemas/CalendarOccurrenceMutation'),
         responses: {
           200: {
             description: 'First occurrence updated as the whole series',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarEventResponse' } } },
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarOccurrenceResponse' } } },
           },
           201: {
             description: 'Successor calendar series created',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarEventResponse' } } },
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/CalendarOccurrenceResponse' } } },
           },
           400: { $ref: '#/components/responses/BadRequest' },
           401: { $ref: '#/components/responses/Unauthorized' },

@@ -107,7 +107,7 @@ test('kein Pfad-Parameter mit Namens-Bedeutung ist als Zahl deklariert', () => {
 test('calendar occurrence conflicts and split successes have exact schemas', () => {
   const spec = buildOpenApiSpec({}, 'test');
   const conflictRef = '#/components/schemas/CalendarOverrideOrphanConflict';
-  const eventRef = '#/components/schemas/CalendarEventResponse';
+  const eventRef = '#/components/schemas/CalendarOccurrenceResponse';
   const genericPut = spec.paths['/api/v1/calendar/{id}'].put;
   const followingPut = spec.paths[
     '/api/v1/calendar/{seriesId}/occurrences/{recurrenceId}/following'
@@ -136,6 +136,57 @@ test('calendar occurrence conflicts and split successes have exact schemas', () 
     conflict: { type: 'string', const: 'calendar_override_orphans' },
     orphaned_override_count: { type: 'integer', minimum: 0 },
   });
+});
+
+test('calendar occurrence response and mutation schemas are explicit and reusable', () => {
+  const spec = buildOpenApiSpec({}, 'test');
+  const onlyPut = spec.paths[
+    '/api/v1/calendar/{seriesId}/occurrences/{recurrenceId}'
+  ].put;
+  const followingPut = spec.paths[
+    '/api/v1/calendar/{seriesId}/occurrences/{recurrenceId}/following'
+  ].put;
+  for (const operation of [onlyPut, followingPut]) {
+    assert.equal(
+      operation.requestBody.content['application/json'].schema.$ref,
+      '#/components/schemas/CalendarOccurrenceMutation',
+    );
+  }
+  assert.equal(
+    onlyPut.responses[200].content['application/json'].schema.$ref,
+    '#/components/schemas/CalendarOccurrenceResponse',
+  );
+
+  const occurrence = spec.components.schemas.CalendarOccurrence.allOf[1];
+  assert.deepEqual(occurrence.required, [
+    'series_id', 'recurrence_id', 'is_occurrence_override',
+    'is_local_recurring_series', 'can_override_occurrence',
+    'assignment_owner_id', 'attachment_owner_id', 'reminder_owner_id',
+    'reminder_anchor_start',
+  ]);
+  assert.equal(occurrence.properties.recurrence_id.format, 'date');
+  assert.equal(occurrence.properties.reminder_anchor_start.$ref,
+    '#/components/schemas/CalendarDateOrDateTime');
+  for (const field of ['assignment_owner_id', 'attachment_owner_id', 'reminder_owner_id']) {
+    assert.equal(occurrence.properties[field].type, 'integer');
+  }
+
+  const mutation = spec.components.schemas.CalendarOccurrenceMutation;
+  for (const field of [
+    'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
+    'location', 'color', 'icon', 'assigned_to', 'visibility', 'countdown',
+    'attachment_name', 'attachment_data', 'remove_attachment',
+    'recurrence_rule', 'reminder_offsets', 'confirmed_orphan_count',
+  ]) {
+    assert.ok(mutation.properties[field], `missing occurrence mutation field ${field}`);
+  }
+  assert.equal(mutation.properties.start_datetime.$ref,
+    '#/components/schemas/CalendarDateOrDateTime');
+  assert.deepEqual(mutation.properties.end_datetime.oneOf[1], { type: 'null' });
+  assert.equal(mutation.properties.reminder_offsets.maxItems, 5);
+  assert.equal(mutation.properties.reminder_offsets.items.minimum, 0);
+  assert.equal(mutation.properties.confirmed_orphan_count.minimum, 0);
+  assert.deepEqual(mutation.properties.recurrence_rule.type, ['string', 'null']);
 });
 
 test('calendar occurrence errors consistently document numeric API codes', () => {

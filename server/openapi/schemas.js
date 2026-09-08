@@ -459,6 +459,13 @@ export const schemas = {
           },
           required: ['data'],
         },
+        CalendarDateOrDateTime: {
+          description: 'A calendar date or local/offset date-time accepted by calendar mutations.',
+          oneOf: [
+            { type: 'string', format: 'date' },
+            { type: 'string', format: 'date-time' },
+          ],
+        },
         CalendarEvent: {
           type: 'object',
           description: 'Calendar event. New attachments use document URLs; attachment_data remains available for legacy stored blobs.',
@@ -500,6 +507,89 @@ export const schemas = {
             data: { $ref: '#/components/schemas/CalendarEvent' },
           },
           required: ['data'],
+        },
+        CalendarOccurrence: {
+          allOf: [
+            { $ref: '#/components/schemas/CalendarEvent' },
+            {
+              type: 'object',
+              properties: {
+                series_id: { type: 'integer', minimum: 1 },
+                recurrence_id: { type: 'string', format: 'date' },
+                is_occurrence_override: { type: 'boolean' },
+                is_local_recurring_series: { type: 'boolean' },
+                can_override_occurrence: { type: 'boolean' },
+                assignment_owner_id: { type: 'integer', minimum: 1 },
+                attachment_owner_id: { type: 'integer', minimum: 1 },
+                reminder_owner_id: { type: 'integer', minimum: 1 },
+                reminder_anchor_start: { $ref: '#/components/schemas/CalendarDateOrDateTime' },
+              },
+              required: [
+                'series_id',
+                'recurrence_id',
+                'is_occurrence_override',
+                'is_local_recurring_series',
+                'can_override_occurrence',
+                'assignment_owner_id',
+                'attachment_owner_id',
+                'reminder_owner_id',
+                'reminder_anchor_start',
+              ],
+            },
+          ],
+        },
+        CalendarOccurrenceResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/CalendarOccurrence' },
+          },
+          required: ['data'],
+        },
+        CalendarOccurrenceMutation: {
+          type: 'object',
+          description: 'Editable occurrence fields. Omitted fields inherit their current or series value.',
+          properties: {
+            title: { type: 'string', maxLength: 200 },
+            description: { type: ['string', 'null'], maxLength: 5000 },
+            start_datetime: { $ref: '#/components/schemas/CalendarDateOrDateTime' },
+            end_datetime: {
+              oneOf: [
+                { $ref: '#/components/schemas/CalendarDateOrDateTime' },
+                { type: 'null' },
+              ],
+            },
+            all_day: { type: 'boolean' },
+            location: { type: ['string', 'null'], maxLength: 200 },
+            color: { type: ['string', 'null'], pattern: '^#[0-9A-Fa-f]{6}$' },
+            icon: { type: 'string' },
+            assigned_to: {
+              oneOf: [
+                { type: 'integer', minimum: 1 },
+                {
+                  type: 'array',
+                  uniqueItems: true,
+                  items: { type: 'integer', minimum: 1 },
+                },
+                { type: 'null' },
+              ],
+            },
+            visibility: { type: 'string', enum: ['all', 'assignees', 'private'] },
+            countdown: { type: 'boolean' },
+            attachment_name: { type: ['string', 'null'] },
+            attachment_data: {
+              type: ['string', 'null'],
+              description: 'A base64 data URL for a replacement attachment, or null to remove it.',
+            },
+            remove_attachment: { type: 'boolean' },
+            recurrence_rule: { type: ['string', 'null'], maxLength: 300 },
+            reminder_offsets: {
+              type: 'array',
+              maxItems: 5,
+              uniqueItems: true,
+              items: { type: 'integer', minimum: 0 },
+            },
+            confirmed_orphan_count: { type: 'integer', minimum: 0 },
+          },
         },
         CalendarEventsResponse: {
           type: 'object',
