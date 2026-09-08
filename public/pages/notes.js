@@ -25,6 +25,7 @@ import {
 } from '/utils/note-category-filter.js';
 import {
   categoryCreationState,
+  closeCategoryPicker,
   findCategorySuggestions,
   findExactCategory,
   moveCategoryPickerOption,
@@ -835,10 +836,7 @@ function openNoteModal({ mode, note = null }) {
         .map((item) => Number(item.value));
 
       function closeCategorySuggestions() {
-        categoryList.hidden = true;
-        categorySearch.setAttribute('aria-expanded', 'false');
-        categorySearch.removeAttribute('aria-activedescendant');
-        activeCategoryOption = -1;
+        activeCategoryOption = closeCategoryPicker({ categoryList, categorySearch });
       }
 
       function paintActiveCategoryOption(options) {
@@ -896,6 +894,7 @@ function openNoteModal({ mode, note = null }) {
         window.lucide?.createIcons({ el: categoryChoices });
         categorySearch.value = '';
         renderCategorySuggestions({ open: false });
+        closeCategorySuggestions();
         categorySearch.focus();
       }
 

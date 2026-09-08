@@ -48,6 +48,14 @@ export function categoryCreationState(categories, query, scope, canChooseScope) 
   };
 }
 
+/** Closes the popup and clears virtual focus shared by Escape and selection. */
+export function closeCategoryPicker({ categoryList, categorySearch }) {
+  categoryList.hidden = true;
+  categorySearch.setAttribute('aria-expanded', 'false');
+  categorySearch.removeAttribute('aria-activedescendant');
+  return -1;
+}
+
 /**
  * Reopens a closed ARIA combobox popup and moves its virtual focus. Escape and
  * successful selection both close the same popup; the next arrow key must make

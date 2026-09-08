@@ -216,9 +216,11 @@ test('combobox keyboard handling stays inside the picker and keeps virtual focus
     'handled combobox keys must not trigger modal save or close handlers');
   assert.match(source, /data-category-option="\$\{category\.id\}"[^>]*tabindex="-1"/,
     'aria-activedescendant options must stay out of the tab order');
+  assert.match(source, /renderCategorySuggestions\(\{ open: false \}\);\s*closeCategorySuggestions\(\);/,
+    'selection must clear virtual focus after rendering the remaining closed options');
 });
 
-test('arrow navigation reopens a picker closed by Escape or selection', () => {
+test('arrow navigation reopens a picker closed by Escape', () => {
   assert.equal(typeof picker.moveCategoryPickerOption, 'function');
   const options = [fakePickerOption('note-category-option-7')];
   const inputAttrs = new Map([['aria-expanded', 'false']]);
@@ -251,6 +253,43 @@ test('arrow navigation reopens a picker closed by Escape or selection', () => {
   assert.equal(movement.activeIndex, 0);
   assert.equal(categorySearch.getAttribute('aria-activedescendant'), options[0].id);
   assert.equal(options[0].getAttribute('aria-selected'), 'true');
+});
+
+test('selection clears hidden virtual focus before the next ArrowDown', () => {
+  assert.equal(typeof picker.closeCategoryPicker, 'function');
+  const options = [
+    fakePickerOption('note-category-option-8'),
+    fakePickerOption('note-category-option-9'),
+  ];
+  const inputAttrs = new Map([
+    ['aria-expanded', 'true'],
+    ['aria-activedescendant', options[0].id],
+  ]);
+  const categorySearch = {
+    setAttribute(name, value) { inputAttrs.set(name, value); },
+    removeAttribute(name) { inputAttrs.delete(name); },
+    getAttribute(name) { return inputAttrs.get(name); },
+  };
+  const categoryList = {
+    hidden: false,
+    querySelectorAll: () => options,
+  };
+
+  const closedIndex = picker.closeCategoryPicker({ categoryList, categorySearch });
+  const movement = picker.moveCategoryPickerOption({
+    categoryList,
+    categorySearch,
+    renderSuggestions() {
+      categoryList.hidden = false;
+      categorySearch.setAttribute('aria-expanded', 'true');
+    },
+    activeIndex: closedIndex,
+    direction: 1,
+  });
+
+  assert.equal(closedIndex, -1);
+  assert.equal(movement.activeIndex, 0);
+  assert.equal(categorySearch.getAttribute('aria-activedescendant'), options[0].id);
 });
 
 test('pointer selection keeps combobox focus until the delegated click selects the option', () => {
