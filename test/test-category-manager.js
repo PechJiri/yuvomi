@@ -81,6 +81,7 @@ test('Notizen importieren die generische Komponente auch beim direkten Seitenauf
 });
 test('Notiz-Kategorien nutzen eine gemeinsame scope-fähige Eingabe und Scope-Icons', () => {
   assert(/unifiedAdd:\s*true/.test(notesPage), 'Notizen müssen genau eine gemeinsame Add-Eingabe konfigurieren');
+  assert(/groupField:\s*'scope'/.test(notesPage), 'Notizen müssen scope als Gruppen- und Request-Feld konfigurieren');
   assert(/rowIconResolver/.test(notesPage), 'Notizen müssen persönliche und Haushaltskategorien per Icon unterscheiden');
   assert(/addScopeHelpKey/.test(notesPage), 'Die Scope-Wahl braucht einen erklärenden Tooltip');
   assert(/this\._unifiedAdd/.test(comp), 'Category Manager muss den gemeinsamen Add-Modus unterstützen');

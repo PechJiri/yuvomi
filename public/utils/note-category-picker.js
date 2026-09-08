@@ -47,3 +47,35 @@ export function categoryCreationState(categories, query, scope, canChooseScope) 
     showControls: !!canChooseScope || canCreate,
   };
 }
+
+/**
+ * Reopens a closed ARIA combobox popup and moves its virtual focus. Escape and
+ * successful selection both close the same popup; the next arrow key must make
+ * the active descendant visible again before announcing it.
+ */
+export function moveCategoryPickerOption({
+  categoryList,
+  categorySearch,
+  renderSuggestions,
+  activeIndex,
+  direction,
+}) {
+  if (categoryList.hidden) renderSuggestions();
+  const options = [...categoryList.querySelectorAll('[role="option"]')];
+  if (!options.length) return { options, activeIndex: -1 };
+
+  const nextIndex = activeIndex < 0
+    ? (direction > 0 ? 0 : options.length - 1)
+    : (activeIndex + direction + options.length) % options.length;
+  options.forEach((option, index) => {
+    const active = index === nextIndex;
+    option.classList.toggle('is-active', active);
+    option.setAttribute('aria-selected', String(active));
+  });
+  const active = options[nextIndex];
+  categoryList.hidden = false;
+  categorySearch.setAttribute('aria-expanded', 'true');
+  categorySearch.setAttribute('aria-activedescendant', active.id);
+  active.scrollIntoView({ block: 'nearest' });
+  return { options, activeIndex: nextIndex };
+}

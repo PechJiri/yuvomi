@@ -20,12 +20,14 @@ import { AVATAR_FALLBACK_COLOR } from '/utils/color.js';
 import {
   noteMatchesCategories,
   occupiedNoteCategoryIds,
+  pruneMissingNoteCategoryIds,
   removeNoteCategoryFromState,
 } from '/utils/note-category-filter.js';
 import {
   categoryCreationState,
   findCategorySuggestions,
   findExactCategory,
+  moveCategoryPickerOption,
 } from '/utils/note-category-picker.js';
 
 // --------------------------------------------------------
@@ -196,6 +198,7 @@ export async function render(container, { user }) {
     const [notesRes, categoriesRes] = await Promise.all([api.get('/notes'), api.get('/notes/categories')]);
     state.notes = notesRes.data;
     state.categories = categoriesRes.data || [];
+    state.filterCategoryIds = pruneMissingNoteCategoryIds(state.filterCategoryIds, state.categories);
     state.canManageHousehold = !!categoriesRes.meta?.can_manage_household;
   } catch (err) {
     console.error('[Notes] Laden fehlgeschlagen:', err);
@@ -910,22 +913,25 @@ function openNoteModal({ mode, note = null }) {
         renderCategorySuggestions();
       });
       categorySearch.addEventListener('keydown', (event) => {
-        const options = [...categoryList.querySelectorAll('[role="option"]')];
         if (['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) {
           // The modal also handles Enter/Escape. A consumed combobox key must
           // select/close only here, never save or close the whole note modal.
           event.stopPropagation();
         }
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-          if (!options.length) return;
           event.preventDefault();
           const direction = event.key === 'ArrowDown' ? 1 : -1;
-          activeCategoryOption = activeCategoryOption < 0
-            ? (direction > 0 ? 0 : options.length - 1)
-            : (activeCategoryOption + direction + options.length) % options.length;
-          paintActiveCategoryOption(options);
+          const movement = moveCategoryPickerOption({
+            categoryList,
+            categorySearch,
+            renderSuggestions: renderCategorySuggestions,
+            activeIndex: activeCategoryOption,
+            direction,
+          });
+          activeCategoryOption = movement.activeIndex;
         } else if (event.key === 'Enter') {
           event.preventDefault();
+          const options = [...categoryList.querySelectorAll('[role="option"]')];
           const active = options[activeCategoryOption];
           if (active) active.click();
           else {
@@ -1054,8 +1060,7 @@ function openNoteCategoryManager() {
       state.categories = categoriesRes.data || [];
       state.canManageHousehold = !!categoriesRes.meta?.can_manage_household;
       state.notes = notesRes.data;
-      const visibleIds = new Set(state.categories.map((category) => Number(category.id)));
-      state.filterCategoryIds = state.filterCategoryIds.filter((id) => visibleIds.has(Number(id)));
+      state.filterCategoryIds = pruneMissingNoteCategoryIds(state.filterCategoryIds, state.categories);
       renderNotesAndFilters();
     } catch {
       // Die Mutation selbst war erfolgreich; dank des optimistischen Updates
@@ -1077,6 +1082,7 @@ function openNoteCategoryManager() {
       manager.configure({
         basePath: '/notes/categories',
         groups,
+        groupField: 'scope',
         labelResolver: (item) => item.name,
         titleKey: 'category.manageTitle',
         hintKey: 'category.manageHint',

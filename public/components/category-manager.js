@@ -5,7 +5,7 @@
  * Abhängigkeiten: /api.js, /i18n.js, /utils/html.js
  *
  * Verhalten:
- *   - configure({ basePath, groups, supportsSubcategories, labelResolver, titleKey, hintKey,
+ *   - configure({ basePath, groups, groupField, supportsSubcategories, labelResolver, titleKey, hintKey,
  *                 deleteDetailKey, subDeleteDetailKey, onChanged })
  *   - Lädt via api.get(basePath); mutiert über post/put/patch/delete relativ zu basePath
  *   - Dispatcht nach jeder Mutation `category-manager-changed`
@@ -42,6 +42,9 @@ class CategoryManagerElement extends HTMLElement {
     super();
     this._basePath = '';
     this._groups = [{ key: '', labelKey: '', addLabelKey: 'common.add' }];
+    // Existing category APIs use `type`; callers with another canonical field
+    // (Notes uses `scope`) opt in without changing the legacy contract.
+    this._groupField = 'type';
     this._supportsSub = false;
     this._labelResolver = (item) => item.label ?? item.name; // Server liefert lokalisiertes `label`
     this._titleKey = 'category.manageTitle';
@@ -79,6 +82,7 @@ class CategoryManagerElement extends HTMLElement {
   configure(opts) {
     this._basePath = opts.basePath;
     if (Array.isArray(opts.groups) && opts.groups.length) this._groups = opts.groups;
+    if (typeof opts.groupField === 'string' && opts.groupField) this._groupField = opts.groupField;
     this._supportsSub = !!opts.supportsSubcategories;
     if (typeof opts.labelResolver === 'function') this._labelResolver = opts.labelResolver;
     if (opts.titleKey) this._titleKey = opts.titleKey;
@@ -142,7 +146,11 @@ class CategoryManagerElement extends HTMLElement {
 
   _inGroup(groupKey) {
     if (!groupKey) return this._cats;
-    return this._cats.filter((c) => (c.type ?? c.group ?? '') === groupKey);
+    return this._cats.filter((c) => this._groupOf(c) === groupKey);
+  }
+
+  _groupOf(item) {
+    return item?.[this._groupField] ?? item?.type ?? item?.group ?? '';
   }
 
   /* Stabiler Zeilen-Schlüssel: Budget/Tasks/Kontakte liefern `key`,
@@ -252,7 +260,7 @@ class CategoryManagerElement extends HTMLElement {
     if (!this._groupsEl || !this._supportsSub) return;
     if (this._deferForDrag()) return;
     const cat = this._cats.find((c) => this._keyOf(c) === parentKey);
-    const groupKey = cat ? (cat.type ?? cat.group ?? '') : '';
+    const groupKey = cat ? this._groupOf(cat) : '';
     const g = this._groups.find((gr) => gr.key === groupKey);
     const row = this._groupsEl.querySelector(`.cat-row[data-key="${CSS.escape(parentKey ?? '')}"]`);
     if (!cat || !g || !row) { this._render(); return; }
@@ -569,7 +577,7 @@ class CategoryManagerElement extends HTMLElement {
     const group = form.querySelector('[name="category-scope"]')?.value || form.dataset.group;
     try {
       const body = { name };
-      if (group) body.type = group;
+      if (group) body[this._groupField] = group;
       const res = await api.post(this._basePath, body);
       this._cats.push(res.data);
       this._renderGroup(group ?? '');
@@ -677,7 +685,7 @@ class CategoryManagerElement extends HTMLElement {
         const res = await api.put(`${this._basePath}/${encodeURIComponent(key)}`, { name: newName });
         const idx = this._cats.findIndex((c) => this._keyOf(c) === key);
         if (idx >= 0) this._cats[idx] = res.data;
-        this._renderGroup(cat.type ?? cat.group ?? '');
+        this._renderGroup(this._groupOf(cat));
         window.yuvomi?.showToast(t('category.renamed'), 'success');
         this._notifyChanged();
         return;
@@ -692,7 +700,7 @@ class CategoryManagerElement extends HTMLElement {
   async _move(key, delta) {
     const cat = this._cats.find((c) => this._keyOf(c) === key);
     if (!cat) return;
-    const groupKey = cat.type ?? cat.group ?? '';
+    const groupKey = this._groupOf(cat);
     // Auf einer Kopie arbeiten: _inGroup('') liefert bei gruppenlosen Modulen
     // (z. B. Kontakte) die LIVE-this._cats-Referenz zurück. Ein In-place-Swap
     // würde den State schon vor der Persistenz optimistisch umstellen — bei einem
@@ -725,7 +733,7 @@ class CategoryManagerElement extends HTMLElement {
   async _persistOrder(groupKey, orderedKeys, movedKey, { rollbackRender = false, focusKey = null, focusDir = null } = {}) {
     try {
       const body = { order: orderedKeys };
-      if (groupKey) body.type = groupKey;
+      if (groupKey) body[this._groupField] = groupKey;
       const res = await api.patch(`${this._basePath}/reorder`, body);
       if (Array.isArray(res?.data)) this._cats = res.data;
       else await this._fetch();
@@ -780,7 +788,7 @@ class CategoryManagerElement extends HTMLElement {
     try {
       await api.delete(`${this._basePath}/${encodeURIComponent(key)}`);
       this._cats = this._cats.filter((c) => this._keyOf(c) !== key);
-      this._renderGroup(cat.type ?? cat.group ?? '');
+      this._renderGroup(this._groupOf(cat));
       window.yuvomi?.showToast(t('category.deleted'), 'default');
       this._notifyChanged({ action: 'delete', key, item: cat });
     } catch (err) {

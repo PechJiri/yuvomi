@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import {
   noteMatchesCategories,
   occupiedNoteCategoryIds,
+  pruneMissingNoteCategoryIds,
   removeNoteCategoryFromState,
 } from '../public/utils/note-category-filter.js';
 import { categoryNameKey } from '../server/services/note-categories.js';
@@ -11,6 +12,17 @@ import { schemas as openApiSchemas } from '../server/openapi/schemas.js';
 import { notesPaths as buildNotePaths } from '../server/openapi/paths/notes.js';
 
 const picker = await import('../public/utils/note-category-picker.js').catch(() => ({}));
+
+function fakePickerOption(id) {
+  const attrs = new Map([['aria-selected', 'false']]);
+  return {
+    id,
+    classList: { toggle() {} },
+    setAttribute(name, value) { attrs.set(name, value); },
+    getAttribute(name) { return attrs.get(name); },
+    scrollIntoView() {},
+  };
+}
 
 test('no selected categories keeps every note, including uncategorized notes', () => {
   assert.equal(noteMatchesCategories({ categories: [] }, []), true);
@@ -50,6 +62,13 @@ test('successful category deletion clears filters, card badges and detail backin
   assert.deepEqual(state.categories.map((category) => category.id), [8]);
   assert.deepEqual(state.filterCategoryIds, [8]);
   assert.deepEqual(state.notes.map((note) => note.categories.map((category) => category.id)), [[8], []]);
+});
+
+test('a later page render prunes a selected category deleted in another session', () => {
+  assert.deepEqual(
+    pruneMissingNoteCategoryIds([7, 8], [{ id: 8, name: 'Keep' }]),
+    [8],
+  );
 });
 
 test('category suggestions ignore accents and exclude selected categories', () => {
@@ -181,6 +200,8 @@ test('notes UI keeps the approved category filter and editor contracts', () => {
   assert.match(source, /renderNoteReadHtml\(note\.content, \{ live: true, categories:/);
   assert.match(source, /sr-only[^\n]*categoryScopeLabel/);
   assert.match(source, /function renderNotesAndFilters\(\)[\s\S]*renderFilters\(\);[\s\S]*renderGrid\(\);/);
+  assert.match(source, /state\.filterCategoryIds\s*=\s*pruneMissingNoteCategoryIds\(/,
+    'a fresh category catalog must discard filters deleted in another session');
   assert.ok((source.match(/renderNotesAndFilters\(\);/g) || []).length >= 5,
     'initial load, save, reload, delete and undo must all refresh occupied category chips');
   assert.match(source.match(/async function reloadNotes\(\)[\s\S]*?\n\}/)?.[0] || '', /renderNotesAndFilters\(\)/);
@@ -195,6 +216,41 @@ test('combobox keyboard handling stays inside the picker and keeps virtual focus
     'handled combobox keys must not trigger modal save or close handlers');
   assert.match(source, /data-category-option="\$\{category\.id\}"[^>]*tabindex="-1"/,
     'aria-activedescendant options must stay out of the tab order');
+});
+
+test('arrow navigation reopens a picker closed by Escape or selection', () => {
+  assert.equal(typeof picker.moveCategoryPickerOption, 'function');
+  const options = [fakePickerOption('note-category-option-7')];
+  const inputAttrs = new Map([['aria-expanded', 'false']]);
+  const categorySearch = {
+    setAttribute(name, value) { inputAttrs.set(name, value); },
+    removeAttribute(name) { inputAttrs.delete(name); },
+    getAttribute(name) { return inputAttrs.get(name); },
+  };
+  const categoryList = {
+    hidden: true,
+    querySelectorAll: () => options,
+  };
+  let renderCount = 0;
+
+  const movement = picker.moveCategoryPickerOption({
+    categoryList,
+    categorySearch,
+    renderSuggestions() {
+      renderCount += 1;
+      categoryList.hidden = false;
+      categorySearch.setAttribute('aria-expanded', 'true');
+    },
+    activeIndex: -1,
+    direction: 1,
+  });
+
+  assert.equal(renderCount, 1);
+  assert.equal(categoryList.hidden, false);
+  assert.equal(categorySearch.getAttribute('aria-expanded'), 'true');
+  assert.equal(movement.activeIndex, 0);
+  assert.equal(categorySearch.getAttribute('aria-activedescendant'), options[0].id);
+  assert.equal(options[0].getAttribute('aria-selected'), 'true');
 });
 
 test('pointer selection keeps combobox focus until the delegated click selects the option', () => {

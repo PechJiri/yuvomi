@@ -12,6 +12,12 @@ export function occupiedNoteCategoryIds(notes) {
   );
 }
 
+/** Drops filters whose category disappeared since the previous page visit. */
+export function pruneMissingNoteCategoryIds(selectedCategoryIds, categories) {
+  const visibleIds = new Set((categories || []).map((category) => Number(category.id)));
+  return (selectedCategoryIds || []).filter((id) => visibleIds.has(Number(id)));
+}
+
 /**
  * Entfernt eine serverseitig gelöschte Kategorie sofort aus allen Notes-
  * Ansichten. Der anschließende GET bleibt die autoritative Reconciliation,
