@@ -298,6 +298,16 @@ let _checkSeq = 0;
  * kommt ja gerade DANACH.
  */
 let _loadSeq = 0;
+/**
+ * Die Nummer des zuletzt ANGEWANDTEN Ladevorgangs.
+ *
+ * Zwei Auffrischungen koennen sich ueberholen, und `settledAt` allein deckt das
+ * nicht: landet die JUENGERE zuerst, raeumt sie den Merker zu Recht (ihre
+ * Antwort kennt den Wert), und die AELTERE schreibt danach den Stand von vor
+ * der Bearbeitung - der Ruecksprung, den der Merker verhindern sollte, ist
+ * wieder da. Beide Wachen werden gebraucht, jede fuer ihren eigenen Fall.
+ */
+let _appliedLoad = 0;
 
 /**
  * Ausstehende Abhak-Werte ueber einen frisch geladenen Bestand legen.
@@ -309,7 +319,15 @@ function applyPendingChecks(items) {
   if (!pendingChecks.size) return items;
   for (const item of items) {
     const pending = pendingChecks.get(item.id);
-    if (pending) item.is_checked = pending.value;
+    if (!pending) continue;
+    // Der Serverwert, der hier ueberschrieben wird, ist ab jetzt die
+    // Ruecksprung-Grundlage. Hat jemand anderes die Zeile inzwischen
+    // umgestellt, waere der Wert von vor dem Antippen nach einem Fehlschlag
+    // eine Angabe, die der Server nie hatte - und die letzte, die davon
+    // wuesste, ist diese Zeile hier. Nur fuer den noch AUSSTEHENDEN Eintrag:
+    // ein bestaetigter springt nirgends mehr zurueck.
+    if (pending.settledAt == null) pending.rollback = item.is_checked;
+    item.is_checked = pending.value;
   }
   return items;
 }
@@ -333,7 +351,7 @@ async function toggleShoppingItem(id, checked, container) {
   // Ab hier haelt der Merker den Wert, den der Server bekommen soll - auch
   // wenn `state.items` im Rundlauf komplett getauscht wird.
   const seq = ++_checkSeq;
-  pendingChecks.set(id, { value: newVal, seq });
+  pendingChecks.set(id, { value: newVal, seq, rollback: checked });
 
   try {
     await api.patch(`/shopping/items/${id}`, { is_checked: newVal });
@@ -350,17 +368,24 @@ async function toggleShoppingItem(id, checked, container) {
     // Steht schon ein neuerer Wunsch an, gehoert weder der Ruecksprung noch
     // die Meldung hierher: dessen eigener Ausgang entscheidet, was die Zeile
     // zeigt, und zwei Rueckspruenge nacheinander landeten beim falschen Wert.
-    if (pendingChecks.get(id)?.seq !== seq) return;
+    const entry = pendingChecks.get(id);
+    if (entry?.seq !== seq) return;
     pendingChecks.delete(id);
     // Die Zeile aus dem AKTUELLEN Bestand holen: eine Auffrischung im Rundlauf
     // hat `state.items` womoeglich ersetzt, und das oben festgehaltene Objekt
     // haengt dann an keiner Liste mehr - der Ruecksprung liefe ins Leere.
     const current = state.items.find((i) => i.id === id);
     if (current) {
-      current.is_checked = checked;
+      // Der Ruecksprung kommt aus dem Merker, nicht aus dem Abschluss: eine
+      // Auffrischung im Fenster hat dort den frischeren Serverwert hinterlegt.
+      const back   = entry.rollback ?? checked;
+      const before = current.is_checked;
+      current.is_checked = back;
       updateItemRow(container, current);
       updateCheckedActions(container);
-      updateListCounter(state.activeListId, 0, newVal ? -1 : 1);
+      // Das Delta aus der TATSAECHLICHEN Aenderung, nicht aus `newVal`: der
+      // Ruecksprung muss nicht mehr dort landen, wo er losgelaufen ist.
+      updateListCounter(state.activeListId, 0, (back ? 1 : 0) - (before ? 1 : 0));
       renderTabs(container);
     }
     window.yuvomi.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
@@ -2128,6 +2153,10 @@ async function loadItems(listId) {
   // Auffrischung des Kategorie-Managers laeuft, waehrend die Seite wieder
   // bedienbar ist.
   if (state.activeListId !== listId) return;
+  // Und wer aelter ist als das, was schon steht, fasst den Stand nicht mehr an.
+  // Die Wache darueber deckt das nicht ab: dieselbe Liste, zwei Rundlaeufe.
+  if (startedAt < _appliedLoad) return;
+  _appliedLoad = startedAt;
   // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte den Wert
   // beim Lesen schon, seine Antwort ist die frischere Wahrheit - auch wenn
   // inzwischen jemand anderes die Zeile wieder zurueckgeholt hat.

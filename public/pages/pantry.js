@@ -81,6 +81,14 @@ let _quantitySeq = 0;
  * spaeter begonnener hat den Wert nachweislich gelesen und raeumt auf.
  */
 let _pantryLoadSeq = 0;
+/**
+ * Die Nummer des zuletzt ANGEWANDTEN Ladevorgangs.
+ *
+ * `settledAt` allein deckt zwei sich ueberholende Auffrischungen nicht ab:
+ * landet die JUENGERE zuerst, raeumt sie den Eintrag zu Recht, und die
+ * AELTERE schreibt danach die Menge von vor dem Schritt zurueck.
+ */
+let _pantryAppliedLoad = 0;
 
 // --------------------------------------------------------
 // Formatierung
@@ -157,7 +165,15 @@ function applyPendingQuantities(items) {
   if (!pendingQuantity.size) return items;
   for (const item of items) {
     const pending = pendingQuantity.get(item.id);
-    if (pending) item.quantity = pending.quantity;
+    if (!pending) continue;
+    // Der Serverwert, der hier ueberschrieben wird, ist ab jetzt die
+    // Ruecksprung-Grundlage. Hat jemand anderes den Bestand inzwischen
+    // geaendert, waere die Menge von vor dem Tippen nach einem Fehlschlag eine
+    // Zahl, die der Server nie hatte - und diese Zeile ist die letzte, die den
+    // frischen Wert ueberhaupt noch sieht. Nur fuer den noch AUSSTEHENDEN
+    // Eintrag: ein bestaetigter springt nirgends mehr zurueck.
+    if (pending.settledAt == null) pending.rollback = Number(item.quantity);
+    item.quantity = pending.quantity;
   }
   return items;
 }
@@ -165,6 +181,9 @@ function applyPendingQuantities(items) {
 async function loadPantry() {
   const startedAt = ++_pantryLoadSeq;
   const res = await api.get('/pantry');
+  // Wer aelter ist als das, was schon steht, fasst den Stand nicht mehr an.
+  if (startedAt < _pantryAppliedLoad) return;
+  _pantryAppliedLoad = startedAt;
   // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte die Menge
   // beim Lesen schon, seine Antwort ist die frischere Wahrheit.
   for (const [itemId, entry] of pendingQuantity) {
@@ -904,10 +923,14 @@ function adjustQuantity(item, direction, row) {
       const rowNow = liveRow(item.id, row);
       if (rowNow) refreshRowQuantity(rowNow, current);
     } catch (err) {
-      if (pendingQuantity.get(item.id)?.seq !== seq) return;
+      const entry = pendingQuantity.get(item.id);
+      if (entry?.seq !== seq) return;
       pendingQuantity.delete(item.id);
       const current = state.items.find((i) => i.id === item.id) ?? item;
-      current.quantity = rollback;
+      // Der Ruecksprung kommt aus dem Merker, nicht aus dem Abschluss: eine
+      // Auffrischung im Entprell-Fenster hat dort den frischeren Serverwert
+      // hinterlegt, und der Wert von vor dem Tippen ist dann veraltet.
+      current.quantity = entry.rollback ?? rollback;
       // Die Seite wurde inzwischen verlassen: kein Zurückzeichnen einer
       // abgehängten Zeile und kein Vorrats-Toast auf einer fremden Seite.
       const rowNow = liveRow(item.id, row);

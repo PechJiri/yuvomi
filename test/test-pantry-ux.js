@@ -215,3 +215,61 @@ test('scheitert der PATCH, bleibt kein Merker stehen', async () => {
   assert.equal(toasts.length, 1);
   delete global.window.yuvomi.showToast;
 });
+
+test('eine aeltere Antwort, die NACH einer juengeren landet, fasst den Stand nicht mehr an', async () => {
+  // Der Fall, den `settledAt` allein nicht deckt (Codex-Befund P1 zu PR #1072).
+  resetPantry();
+  __test.state.items = [rice(2)];
+  __test.setQuantityDebounceMsForTest(5);
+
+  const alt = deferred();   // Schnappschuss VOR dem Schritt
+  const neu = deferred();   // Schnappschuss NACH der Bestaetigung
+  const gates = [alt, neu];
+  globalThis.__apiStub = {
+    get: () => gates.shift().promise,
+    patch: async (_p, body) => ({ data: rice(body.quantity) }),
+  };
+
+  const ladenAlt = __test.loadPantry();            // beginnt zuerst
+  const { row } = makeRow();
+  __test.adjustQuantity(__test.state.items[0], +1, row);
+  await settled();                                  // PATCH bestaetigt
+  const ladenNeu = __test.loadPantry();            // beginnt danach
+
+  neu.resolve({ data: [rice(3)], locations: [], categories: [] });
+  await ladenNeu;
+  assert.equal(__test.state.items[0].quantity, 3);
+  assert.equal(__test.pendingQuantity.size, 0, 'die juengere Antwort kennt den Wert, der Eintrag darf gehen');
+
+  alt.resolve({ data: [rice(2)], locations: [], categories: [] });
+  await ladenAlt;
+  assert.equal(__test.state.items[0].quantity, 3,
+    'eine ueberholte Antwort darf den bereits angewandten Stand nicht mehr ueberschreiben');
+});
+
+test('scheitert der PATCH, springt die Menge auf den FRISCHEN Serverstand zurueck', async () => {
+  // Lokal 2, jemand anderes fuellt auf 5 auf, hier wird auf 3 getippt und der
+  // PATCH scheitert: der Ruecksprung muss 5 treffen. Die 2 hatte der Server nie
+  // - und `applyPendingQuantities` ist die letzte Stelle, die die 5 noch sieht.
+  resetPantry();
+  __test.state.items = [rice(2)];
+  __test.setQuantityDebounceMsForTest(5);
+
+  const toasts = [];
+  global.window.yuvomi.showToast = (msg) => toasts.push(msg);
+  globalThis.__apiStub = {
+    get: async () => ({ data: [rice(5)], locations: [], categories: [] }),
+    patch: async () => { throw Object.assign(new Error('nope'), { data: { error: 'kaputt' } }); },
+  };
+
+  const { row } = makeRow();
+  __test.adjustQuantity(__test.state.items[0], +1, row);
+  await __test.loadPantry();
+  assert.equal(__test.state.items[0].quantity, 3, 'der Schritt ueberlebt die Auffrischung');
+
+  await settled();
+  assert.equal(__test.state.items[0].quantity, 5,
+    'der Ruecksprung muss den frischen Serverstand treffen, nicht den Stand von vor dem Tippen');
+  assert.equal(toasts.length, 1);
+  delete global.window.yuvomi.showToast;
+});

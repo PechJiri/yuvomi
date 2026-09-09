@@ -676,3 +676,69 @@ test('scheitert der PATCH, bleibt kein Merker stehen', async () => {
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
 });
+
+test('eine aeltere Antwort, die NACH einer juengeren landet, fasst den Stand nicht mehr an', async () => {
+  // Der Fall, den `settledAt` allein nicht deckt (Codex-Befund P1 zu PR #1072):
+  // die juengere Antwort raeumt den Merker zu Recht - sie kennt den Wert -, und
+  // die aeltere schrieb danach den Stand von vor der Bearbeitung zurueck.
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  const alt = deferred();   // Schnappschuss VOR dem Abhaken
+  const neu = deferred();   // Schnappschuss NACH der Bestaetigung
+  const gates = [alt, neu];
+  globalThis.__apiStub = { get: () => gates.shift().promise, patch: async () => ({ data: null }) };
+
+  const ladenAlt = __test.loadItems(1);            // beginnt zuerst
+  await __test.toggleShoppingItem(10, 0, makeNullContainer());
+  const ladenNeu = __test.loadItems(1);            // beginnt danach
+
+  // Die JUENGERE landet zuerst und raeumt den Merker.
+  neu.resolve({ data: [milk(1)] });
+  await ladenNeu;
+  assert.equal(__test.state.items[0].is_checked, 1);
+  assert.equal(__test.pendingChecks.size, 0, 'die juengere Antwort kennt den Wert, der Merker darf gehen');
+
+  // Und jetzt trifft die AELTERE ein.
+  alt.resolve({ data: [milk(0)] });
+  await ladenAlt;
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'eine ueberholte Antwort darf den bereits angewandten Stand nicht mehr ueberschreiben');
+  delete globalThis.__apiStub;
+});
+
+test('scheitert der PATCH, springt die Zeile auf den FRISCHEN Serverstand zurueck', async () => {
+  // Ohne diesen Weg naehme der Ruecksprung den Wert von vor dem Antippen - eine
+  // Angabe, die der Server nie hatte, wenn jemand anderes die Zeile inzwischen
+  // umgestellt hat. Die Auffrischung ist die letzte Stelle, die davon weiss.
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  const toasts = [];
+  global.window.yuvomi.showToast = (msg) => toasts.push(msg);
+  const patchGate = deferred();
+  globalThis.__apiStub = {
+    // Jemand anderes im Haushalt hat den Artikel ebenfalls abgehakt.
+    get: async () => ({ data: [milk(1)] }),
+    patch: () => patchGate.promise,
+  };
+
+  const abhaken = __test.toggleShoppingItem(10, 0, makeNullContainer());
+  await __test.loadItems(1);
+  assert.equal(__test.state.items[0].is_checked, 1);
+
+  patchGate.promise.catch(() => {});
+  patchGate.resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
+  await abhaken;
+
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'der Ruecksprung muss den frischen Serverstand treffen, nicht den Stand von vor dem Antippen');
+  assert.equal(__test.state.lists[0].item_checked, 1, 'und der Zaehler muss dazu passen');
+  assert.equal(toasts.length, 1);
+  delete globalThis.__apiStub;
+  delete global.window.yuvomi.showToast;
+});

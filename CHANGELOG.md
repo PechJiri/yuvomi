@@ -138,7 +138,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   demonstrably started after the server confirmed it, and only the affected rows are re-applied on
   top of the fresh data. Everything else in the response lands untouched, so the refresh still
   delivers what it ran for. Discarding the whole response instead would have taken the renamed
-  categories with it - the very thing the refresh exists to bring.
+  categories with it - the very thing the refresh exists to bring. A refresh that is overtaken by a
+  later one now steps aside rather than writing an older picture over a newer one.
+
+  If the change to the server does fail, the row goes back to what the server last said rather than
+  to what it showed before the tap. Those are the same value in the ordinary case and differ exactly
+  when someone else in the household changed the same row in the meantime - and then the value from
+  before the tap is a number the server has never held.
 
   In the pantry the pending step also lost track of its own row: a refresh replaces the stored items
   with new objects, and the delayed request still held the old one, so the server's answer was
