@@ -824,10 +824,36 @@ test('Angepinnte Notizen: nicht angepinnte werden ausgeschlossen', () => {
 // --------------------------------------------------------
 // Tests: Geburtstage
 // --------------------------------------------------------
+/* Der Bezugszeitpunkt ist MITTAG DES HAUSHALTSTAGS, nicht Mittag UTC.
+ *
+ * Hier stand `new Date(`${today}T12:00:00Z`)`. `today` ist der lokale
+ * Kalendertag (siehe der Kommentar beim Seed weiter oben), `...T12:00:00Z` aber
+ * ein Zeitpunkt in UTC - und `hydrateBirthday` reicht ihn an
+ * `todayKey(database, from)` weiter, das ihn in der HAUSHALTSZONE liest. Ab
+ * Offset +12 liegt Mittag UTC dort schon auf dem Folgetag: der Stichtag war
+ * `today + 1`, der als "heute" geseedete Geburtstag stand auf `days_until` 1
+ * statt 0. Gemessen mit `todayKey(null, ...)` am 2026-09-09:
+ *
+ *   TZ=UTC / Europe/Berlin / America/Los_Angeles -> Stichtag == today  (gruen)
+ *   TZ=Pacific/Auckland (+12)                    -> today + 1          (rot)
+ *   TZ=Pacific/Kiritimati (+14)                  -> today + 1          (rot)
+ *
+ * Der Produktivcode ist daran unbeteiligt: alle Aufrufer von
+ * `hydrateBirthday` in `server/routes/` uebergeben gar kein `from` und
+ * bekommen `new Date()`, also einen echten Zeitpunkt, den `todayKey` korrekt
+ * in den Haushaltstag umrechnet. Nur dieser Test baute sich einen Zeitpunkt,
+ * der nicht der Tag war, den er meinte.
+ *
+ * Ohne `Z` ist es der lokale Mittag - dieselbe Uhr, aus der `today` stammt,
+ * und damit in JEDER Zone derselbe Kalendertag. Die Regel dahinter: ein Key
+ * ('2026-09-09') ist zonenlos, ein Date daraus ist es nicht mehr. Wer aus einem
+ * Key einen Zeitpunkt baut, muss sagen, in welcher Zone er ihn meint - sonst
+ * meint er UTC und rechnet gegen eine andere Uhr.
+ */
 test('Geburtstage: haushaltsweit, sortiert nach nächstem Geburtstag', () => {
   const rows = db.prepare('SELECT * FROM birthdays ORDER BY name COLLATE NOCASE ASC').all();
   const birthdays = rows
-    .map((row) => hydrateBirthday(db, row, new Date(`${today}T12:00:00Z`)))
+    .map((row) => hydrateBirthday(db, row, new Date(`${today}T12:00:00`)))
     .sort((a, b) => a.days_until - b.days_until || a.name.localeCompare(b.name))
     .slice(0, 3);
 
@@ -836,6 +862,63 @@ test('Geburtstage: haushaltsweit, sortiert nach nächstem Geburtstag', () => {
   assert(birthdays.some((birthday) => birthday.name === 'Heute Geburtstag' && birthday.days_until === 0),
     'Eigener heutiger Geburtstag muss enthalten sein');
   assert(birthdays.some((birthday) => birthday.name === 'Anderer Nutzer'), 'Geburtstag eines anderen Nutzers muss enthalten sein');
+});
+
+/* Und der Gegen-Test dazu: die Zone BEWUSST verschieben.
+ *
+ * Die Probe darueber nagelt den Bezugszeitpunkt fest, misst die Zone aber nicht
+ * - sie laeuft mit der Rueckfallzone des Servers, weil diese Testdatenbank gar
+ * kein `sync_config` hat. Damit waere die Suite gegen genau die Fehlerklasse
+ * blind, die sie am dringendsten sehen muesste: dass der Stichtag der
+ * HAUSHALTSZONE folgt und nicht der der Maschine.
+ *
+ * Diese Probe stellt deshalb eine eigene Datenbank MIT `sync_config` hin und
+ * liest denselben Zeitpunkt zweimal, in zwei Zonen beiderseits der
+ * Datumsgrenze. Weil beide Antworten aus EINEM Zeitpunkt kommen und sich
+ * unterscheiden MUESSEN, kann keine Fassung sie erfuellen, die stattdessen die
+ * Zone der Maschine liest - die ist innerhalb eines Laufs konstant.
+ */
+test('Geburtstage: der Stichtag folgt der Haushaltszone, nicht der des Servers', () => {
+  const zdb = new DatabaseSync(':memory:');
+  zdb.exec('PRAGMA foreign_keys = ON;');
+  zdb.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY, description TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    );
+  `);
+  zdb.exec(MIGRATIONS_SQL[1]);
+  zdb.exec(MIGRATIONS_SQL[2]); // sync_config - ohne die Tabelle faellt householdTimeZone() auf die Serverzone zurueck
+
+  const zoneUser = zdb.prepare(`INSERT INTO users (username, display_name, password_hash, avatar_color)
+    VALUES ('zonen-test', 'Zonen Test', 'x', '#FF9500')`).run().lastInsertRowid;
+  zdb.prepare(`INSERT INTO birthdays (name, birth_date, created_by)
+    VALUES ('Zonenkind', '2012-06-16', ?)`).run(zoneUser);
+  const row = zdb.prepare('SELECT * FROM birthdays').get();
+
+  const setZone = (zone) => zdb.prepare(`
+    INSERT INTO sync_config (key, value) VALUES ('household_timezone', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(zone);
+
+  // EIN Zeitpunkt, der die Zonen trennt: 2026-06-15T12:00:00Z ist in Kiritimati
+  // (+14) bereits der 16. um 02:00, in Los Angeles (-7) noch der 15. um 05:00.
+  const at = new Date('2026-06-15T12:00:00Z');
+
+  setZone('Pacific/Kiritimati');
+  const east = hydrateBirthday(zdb, row, at);
+  assert(east.days_until === 0,
+    `Haushalt auf Kiritimati: am 16. ist der Geburtstag heute, erhalten days_until=${east.days_until} (next_birthday ${east.next_birthday})`);
+
+  setZone('America/Los_Angeles');
+  const west = hydrateBirthday(zdb, row, at);
+  assert(west.days_until === 1,
+    `Haushalt auf Los Angeles: derselbe Zeitpunkt ist noch der 15., der Geburtstag also morgen, erhalten days_until=${west.days_until} (next_birthday ${west.next_birthday})`);
+
+  // Und die beiden muessen sich unterscheiden - sonst hat die Zone gar nichts
+  // entschieden und beide Zweige lasen dieselbe (Server-)Uhr.
+  assert(east.days_until !== west.days_until,
+    'derselbe Zeitpunkt muss in beiden Haushaltszonen einen anderen Stichtag ergeben');
 });
 
 test('Dashboard-Geburtstagswidget lädt Geburtstage haushaltsweit (Issue #406)', async () => {
