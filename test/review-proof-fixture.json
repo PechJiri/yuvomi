@@ -2,7 +2,7 @@
   "quelle": {
     "pr": "https://github.com/ulsklyc/yuvomi/pull/1066",
     "gemessen": "2026-09-09",
-    "hinweis": "Aeusserungen aus der GitHub-API von PR #1066, laeufe aus der Actions-API, ergebnisse aus den result-Objekten der genannten Job-Logs. Nur die Felder, die der Nachweis liest."
+    "hinweis": "Aeusserungen aus der GitHub-API von PR #1066 (mit `commit` genau so, wie der Nachweis sie holt: Reviews und Inline-Anmerkungen tragen die SHA, eine Zusammenfassung nicht), laeufe aus der Actions-API, ergebnisse aus den result-Objekten der genannten Job-Logs. Nur die Felder, die der Nachweis liest."
   },
   "laeufe": {
     "34315259346": {
@@ -18,239 +18,330 @@
       "was": "Abbruch im Tor (1m18s), nichts hinterlassen - der Haken stand trotzdem gruen"
     }
   },
+  "koepfe": {
+    "b1ce599e": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
+    "8a87a5cd": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60"
+  },
   "aeusserungen": {
     "zusammenfassungen": [
       {
+        "commit": null,
         "login": "claude[bot]",
         "zeit": "2026-09-09T05:57:53Z"
       }
     ],
     "reviews": [
       {
+        "commit": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
         "login": "claude[bot]",
         "zeit": "2026-09-09T05:41:30Z"
       },
       {
+        "commit": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T05:42:03Z"
       },
       {
+        "commit": "a2e731cb92313fee6b4db4097089084197bc7c6a",
         "login": "ulsklyc",
         "zeit": "2026-09-09T05:48:05Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "ulsklyc",
         "zeit": "2026-09-09T05:56:37Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "ulsklyc",
         "zeit": "2026-09-09T05:56:39Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "claude[bot]",
         "zeit": "2026-09-09T06:04:45Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:06:59Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:21:10Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:21:11Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:21:13Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:21:14Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:30:13Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:40:47Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:40:48Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:52:03Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:58:34Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:58:35Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:58:36Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T07:07:46Z"
       },
       {
+        "commit": "cc6d707bf8b9be8320c683a14c3b36a9ce4c264a",
         "login": "ulsklyc",
         "zeit": "2026-09-09T07:15:17Z"
       },
       {
+        "commit": "cc6d707bf8b9be8320c683a14c3b36a9ce4c264a",
         "login": "ulsklyc",
         "zeit": "2026-09-09T07:15:18Z"
       },
       {
+        "commit": "cc6d707bf8b9be8320c683a14c3b36a9ce4c264a",
         "login": "ulsklyc",
         "zeit": "2026-09-09T07:15:20Z"
       },
       {
+        "commit": "dbf3d2cbfbdac24ac9898f5b56613b872016da74",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T07:29:35Z"
       },
       {
+        "commit": "dbf3d2cbfbdac24ac9898f5b56613b872016da74",
         "login": "ulsklyc",
         "zeit": "2026-09-09T07:31:21Z"
+      },
+      {
+        "commit": "dbf3d2cbfbdac24ac9898f5b56613b872016da74",
+        "login": "ulsklyc",
+        "zeit": "2026-09-09T08:07:09Z"
+      },
+      {
+        "commit": "dbf3d2cbfbdac24ac9898f5b56613b872016da74",
+        "login": "ulsklyc",
+        "zeit": "2026-09-09T08:07:10Z"
+      },
+      {
+        "commit": "dbf3d2cbfbdac24ac9898f5b56613b872016da74",
+        "login": "ulsklyc",
+        "zeit": "2026-09-09T08:07:11Z"
       }
     ],
     "inline": [
       {
+        "commit": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
         "login": "claude[bot]",
         "zeit": "2026-09-09T05:41:30Z"
       },
       {
+        "commit": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T05:42:03Z"
       },
       {
+        "commit": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T05:42:03Z"
       },
       {
+        "commit": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
         "login": "ulsklyc",
         "zeit": "2026-09-09T05:48:05Z"
       },
       {
+        "commit": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
         "login": "ulsklyc",
         "zeit": "2026-09-09T05:56:37Z"
       },
       {
+        "commit": "b1ce599e2551d37b2037e2c3c8a104d7e965e00e",
         "login": "ulsklyc",
         "zeit": "2026-09-09T05:56:39Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "claude[bot]",
         "zeit": "2026-09-09T06:04:45Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:06:59Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:06:59Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:06:59Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:21:10Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:21:11Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:21:13Z"
       },
       {
+        "commit": "203386cccaadb267944445fb1339825fd8847beb",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:21:14Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:30:13Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:30:13Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:40:47Z"
       },
       {
+        "commit": "7b06099230ce5bbc69856ec3a8c92a1d10e7755f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:40:48Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:52:03Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:52:03Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T06:52:03Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:58:34Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:58:35Z"
       },
       {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
         "login": "ulsklyc",
         "zeit": "2026-09-09T06:58:36Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T07:07:46Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T07:07:46Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T07:07:46Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T07:15:17Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T07:15:18Z"
       },
       {
+        "commit": "5036335229975bd30b99c2d7870de003dfb1dd4f",
         "login": "ulsklyc",
         "zeit": "2026-09-09T07:15:20Z"
       },
       {
+        "commit": "dbf3d2cbfbdac24ac9898f5b56613b872016da74",
         "login": "chatgpt-codex-connector[bot]",
         "zeit": "2026-09-09T07:29:35Z"
       },
       {
+        "commit": "dbf3d2cbfbdac24ac9898f5b56613b872016da74",
         "login": "ulsklyc",
         "zeit": "2026-09-09T07:31:21Z"
+      },
+      {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
+        "login": "ulsklyc",
+        "zeit": "2026-09-09T08:07:09Z"
+      },
+      {
+        "commit": "dbf3d2cbfbdac24ac9898f5b56613b872016da74",
+        "login": "ulsklyc",
+        "zeit": "2026-09-09T08:07:10Z"
+      },
+      {
+        "commit": "8a87a5cd7aa6a83f148817c2c53ac292e86dde60",
+        "login": "ulsklyc",
+        "zeit": "2026-09-09T08:07:11Z"
       }
     ]
   },

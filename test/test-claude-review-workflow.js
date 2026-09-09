@@ -88,14 +88,6 @@ test('gemessen wird gegen den Laufbeginn, nicht gegen die Commit-Zeit', () => {
   assert.match(workflow, /SEIT: \$\{\{ steps\.stand\.outputs\.seit \}\}/);
 });
 
-test('ob ein Stand schon geprueft ist, entscheidet die Commit-Bindung', () => {
-  // Fuer diese zweite Frage ist die Uhr das falsche Mittel: Reviews und
-  // Inline-Anmerkungen tragen die SHA, zu der sie gehoeren. Fehlt sie, laeuft
-  // die Review beim Rerun lieber noch einmal - das kostet, luegt aber nicht.
-  assert.match(workflow, /\.commit_id == env\.HEAD_SHA/);
-  assert.match(workflow, /\(\.original_commit_id \/\/ \.commit_id\) == env\.HEAD_SHA/);
-});
-
 test('der Prompt hebt die Abbruchbedingung auf, sonst prueft nur der erste Push', () => {
   // Ohne diesen Absatz bricht das Plugin ab dem zweiten Push zugesichert ab,
   // dann waere ein Nachweis, der pro Push zaehlt, dauerhaft rot. Die Aufhebung
@@ -103,10 +95,6 @@ test('der Prompt hebt die Abbruchbedingung auf, sonst prueft nur der erste Push'
   // blinder Fleck.
   assert.match(workflow, /ABBRUCHBEDINGUNG[^\n]*GILT\s*\n\s*HIER NICHT/);
   assert.match(workflow, /github\.event\.pull_request\.head\.sha/);
-});
-
-test('ein Rerun desselben Standes kostet keine zweite Review', () => {
-  assert.match(workflow, /steps\.stand\.outputs\.geprueft != 'true'/);
 });
 
 test('ein Lauf je PR, und zwar der zum neuesten Stand', () => {
@@ -129,6 +117,40 @@ test('der Selbst-Uebersprung wird an Zeichengleichheit erkannt', () => {
   assert.match(workflow, /contents\/\$DATEI\?ref=\$HEAD_SHA/);
   assert.match(workflow, /contents\/\$DATEI\?ref=\$BASIS/);
   assert.match(workflow, /\[ "\$kopf" = "\$basis" \]/);
+});
+
+test('die Selbst-Uebersprung-Ausnahme schliesst zu', () => {
+  // Ein Ersatzwert bei fehlgeschlagenem Lookup waere bequem und genau falsch
+  // herum: zwei ungleiche Platzhalter haetten `self=true` gesetzt, den Nachweis
+  // ausgesetzt und den Job gruen gelassen - wegen eines 403 oder 5xx in einer
+  // DIAGNOSE-Abfrage. Wer nicht beweisen kann, dass er ausgenommen ist, ist
+  // nicht ausgenommen.
+  assert.doesNotMatch(workflow, /kopf="fehlt-im-pr"/);
+  assert.doesNotMatch(workflow, /basis="fehlt-in-basis"/);
+  assert.match(workflow, /if \[ -z "\$kopf" \] \|\| \[ -z "\$basis" \]; then\n\s*echo "self=false"/);
+});
+
+test('kein Rerun-Kurzschluss: die Review laeuft bei jedem Anlass', () => {
+  // Hier stand eine Abkuerzung: haengt am Head schon eine claude-Aeusserung,
+  // spare die Review. Ein Lauf, der EINE Inline-Anmerkung gepostet hat und dann
+  // in den Timeout lief, haette damit den ganzen Commit als geprueft gegolten -
+  // der Rerun uebersprungen, der Nachweis mit ihm (`outcome: skipped`), und der
+  // Haken gruen ueber einer abgebrochenen Pruefung. Ein Rerun kostet jetzt eine
+  // zweite Review; das ist der billigere Fehler.
+  assert.doesNotMatch(workflow, /steps\.stand\.outputs\.geprueft/);
+  assert.doesNotMatch(workflow, /geprueft=true/);
+});
+
+test('der Nachweis bindet Aeusserungen an die Commit-SHA', () => {
+  // Ein Zeitstempel allein belegt nicht, dass eine Aeusserung aus DIESEM Lauf
+  // stammt: der Mention-Pfad antwortet als derselbe Bot, und ein abgebrochener
+  // Vorgaenger kann noch posten, nachdem der Nachfolger seinen Laufbeginn
+  // notiert hat. Reviews und Inline-Anmerkungen tragen die SHA, eine
+  // Zusammenfassung nicht - die bekommt `null`.
+  assert.match(workflow, /--kopf "\$HEAD_SHA"/);
+  assert.match(workflow, /commit: \.commit_id/);
+  assert.match(workflow, /commit: \(\.original_commit_id \/\/ \.commit_id\)/);
+  assert.match(workflow, /commit: null/);
 });
 
 test('Entwurf und Bot-PR sind vom Nachweis ausgenommen', () => {

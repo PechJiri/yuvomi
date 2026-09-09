@@ -26,8 +26,14 @@ import { readFileSync } from 'node:fs';
  * Wortlaut aus #1029: 'This matches the step 1 stop condition ("trivial change
  * that is obviously correct"), so per the review process I am stopping here'.
  */
-const TOR_STOPP = /stop\s+condition/i;
+const TOR_STOPP = /\b(?:matches|meets|satisfies|triggers|hits)\b[^.]{0,60}\bstop\s+condition\b/i;
 const TRIVIAL = /\btrivial\b|obviously\s+correct/i;
+/**
+ * Und selbst dann nicht, wenn der Satz sie VERNEINT. Zwei unabhaengige Muster
+ * greifen sonst auch in "the stop condition does not apply because this is not
+ * trivial" - der Text sagt das Gegenteil, und der Haken waere gruen geworden.
+ */
+const VERNEINT = /\b(?:does\s+not|doesn'?t|did\s+not|didn'?t|no|not)\s+(?:apply|match|meet|trivial)\b|\bnot\s+a\s+trivial\b/i;
 
 /**
  * Der Abbruch, um den es hier geht. Er sieht dem obigen zum Verwechseln
@@ -54,13 +60,24 @@ const WARTET_AUF_AGENTEN = /wait(?:ing|s)?\s+for\b[^.]{0,80}\bagents?\b|notified
  * anderer Form (Offset statt Z, Millisekunden) wuerde das brechen, deshalb
  * lehnt `beurteile` einen solchen Stand von vornherein ab.
  */
-export function zaehleSeit(aeusserungen, seit) {
-  return aeusserungen.filter((eintrag) => {
+export function zaehleSeit(aeusserungen, seit, kopf = '') {
+  const meine = aeusserungen.filter((eintrag) => {
     const login = String(eintrag?.login ?? '').toLowerCase();
     if (!login.includes('claude')) return false;
     const zeit = String(eintrag?.zeit ?? '');
     return zeit !== '' && zeit > seit;
-  }).length;
+  });
+  // GEBUNDEN heisst: die Aeusserung nennt selbst den Commit, um den es geht.
+  // Reviews und Inline-Anmerkungen tragen diese SHA, eine Zusammenfassung
+  // ("## Code review / No issues found") traegt sie nicht - am 09.09. an #1066
+  // nachgesehen. Die Zeit allein ist eben KEIN Beweis, dass eine Aeusserung aus
+  // diesem Lauf stammt: der Mention-Pfad in .github/workflows/claude.yml
+  // antwortet als derselbe Bot, und ein abgebrochener Vorgaenger kann noch
+  // posten, nachdem der Nachfolger seinen Laufbeginn notiert hat.
+  const gebunden = kopf
+    ? meine.filter((eintrag) => String(eintrag?.commit ?? '') === kopf).length
+    : 0;
+  return { gebunden, frei: meine.length - gebunden, gesamt: meine.length };
 }
 
 const ZEITSTEMPEL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
@@ -80,10 +97,12 @@ const ZEITSTEMPEL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
  *        Push, und ein Kommentar zum VORIGEN Stand kann dann zeitlich
  *        hinter ihm liegen. Genau so entstuende der alte blinde Fleck neu.
  * @param {object|null} eingabe.ergebnis  das `result`-Objekt des Laufs.
- * @param {Array<{login: string, zeit: string}>} eingabe.aeusserungen
+ * @param {Array<{login: string, zeit: string, commit?: string}>} eingabe.aeusserungen
+ * @param {string} [eingabe.kopf]  SHA des aktuellen Head, gegen die eine
+ *        Aeusserung gebunden wird.
  * @param {number} [eingabe.kaputt]  Zeilen, die nicht zu lesen waren.
  */
-export function beurteile({ seit, ergebnis, aeusserungen = [], kaputt = 0 }) {
+export function beurteile({ seit, ergebnis, aeusserungen = [], kopf = '', kaputt = 0 }) {
   // Ohne belastbaren Stand gibt es nichts zu vergleichen. Der leere Fallback
   // waere hier der gefaehrlichste: er wuerde JEDE Aeusserung mitzaehlen und
   // damit genau das stille Gruen erzeugen, das dieser Nachweis abschafft.
@@ -91,38 +110,59 @@ export function beurteile({ seit, ergebnis, aeusserungen = [], kaputt = 0 }) {
     return stumm('kein-stand', 0, seit, ergebnis);
   }
 
-  const neu = zaehleSeit(aeusserungen, seit);
-  if (neu > 0) {
-    return {
-      ausgang: 'geprueft',
-      grund: 'gesprochen',
-      neu,
-      meldung: `Die Review hat in diesem Lauf gesprochen: ${neu} Aeusserung(en) nach dem Laufbeginn ${seit}.`
-    };
-  }
+  const zahl = zaehleSeit(aeusserungen, seit, kopf);
+  const neu = zahl.gesamt;
 
   // Waere hier auch nur eine Zeile unlesbar, koennte "nichts gefunden" schlicht
   // heissen "nicht gelesen". Ein Rot aus dem falschen Grund schickt die naechste
   // Runde in die falsche Richtung, deshalb bekommt der Fall seinen eigenen.
-  if (kaputt > 0) {
-    return stumm('daten-kaputt', neu, seit, ergebnis);
-  }
-
-  if (!ergebnis) {
-    return stumm('kein-ergebnis', neu, seit, ergebnis);
-  }
+  if (kaputt > 0) return stumm('daten-kaputt', neu, seit, ergebnis);
+  if (!ergebnis) return stumm('kein-ergebnis', neu, seit, ergebnis);
 
   const text = String(ergebnis.result ?? '');
   const sperren = Array.isArray(ergebnis.permission_denials)
     ? ergebnis.permission_denials.length
     : 0;
 
+  // DAS PROTOKOLL DES LAUFS SCHLAEGT DIE KOMMENTARZAEHLUNG, und zwar in dieser
+  // Reihenfolge und nicht umgekehrt. Vorher stand ein "hat irgendwer nach dem
+  // Laufbeginn geredet?" ganz oben und schloss kurz - damit konnte eine FREMDE
+  // claude-Aeusserung einen abgebrochenen Lauf gruen faerben: eine Antwort des
+  // Mention-Pfades, oder ein Nachzuegler des abgebrochenen Vorgaengers. Was
+  // dieser Lauf getan hat, weiss nur sein eigenes result-Objekt; die Kommentare
+  // sind die Wirkung und koennen von anderen stammen.
   if (ergebnis.is_error === true) return stumm('lauf-fehler', neu, seit, ergebnis);
   if (ergebnis.subtype && ergebnis.subtype !== 'success') {
     return stumm('lauf-fehler', neu, seit, ergebnis);
   }
   if (SCHON_KOMMENTIERT.test(text)) return stumm('schon-kommentiert', neu, seit, ergebnis);
-  if (TOR_STOPP.test(text) && TRIVIAL.test(text)) {
+
+  // EINE GEBUNDENE AEUSSERUNG SCHLAEGT ALLES, WAS DANACH KOMMT - auch die
+  // Verweigerungen. Eine Review oder Inline-Anmerkung, die genau diesen Commit
+  // nennt, ist geliefert; ob unterwegs ein Werkzeug gesperrt war, aendert daran
+  // nichts. Die echte Review an #1066 ist genau dieser Fall: sie lief in vier
+  // verweigerte `gh api`-Versuche auf ein CLAUDE.md, das es nicht gibt, und
+  // postete danach ihren Befund. Stuende die Sperrpruefung davor, waere sie rot.
+  if (zahl.gebunden > 0) {
+    return {
+      ausgang: 'geprueft',
+      grund: 'gebunden',
+      neu,
+      meldung:
+        `Die Review hat zu diesem Commit gesprochen: ${zahl.gebunden} Aeusserung(en) ` +
+        `mit der SHA ${kopf}, nach dem Laufbeginn ${seit}.`
+    };
+  }
+
+  if (WARTET_AUF_AGENTEN.test(text)) return stumm('agenten', neu, seit, ergebnis);
+
+  // DIE SPERRE VOR DER TOR-AUSNAHME. Andersherum konnte ein Lauf, der an einer
+  // Werkzeugsperre gescheitert war, ueber die Tor-Ausnahme gruen werden, wenn
+  // sein Text zufaellig beide Woerter trug - die einzige stille Gruen-Ausnahme
+  // darf nicht vor der Fehlerpruefung liegen.
+  if (sperren > 0) return stumm('werkzeugsperre', neu, seit, ergebnis);
+
+  if (TOR_STOPP.test(text) && TRIVIAL.test(text) && !VERNEINT.test(text)) {
     return {
       ausgang: 'ausgesetzt',
       grund: 'trivial',
@@ -134,8 +174,23 @@ export function beurteile({ seit, ergebnis, aeusserungen = [], kaputt = 0 }) {
         'pruefen", nicht "geprueft".'
     };
   }
-  if (sperren > 0) return stumm('werkzeugsperre', neu, seit, ergebnis);
-  if (WARTET_AUF_AGENTEN.test(text)) return stumm('agenten', neu, seit, ergebnis);
+
+  // Eine Zusammenfassung ohne Commit-Bindung ("## Code review / No issues
+  // found") ist der einzige Beleg, den ein sauberer PR hinterlaesst. Sie zaehlt
+  // erst hier: nachdem feststeht, dass dieser Lauf nicht im Tor abgebrochen ist,
+  // nicht auf Agenten gewartet hat und an keiner Sperre haengt. Fuer sich
+  // genommen koennte sie von jemand anderem stammen.
+  if (zahl.frei > 0) {
+    return {
+      ausgang: 'geprueft',
+      grund: 'ungebunden',
+      neu,
+      meldung:
+        `Die Review hat in diesem Lauf gesprochen: ${zahl.frei} Aeusserung(en) ohne ` +
+        'Commit-Bindung (eine Zusammenfassung traegt keine SHA) nach dem Laufbeginn ' +
+        `${seit}. Ihr result-Objekt zeigt keinen Abbruch und keine Sperre.`
+    };
+  }
   return stumm('unbekannt', neu, seit, ergebnis);
 }
 
@@ -263,11 +318,12 @@ export function leseAeusserungen(pfade) {
 }
 
 function argumente(argv) {
-  const werte = { seit: '', ergebnis: '', aeusserungen: [] };
+  const werte = { seit: '', kopf: '', ergebnis: '', aeusserungen: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const name = argv[i];
     const wert = argv[i + 1];
     if (name === '--seit') werte.seit = wert ?? '';
+    else if (name === '--kopf') werte.kopf = wert ?? '';
     else if (name === '--ergebnis') werte.ergebnis = wert ?? '';
     else if (name === '--aeusserungen') werte.aeusserungen.push(wert ?? '');
     else continue;
@@ -282,16 +338,20 @@ function einzeilig(text) {
 }
 
 function main() {
-  const { seit, ergebnis: ergebnisPfad, aeusserungen: pfade } = argumente(process.argv.slice(2));
+  const { seit, kopf, ergebnis: ergebnisPfad, aeusserungen: pfade } = argumente(
+    process.argv.slice(2)
+  );
   const { eintraege, kaputt } = leseAeusserungen(pfade);
   const urteil = beurteile({
     seit,
+    kopf,
     ergebnis: leseErgebnis(ergebnisPfad),
     aeusserungen: eintraege,
     kaputt
   });
 
   console.log(`Laufbeginn: ${seit || '(unbekannt)'}`);
+  console.log(`Aktueller Stand: ${kopf || '(unbekannt)'}`);
   console.log(`Aeusserungen von claude seit dem Laufbeginn: ${urteil.neu}`);
   console.log('');
   console.log(urteil.meldung);

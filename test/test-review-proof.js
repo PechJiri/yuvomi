@@ -46,6 +46,7 @@ const wieGesehen = (lauf) =>
 const ECHTE_REVIEW = '34315259346';
 const ABBRUCH_LAUF = '34320151190';
 const seit = (lauf) => fixture.laeufe[lauf].beginn;
+const kopf = (lauf) => fixture.laeufe[lauf].head;
 const ABBRUCH = fixture.ergebnisse['abbruch-schon-kommentiert'];
 
 test('DER FALL AUS #1066: alter Kommentar plus neuer Push wird rot', () => {
@@ -78,7 +79,7 @@ test('und genau diese Lage haette der alte Nachweis gruen genannt', () => {
     5,
     'ohne alte claude-Zeilen stellt diese Probe den Fehlerfall gar nicht nach'
   );
-  assert.equal(zaehleSeit(gesehen, seit(ABBRUCH_LAUF)), 0);
+  assert.equal(zaehleSeit(gesehen, seit(ABBRUCH_LAUF), kopf(ABBRUCH_LAUF)).gesamt, 0);
 });
 
 test('derselbe PR, der Lauf, der wirklich geprueft hat: gruen', () => {
@@ -87,10 +88,12 @@ test('derselbe PR, der Lauf, der wirklich geprueft hat: gruen', () => {
   // Fleck - einer, der immer rot ist.
   const urteil = beurteile({
     seit: seit(ECHTE_REVIEW),
+    kopf: kopf(ECHTE_REVIEW),
     ergebnis: fixture.ergebnisse['echte-review'],
     aeusserungen: wieGesehen(ECHTE_REVIEW)
   });
   assert.equal(urteil.ausgang, 'geprueft');
+  assert.equal(urteil.grund, 'gebunden', 'Review und Inline nennen genau diesen Commit');
   // Zwei und nicht eine: derselbe Befund steht in beiden Listen, einmal als
   // Review und einmal als ihre Inline-Anmerkung. Der Nachweis zaehlt
   // Aeusserungen und keine Befunde - fuer die Frage "hat sie gesprochen?"
@@ -110,7 +113,7 @@ test('fremde Stimmen zaehlen nicht, auch wenn sie fleissig sind', () => {
     waehrendDesLaufs.some((a) => a.login.includes('codex')),
     'und zwar unter anderem von codex'
   );
-  assert.equal(zaehleSeit(waehrendDesLaufs, seit(ABBRUCH_LAUF)), 0);
+  assert.equal(zaehleSeit(waehrendDesLaufs, seit(ABBRUCH_LAUF), kopf(ABBRUCH_LAUF)).gesamt, 0);
 });
 
 test('der triviale Abbruch bleibt gruen, sagt aber, dass er nichts geprueft hat', () => {
@@ -216,7 +219,123 @@ test('zaehleSeit vergleicht die Zeitstempel und nicht die Reihenfolge', () => {
     { login: 'Claude[BOT]', zeit: '2026-09-09T07:00:00Z' },
     { login: 'claude[bot]', zeit: '' }
   ];
-  // Die Sekunde des Commits selbst zaehlt nicht mit: strikt spaeter, damit ein
-  // Kommentar den Stand nicht vordatiert.
-  assert.equal(zaehleSeit(liste, '2026-09-09T06:40:30Z'), 2);
+  // Die Sekunde des Laufbeginns selbst zaehlt nicht mit: strikt spaeter.
+  assert.equal(zaehleSeit(liste, '2026-09-09T06:40:30Z').gesamt, 2);
+});
+
+test('gebunden und ungebunden werden getrennt gezaehlt', () => {
+  // Die Commit-SHA ist der Unterschied zwischen "jemand hat geredet" und "zu
+  // DIESEM Commit wurde geredet". An #1066 traegt die Zusammenfassung keine.
+  const liste = [
+    { login: 'claude[bot]', zeit: '2026-09-09T06:00:00Z', commit: 'aaa' },
+    { login: 'claude[bot]', zeit: '2026-09-09T06:00:00Z', commit: 'bbb' },
+    { login: 'claude[bot]', zeit: '2026-09-09T06:00:00Z', commit: null }
+  ];
+  const zahl = zaehleSeit(liste, '2026-09-09T05:00:00Z', 'aaa');
+  assert.deepEqual(zahl, { gebunden: 1, frei: 2, gesamt: 3 });
+});
+
+// ---------------------------------------------------------------------------
+// Vier Befunde aus der Codex-Runde zu PR #1073. Jede Probe faellt ohne ihren
+// Fix - nachgeprueft, indem die alte Fassung wieder eingesetzt wurde.
+// ---------------------------------------------------------------------------
+
+test('eine FREMDE claude-Aeusserung faerbt einen Abbruch nicht gruen', () => {
+  // Ein Zeitstempel allein belegt nicht, dass eine Aeusserung aus DIESEM Lauf
+  // stammt: der Mention-Pfad (.github/workflows/claude.yml) antwortet als
+  // derselbe Bot, und ein per cancel-in-progress abgebrochener Vorgaenger kann
+  // noch posten, nachdem der Nachfolger seinen Laufbeginn notiert hat. Vorher
+  // schloss "irgendwer hat nach dem Laufbeginn geredet" kurz, bevor das
+  // result-Objekt ueberhaupt gelesen wurde.
+  const fremd = [
+    ...wieGesehen(ABBRUCH_LAUF),
+    { login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }
+  ];
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: ABBRUCH,
+    aeusserungen: fremd
+  });
+  assert.equal(urteil.ausgang, 'stumm', 'das Protokoll des Laufs schlaegt die Zaehlung');
+  assert.equal(urteil.grund, 'schon-kommentiert');
+});
+
+test('eine VERNEINTE Tor-Bedingung ist keine Ausnahme', () => {
+  // "the stop condition does not apply because this is not trivial" trug beide
+  // Woerter und haette die einzige stille Gruen-Ausnahme ausgeloest.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 6,
+      subtype: 'success',
+      is_error: false,
+      permission_denials: [],
+      result:
+        'The step 1 stop condition does not apply because this is not a trivial ' +
+        'change, so I continued.'
+    },
+    aeusserungen: wieGesehen(ABBRUCH_LAUF)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'unbekannt');
+});
+
+test('eine Werkzeugsperre schlaegt die Tor-Ausnahme', () => {
+  // Die Reihenfolge war umgekehrt: ein Lauf, der an einer Sperre gescheitert
+  // war, wurde gruen, wenn sein Text zufaellig nach dem trivialen Tor klang.
+  // Die einzige stille Gruen-Ausnahme darf nicht vor der Fehlerpruefung liegen.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 12,
+      subtype: 'success',
+      is_error: false,
+      permission_denials: [{ tool_name: 'Bash' }],
+      result: 'This matches the step 1 stop condition (trivial change).'
+    },
+    aeusserungen: wieGesehen(ABBRUCH_LAUF)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'werkzeugsperre');
+});
+
+test('der echte #1029-Wortlaut bleibt die Ausnahme', () => {
+  // Das geschaerfte Muster darf den Fall, fuer den es gebaut ist, nicht
+  // verlieren. Der Wortlaut steht als Beleg im Fixture.
+  assert.match(fixture.ergebnisse['abbruch-trivial'].result, /matches the step 1 stop condition/);
+  assert.equal(
+    beurteile({
+      seit: seit(ABBRUCH_LAUF),
+      kopf: kopf(ABBRUCH_LAUF),
+      ergebnis: fixture.ergebnisse['abbruch-trivial'],
+      aeusserungen: wieGesehen(ABBRUCH_LAUF)
+    }).ausgang,
+    'ausgesetzt'
+  );
+});
+
+test('eine Zusammenfassung ohne SHA zaehlt nur ohne Abbruch im Protokoll', () => {
+  // Sie ist der einzige Beleg, den das Plugin bei einem sauberen PR
+  // hinterlaesst ("## Code review / No issues found") und traegt keine SHA.
+  // Sie darf zaehlen - aber erst, nachdem feststeht, dass dieser Lauf nicht im
+  // Tor abgebrochen und an keiner Sperre gescheitert ist.
+  const sauber = {
+    num_turns: 18,
+    subtype: 'success',
+    is_error: false,
+    permission_denials: [],
+    result: 'Review posted. No issues found.'
+  };
+  const nur_frei = [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }];
+  assert.equal(
+    beurteile({ seit: seit(ABBRUCH_LAUF), kopf: kopf(ABBRUCH_LAUF), ergebnis: sauber, aeusserungen: nur_frei }).grund,
+    'ungebunden'
+  );
+  assert.equal(
+    beurteile({ seit: seit(ABBRUCH_LAUF), kopf: kopf(ABBRUCH_LAUF), ergebnis: ABBRUCH, aeusserungen: nur_frei }).grund,
+    'schon-kommentiert'
+  );
 });

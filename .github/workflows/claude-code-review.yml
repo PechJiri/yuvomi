@@ -53,10 +53,9 @@ jobs:
         with:
           fetch-depth: 1
 
-      # WELCHER STAND STEHT ZUR PRUEFUNG? Der Schritt beantwortet zwei Fragen,
-      # und zwar mit zwei verschiedenen Mitteln, weil sie verschieden sind:
-      # "ist dieser Commit schon geprueft?" (Commit-Bindung) und "ab wann zaehlt
-      # eine Aeusserung als Antwort DIESES Laufs?" (Laufbeginn).
+      # WELCHER STAND STEHT ZUR PRUEFUNG? Der Schritt haelt den Laufbeginn fest.
+      # Ab dieser Zeit gilt eine Aeusserung als moegliche Antwort DIESES Laufs -
+      # und die Commit-SHA daneben entscheidet, ob sie es beweisbar ist.
       #
       # Vorher zaehlte der Nachweis ueber die ganze Lebensdauer des PR, und ein
       # einziger alter Kommentar faerbte damit jeden spaeteren Abbruch gruen. An
@@ -64,14 +63,19 @@ jobs:
       # Laeufe von 1m18s, 1m18s und 1m46s, jeder mit `num_turns: 3`, NULL
       # Verweigerungen und dem result-Text "Claude has already left a comment on
       # this PR ... I should stop here" - waehrend der Haken gruen stand.
+      #
+      # HIER STAND EINMAL EINE ABKUERZUNG FUER DEN RERUN-FALL: haengt am Head
+      # schon eine claude-Aeusserung, spare die Review. Sie ist wieder draussen.
+      # Ein Lauf, der EINE Inline-Anmerkung gepostet hat und dann in den Timeout
+      # oder in den Abbruch lief, hinterlaesst genau diese eine Anmerkung - und
+      # die Abkuerzung haette sie als Beweis genommen, dass der ganze Commit
+      # geprueft sei. Der Rerun waere uebersprungen worden, der Nachweis mit ihm
+      # (`outcome: skipped`), und der Haken gruen ueber einer abgebrochenen
+      # Pruefung. Ein Rerun kostet jetzt eine zweite Review. Das ist der
+      # billigere Fehler.
       - name: Welcher Stand steht zur Pruefung?
         id: stand
         if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           # DER ANKER IST DER LAUFBEGINN, NICHT DIE COMMIT-ZEIT. Die Commit-Zeit
@@ -82,34 +86,9 @@ jobs:
           # gehalten. Genau diese Sorte stiller Verwechslung wird hier
           # abgeschafft und nicht in neuer Form wieder eingebaut.
           echo "seit=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-          # Ob dieser Stand schon geprueft IST, entscheidet dagegen keine Uhr,
-          # sondern die Commit-Bindung: Reviews und Inline-Anmerkungen tragen die
-          # SHA, zu der sie gehoeren. Ein Rerun desselben Pushes soll die Review
-          # nicht ein zweites Mal kosten, und der Abbruch, mit dem das Plugin
-          # darauf antwortet, waere dann zu Recht kein Befund.
-          # Eine reine "No issues found"-Zusammenfassung traegt keine SHA - dann
-          # laeuft die Review beim Rerun lieber noch einmal. Das kostet, luegt aber
-          # nicht, und das ist hier die richtige Richtung.
-          reviews=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
-            --jq '.[] | select(.user.login | ascii_downcase | contains("claude"))
-                      | select(.commit_id == env.HEAD_SHA) | .id' \
-            | wc -l | tr -d ' ')
-          inline=$(gh api "repos/$REPO/pulls/$PR/comments" --paginate \
-            --jq '.[] | select(.user.login | ascii_downcase | contains("claude"))
-                      | select((.original_commit_id // .commit_id) == env.HEAD_SHA) | .id' \
-            | wc -l | tr -d ' ')
-          gebunden=$((reviews + inline))
-          echo "Stand $HEAD_SHA - schon daran haengende Aeusserungen: $gebunden"
-          if [ "$gebunden" -gt 0 ]; then
-            echo "geprueft=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Zu diesem Commit haengt schon eine Aeusserung von claude." \
-                 "Die Review wird nicht wiederholt - das ist der Rerun-Fall, kein Abbruch."
-          else
-            echo "geprueft=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Run Claude Code Review
-        if: env.CLAUDE_CODE_OAUTH_TOKEN != '' && steps.stand.outputs.geprueft != 'true'
+        if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
         id: claude-review
         uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1 # v1.0.216
         with:
@@ -320,9 +299,21 @@ jobs:
           # sich, der Nachweis fand kein result-Objekt und waere rot geworden,
           # obwohl niemand etwas falsch gemacht hat. Blob-SHAs vergleichen ist
           # genau das Kriterium der Action, in einer Zeile.
-          kopf=$(gh api "repos/$REPO/contents/$DATEI?ref=$HEAD_SHA" --jq '.sha' 2>/dev/null) || kopf="fehlt-im-pr"
-          basis=$(gh api "repos/$REPO/contents/$DATEI?ref=$BASIS" --jq '.sha' 2>/dev/null) || basis="fehlt-in-basis"
-          if [ "$kopf" = "$basis" ]; then
+          # DIESE AUSNAHME SCHLIESST ZU. Ein Ersatzwert bei Fehlschlag waere
+          # bequem und genau falsch herum: zwei ungleiche Platzhalter haetten
+          # `self=true` gesetzt, den Nachweis ausgesetzt und den Job gruen
+          # gelassen - wegen eines 403 oder 5xx in einer DIAGNOSE-Abfrage. Wer
+          # nicht beweisen kann, dass er ausgenommen ist, ist nicht ausgenommen.
+          kopf=""; basis=""
+          kopf=$(gh api "repos/$REPO/contents/$DATEI?ref=$HEAD_SHA" --jq '.sha') || kopf=""
+          basis=$(gh api "repos/$REPO/contents/$DATEI?ref=$BASIS" --jq '.sha') || basis=""
+          if [ -z "$kopf" ] || [ -z "$basis" ]; then
+            echo "self=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Die Fassung des Review-Workflows liess sich nicht auf" \
+                 "beiden Seiten lesen (Kopf: '${kopf:-Fehler}', $BASIS: '${basis:-Fehler}')." \
+                 "Die Selbst-Uebersprung-Ausnahme gilt deshalb NICHT - sie braucht" \
+                 "zwei gelesene, wirklich verschiedene Fassungen. Der Nachweis laeuft."
+          elif [ "$kopf" = "$basis" ]; then
             echo "self=false" >> "$GITHUB_OUTPUT"
             echo "Der Review-Workflow ist zeichengleich mit $BASIS ($kopf)."
           else
@@ -358,22 +349,30 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           SEIT: ${{ steps.stand.outputs.seit }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
         run: |
           set -euo pipefail
           # Hier wird nur noch geholt. `--paginate` mit einem jq, das ein Array
           # baut, druckt EINE Zeile JE SEITE - `$((a + b))` stirbt daran, sobald
           # ein PR ueber 30 Kommentare kommt. Deshalb ein Objekt je Zeile.
-          hole() {
-            gh api "repos/$REPO/$1" --paginate \
-              --jq '.[] | {login: .user.login, zeit: ((.created_at // .submitted_at) // "")}' \
-              > "$RUNNER_TEMP/$2"
-          }
-          hole "issues/$PR/comments" zusammenfassungen.jsonl
-          hole "pulls/$PR/reviews" reviews.jsonl
-          hole "pulls/$PR/comments" inline.jsonl
+          # `commit` ist der Unterschied zwischen "jemand hat geredet" und
+          # "zu DIESEM Commit wurde geredet". Reviews und Inline-Anmerkungen
+          # tragen ihn, eine Zusammenfassung nicht - die bekommt `null`, und das
+          # Urteil weiss dann, dass sie nur zaehlt, wenn das result-Objekt des
+          # Laufs keinen Abbruch zeigt.
+          gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '.[] | {login: .user.login, zeit: .created_at, commit: null}' \
+            > "$RUNNER_TEMP/zusammenfassungen.jsonl"
+          gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
+            --jq '.[] | {login: .user.login, zeit: (.submitted_at // ""), commit: .commit_id}' \
+            > "$RUNNER_TEMP/reviews.jsonl"
+          gh api "repos/$REPO/pulls/$PR/comments" --paginate \
+            --jq '.[] | {login: .user.login, zeit: .created_at, commit: (.original_commit_id // .commit_id)}' \
+            > "$RUNNER_TEMP/inline.jsonl"
           node .github/scripts/review-verdict.mjs \
             --seit "$SEIT" \
+            --kopf "$HEAD_SHA" \
             --ergebnis "$EXECUTION_FILE" \
             --aeusserungen "$RUNNER_TEMP/zusammenfassungen.jsonl" \
             --aeusserungen "$RUNNER_TEMP/reviews.jsonl" \
