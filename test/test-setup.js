@@ -10,10 +10,12 @@ const tmpDir = mkdtempSync(join(tmpdir(), 'oikos-setup-test-'));
 process.env.SESSION_SECRET = 'test-setup-secret-minimum-32-chars-x';
 process.env.DB_PATH = join(tmpDir, 'test.db');
 process.env.SESSION_SECURE = 'false';
-// Der Test spricht ueber listenOnFreePort() mit einem eigenen Listener. PORT gilt
-// nur noch dem Listener, den server/index.js beim Import selbst startet: ohne
-// die Zuweisung waere das 3000, wo lokal gern schon ein Dev-Server sitzt.
-process.env.PORT = '13099';
+// Auch der Listener, den server/index.js beim Import selbst startet, darf keinen
+// festen Port belegen: `app.listen(PORT)` dort hat keinen error-Handler, ein
+// EADDRINUSE endet also als uncaughtException und reisst die Suite mit. Port 0
+// laesst das Betriebssystem einen freien waehlen; der Test selbst spricht ohnehin
+// ueber den eigenen Listener aus listenOnFreePort().
+process.env.PORT = '0';
 process.env.APP_BUILD_REVISION = 'acceptance-route-test';
 
 // Dynamic import so env vars are set before module initialization
