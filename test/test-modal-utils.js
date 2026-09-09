@@ -555,9 +555,9 @@ test('_doClose fasst nach, und das Nachfassen behaelt seine Wachen', () => {
   // zweite Kopie waere die Stelle, an der sie auseinanderlaufen.
   const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
   assert.ok(wachen, '_tryRefocus nicht gefunden');
-  assert.match(wachen, /ziel\.isConnected && !istRueckfall/,
-    'ein lebendes Ziel beendet den Lauf - ausser es ist unser eigener Rueckfall, den ein '
-    + 'spaeterer Neuaufbau ersetzen darf');
+  assert.match(wachen, /ziel\.isConnected && document\.activeElement === ziel && !istRueckfall/,
+    'nicht die ANWESENHEIT des Ziels beendet den Lauf, sondern sein FOKUSBESITZ - eine Zeile auf '
+    + '`display: none` haengt weiter im Dokument und haelt trotzdem keinen Fokus');
   assert.match(wachen, /document\.activeElement === document\.body/,
     'hat die Seite selbst etwas fokussiert, ist ihre Wahl die bessere');
   assert.match(wachen, /if \(activeOverlay\) return;/,
@@ -671,7 +671,22 @@ test('ein Fokus auf der Seitenwurzel darf spaeter vom echten Ziel abgeloest werd
   const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
   assert.match(wachen, /const istRueckfall = ziel\.id === PAGE_ROOT_ID;/,
     'der eigene Rueckfall muss als solcher erkannt werden');
-  assert.match(wachen, /istRueckfall && document\.activeElement === ziel/,
-    'liegt der Fokus auf unserem eigenen Rueckfall, gilt das als "noch niemand hat gewaehlt" - '
-    + 'sonst bliebe er an der Seitenwurzel haengen, obwohl der Knopf laengst wieder da ist');
+  assert.match(wachen, /document\.activeElement === document\.body \|\| document\.activeElement === ziel/,
+    'liegt der Fokus auf dem Ziel selbst, gilt das als "noch niemand hat gewaehlt" - sonst bliebe '
+    + 'er am Rueckfall haengen, obwohl der Knopf laengst wieder da ist');
+});
+
+/* Ein Knoten kann im Dokument haengen und trotzdem unbedienbar sein: der
+ * Loesch-Weg der Aufgaben setzt die Zeile auf `display: none`, statt sie zu
+ * entfernen. Der Fokus faellt dabei auf `body`, der Knoten bleibt verbunden -
+ * eine Wache auf `isConnected` allein haette hier abgebrochen (Review zu #1070).
+ */
+test('ein verbundenes, aber unbedienbares Ziel beendet den Lauf nicht', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.doesNotMatch(wachen, /if \(ziel\.isConnected\)\s*return;/,
+    'die Anwesenheit allein darf den Lauf nicht beenden - sie sagt nichts darueber, '
+    + 'ob das Ziel den Fokus auch haelt');
+  assert.match(wachen, /document\.activeElement === ziel/,
+    'geprueft gehoert der Fokusbesitz');
 });

@@ -221,7 +221,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is the same silent no-op the whole entry is about. Where it does not take, the page root does. And
   where that root was chosen as a stand-in, a later rebuild is allowed to take the focus off it
   again, so a loader that swaps its opener for a skeleton and rebuilds it after the request does not
-  leave the reader stranded at the top of the page.
+  leave the reader stranded at the top of the page. What decides is whether the target still holds
+  focus, not whether it is still in the document: deleting a task hides its row rather than removing
+  it, and a hidden row keeps its place in the tree while dropping focus to `body`.
 
   Measured across the seven callers of the category manager, exactly one - the budget page - puts
   its button inside the very section it re-renders while the dialog is open. The others keep theirs

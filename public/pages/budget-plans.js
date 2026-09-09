@@ -331,6 +331,7 @@ async function deletePlan(category) {
     vibrate(10);
     closeModal({ force: true });
     await load();
+    refocusAfterRender();
     window.yuvomi?.showToast(t('budget.planRemovedToast'), 'default', 5000, async () => {
       if (previous == null) return;
       try {

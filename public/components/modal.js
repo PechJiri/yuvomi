@@ -734,12 +734,19 @@ function _tryRefocus(memo, ziel) {
   // weiteren Versuch abgewiesen, und der Fokus bliebe an der Seitenwurzel
   // haengen, obwohl der Knopf laengst wieder da ist (Review zu #1070).
   const istRueckfall = ziel.id === PAGE_ROOT_ID;
-  if (ziel.isConnected && !istRueckfall) return;
+  // NICHT `isConnected` FRAGEN, SONDERN OB DAS ZIEL DEN FOKUS NOCH HAELT. Ein
+  // Knoten kann im Dokument haengen und trotzdem unbedienbar sein: der
+  // Loesch-Weg der Aufgaben setzt die Zeile auf `display: none`, statt sie zu
+  // entfernen (`deleteTaskWithUndo` in components/task-detail.js), und der Fokus
+  // faellt dabei auf `body`, waehrend der Knoten verbunden bleibt. Dieselbe
+  // Familie wie ein `disabled` gewordener Ersatz - beide melden Anwesenheit und
+  // nehmen keinen Fokus (Review zu #1070).
+  if (ziel.isConnected && document.activeElement === ziel && !istRueckfall) return;
   if (activeOverlay) return;
-  // Hat die Seite selbst etwas fokussiert, gilt ihre Wahl. Beim Rueckfall zaehlt
-  // zusaetzlich er selbst als "noch niemand hat gewaehlt".
-  const frei = document.activeElement === document.body
-    || (istRueckfall && document.activeElement === ziel);
+  // Hat die Seite selbst etwas fokussiert, gilt ihre Wahl. Der Fokus auf dem
+  // Ziel selbst zaehlt hier als "noch niemand hat gewaehlt": beim Rueckfall darf
+  // ein besseres Ziel ihn abloesen.
+  const frei = document.activeElement === document.body || document.activeElement === ziel;
   if (!frei) return;
   const ersatz = focusRestoreTarget(memo);
   if (!ersatz || ersatz === ziel) return;

@@ -15824,12 +15824,23 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
       const wrapper = rendererIn(lines);
       lines.forEach((zeile, i) => {
         if (!/closeModal\s*\(/.test(zeile)) return;
-        const fenster = blockAb(lines, i);
+        // NUR DIE EIGENE EBENE. Alles Tiefere steht in einem Callback, der auf
+        // diesem Weg gar nicht laeuft - der Undo-Zweig eines Toasts etwa. Wer
+        // ihn mitzaehlt, haelt `deletePlan()` in budget-plans.js fuer gedeckt,
+        // weil im Undo-Callback ein Aufruf steht, waehrend der Hauptpfad ohne
+        // blieb (Review zu #1070).
+        const ankerTiefe = zeile.match(/^\s*/)[0].length;
+        const fenster = blockAb(lines, i)
+          .filter((x) => x.trim() === '' || x.match(/^\s*/)[0].length <= ankerTiefe);
         let letzte = -1;
         fenster.forEach((x, k) => { if (istNeuaufbau(x, wrapper)) letzte = k; });
         if (letzte === -1) return;
         // Ohne `await` davor rendert die Seite synchron - das deckt der Frame ab.
         if (!fenster.slice(0, letzte + 1).some((x) => /\bawait\b/.test(x))) return;
+        // Der Aufruf muss auf der EBENE des Neuaufbaus liegen. Ein
+        // `refocusAfterRender()` tief in einem Undo-Callback deckt den Weg
+        // darueber nicht ab - genau so sah `deletePlan()` in budget-plans.js
+        // gedeckt aus, waehrend der Hauptpfad ohne Aufruf blieb (Review zu #1070).
         if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) return;
         fehlend.push(`${datei}:${i + 1} (${fenster[letzte].trim().slice(0, 48)})`);
       });
@@ -15926,6 +15937,10 @@ test('refocusAfterRender steht nach dem LETZTEN Neuaufbau im Block', () => {
         for (let j = i + 1; j < lines.length; j++) {
           if (lines[j].trim() === '') continue;
           if (lines[j].match(/^\s*/)[0].length < tiefe) break;
+          // Tiefer eingerueckt heisst: in einem Callback, der hier nicht laeuft.
+          // Ein `await load()` im Undo-Zweig eines Toasts ist kein Neuaufbau
+          // dieses Weges (Fehlalarm an budget-plans.js gemessen).
+          if (lines[j].match(/^\s*/)[0].length > tiefe) continue;
           if (!/\bawait\b/.test(lines[j])) continue;
           // Ein Callback baut per Definition Unbekanntes um; sonst zaehlt nur
           // ein erkannter Neuaufbau.
