@@ -524,8 +524,8 @@ test('_doClose fokussiert das Ergebnis des Rueckfalls, nicht den gemerkten Zeige
  * `el.tabIndex` taugt nicht zur Pruefung: es liest auch ohne Attribut `-1`,
  * ebenfalls gemessen. Deshalb `hasAttribute`.
  *
- * GEGENPROBE: die Zeile in `_pageRoot` tot stellen, dann faellt die erste der
- * beiden Sonden.
+ * GEGENPROBE: die Zeile in `_focusable` tot stellen, dann fallen die erste und
+ * die dritte Sonde.
  */
 test('eine Seitenwurzel ohne tabindex wird fokussierbar gemacht', () => {
   const alt = makeNode('irgendwas', { connected: false });
@@ -548,5 +548,25 @@ test('ein vorhandenes tabindex wird nicht ueberschrieben', () => {
     focusRestoreTarget(alt);
     assert.equal(wurzel._attrs.tabindex, '0',
       'eine Seite, die ihrer Wurzel bewusst ein anderes tabindex gibt, behaelt es');
+  });
+});
+
+/* ZWEITER REVIEW-BEFUND ZU #1069: der Ausloeser KANN die Seitenwurzel sein.
+ *
+ * Ein Dialog, der geoeffnet wird, waehrend der Fokus auf `#main-content` liegt
+ * (Tastenkuerzel, programmatisches Oeffnen), merkt sich die Wurzel als
+ * Ausloeser. Beim Schliessen findet die id-Suche dann die NEUE Wurzel und gab
+ * sie direkt zurueck - am Fokussierbar-Machen vorbei. Auf einer Auth-Seite ist
+ * das wieder ein `<main>` ohne tabindex und `.focus()` wieder ein No-op.
+ */
+test('auch ein Ersatz, der selbst die Seitenwurzel ist, wird fokussierbar gemacht', () => {
+  const alt = makeNode('main-content', { connected: false });
+  const neueWurzel = makeNode('main-content');        // Auth-Seite: kein tabindex
+  withElements({ 'main-content': neueWurzel }, () => {
+    const ziel = focusRestoreTarget(alt);
+    assert.equal(ziel, neueWurzel, 'die neue Wurzel ist das Ziel');
+    assert.equal(ziel.hasAttribute('tabindex'), true,
+      'die id-Suche darf nicht am Fokussierbar-Machen vorbeifuehren - sonst ist `.focus()` '
+      + 'auf der Auth-Seite wieder ein stiller No-op');
   });
 });

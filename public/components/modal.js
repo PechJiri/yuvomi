@@ -576,7 +576,11 @@ function _discardSuspendedModal({ overlay, restoreFocus }) {
  * braeuchte.
  */
 /**
- * Die Seitenwurzel, und zwar eine, die den Fokus auch ANNIMMT.
+ * Ein Fokusziel, das den Fokus auch ANNIMMT.
+ *
+ * Betrifft genau ein Element: die Seitenwurzel. Alles andere, was diese Weiche
+ * zurueckgibt, ist ein Knopf oder eine Zeile und damit von Natur aus
+ * fokussierbar.
  *
  * `renderAppShell()` in router.js setzt `tabIndex = -1` - aber nur fuer die
  * Routen mit App-Shell. Die fuenf Auth-Seiten (login, setup, join,
@@ -593,10 +597,9 @@ function _discardSuspendedModal({ overlay, restoreFocus }) {
  * `hasAttribute` und nicht `el.tabIndex`: das Property liest auch ohne Attribut
  * `-1` und kann die beiden Faelle gar nicht unterscheiden (gemessen).
  */
-function _pageRoot() {
-  const root = document.getElementById(PAGE_ROOT_ID);
-  if (root && !root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
-  return root;
+function _focusable(el) {
+  if (el && el.id === PAGE_ROOT_ID && !el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  return el;
 }
 
 export function focusRestoreTarget(remembered) {
@@ -605,7 +608,10 @@ export function focusRestoreTarget(remembered) {
   // getElementById und kein Selektor: eine id darf Zeichen enthalten, an denen
   // querySelector scheitert.
   const replacement = remembered.id ? document.getElementById(remembered.id) : null;
-  return replacement ?? _pageRoot();
+  // Durch `_focusable` MUESSEN beide Wege: war der Ausloeser selbst die
+  // Seitenwurzel, liefert die id-Suche sie direkt zurueck, und ein Rueckgabewert
+  // an `_pageRoot()` vorbei haette wieder kein tabindex (Review zu #1069).
+  return _focusable(replacement ?? document.getElementById(PAGE_ROOT_ID));
 }
 
 function _doClose(overlayEl) {
