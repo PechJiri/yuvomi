@@ -398,7 +398,18 @@ async function toggleShoppingItem(id, checked, container) {
     // Nur der EIGENE Eintrag: ein zweites Antippen im Rundlauf hat schon den
     // naechsten Wert hinterlegt, und der gilt.
     const entry = pendingChecks.get(id);
-    if (entry?.seq === seq) entry.settledAt = _loadSeq;
+    if (entry?.seq === seq) {
+      entry.settledAt = _loadSeq;
+    } else if (entry) {
+      // UEBERHOLT, ABER ERFOLGREICH. Der Server steht jetzt auf `newVal`, und
+      // das ist ab hier die Ruecksprung-Grundlage des neueren Wunsches. Diesen
+      // Ausgang bloss zu verwerfen liess einen Fehlschlag des neueren auf einen
+      // Stand zurueckspringen, den der Server nicht mehr hat: zweimal antippen,
+      // der erste Rundlauf gelingt, der zweite scheitert - und die Zeile stand
+      // auf dem Wert von vor beiden.
+      entry.rollback    = newVal;
+      entry.confirmedAt = _loadSeq;
+    }
     vibrate(10);
   } catch (err) {
     // Steht schon ein neuerer Wunsch an, gehoert weder der Ruecksprung noch
@@ -410,20 +421,25 @@ async function toggleShoppingItem(id, checked, container) {
     // Die Zeile aus dem AKTUELLEN Bestand holen: eine Auffrischung im Rundlauf
     // hat `state.items` womoeglich ersetzt, und das oben festgehaltene Objekt
     // haengt dann an keiner Liste mehr - der Ruecksprung liefe ins Leere.
+    // Der Ruecksprung kommt aus dem Merker, nicht aus dem Abschluss: eine
+    // Auffrischung im Fenster hat dort den frischeren Serverwert hinterlegt.
+    const back    = entry.rollback ?? checked;   // siehe `zurueck` oben
     const current = state.items.find((i) => i.id === id);
+    // DER ZAEHLER GEHOERT ZUR URSPRUNGSLISTE, und zwar auch dann, wenn ihre
+    // Zeile nicht mehr die sichtbare ist. Stand die Buchung frueher im
+    // `if (current)`, blieb nach einem Listenwechsel die optimistische
+    // Erhoehung von Liste A stehen: `loadItems` frischt nur die Artikel auf,
+    // die Zaehler kommen aus `loadLists` - der Reiter log dann unbegrenzt.
+    // Ohne sichtbare Zeile ist `newVal` das, was optimistisch gebucht wurde;
+    // mit ihr ist der gezeigte Stand die genauere Grundlage.
+    const gebucht = current ? current.is_checked : newVal;
+    updateListCounter(entry.listId, 0, (back ? 1 : 0) - (gebucht ? 1 : 0));
     if (current) {
-      // Der Ruecksprung kommt aus dem Merker, nicht aus dem Abschluss: eine
-      // Auffrischung im Fenster hat dort den frischeren Serverwert hinterlegt.
-      const back   = entry.rollback ?? checked;   // siehe `zurueck` oben
-      const before = current.is_checked;
       current.is_checked = back;
       updateItemRow(container, current);
       updateCheckedActions(container);
-      // Das Delta aus der TATSAECHLICHEN Aenderung, nicht aus `newVal`: der
-      // Ruecksprung muss nicht mehr dort landen, wo er losgelaufen ist.
-      updateListCounter(state.activeListId, 0, (back ? 1 : 0) - (before ? 1 : 0));
-      renderTabs(container);
     }
+    renderTabs(container);
     window.yuvomi.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
   }
 }

@@ -978,3 +978,77 @@ test('zweimal antippen vor dem ersten Rundlauf: der Ruecksprung bleibt der Serve
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
 });
+
+test('ein ueberholter, aber ERFOLGREICHER Rundlauf bleibt die Ruecksprung-Grundlage', async () => {
+  // Zweimal antippen, der erste PATCH gelingt, der zweite scheitert. Wird der
+  // Erfolg des ersten bloss verworfen, springt die Zeile auf den Stand von vor
+  // BEIDEN zurueck - der Server steht dann auf dem Wert des ersten
+  // (Codex-Befund P2 zu PR #1072, sechste Runde).
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.activeListId = 1;
+  __test.state.items = [milk(0)];
+
+  global.window.yuvomi.showToast = () => {};
+  const tore = [deferred(), deferred()];
+  let n = 0;
+  globalThis.__apiStub = {
+    getWithSource: async () => ({ data: { data: [milk(0)] }, fromCache: false }),
+    patch: () => tore[n++].promise,
+  };
+
+  const erstes  = __test.toggleShoppingItem(10, 0, makeNullContainer());   // 0 -> 1
+  const zweites = __test.toggleShoppingItem(10, 1, makeNullContainer());   // 1 -> 0
+
+  tore[0].resolve({ data: null });                                          // erster: Erfolg
+  await erstes;
+  tore[1].promise.catch(() => {});
+  tore[1].resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
+  await zweites;
+
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'der Server steht auf dem Wert des ERSTEN Rundlaufs, dorthin gehoert der Ruecksprung');
+  assert.equal(__test.state.lists[0].item_checked, 1, 'und der Zaehler dazu');
+  delete globalThis.__apiStub;
+  delete global.window.yuvomi.showToast;
+});
+
+test('ein Fehlschlag nach dem Listenwechsel dreht den Zaehler der URSPRUNGSLISTE zurueck', async () => {
+  // `state.items` traegt dann die Zeilen von B, die Zeile aus A ist nicht mehr
+  // zu finden. Stand die Zaehler-Buchung im `if (current)`, blieb die
+  // optimistische Erhoehung von A stehen - und `loadItems` frischt nur die
+  // Artikel auf, die Zaehler kommen aus `loadLists`.
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [
+    { id: 1, name: 'A', item_total: 1, item_checked: 0 },
+    { id: 2, name: 'B', item_total: 0, item_checked: 0 },
+  ];
+  __test.state.activeListId = 1;
+  __test.state.items = [milk(0)];
+
+  global.window.yuvomi.showToast = () => {};
+  const tor = deferred();
+  globalThis.__apiStub = {
+    getWithSource: async () => ({ data: { data: [] }, fromCache: false }),
+    patch: () => tor.promise,
+  };
+
+  const abhaken = __test.toggleShoppingItem(10, 0, makeNullContainer());
+  assert.equal(__test.state.lists[0].item_checked, 1, 'optimistisch gebucht');
+
+  // Listenwechsel, waehrend der PATCH laeuft.
+  __test.state.activeListId = 2;
+  __test.state.items = [];
+
+  tor.promise.catch(() => {});
+  tor.resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
+  await abhaken;
+
+  assert.equal(__test.state.lists[0].item_checked, 0,
+    'der Zaehler von Liste A gehoert zurueckgedreht, auch ohne sichtbare Zeile');
+  assert.equal(__test.state.lists[1].item_checked, 0, 'und Liste B bleibt unberuehrt');
+  delete globalThis.__apiStub;
+  delete global.window.yuvomi.showToast;
+});

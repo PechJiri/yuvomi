@@ -42,12 +42,13 @@ const KEY = 'yuvomi:recentTaskFilters';
 const emptySet = { status: [], priority: [], assigned_to: [], category: [], tags: [] };
 
 /** Setzt den Bestand, gegen den die gemerkten Sets geprueft werden. */
-function withKnown({ categories = [], tags = [], users = [], loadError = null } = {}) {
+function withKnown({ categories = [], tags = [], users = [], loadError = null, fromCache = false } = {}) {
   store.clear();
   tasks.state.categories = categories.map((key) => ({ key, name: key, sort_order: 0 }));
   tasks.state.allTags = tags.map((tag) => ({ tag, count: 1 }));
   tasks.state.users = users.map((id) => ({ id, display_name: `U${id}` }));
   tasks.state.loadError = loadError;
+  tasks.state.metaFromCache = fromCache;
 }
 
 const put = (...sets) => store.set(KEY, JSON.stringify(sets.map((s) => ({ ...emptySet, ...s }))));
@@ -142,4 +143,27 @@ test('zwei Sets, die nach dem Beschneiden gleich aussehen, geben EIN Chip', () =
   assert.equal(raw().length, 2, 'entdoppelt wird die ANSICHT, nicht der Speicher');
   tasks.state.categories.push({ key: 'garten', name: 'Garten', sort_order: 1 });
   assert.equal(tasks.getRecentFilters().length, 2);
+});
+
+test('gegen Referenzlisten aus dem Offline-Cache wird NICHT gefiltert', () => {
+  // `/tasks` steht in `API_CACHE_WHITELIST` (sw.js), also auch
+  // `/tasks/meta/options`. Offline antwortet `networkFirstApi` mit dem Cache
+  // und Status 200 - `state.loadError` bleibt null, die Listen sehen echt aus
+  // und sind beliebig alt (Codex-Befund P2 zu PR #1072).
+  //
+  // Beide Richtungen sind falsch: eine nach dem Cache-Zeitpunkt angelegte
+  // Kategorie fehlt dort und versteckte ein gueltiges Chip, eine danach
+  // geloeschte stuende noch drin und boete ein totes an. Offline gilt deshalb
+  // dasselbe wie beim Ladefehler.
+  withKnown({ categories: ['haushalt'], fromCache: true });
+  put({ category: ['garten'], tags: ['urlaub'], assigned_to: ['9'] });
+
+  const [set] = tasks.getRecentFilters();
+  assert.deepEqual(set.category, ['garten'], 'der Cache darf kein Chip wegnehmen');
+  assert.deepEqual(set.tags, ['urlaub']);
+  assert.deepEqual(set.assigned_to, ['9']);
+
+  // Sobald die Listen netzfrisch sind, greift die Bereinigung wieder.
+  tasks.state.metaFromCache = false;
+  assert.equal(tasks.getRecentFilters().length, 0, 'netzfrisch wird wieder beschnitten');
 });

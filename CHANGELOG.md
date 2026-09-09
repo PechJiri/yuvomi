@@ -195,7 +195,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   another device. A set that has nothing left to offer disappears from the bar. Nothing is rewritten
   in storage, so a category that comes back brings its chip back with it, and a load error - where
   the app has no reliable list to compare against - leaves every chip alone rather than sweeping
-  them away.
+  them away. Offline counts as such a case: the list of categories, tags and members can itself come
+  from the offline cache and be arbitrarily old, which would hide a chip that is still valid just as
+  readily as it would keep a dead one.
 
 - **Deleting a category now updates the page behind the dialog**. Every module that offers
   "manage categories" kept showing the category you had just deleted: the filter chips in Contacts,

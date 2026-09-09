@@ -2268,10 +2268,15 @@ test('wer optimistisch schreibt UND offline gecacht wird, liest ueber getWithSou
   assert.ok(whitelist, 'API_CACHE_WHITELIST in sw.js nicht gefunden - der Guard liest ins Leere');
   const cached = [...whitelist.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 
-  // Seiten mit optimistischem Schreiben und einem Merker, den das Laden raeumt.
+  // Seiten, deren Entscheidung von der FRISCHE der Antwort abhaengt: ein Merker,
+  // den das Laden raeumt, oder eine Referenzliste, gegen die gefiltert wird.
+  // Tasks gehoert aus dem zweiten Grund dazu - `/tasks/meta/options` faellt
+  // unter das `/tasks`-Praefix, und `getRecentFilters` wuerde gegen beliebig
+  // alte Kategorien, Tags und Mitglieder beschneiden.
   const seiten = [
     { pfad: '/shopping', datei: '../public/pages/shopping.js' },
     { pfad: '/pantry',   datei: '../public/pages/pantry.js' },
+    { pfad: '/tasks',    datei: '../public/pages/tasks.js' },
   ];
   for (const { pfad, datei } of seiten) {
     if (!cached.includes(pfad)) continue;
