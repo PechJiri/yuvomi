@@ -2038,9 +2038,16 @@ function formatEntryDate(dateStr) {
 // --------------------------------------------------------
 
 function openCategoryManager() {
-  let manager = null;
+  // Die Auffrischung haengt am Ereignis, nicht am Schliessen: beim Loeschen
+  // raeumt `confirmOverModal` das Modal darunter ab, bevor `api.delete` laeuft
+  // (siehe `_notifyChanged` in components/category-manager.js).
   const onChanged = async () => {
     await loadBudgetMeta();
+    // `renderBody()` baut `#budget-body` neu auf - und darin liegt der Knopf,
+    // der diesen Manager geoeffnet hat. Das Nachziehen macht die geteilte
+    // Schicht: `refocusAfterRender()` findet ihn ueber seine id wieder. Der
+    // frueher hier stehende `hadFocus`-Griff ist damit weg - eine Regel an
+    // einer Stelle statt einer Kopie je Seite.
     renderBody();
     refocusAfterRender();
   };
@@ -2049,7 +2056,7 @@ function openCategoryManager() {
     content: '<yuvomi-category-manager></yuvomi-category-manager>',
     size: 'lg',
     onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-category-manager');
+      const manager = panel.querySelector('yuvomi-category-manager');
       manager.addEventListener('category-manager-changed', onChanged);
       manager.configure({
         basePath: '/budget/categories',
@@ -2067,7 +2074,8 @@ function openCategoryManager() {
         subDeleteDetailKey: 'budget.subcategoryDeleteConfirmDetail',
       });
     },
-    onClose: () => manager?.removeEventListener('category-manager-changed', onChanged),
+    // Bewusst KEIN onClose, das den Listener abmeldet - es liefe vor dem
+    // Loeschen. Das Element entsteht je Oeffnen neu und geht mit dem Overlay.
   });
 }
 

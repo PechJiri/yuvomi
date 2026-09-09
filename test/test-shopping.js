@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import { url } from '../server/middleware/validate.js';
-import { aggregateMealIngredients } from '../server/services/shopping-import.js';
+import { aggregateMealIngredients, parseQuantity } from '../server/services/shopping-import.js';
 
 let passed = 0;
 let failed = 0;
@@ -109,16 +109,33 @@ test('Geteilter Category-Manager erfüllt die Web-Component-Verträge (Einkauf, 
   assert(/removeEventListener/.test(disconnectFn), 'disconnectedCallback muss Listener entfernen');
 });
 
-test('Shopping-Seite räumt den category-manager-changed-Listener in onClose ab', () => {
+test('Der Kategorie-Manager frischt im Ereignis auf, nicht beim Schliessen', () => {
   const source = readFileSync(new URL('../public/pages/shopping.js', import.meta.url), 'utf8');
   const fn = source.match(/async function openCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
   assert(fn, 'openCategoryManager muss auffindbar sein');
-  // Manager-Referenz im äußeren Scope, damit onClose ihn abräumen kann (kein Leak bei Modal-Reuse).
-  assert(/let manager = null/.test(fn), 'Manager-Referenz muss im äußeren Scope gehalten werden');
   assert(/manager\.addEventListener\('category-manager-changed'/.test(fn), 'onSave muss den Listener registrieren');
   assert(/manager\.configure\(\{/.test(fn), 'onSave muss die geteilte Komponente konfigurieren');
   assert(/labelResolver:\s*\(item\) => categoryLabel\(item\.name\)/.test(fn), 'labelResolver muss Default-Kategorien lokalisieren');
-  assert(/manager\?\.removeEventListener\('category-manager-changed'/.test(fn), 'onClose muss den Listener wieder entfernen');
+  // Frueher stand hier die Umkehrung: onClose MUSSTE abmelden. Gemessen am
+  // 08.09.2026 kommt das Ereignis beim Loeschen erst, wenn das Element schon
+  // aus dem Dokument ist (`confirmOverModal` raeumt das Modal darunter ab,
+  // `api.delete` laeuft danach) - die Abmeldung verpasste also genau die
+  // Loeschung, und der gleichfalls in onClose ausgewertete `changed`-Merker
+  // stand dabei auf false. Beides ist jetzt gesperrt.
+  assert(!/removeEventListener\('category-manager-changed'/.test(fn), 'onClose darf sich nicht abmelden - das liefe vor dem Loeschen');
+  assert(/const onCategoriesChanged = async \(\) => \{[\s\S]*?loadCategories\(\)[\s\S]*?renderListContent\(container\)/.test(fn),
+    'die Auffrischung der sichtbaren Liste gehoert in den Ereignis-Handler');
+  // Und die Artikel muessen mit: der Einkauf haelt die Kategorie als NAME in
+  // `shopping_items.category`, also schreibt der Server beim Umbenennen und
+  // beim Loeschen in die Artikelzeilen (`UPDATE shopping_items SET category`).
+  // `loadCategories()` fasst `state.items` nicht an, und `groupItemsByCategory`
+  // liest den Namen von dort - ohne Nachladen stehen die Zeilen unter der alten
+  // Ueberschrift am Listenende.
+  // `listId` statt `state.activeListId`: der Nutzer kann waehrend des Rundlaufs
+  // die Liste wechseln, und dann gehoert weder das Schreiben noch das Rendern
+  // mehr diesem Handler.
+  assert(/const onCategoriesChanged = async \(\) => \{[\s\S]*?const listId = state\.activeListId;[\s\S]*?loadItems\(listId\)[\s\S]*?renderListContent\(container\)/.test(fn),
+    'der Handler muss auch die Artikel nachladen - der Server weist sie beim Loeschen um');
 });
 
 let listId, list2Id, itemId1, itemId2, itemId3;
@@ -308,6 +325,155 @@ test('Essensplan-Import summiert auch Mengen mit gleicher Einheit', () => {
   ]);
   assert(result.length === 1, `Erwartet 1 aggregierten Eintrag, erhalten ${result.length}`);
   assert(result[0].quantity === '4 pack', `Erwartet summierte Menge 4 pack, erhalten ${result[0].quantity}`);
+});
+
+test('parseQuantity liest eine Menge in fremden Ziffern', () => {
+  // `\d` ist in JavaScript ASCII. Vorher traf die Regex „۲۵۰ g" ueberhaupt nicht,
+  // die Zutat fiel wortlos aus der Summierung und stand danach zweimal
+  // untereinander auf der Liste - ein Haushalt, der seine eigenen Ziffern
+  // benutzt, bekam stillschweigend eine schlechtere Einkaufsliste.
+  for (const [eingabe, betrag, einheit] of [
+    ['۲۵۰ g', 250, 'g'],   // fa
+    ['٢٥٠ g', 250, 'g'],   // ar
+    ['२५० g', 250, 'g'],   // hi
+    ['๒๕๐ g', 250, 'g'],   // th
+    ['۱٫۵ kg', 1.5, 'kg'], // oestlicher Dezimaltrenner
+    // Das oestliche Tausenderzeichen hat einen eigenen Test - es wird
+    // aufgeloest, nicht wie ein ASCII-Komma gedeutet.
+  ]) {
+    const ergebnis = parseQuantity(eingabe);
+    assert(ergebnis !== null, `"${eingabe}" wurde gar nicht gelesen`);
+    assert(ergebnis.amount === betrag, `"${eingabe}": ${ergebnis.amount} statt ${betrag}`);
+    assert(ergebnis.unit === einheit, `"${eingabe}": Einheit "${ergebnis.unit}" statt "${einheit}"`);
+  }
+});
+
+test('parseQuantity laesst das bestehende Verhalten unveraendert', () => {
+  // Die Umschrift darf nur HINZUFUEGEN. Jeder dieser Faelle lief vorher schon so.
+  for (const [eingabe, erwartet] of [
+    ['250 g', { amount: 250, unit: 'g' }],
+    ['1,5 kg', { amount: 1.5, unit: 'kg' }],
+    ['1.5 kg', { amount: 1.5, unit: 'kg' }],
+    ['12', { amount: 12, unit: '' }],
+    ['-3 EL', { amount: -3, unit: 'el' }],
+    ['1,000 g', { amount: 1, unit: 'g' }],
+    ['eine Prise', null],
+    ['', null],
+  ]) {
+    const ergebnis = parseQuantity(eingabe);
+    assert(JSON.stringify(ergebnis) === JSON.stringify(erwartet),
+      `"${eingabe}": ${JSON.stringify(ergebnis)} statt ${JSON.stringify(erwartet)}`);
+  }
+});
+
+test('parseQuantity schneidet die Einheit aus dem Original, nicht aus der Umschrift', () => {
+  // Umgeschrieben wird nur, was gerechnet wird. Sonst verloere ein zweiter
+  // Zahlenteil seine Ziffern und die gespeicherte Einheit saehe anders aus als
+  // die, die dasteht.
+  assert(parseQuantity('۲ x ۵۰۰ g').unit === 'x ۵۰۰ g',
+    `Einheit war "${parseQuantity('۲ x ۵۰۰ g').unit}"`);
+  assert(parseQuantity('۲۵۰ گرم').unit === 'گرم',
+    `Einheit war "${parseQuantity('۲۵۰ گرم').unit}"`);
+});
+
+test('parseQuantity loest das oestliche Tausenderzeichen auf', () => {
+  // U+066C ist per Unicode EINDEUTIG ein Tausenderzeichen - anders als das
+  // ASCII-Komma, dem der Server ohne Region nicht ansieht, ob es gruppiert oder
+  // trennt. „١٬٠٠٠ g" heisst tausend Gramm. Es auf ein Komma abzubilden und dem
+  // bestehenden Pfad zu ueberlassen las daraus 1: der Faktor tausend daneben,
+  // mit Information, die man selbst weggeworfen hatte.
+  assert(parseQuantity('١٬٠٠٠ g').amount === 1000, `erhalten ${parseQuantity('١٬٠٠٠ g').amount}`);
+  assert(parseQuantity('٢٬٥٠٠ g').amount === 2500, `erhalten ${parseQuantity('٢٬٥٠٠ g').amount}`);
+  // Das ASCII-Komma bleibt unangetastet - dort fehlt genau diese Eindeutigkeit.
+  assert(parseQuantity('1,000 g').amount === 1, 'ASCII-Verhalten darf sich nicht aendern');
+  // Und der oestliche DEZIMALtrenner (U+066B) bleibt ein Dezimaltrenner.
+  assert(parseQuantity('١٢٫٥ kg').amount === 12.5, `erhalten ${parseQuantity('١٢٫٥ kg').amount}`);
+});
+
+test('parseQuantity prueft eine Gruppierung, statt den Trenner nur wegzuwerfen', () => {
+  // Die Aufloesung war erst bedingungslos: „٢٬٥٠ g" wurde 250, „٢٬٠٠٠٠ g" wurde
+  // 20000. Beides sind KEINE gueltigen Gruppierungen - zwei bzw. vier Stellen
+  // hinter dem Zeichen -, sondern vermutlich Tippfehler. Eine Zahl, die nur zur
+  // Haelfte einem Muster folgt, ist keine Zahl.
+  assert(parseQuantity('٢٬٥٠ g') === null, 'zwei Stellen sind keine Gruppierung');
+  assert(parseQuantity('٢٬٥ g') === null, 'eine Stelle auch nicht');
+  assert(parseQuantity('٢٬٠٠٠٠ g') === null, 'vier Stellen auch nicht');
+  assert(parseQuantity('٢٬٥٠٠ g').amount === 2500, 'die gueltige Form bleibt lesbar');
+  // Mehrere Gruppen in voller Laenge: vorher wurde nur die erste gelesen und der
+  // Rest zur Einheit („١٬٠٠٠٬٠٠٠ g" ergab 1000 mit Einheit „٬٠٠٠ g").
+  assert(parseQuantity('١٬٠٠٠٬٠٠٠ g').amount === 1000000,
+    `erhalten ${JSON.stringify(parseQuantity('١٬٠٠٠٬٠٠٠ g'))}`);
+  // Und mit Dezimalteil dahinter.
+  assert(parseQuantity('١٬٠٠٠٫٥ g').amount === 1000.5,
+    `erhalten ${JSON.stringify(parseQuantity('١٬٠٠٠٫٥ g'))}`);
+});
+
+test('parseQuantity weist ein mehrdeutiges Komma in fremden Ziffern ab', () => {
+  // bn, hi und th gruppieren mit dem ASCII-Komma. „১,০০০ g" heisst dort tausend
+  // Gramm - die naive ASCII-Deutung machte daraus ein Gramm, also den Faktor 1000
+  // daneben. Der Server kann die richtige Deutung nicht sicher wissen, und diese
+  // Eingaben hatten vor der Umschrift GAR KEIN Verhalten: sie nachtraeglich einer
+  // Deutung zu unterwerfen, die fuer sie nie gedacht war, waere die schlechtere
+  // von zwei Antworten.
+  for (const eingabe of ['১,০০০ g', '१,००० g', '๑,๐๐๐ g']) {
+    assert(parseQuantity(eingabe) === null, `"${eingabe}" darf nicht als 1 gelten`);
+  }
+  // Ein Punkt an derselben Stelle ist dort dagegen der Dezimaltrenner.
+  assert(parseQuantity('১.৫ kg').amount === 1.5, 'bn: Punkt trennt dezimal');
+  assert(parseQuantity('१.५ kg').amount === 1.5, 'hi: Punkt trennt dezimal');
+});
+
+test('parseQuantity laesst den ASCII-Pfad vollstaendig unberuehrt', () => {
+  // Eine reine ASCII-Zahl deutet dieser Server seit jeher naiv. Das zu aendern
+  // waere eine eigene Entscheidung mit Folgen fuer bestehende Daten - die
+  // strengere Regel gilt deshalb NUR fuer Zahlen mit fremden Zeichen, die vorher
+  // ohnehin kein Verhalten hatten.
+  for (const [eingabe, erwartet] of [
+    ['1,000 g', { amount: 1, unit: 'g' }],
+    ['1,000,000 g', { amount: 1, unit: ',000 g' }],
+    ['2x500 g', { amount: 2, unit: 'x500 g' }],
+    ['1.5 kg', { amount: 1.5, unit: 'kg' }],
+  ]) {
+    assert(JSON.stringify(parseQuantity(eingabe)) === JSON.stringify(erwartet),
+      `"${eingabe}": ${JSON.stringify(parseQuantity(eingabe))} statt ${JSON.stringify(erwartet)}`);
+  }
+});
+
+test('parseQuantity laesst einen Bruch dem Rohtext-Pfad', () => {
+  // „١/٢ kg" ergaebe sonst Betrag 1 mit Einheit „/٢ kg", und zwei halbe Kilo
+  // stuenden als „2 /٢ kg" auf der Liste. Ohne Umschrift traf die Regex solche
+  // Mengen gar nicht - dort gehoeren sie weiter hin, bis jemand Brueche rechnet.
+  assert(parseQuantity('١/٢ kg') === null, 'oestlicher Bruch darf nicht als 1 gelten');
+  // Derselbe Fehler stand fuer ASCII schon vorher da, nur unbemerkt.
+  assert(parseQuantity('1/2 kg') === null, 'ASCII-Bruch darf nicht als 1 gelten');
+  const summe = aggregateMealIngredients([
+    { id: 1, meal_id: 10, name: 'Butter', quantity: '١/٢ kg', category: 'Sonstiges' },
+    { id: 2, meal_id: 11, name: 'Butter', quantity: '١/٢ kg', category: 'Sonstiges' },
+  ]);
+  assert(summe[0].quantity === '2 x ١/٢ kg', `erhalten ${summe[0].quantity}`);
+});
+
+test('Essensplan-Import fasst gleiche Mengen mit Zahlen IM Rest zusammen', () => {
+  // Die Einheit bleibt fuer die Anzeige im Original, aber der Schluessel nutzt
+  // ihre umgeschriebene Fassung: „۲ x ۵۰۰ g" und „2 x 500 g" sind dieselbe Menge
+  // und gehoerten sonst in zwei Zeilen.
+  const result = aggregateMealIngredients([
+    { id: 1, meal_id: 10, name: 'Milch', quantity: '۲ x ۵۰۰ g', category: 'Sonstiges' },
+    { id: 2, meal_id: 11, name: 'Milch', quantity: '2 x 500 g', category: 'Sonstiges' },
+  ]);
+  assert(result.length === 1, `Erwartet 1 Eintrag, erhalten ${result.length}`);
+  assert(result[0].quantity === '4 x ۵۰۰ g', `erhalten ${result[0].quantity}`);
+});
+
+test('Essensplan-Import summiert dieselbe Zutat ueber Schreibweisen hinweg', () => {
+  // Der eigentliche Nutzen: zwei Mahlzeiten, dieselbe Zutat, verschieden
+  // geschrieben. Vorher ergaben sie zwei Zeilen, weil die eine als Text galt.
+  const result = aggregateMealIngredients([
+    { id: 1, meal_id: 10, name: 'Mehl', quantity: '۲۵۰ g', category: 'Sonstiges' },
+    { id: 2, meal_id: 11, name: 'Mehl', quantity: '250 g', category: 'Sonstiges' },
+  ]);
+  assert(result.length === 1, `Erwartet 1 aggregierten Eintrag, erhalten ${result.length}`);
+  assert(result[0].quantity === '500 g', `Erwartet 500 g, erhalten ${result[0].quantity}`);
 });
 
 test('Essensplan-Import zählt rein textuelle Mengen sichtbar zusammen', () => {
