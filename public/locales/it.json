@@ -596,7 +596,15 @@
         "toPantryNothing": "Non è stato aggiunto nulla alla dispensa. Riapri «In dispensa» e controlla le quantità.",
         "reorderHandle": "Riordina: {{name}}",
         "reorderHandleHint": "Trascina o usa i tasti freccia per riordinare",
-        "reorderPosition": "Posizione {{index}} di {{total}}"
+        "reorderPosition": "Posizione {{index}} di {{total}}",
+        "priceLabel": "Prezzo",
+        "storeLabel": "Negozio",
+        "storePlaceholder": "Scegli o digita",
+        "manageStores": "Gestisci negozi",
+        "storesHint": "I negozi in cui fate la spesa. Un prezzo senza negozio risponde solo a metà.",
+        "storeDeleteConfirm": "Eliminare il negozio «{{name}}»?",
+        "storeDeleteConfirmDetail": "Gli articoli di questo negozio restano, e anche il loro prezzo: solo l'assegnazione del negozio resta vuota. Qui non c'è un negozio sostitutivo.",
+        "addStore": "Nuovo negozio"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} pasti pianificati.",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "Rate già pagate",
         "loanPaidInstallmentsHint": "Per un prestito già in corso. Queste rate vengono registrate ma non contabilizzate nel budget.",
         "loanPaymentTypeLocked": "Entrata o uscita segue il tipo di prestito e si modifica lì.",
-        "planHistoricNote": "Misurato sul tuo piano attuale. Yuvomi non conserva quale fosse il piano in un mese precedente."
+        "planHistoricNote": "Misurato sul tuo piano attuale. Yuvomi non conserva quale fosse il piano in un mese precedente.",
+        "recurringEditSeriesHint": "La prima registrazione della serie è anche il suo modello - titolo, importo, categoria e conto cambiano anche lì, anche se è nel passato.",
+        "responsibleLabel": "Responsabile",
+        "responsibleHint": "Chi si occupa di questa registrazione. Non muove denaro: per i conti ci sono le spese condivise.",
+        "responsibleFilterTo": "Solo registrazioni di {{name}}",
+        "clearResponsibleFilter": "Rimuovi il filtro responsabile",
+        "groupByResponsible": "Per responsabile",
+        "responsibleNobody": "Nessuno",
+        "responsibleFilterEmptyTitle": "Nessuna registrazione per questa persona",
+        "responsibleFilterEmptyDescription": "Nessuno è responsabile di una registrazione in questo mese con questa selezione.",
+        "handoverToSplit": "Passa alle spese condivise",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (piano: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Mostra la scheda ciclo",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "Aggiorna anche le voci esistenti",
         "healthVisibilityApplyHint": "Salvato. Vuoi aggiornare anche le voci esistenti in {{area}}?",
         "healthVisibilityApplied": "{{count}} voci aggiornate.",
-        "healthVisibilityApplied_one": "Una voce aggiornata."
+        "healthVisibilityApplied_one": "Una voce aggiornata.",
+        "mealTypeNamesLabel": "Nomi personalizzati",
+        "mealTypeNamesHint": "Come la tua famiglia chiama i quattro pasti. Lascia vuoto per il nome integrato. Il nome appare uguale in tutte le lingue.",
+        "mealTypeNamesSaved": "Nomi salvati."
     },
     "login": {
         "tagline": "Bentornato nel tuo pianificatore familiare.",
@@ -2757,7 +2779,12 @@
         "sourceNative": "Nativa",
         "sourceAll": "Tutte",
         "sourceFilterLabel": "Filtra per origine",
-        "plannedThisWeek": "In programma questa settimana"
+        "plannedThisWeek": "In programma questa settimana",
+        "imageLabel": "Immagine",
+        "imageChoose": "Scegli immagine",
+        "imageRemove": "Rimuovi immagine",
+        "imageHint": "Un'immagine per ricetta. Appare nel piano pasti e nel riquadro panoramica.",
+        "imageTooLarge": "L'immagine è ancora troppo grande dopo il ridimensionamento."
     },
     "search": {
         "emptyHint": "Digita almeno 2 caratteri per cercare tra attività, appuntamenti, note, contatti, spesa e salute.",
@@ -3766,7 +3793,9 @@
         "completedOn": "Completato il {{date}}",
         "completedToast": "Abbonamento completato.",
         "endsAfter": "Ancora {{count}} pagamenti",
-        "logoTypeError": "Usa un'immagine PNG, JPEG, WebP o SVG."
+        "logoTypeError": "Usa un'immagine PNG, JPEG, WebP o SVG.",
+        "accountUsernameLabel": "Registrato con",
+        "accountUsernameHint": "Indirizzo e-mail o nome utente. Non è un campo per password: Yuvomi non memorizza password."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Inventario Yuvomi",
         "removeBookingAction": "Rimuovi \"{{title}}\"",
-        "photoTooLarge": "La foto è ancora troppo grande dopo il ridimensionamento."
+        "photoTooLarge": "La foto è ancora troppo grande dopo il ridimensionamento.",
+        "accountUsernameLabel": "Registrato con",
+        "accountUsernameHint": "Indirizzo e-mail o nome utente. Non è un campo per password: Yuvomi non memorizza password."
     },
     "documentAttach": {
         "label": "Allegati",

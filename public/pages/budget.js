@@ -6,14 +6,14 @@
  */
 
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError, refocusAfterRender } from '/components/modal.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
 import { stagger, vibrate, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireTablist } from '/utils/tablist.js';
 import { t, formatDate, formatDayMonth, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
-import { render as renderSplitExpenses } from '/pages/split-expenses.js';
+import { render as renderSplitExpenses, prefillSplitExpense } from '/pages/split-expenses.js';
 import { openSubscriptionModal, render as renderSubscriptions } from '/pages/subscriptions.js';
 import { renderStats } from '/pages/budget-stats.js';
 import { renderPlans } from '/pages/budget-plans.js';
@@ -29,6 +29,7 @@ import '/components/category-manager.js';
 import { findPageFab } from '/utils/fab.js';
 import { emptyStateHTML, mountLoadError } from '/utils/empty-state.js';
 import { attachOverlay } from '/utils/overlay-history.js';
+import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderAvatarStack } from '/components/user-multi-select.js';
 
 // --------------------------------------------------------
 // Konstanten
@@ -38,6 +39,9 @@ import { attachOverlay } from '/utils/overlay-history.js';
 // aus, damit reines Ausgaben-Tracking nicht als roter Minus-Saldo missverstanden wird.
 // Reine Client-Ansicht (kein Server-Pref), analog zu documents-view/Kalender-Layern.
 const EXPENSES_ONLY_KEY = 'yuvomi-budget-expenses-only';
+// Geraeteweit wie die Ausgaben-Ansicht daneben: ob die Liste nach Zustaendigen
+// gruppiert erscheint, ist eine Frage des Schirms, nicht des Haushalts (#1057).
+const GROUP_RESPONSIBLE_KEY = 'yuvomi:budget:group-responsible';
 
 const SUBCATEGORY_I18N = () => ({
   rent_mortgage:            t('budget.subcatRentMortgage'),
@@ -205,6 +209,9 @@ let state = {
   loanStatusFilter: 'active',
   currency:    'EUR',
   budgetMode:  'shared',      // 'shared' (Altverhalten) | 'personal' (#476/#505)
+  members:     [],            // Haushaltsmitglieder fuer den Zustaendigen-Picker (#1057)
+  responsibleFilterId: null,  // aktiver Zustaendigen-Filter der Liste (#1057)
+  groupByResponsible: false,  // Liste nach Zustaendigem gruppieren (#1057)
   scope:       'mine',        // Ansichts-Filter im personal-Modus: 'mine' | 'household'
   expensesOnly: false,        // Anzeige „Nur Ausgaben" (#504): Einnahmen+Saldo ausblenden
   meta:        { expenseCategories: [], incomeCategories: [], subcategories: {} },
@@ -422,15 +429,21 @@ export async function render(container, { user }) {
 
   if (user?.access_scope !== 'split_guest') {
     try {
-      const [prefsRes] = await Promise.all([
+      const [prefsRes, usersRes] = await Promise.all([
         api.get('/preferences'),
+        // Fuer den Zustaendigen-Picker (#1057). Faellt der Aufruf aus, bleibt die
+        // Liste leer und das Feld verschwindet - eine Buchung ohne Picker ist
+        // besser als ein Formular, das gar nicht aufgeht.
+        api.get('/auth/users').catch(() => ({ data: [] })),
         loadBudgetMeta(),
       ]);
       state.currency = prefsRes.data?.currency ?? 'EUR';
       state.budgetMode = prefsRes.data?.budget_mode === 'personal' ? 'personal' : 'shared';
+      state.members = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.users ?? []);
     } catch (_) { /* Fallback auf EUR */ }
   }
   state.expensesOnly = localStorage.getItem(EXPENSES_ONLY_KEY) === '1';
+  state.groupByResponsible = localStorage.getItem(GROUP_RESPONSIBLE_KEY) === '1';
 
   setHtml(container, `
     <div class="budget-page app-page app-page--reading page-measure--narrow" data-composition="reading">
@@ -818,8 +831,21 @@ function renderBody() {
             <span>${esc(accountName(state.accountFilterId))}</span>
             <i data-lucide="x" class="icon-sm" aria-hidden="true"></i>
           </button>` : ''}
+          ${state.responsibleFilterId != null ? `
+          <button class="budget-account-chip" id="budget-clear-responsible-filter" type="button"
+                  aria-label="${esc(t('budget.clearResponsibleFilter'))}">
+            <i data-lucide="user-round" class="icon-sm" aria-hidden="true"></i>
+            <span>${esc(state.members.find((u) => u.id === state.responsibleFilterId)?.display_name ?? '')}</span>
+            <i data-lucide="x" class="icon-sm" aria-hidden="true"></i>
+          </button>` : ''}
         </div>
         <div class="budget-list-header__actions">
+        ${state.entries.some((e) => e.responsible_users?.length) ? `
+        <button class="btn btn--secondary${state.groupByResponsible ? ' is-active' : ''}" id="budget-group-responsible"
+          type="button" aria-pressed="${state.groupByResponsible ? 'true' : 'false'}"
+          title="${esc(t('budget.groupByResponsible'))}">
+          <i data-lucide="users" class="icon-sm" aria-hidden="true"></i>${esc(t('budget.groupByResponsible'))}
+        </button>` : ''}
         <button class="btn btn--secondary budget-manage-categories" id="budget-manage-categories"
           title="${t('budget.manageCategories')}">
           <i data-lucide="tags" class="icon-sm" aria-hidden="true"></i>${t('budget.manageCategories')}
@@ -853,6 +879,18 @@ function renderBody() {
     await loadMonth(state.month);
     renderBody();
   });
+  // Zustaendigen-Filter und Gruppierung arbeiten auf den SCHON geladenen Zeilen
+  // (#1057) - kein Nachladen, der Monat liegt vollstaendig vor.
+  _container.querySelector('#budget-clear-responsible-filter')?.addEventListener('click', () => {
+    state.responsibleFilterId = null;
+    renderBody();
+  });
+  _container.querySelector('#budget-group-responsible')?.addEventListener('click', () => {
+    state.groupByResponsible = !state.groupByResponsible;
+    try { localStorage.setItem(GROUP_RESPONSIBLE_KEY, state.groupByResponsible ? '1' : '0'); } catch (_) { /* Private-Mode */ }
+    vibrate(10);
+    renderBody();
+  });
   stagger(_container.querySelector('#budget-list')?.querySelectorAll('.budget-entry') ?? []);
 
   _container.querySelector('#budget-list')?.addEventListener('click', async (e) => {
@@ -861,6 +899,17 @@ function renderBody() {
 
     const confirmBtn = e.target.closest('[data-action="confirm"]');
     if (confirmBtn) { await openConfirmBookingModal(parseInt(confirmBtn.dataset.id, 10)); return; }
+
+    // Ein Klick auf die Avatare filtert auf diese Person (#1057) - dieselbe
+    // Geste wie der Konto-Drilldown, und sie braucht kein eigenes Bedienelement
+    // in einer Kopfzeile, die schon voll ist.
+    const respBtn = e.target.closest('[data-responsible]');
+    if (respBtn) {
+      const id = parseInt(respBtn.dataset.responsible, 10);
+      state.responsibleFilterId = state.responsibleFilterId === id ? null : id;
+      renderBody();
+      return;
+    }
 
     const item = e.target.closest('.budget-entry[data-id]');
     if (item && !e.target.closest('[data-action]')) {
@@ -982,6 +1031,42 @@ function renderCategoryBars(byCategory) {
   }).join('');
 }
 
+/* DIE LISTE NACH ZUSTAENDIGEN (#1057).
+ *
+ * EINE BUCHUNG KANN IN ZWEI GRUPPEN STEHEN, und das ist kein Fehler: "die
+ * Versicherung laeuft auf uns beide" ist der Fall, fuer den es das Feld gibt.
+ * Die Gruppen sind deshalb ausdruecklich NICHT disjunkt, ihre Summen addieren
+ * sich nicht zum Monat, und die Ueberschrift sagt "mitzustaendig" statt
+ * "zustaendig". Eine Gesamtsumme ueber die Gruppen waere doppelt gezaehlt -
+ * es gibt hier bewusst keine.
+ *
+ * "Niemand" ist eine eigene Gruppe und steht am Ende: eine Buchung, um die sich
+ * niemand kuemmert, ist die interessanteste Zeile der Ansicht, aber nicht die
+ * erste, die jemand sucht.
+ */
+function groupEntriesByResponsible(entries) {
+  const groups = new Map();
+  const unassigned = [];
+  for (const e of entries) {
+    const people = e.responsible_users ?? [];
+    if (!people.length) { unassigned.push(e); continue; }
+    for (const person of people) {
+      if (!groups.has(person.id)) groups.set(person.id, { person, entries: [] });
+      groups.get(person.id).entries.push(e);
+    }
+  }
+  const ordered = [...groups.values()].sort((a, b) =>
+    String(a.person.display_name ?? '').localeCompare(String(b.person.display_name ?? '')));
+  if (unassigned.length) ordered.push({ person: null, entries: unassigned });
+  return ordered;
+}
+
+function visibleEntries() {
+  if (state.responsibleFilterId == null) return state.entries;
+  return state.entries.filter((e) =>
+    (e.responsible_users ?? []).some((u) => u.id === state.responsibleFilterId));
+}
+
 function renderEntries() {
   if (!state.entries.length) {
     return emptyStateHTML({
@@ -993,7 +1078,37 @@ function renderEntries() {
     });
   }
 
-  return state.entries.map((e) => {
+  const rows = visibleEntries();
+  if (!rows.length) {
+    // Gefiltert und nichts uebrig: der Leerzustand muss den FILTER benennen,
+    // nicht "noch keine Buchungen" behaupten - sonst sieht es aus, als waere
+    // der Monat leer.
+    return emptyStateHTML({
+      icon: 'user-round-x',
+      title: t('budget.responsibleFilterEmptyTitle'),
+      description: t('budget.responsibleFilterEmptyDescription'),
+    });
+  }
+
+  if (state.groupByResponsible) {
+    return groupEntriesByResponsible(rows).map((group) => `
+      <div class="budget-responsible-group">
+        <div class="budget-responsible-group__head">
+          ${group.person
+            ? `${renderAvatarStack([group.person], { size: 20, maxVisible: 1 })}<span>${esc(group.person.display_name ?? '')}</span>`
+            : `<span>${esc(t('budget.responsibleNobody'))}</span>`}
+          <span class="budget-responsible-group__count">${group.entries.length}</span>
+        </div>
+        ${entryRows(group.entries)}
+      </div>`).join('');
+  }
+
+  return entryRows(rows);
+}
+
+/** Die Buchungszeilen selbst - einmal gebaut, von Liste und Gruppen benutzt. */
+function entryRows(list) {
+  return list.map((e) => {
     const isIncome  = e.amount > 0;
     const amtClass  = isIncome ? 'budget-entry__amount--income' : 'budget-entry__amount--expenses';
     const indClass  = isIncome ? 'budget-entry__indicator--income' : 'budget-entry__indicator--expenses';
@@ -1084,6 +1199,15 @@ function renderEntries() {
       ? `<div class="list-row__name budget-entry__title">${esc(displayTitle)}${sharedBadge}${maskedBadge}${pendingBadge}</div>`
       : `<button class="list-row__name budget-entry__title" type="button"
            aria-label="${esc(t('budget.editEntry'))}: ${esc(e.title)}, ${amountText}">${esc(displayTitle)}${sharedBadge}${maskedBadge}${pendingBadge}</button>`;
+    // ZUSTAENDIGE (#1057) als Avatar-Stapel in der Metazeile - dieselbe Sprache,
+    // die Kalender und Aufgaben fuer "wer gehoert dazu" schon sprechen. Bei
+    // einer maskierten Buchung faellt er weg: deren Zweck bleibt verborgen, und
+    // wer sich darum kuemmert, gehoert dazu (#659).
+    const responsibleMark = (!masked && (e.responsible_users?.length))
+      ? ` · <button type="button" class="budget-responsible-chip" data-responsible="${e.responsible_users[0].id}"
+             aria-label="${esc(t('budget.responsibleFilterTo', { name: e.responsible_users[0].display_name ?? '' }))}"
+           >${renderAvatarStack(e.responsible_users, { size: 16, maxVisible: 3 })}</button>`
+      : '';
     const rowActions = masked ? '' : `
           ${confirmBtn}
           <button class="row-action row-action--danger" data-action="delete" data-id="${e.id}" aria-label="${t('budget.deleteLabel')}">
@@ -1095,7 +1219,7 @@ function renderEntries() {
         <div class="budget-entry__indicator ${indClass}"></div>
         <div class="list-row__main">
           ${titleCell}
-          <div class="list-row__meta budget-entry__meta">${date} · ${esc(categoryMeta)}${acctMeta}${recurTag}${receiptMark}</div>
+          <div class="list-row__meta budget-entry__meta">${date} · ${esc(categoryMeta)}${acctMeta}${recurTag}${receiptMark}${responsibleMark}</div>
         </div>
         <div class="budget-entry__amount ${amtClass}">${amountText}</div>
         <div class="list-row__actions">${rowActions}
@@ -1337,6 +1461,7 @@ function openAccountModal(account = null) {
           closeModal({ force: true });
           await loadAccounts();
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(nextArchived ? t('budget.accountArchivedToast') : t('budget.accountRestoredToast'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
@@ -1356,6 +1481,7 @@ function openAccountModal(account = null) {
           await api.delete(`/budget/accounts/${account.id}`);
           await loadMonth(state.month);
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(t('budget.accountDeletedToast'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
@@ -1403,6 +1529,7 @@ function openAccountModal(account = null) {
           closeModal({ force: true });
           await loadAccounts();
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(isEdit ? t('budget.accountSavedToast') : t('budget.accountAddedToast'), 'success');
         } catch (err) {
           saveBtn.disabled = false;
@@ -1699,7 +1826,21 @@ function openLoanReport(loan) {
       [t('budget.loanRemainingPrincipal'), formatLoanAmount(loan.remaining_principal, loan)],
       [t('budget.loanStillToPay'), formatLoanAmount(loan.remaining_amount, loan)],
       [t('budget.loanPaidAmount'), formatLoanAmount(loan.paid_amount, loan)],
-      [t('budget.loanRemainingInstallments'), String(loan.remaining_installments)],
+      /* ZWEI ZAHLEN, NICHT EINE (#964). Links steht, was der Kontostand hergibt -
+       * wer sondertilgt, sieht sie sinken. In Klammern die Planzahl, damit der
+       * Vertragsblick nicht still verschwindet: die Bank schickt weiter dieselbe
+       * Rate, und die uebrigen Kennzahlen daneben (Monatsrate, Gesamtzins)
+       * beschreiben ausdruecklich den Vertrag. Wo die Prognose nicht zu rechnen
+       * ist - Rate deckt den Zins nicht, Laufzeit ueber der Grenze - bleibt es
+       * bei der Planzahl allein. */
+      [t('budget.loanRemainingInstallments'),
+        (loan.remaining_installments_forecast != null
+          && loan.remaining_installments_forecast !== loan.remaining_installments)
+          ? t('budget.loanRemainingInstallmentsForecast', {
+            forecast: loan.remaining_installments_forecast,
+            plan: loan.remaining_installments,
+          })
+          : String(loan.remaining_installments)],
     ]
     : [
       [t('budget.loanAmountLabel'), formatLoanAmount(loan.total_amount, loan)],
@@ -1897,17 +2038,25 @@ function formatEntryDate(dateStr) {
 // --------------------------------------------------------
 
 function openCategoryManager() {
-  let manager = null;
+  // Die Auffrischung haengt am Ereignis, nicht am Schliessen: beim Loeschen
+  // raeumt `confirmOverModal` das Modal darunter ab, bevor `api.delete` laeuft
+  // (siehe `_notifyChanged` in components/category-manager.js).
   const onChanged = async () => {
     await loadBudgetMeta();
+    // `renderBody()` baut `#budget-body` neu auf - und darin liegt der Knopf,
+    // der diesen Manager geoeffnet hat. Das Nachziehen macht die geteilte
+    // Schicht: `refocusAfterRender()` findet ihn ueber seine id wieder. Der
+    // frueher hier stehende `hadFocus`-Griff ist damit weg - eine Regel an
+    // einer Stelle statt einer Kopie je Seite.
     renderBody();
+    refocusAfterRender();
   };
   openSharedModal({
     title: t('budget.manageCategories'),
     content: '<yuvomi-category-manager></yuvomi-category-manager>',
     size: 'lg',
     onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-category-manager');
+      const manager = panel.querySelector('yuvomi-category-manager');
       manager.addEventListener('category-manager-changed', onChanged);
       manager.configure({
         basePath: '/budget/categories',
@@ -1925,7 +2074,8 @@ function openCategoryManager() {
         subDeleteDetailKey: 'budget.subcategoryDeleteConfirmDetail',
       });
     },
-    onClose: () => manager?.removeEventListener('category-manager-changed', onChanged),
+    // Bewusst KEIN onClose, das den Listener abmeldet - es liefe vor dem
+    // Loeschen. Das Element entsteht je Oeffnen neu und geht mit dem Overlay.
   });
 }
 
@@ -2041,6 +2191,30 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
       <p class="form-hint" id="bm-visibility-hint">${esc(t(`budget.visibilityHint_${isEdit ? entry.visibility : 'shared'}`))}</p>
     </div>` : ''}
 
+    ${/* ZUSTAENDIG (#1057) - ein Etikett, das kein Geld bewegt.
+        *
+        * Steht bewusst NEBEN der Sichtbarkeit und nicht in ihr: `owner_id` ist
+        * die Datenschutz-Achse und liegt fest, die Zustaendigkeit ist die
+        * zweite Achse und darf wechseln. Wer die Wasserrechnung uebernimmt,
+        * bekommt damit keine private Buchung und schuldet auch nichts - das
+        * Abrechnen bleibt in den geteilten Ausgaben.
+        *
+        * Verschwindet im Solo-Haushalt: eine Zustaendigkeitsfrage mit genau
+        * einer moeglichen Antwort ist ein Formularfeld ohne Frage (dieselbe
+        * Regel wie in utils/household.js). */ ''}
+    ${state.members.length > 1 ? `<div class="form-group js-entry-field">
+      ${renderUserMultiSelect(state.members, isEdit ? (entry.responsible_users ?? []).map((u) => u.id) : [], 'bm-responsible', 'budget.responsibleLabel')}
+      <p class="form-hint">${esc(t('budget.responsibleHint'))}</p>
+      ${/* Der Weg von der Zuschreibung zur Forderung (#1057) - und er ist
+          * ausdruecklich ein Weg und keine Verschmelzung: hier entsteht nichts,
+          * dort bestaetigt die Person, was entsteht. Nur beim Bearbeiten, weil
+          * eine noch nicht gespeicherte Buchung nichts zu uebergeben hat. */ ''}
+      ${isEdit && (entry.responsible_users ?? []).length ? `
+      <button type="button" class="btn btn--secondary btn--sm" id="bm-to-split">
+        <i data-lucide="arrow-right-left" class="icon-sm" aria-hidden="true"></i>${esc(t('budget.handoverToSplit'))}
+      </button>` : ''}
+    </div>` : ''}
+
     <div class="js-entry-field">
       ${advancedSection(`
         ${accountField}
@@ -2131,6 +2305,28 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
     size: 'sm',
     onSave(panel) {
       let currentType = !isEdit && initialType === 'loan' ? 'loan' : (isExpense ? 'expense' : 'income');
+
+      // Checkbox-Logik des Zustaendigen-Pickers (#1057): "Niemand" schliesst die
+      // uebrigen aus und umgekehrt. Ohne diese Bindung waeren beide gleichzeitig
+      // anwaehlbar.
+      bindUserMultiSelect(panel, 'bm-responsible');
+
+      // Uebergabe an die geteilten Ausgaben (#1057). Der Dialog schliesst, der
+      // Tab wechselt, und dort oeffnet sich die neue Ausgabe mit Titel, Betrag
+      // und den Zustaendigen als Beteiligten - zu bestaetigen ist sie dort.
+      panel.querySelector('#bm-to-split')?.addEventListener('click', async () => {
+        prefillSplitExpense({
+          title: entry.title,
+          amount: Math.abs(entry.amount),
+          date: entry.date,
+          currency: state.currency,
+          participantIds: (entry.responsible_users ?? []).map((u) => u.id),
+        });
+        await closeModal({ force: true });
+        state.activeTab = 'split-expenses';
+        _tablist?.setActive?.('split-expenses');
+        renderBody();
+      });
 
       const setType = (type) => {
         currentType = type;
@@ -2284,6 +2480,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
       panel.querySelector('#bm-delete')?.addEventListener('click', async () => {
         closeModal({ force: true });
         await deleteEntry(entry.id);
+        refocusAfterRender();
       });
 
       panel.querySelector('#bm-save').addEventListener('click', async () => {
@@ -2339,6 +2536,12 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
             recurrence_confirm: confirmFirst,
           };
           if (accountId !== undefined) body.account_id = accountId;
+          // Zustaendige (#1057): nur mitsenden, wenn der Picker ueberhaupt da
+          // ist. Im Solo-Haushalt fehlt er, und ein leeres Array wuerde dort
+          // beim Bearbeiten die vorhandene Zuordnung abraeumen.
+          if (panel.querySelector('[data-ms-name="bm-responsible"]')) {
+            body.responsible_user_ids = getSelectedUserIds(panel, 'bm-responsible');
+          }
           // Sichtbarkeit nur im personal-Modus mitsenden (#476/#505, #659).
           const visibilityEl = panel.querySelector('#bm-visibility');
           if (visibilityEl && VISIBILITY_LEVELS.includes(visibilityEl.value)) {
@@ -2367,6 +2570,13 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
               title: t('budget.recurringSeriesScope'),
               thisLabel: t('budget.recurringThisOnly'),
               seriesLabel: t('budget.recurringEditSeries'),
+              // #1035: das Original der Serie ist Vorlage UND erste Buchung, und
+              // `PUT /budget/:id/series` schreibt Titel, Betrag, Kategorie und
+              // Konto auf genau diese Zeile - ohne Datumsschnitt
+              // (`WHERE id = ?`, routes/budget/entries.js). Bis die beiden
+              // Bedeutungen getrennt sind, sagt es wenigstens der Dialog, an
+              // dem die Wahl faellt.
+              note: t('budget.recurringEditSeriesHint'),
             });
             if (scope === null) { openBudgetModal({ mode: 'edit', entry }); return; }
             if (scope === 'series') {
@@ -2393,6 +2603,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
             }
             await loadMonth(state.month);
             renderBody();
+            refocusAfterRender();
           } else {
             const res = await api.put(`/budget/${entry.id}`, await withReceipts());
             const idx = state.entries.findIndex((e) => e.id === entry.id);
@@ -3112,6 +3323,7 @@ async function openConfirmBookingModal(id) {
           closeModal({ force: true });
           await loadMonth(state.month);
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(t('budget.confirmSaved'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.message || t('common.errorGeneric'), 'danger');
@@ -3164,8 +3376,13 @@ async function deleteEntry(id) {
 /**
  * Zeigt ein Modal mit zwei Wahloptionen für wiederkehrende Einträge.
  * Gibt 'this' | 'series' | null (abgebrochen) zurück.
+ *
+ * `note` steht ÜBER den Knöpfen, nicht darunter: der Hinweis soll gelesen
+ * werden, bevor die Wahl fällt, und die gestapelten Knöpfe sind das Ende des
+ * Dialogs. Optional, weil ihn nur das Bearbeiten braucht - beim Löschen sagt
+ * „Gesamte Serie löschen" schon alles.
  */
-function recurringChoiceModal({ title, thisLabel, seriesLabel, seriesDanger = false }) {
+function recurringChoiceModal({ title, thisLabel, seriesLabel, seriesDanger = false, note = '' }) {
   return new Promise((resolve) => {
     let resolved = false;
     function finish(value) {
@@ -3178,6 +3395,7 @@ function recurringChoiceModal({ title, thisLabel, seriesLabel, seriesDanger = fa
       title,
       size: 'sm',
       content: `
+        ${note ? `<p class="form-hint">${esc(note)}</p>` : ''}
         <div class="modal-actions modal-actions--stack">
           <button type="button" class="btn btn--secondary" id="rcs-this">${thisLabel}</button>
           <button type="button" class="btn ${seriesDanger ? 'btn--danger' : 'btn--primary'}" id="rcs-series">${seriesLabel}</button>

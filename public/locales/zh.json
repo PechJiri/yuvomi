@@ -596,7 +596,15 @@
         "toPantryNothing": "没有任何内容添加到储藏。请重新打开「加入储藏」并检查数量。",
         "reorderHandle": "重新排序：{{name}}",
         "reorderHandleHint": "拖动或使用方向键排序",
-        "reorderPosition": "第 {{index}} 项，共 {{total}} 项"
+        "reorderPosition": "第 {{index}} 项，共 {{total}} 项",
+        "priceLabel": "价格",
+        "storeLabel": "商店",
+        "storePlaceholder": "选择或输入",
+        "manageStores": "管理商店",
+        "storesHint": "你们购物的商店。没有商店的价格只回答了一半。",
+        "storeDeleteConfirm": "删除商店“{{name}}”？",
+        "storeDeleteConfirmDetail": "该商店的商品及其价格都会保留，只有商店归属会变为空白，这里不会自动换成别的商店。",
+        "addStore": "新商店"
     },
     "meals": {
         "randomizeSuccess_few": "已规划 {{count}} 餐。",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "已支付期数",
         "loanPaidInstallmentsHint": "适用于已在还款的借贷。这些期数会被记录，但不会计入预算。",
         "loanPaymentTypeLocked": "属于收入还是支出取决于借贷类型，请在那里更改。",
-        "planHistoricNote": "与你当前的预算计划对比。Yuvomi 不会保存过去某个月的计划金额。"
+        "planHistoricNote": "与你当前的预算计划对比。Yuvomi 不会保存过去某个月的计划金额。",
+        "recurringEditSeriesHint": "系列的第一条条目同时也是它的模板：标题、金额、分类和账户也会在那里一起更改，即使它已是过去的日期。",
+        "responsibleLabel": "负责人",
+        "responsibleHint": "由谁负责这笔记录。不会转移金钱，结算请使用共享支出。",
+        "responsibleFilterTo": "仅显示 {{name}} 的记录",
+        "clearResponsibleFilter": "清除负责人筛选",
+        "groupByResponsible": "按负责人",
+        "responsibleNobody": "无负责人",
+        "responsibleFilterEmptyTitle": "该成员没有记录",
+        "responsibleFilterEmptyDescription": "在此筛选下，本月没有任何记录有负责人。",
+        "handoverToSplit": "转入共享支出",
+        "loanRemainingInstallmentsForecast": "{{forecast}}（计划：{{plan}}）"
     },
     "settings": {
         "healthCycleEnableLabel": "显示周期标签页",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "同时修改已有记录",
         "healthVisibilityApplyHint": "已保存。是否也修改 {{area}} 中的已有记录？",
         "healthVisibilityApplied": "已修改 {{count}} 条记录。",
-        "healthVisibilityApplied_one": "已修改 1 条记录。"
+        "healthVisibilityApplied_one": "已修改 1 条记录。",
+        "mealTypeNamesLabel": "自定义名称",
+        "mealTypeNamesHint": "你家对这四餐的称呼。留空则使用内置名称。名称在所有语言中都按你输入的样子显示。",
+        "mealTypeNamesSaved": "名称已保存。"
     },
     "login": {
         "tagline": "欢迎回到您的家庭计划工具。",
@@ -2757,7 +2779,12 @@
         "sourceNative": "本地",
         "sourceAll": "全部",
         "sourceFilterLabel": "按来源筛选",
-        "plannedThisWeek": "本周已安排"
+        "plannedThisWeek": "本周已安排",
+        "imageLabel": "图片",
+        "imageChoose": "选择图片",
+        "imageRemove": "移除图片",
+        "imageHint": "每个食谱一张图片。会显示在饮食计划和概览卡片上。",
+        "imageTooLarge": "缩小后图片仍然过大。"
     },
     "search": {
         "emptyHint": "输入至少 2 个字符即可搜索任务、日程、便签、联系人、购物和健康。",
@@ -3766,7 +3793,9 @@
         "completedOn": "于 {{date}} 完成",
         "completedToast": "订阅已完成。",
         "endsAfter": "还剩 {{count}} 次付款",
-        "logoTypeError": "请使用 PNG、JPEG、WebP 或 SVG 图片。"
+        "logoTypeError": "请使用 PNG、JPEG、WebP 或 SVG 图片。",
+        "accountUsernameLabel": "注册账号",
+        "accountUsernameHint": "电子邮箱地址或用户名。这不是密码字段，Yuvomi 不保存密码。"
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}：{{name}}",
         "icsCalendarName": "Yuvomi 物品",
         "removeBookingAction": "移除“{{title}}”",
-        "photoTooLarge": "缩放后照片仍然太大。"
+        "photoTooLarge": "缩放后照片仍然太大。",
+        "accountUsernameLabel": "注册账号",
+        "accountUsernameHint": "电子邮箱地址或用户名。这不是密码字段，Yuvomi 不保存密码。"
     },
     "documentAttach": {
         "label": "附件",

@@ -60,3 +60,40 @@ export function withoutBlockComments(src) {
   } while (out !== previous);
   return out;
 }
+
+/**
+ * Schneidet Block- UND Zeilenkommentare heraus und ERHAELT die Zeilenzahl.
+ *
+ * Fuer Guards, die zeilenweise urteilen und die gefundene Zeile melden - dort
+ * ist `withoutBlockComments` nicht brauchbar, weil es Zeilen zusammenzieht und
+ * jede gemeldete Nummer daneben laege.
+ *
+ * WARUM ES DIESEN DRITTEN SCHNITT BRAUCHT: ein auskommentierter Aufruf ist tot,
+ * steht aber weiter im Text. Ein Guard, der `refocusAfterRender(` sucht, findet
+ * ihn in `// refocusAfterRender();` und meldet gruen - gemessen genau so
+ * passiert, die Gegenprobe zum Guard blieb still. Toter Code besteht einen
+ * Textguard, solange der Guard den Text nicht erst neutralisiert.
+ *
+ * `http://` bleibt heil: der Schnitt greift nur bei einem `//`, dem weder ein
+ * Doppelpunkt noch ein Backslash vorausgeht. Ohne den Doppelpunkt verschluckte
+ * die Regel den Rest einer Zeile mit einer URL darin; ohne den Backslash
+ * dieselbe Zeile mit einem Regex-Literal wie `/^https?:\/\//i`, dessen
+ * escapter Schraegstrich mit dem schliessenden ein `//` bildet (gemessen an
+ * `documents.js`, `shopping.js` und `personal-feeds.js`). Ein Guard, der eine
+ * vorhandene Zeile nicht mehr sieht, meldet einen Fehler, den es nicht gibt -
+ * oder uebersieht einen, den es gibt.
+ *
+ * Blockkommentare werden durch Leerzeichen ersetzt, nicht entfernt, damit jede
+ * Zeile ihre Nummer behaelt. Der Fixpunkt hat denselben Grund wie oben.
+ * @param {string} src
+ * @returns {string}
+ */
+export function withoutCommentsKeepingLines(src) {
+  let out = src;
+  let previous;
+  do {
+    previous = out;
+    out = out.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+  } while (out !== previous);
+  return out.split('\n').map((z) => z.replace(/(^|[^:\\])\/\/.*$/, '$1')).join('\n');
+}

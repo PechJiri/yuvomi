@@ -6,7 +6,7 @@
 
 import { api } from '/api.js';
 import { renderRRuleFields, bindRRuleEvents, getRRuleValues } from '/rrule-ui.js';
-import { openModal as openSharedModal, closeModal, wireBlurValidation, validateAll, btnSuccess, btnError, btnLoading, promptModal, confirmModal, advancedSection } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, wireBlurValidation, validateAll, btnSuccess, btnError, btnLoading, promptModal, confirmModal, advancedSection, refocusAfterRender } from '/components/modal.js';
 import { stagger, vibrate, scheduleUndoableDelete, animationSettled } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
 import { t, getLocale, formatDate, formatTime, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
@@ -1061,6 +1061,27 @@ let state = {
   users:           [],
   categories:      [],
   allTags:         [],       // [{ tag, count }] für Filterleiste und Vorschläge (#586)
+  /** Welche Referenzlisten sind gerade NICHT nachweislich frisch?
+   *
+   *  Zwei Wege dorthin, und beide enden gleich. Erstens der Offline-Cache:
+   *  `/tasks` steht in `API_CACHE_WHITELIST` (sw.js), also auch
+   *  `/tasks/meta/options`, `/tasks/tags` und `/tasks/categories` - und
+   *  `networkFirstApi` antwortet bei Netzfehler mit dem Cache und Status 200.
+   *  Zweitens eine fehlgeschlagene Auffrischung, die die alte Liste stehen
+   *  laesst (`refreshTags`). In beiden Faellen sind die Listen beliebig alt,
+   *  und eine Filterentscheidung darauf ist keine. Siehe `getRecentFilters`.
+   *
+   *  Deshalb heisst das Feld nicht `metaFromCache`: der Cache ist nur der
+   *  haeufigere der beiden Wege.
+   *
+   *  UND JE LISTE, nicht als ein Flag fuer drei. Die drei Endpunkte sind
+   *  getrennte Cache-Eintraege und werden getrennt aufgefrischt: `refreshTags`
+   *  holt nur `/tasks/tags`, der Kategorie-Manager nur `/tasks/categories`,
+   *  und allein `/tasks/meta/options` bringt alle drei. Als EIN gemeinsames
+   *  Flag erklaerte eine netzfrische Tag-Auffrischung die noch gecachten
+   *  Kategorien und Mitglieder fuer autoritativ - und das Beschneiden warf
+   *  dann ein Chip weg, das es noch gibt. */
+  metaStale:       { users: false, categories: false, tags: false },
   defaultPoints:   0,        // Haushalt-Standard für neue Aufgaben (#578), 0 = aus
   currentUserId:   null,
   isAdmin:         false,    // darf fremde Kommentare entfernen (#734)
@@ -1159,9 +1180,16 @@ async function loadTasks(container) {
  */
 async function refreshTags() {
   try {
-    const res = await api.get('/tasks/tags');
-    state.allTags = res.data ?? [];
-  } catch { /* alte Liste behalten */ }
+    const { data, fromCache } = await api.getWithSource('/tasks/tags');
+    state.allTags = data.data ?? [];
+    // NUR die Tags: ueber Kategorien und Mitglieder sagt dieser Rundlauf
+    // nichts, ihr Zustand bleibt, wie er war.
+    state.metaStale.tags = fromCache === true;
+  } catch {
+    // Alte Liste behalten - aber sie ist ab jetzt nicht mehr nachweislich
+    // frisch, und `getRecentFilters` darf nicht mehr dagegen beschneiden.
+    state.metaStale.tags = true;
+  }
 }
 
 async function toggleTaskStatus(id, currentStatus) {
@@ -1500,6 +1528,7 @@ function openBulkTagDialog(taskIds, mode, container) {
           updateBulkActionsBar(container);
           renderFilters(container);
           await loadTasks(container);
+          refocusAfterRender();
         } catch (err) {
           window.yuvomi.showToast(err.message ?? t('common.errorGeneric'), 'danger');
         }
@@ -1513,20 +1542,48 @@ function openBulkTagDialog(taskIds, mode, container) {
 // --------------------------------------------------------
 
 function openTaskCategoryManager(container) {
-  let manager = null;
+  // Die Auffrischung haengt am Ereignis, nicht am Schliessen: beim Loeschen
+  // raeumt `confirmOverModal` das Modal darunter ab, bevor `api.delete` laeuft
+  // (siehe `_notifyChanged` in components/category-manager.js).
   const onChanged = async () => {
     try {
-      const res = await api.get('/tasks/categories');
-      state.categories = res.data ?? [];
+      const { data, fromCache } = await api.getWithSource('/tasks/categories');
+      state.categories = data.data ?? [];
+      state.metaStale.categories = fromCache === true;
+      // Loeschbar ist die UNBENUTZTE Kategorie, also gerade die, nach der jemand
+      // gefiltert haben kann. Bliebe ihr Key in `state.filters.category`, fragte
+      // die Seite den Server weiter nach einer Kategorie, die es nicht mehr
+      // gibt: dauerhaft leere Liste, dazu ein Chip, der sie weiter benennt.
+      const bekannt = new Set(state.categories.map((c) => c.key));
+      const behalten = state.filters.category.filter((key) => bekannt.has(key));
+      const filterBereinigt = behalten.length !== state.filters.category.length;
+      state.filters.category = behalten;
+      // Die Leiste IMMER neu bauen, nicht nur beim Bereinigen: das Filter-Panel
+      // kann hinter dem Manager offen stehen. Es boete sonst weiter die eben
+      // geloeschte Kategorie zur Auswahl an - ein Klick darauf installierte den
+      // toten Key erneut -, und nach Umbenennen oder Anlegen stuenden dort die
+      // alten Namen.
+      renderFilters(container);
+      if (filterBereinigt) {
+        await loadTasks(container); // die Abfrage hat sich geaendert; laedt und rendert
+        return;
+      }
       renderTaskList(container);
-    } catch { /* Fehler wurde bereits vom Manager als Toast angezeigt */ }
+    } catch (err) {
+      // NICHT „meldet der Manager selbst": der quittiert nur seine eigene
+      // Mutation, und `_notifyChanged()` kommt erst nach deren Erfolg. Was hier
+      // ankommt, ist immer ein Fehler DIESER Auffrischung - und der erklaert als
+      // einziger, warum die Seite den alten Stand behaelt.
+      console.error('[Tasks] Auffrischen nach Kategorie-Aenderung fehlgeschlagen:', err);
+      window.yuvomi?.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
+    }
   };
   openSharedModal({
     title: t('tasks.manageCategories'),
     content: '<yuvomi-category-manager></yuvomi-category-manager>',
     size: 'lg',
     onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-category-manager');
+      const manager = panel.querySelector('yuvomi-category-manager');
       manager.addEventListener('category-manager-changed', onChanged);
       manager.configure({
         basePath: '/tasks/categories',
@@ -1537,7 +1594,8 @@ function openTaskCategoryManager(container) {
         deleteDetailKey: 'category.deleteConfirmDetail',
       });
     },
-    onClose: () => manager?.removeEventListener('category-manager-changed', onChanged),
+    // Bewusst KEIN onClose, das den Listener abmeldet - es liefe vor dem
+    // Loeschen. Das Element entsteht je Oeffnen neu und geht mit dem Overlay.
   });
 }
 
@@ -2700,22 +2758,113 @@ async function toggleValueFilter(key, value, container) {
   await loadTasks(container);
 }
 
-function getRecentFilters() {
+/**
+ * Die gemerkten Sets, wie sie im Speicher STEHEN - ohne Veraltungsfilter.
+ *
+ * Getrennt von `getRecentFilters()`, weil `saveRecentFilter()` sonst die
+ * gefilterte Fassung zurueckschriebe: das waere Bereinigen beim Schreiben durch
+ * die Hintertuer, und ein einmal unvollstaendiger Referenzbestand (Ladefehler,
+ * noch nicht geladene Tags) haette die Chips fuer immer entfernt.
+ */
+function storedRecentFilters() {
   try {
     return JSON.parse(localStorage.getItem(RECENT_FILTERS_KEY) ?? '[]').map(normalizeFilterSet);
   } catch { return []; }
 }
 
+/**
+ * Die gemerkten Sets, wie sie ANGEBOTEN werden duerfen.
+ *
+ * Was ein Set nennt, kann verschwinden, nachdem es gespeichert wurde: eine
+ * geloeschte Kategorie, ein umbenannter oder zusammengefuehrter Tag, ein
+ * entferntes Haushaltsmitglied. Bliebe der Wert im Chip, brachte ein Klick ihn
+ * in `state.filters` zurueck, die Liste filterte auf etwas, das es nicht mehr
+ * gibt - dauerhaft leer, und ein Neuladen aenderte nichts, weil der Wert im
+ * localStorage steht.
+ *
+ * Lesend statt beim Schreiben (#984, read-side transformation): so gilt die
+ * Regel an EINER Stelle und stimmt nach jeder Auffrischung von selbst, auch
+ * wenn die Aenderung in einem anderen Tab oder auf einem anderen Geraet
+ * passiert ist. Der Speicher bleibt unangetastet - eine wieder angelegte
+ * Kategorie bringt ihr Chip mit.
+ *
+ * Status und Prioritaet stehen bewusst nicht drin: das sind feste Konstanten
+ * dieser Datei, sie koennen nicht veralten.
+ */
+function getRecentFilters() {
+  const sets = storedRecentFilters();
+  // Nach einem Ladefehler stehen `users`, `categories` und `allTags` auf `[]`
+  // (siehe den catch-Zweig in render()). „Leer" hiesse dann „gibt es nicht",
+  // und ein Serverfehler naehme dem Nutzer seine gemerkten Filter weg - genau
+  // die Verwechslung aus dem Leer-Zweig, die der Ladefehler-Zustand behebt.
+  //
+  // Und ebenso wenig gegen Referenzlisten, die nicht nachweislich frisch sind -
+  // aus dem Offline-Cache oder von einer fehlgeschlagenen Auffrischung: die
+  // koennen beliebig alt sein. Vor dem Cache-Zeitpunkt angelegte Werte fehlten dort und
+  // versteckten ein gueltiges Chip; danach geloeschte staenden noch drin und
+  // boeten weiter einen toten an. Offline gilt dasselbe wie beim Ladefehler -
+  // nichts wegnehmen, was jemand gespeichert hat.
+  if (state.loadError) return sets;
+
+  // JE ACHSE: eine Liste, die gerade nicht nachweislich frisch ist, beschneidet
+  // nicht - die beiden anderen schon. `null` heisst hier „kein Urteil".
+  const stale = state.metaStale;
+  const knownCategories = stale.categories ? null : new Set(state.categories.map((c) => c.key));
+  const knownTags       = stale.tags       ? null : new Set(state.allTags.map((entry) => entry.tag.toLowerCase()));
+  const knownUsers      = stale.users      ? null : new Set(state.users.map((u) => String(u.id)));
+
+  const beschnitten = sets
+    .map((f) => ({
+      ...f,
+      assigned_to: knownUsers ? f.assigned_to.filter((id) => knownUsers.has(String(id))) : f.assigned_to,
+      category:    knownCategories ? f.category.filter((key) => knownCategories.has(key)) : f.category,
+      // Tag-Vergleich kleingeschrieben, wie ueberall sonst in dieser Datei
+      // (`hasTagFilter`): der Server behaelt die Schreibweise des Anlegens.
+      tags:        knownTags ? f.tags.filter((tag) => knownTags.has(String(tag).toLowerCase())) : f.tags,
+    }))
+    // Ein Set, von dem nichts uebrig bleibt, ist kein Chip mehr. Es bliebe
+    // sonst als leere Pille stehen und setzte beim Klick alle Filter zurueck.
+    .filter((f) => f.status.length || f.priority.length || f.assigned_to.length
+      || f.category.length || f.tags.length);
+
+  // Und was nach dem Beschneiden gleich AUSSIEHT, ist auch gleich: „Offen +
+  // Garten" faellt mit „Offen" zusammen, sobald es Garten nicht mehr gibt.
+  // Zwei sicht- und verhaltensgleiche Pillen nebeneinander sind keine Auswahl.
+  // `saveRecentFilter` kann die Dublette nicht verdraengen - es vergleicht die
+  // UNGEFILTERTEN Schluessel, und die gehen ja gerade noch auseinander.
+  // Entdoppelt wird deshalb die ANSICHT, nicht der Speicher: kommt Garten
+  // zurueck, sind es wieder zwei verschiedene Sets.
+  const gesehen = new Set();
+  return beschnitten.filter((f) => {
+    const key = recentFilterKey(f);
+    if (gesehen.has(key)) return false;
+    gesehen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Kennung eines Filter-Sets.
+ *
+ * Jede Achse gehört mit allen ihren Werten hinein: sonst verdrängte
+ * „Offen + Garten" den Eintrag „Offen + Haus", weil beide auf dieselbe Kennung
+ * fielen - seit #671 gilt dasselbe für zwei Prioritäten statt einer.
+ *
+ * EINE Formel für zwei Verwendungen: `saveRecentFilter` verdrängt damit den
+ * gleichen Eintrag im Speicher, `getRecentFilters` entdoppelt damit die
+ * Ansicht. Zwei Kopien davon liefen genau dann auseinander, wenn eine neue
+ * Achse dazukommt - und dann still.
+ */
+function recentFilterKey(f) {
+  const axis = (values) => [...values].map((v) => String(v).toLowerCase()).sort().join(',');
+  return [f.status, f.priority, f.assigned_to, f.category, f.tags].map(axis).join('|');
+}
+
 function saveRecentFilter(filters) {
   const set = normalizeFilterSet(filters);
   if (!set.status.length && !set.priority.length && !set.assigned_to.length && !set.category.length && !set.tags.length) return;
-  // Jede Achse gehört mit allen ihren Werten in den Schlüssel: sonst verdrängte
-  // „Offen + Garten" den Eintrag „Offen + Haus", weil beide auf dieselbe Kennung
-  // fielen - seit #671 gilt dasselbe für zwei Prioritäten statt einer.
-  const axis = (values) => [...values].map((v) => String(v).toLowerCase()).sort().join(',');
-  const keyOf = (f) => [f.status, f.priority, f.assigned_to, f.category, f.tags].map(axis).join('|');
-  const key = keyOf(set);
-  const recent = getRecentFilters().filter((f) => keyOf(f) !== key);
+  const key = recentFilterKey(set);
+  const recent = storedRecentFilters().filter((f) => recentFilterKey(f) !== key);
   recent.unshift(set);
   try { localStorage.setItem(RECENT_FILTERS_KEY, JSON.stringify(recent.slice(0, RECENT_FILTERS_MAX))); } catch {}
 }
@@ -3336,7 +3485,9 @@ export async function openTaskById(taskId, { user = null, container = null, onCh
   // dieses Moduls. Ein `meta.data?.users` daneben laese still `undefined`.
   if (!state.users.length || !state.categories.length) {
     try {
-      const meta = await api.get('/tasks/meta/options');
+      const { data: meta = {}, fromCache } = await api.getWithSource('/tasks/meta/options');
+      const alleStale = fromCache === true;
+      state.metaStale = { users: alleStale, categories: alleStale, tags: alleStale };
       state.users         = meta.users      ?? state.users;
       state.categories    = meta.categories ?? state.categories;
       state.allTags       = meta.tags       ?? state.allTags;
@@ -3567,17 +3718,22 @@ export async function render(container, { user }) {
   try {
     const [tasksData, metaData, preferencesData] = await Promise.all([
       api.get(`/tasks${taskQuery()}`),
-      api.get('/tasks/meta/options'),
+      api.getWithSource('/tasks/meta/options'),
       // Reine Anzeigepräferenz: ein Fehler hier darf die Aufgabenliste nicht
       // mit in den Ladefehler ziehen, deshalb eigener Fallback.
       api.get('/preferences').catch(() => ({ data: {} })),
     ]);
     state.loadError = null;
+    // `metaData` traegt jetzt `{ data, fromCache }` - der Rumpf steht in `.data`.
+    const meta = metaData.data ?? {};
+    // `/tasks/meta/options` bringt als einziger Pfad alle drei.
+    const alleStale = metaData.fromCache === true;
+    state.metaStale = { users: alleStale, categories: alleStale, tags: alleStale };
     state.tasks = tasksData.data ?? [];
-    state.users = metaData.users ?? [];
-    state.categories = metaData.categories ?? [];
-    state.allTags = metaData.tags ?? [];
-    state.defaultPoints = Number(metaData.default_points) || 0;
+    state.users = meta.users ?? [];
+    state.categories = meta.categories ?? [];
+    state.allTags = meta.tags ?? [];
+    state.defaultPoints = Number(meta.default_points) || 0;
     state.subtasksExpandedByDefault = preferencesData.data?.tasks_subtasks_expanded === true;
     state.defaultSyncTarget = preferencesData.data?.tasks_default_target || '';
   } catch (err) {
@@ -3593,6 +3749,7 @@ export async function render(container, { user }) {
     state.users = [];
     state.categories = [];
     state.allTags = [];
+    state.metaStale = { users: false, categories: false, tags: false };
     state.defaultPoints = 0;
     state.subtasksExpandedByDefault = false;
     state.defaultSyncTarget = '';
@@ -3638,4 +3795,12 @@ export async function render(container, { user }) {
 }
 
 // Testfläche: nur reine Funktionen, deren Vertrag außerhalb dieser Datei zählt.
-export const __test = { groupBy, groupKey, formatDueDate, normalizeFilterSet, taskQuery, state };
+export const __test = {
+  groupBy, groupKey, formatDueDate, normalizeFilterSet, taskQuery, state,
+  // Gemerkte Filter: der Vertrag ist, dass Lesen und Schreiben AUSEINANDER
+  // gehen - sonst schriebe das Bereinigen sich fest (siehe getRecentFilters).
+  getRecentFilters, storedRecentFilters, saveRecentFilter,
+  // Die Frische der Referenzlisten ist nur verhaltensgetrieben pruefbar: sie
+  // haengt daran, WIE die Antwort kam, nicht daran, dass eine kam.
+  refreshTags,
+};

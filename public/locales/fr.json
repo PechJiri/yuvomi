@@ -596,7 +596,15 @@
         "toPantryNothing": "Rien n'a été ajouté au garde-manger. Ouvrez à nouveau « Vers le garde-manger » et vérifiez les quantités.",
         "reorderHandle": "Réorganiser : {{name}}",
         "reorderHandleHint": "Faites glisser ou utilisez les flèches pour réorganiser",
-        "reorderPosition": "Position {{index}} sur {{total}}"
+        "reorderPosition": "Position {{index}} sur {{total}}",
+        "priceLabel": "Prix",
+        "storeLabel": "Magasin",
+        "storePlaceholder": "Choisir ou saisir",
+        "manageStores": "Gérer les magasins",
+        "storesHint": "Les magasins où vous faites vos courses. Un prix sans magasin ne répond qu'à moitié.",
+        "storeDeleteConfirm": "Supprimer le magasin « {{name}} » ?",
+        "storeDeleteConfirmDetail": "Les articles de ce magasin sont conservés, leur prix aussi - seule l'affectation au magasin devient vide. Il n'y a pas de magasin de remplacement.",
+        "addStore": "Nouveau magasin"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} repas planifiés.",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "Échéances déjà payées",
         "loanPaidInstallmentsHint": "Pour un prêt déjà en cours. Ces échéances sont enregistrées mais non comptabilisées dans le budget.",
         "loanPaymentTypeLocked": "Revenu ou dépense suit le type de prêt et se modifie à cet endroit.",
-        "planHistoricNote": "Mesuré par rapport à votre plan actuel. Yuvomi ne conserve pas le plan tel qu’il était un mois plus tôt."
+        "planHistoricNote": "Mesuré par rapport à votre plan actuel. Yuvomi ne conserve pas le plan tel qu’il était un mois plus tôt.",
+        "recurringEditSeriesHint": "La première écriture de la série est aussi son modèle - titre, montant, catégorie et compte y changent également, même si elle est passée.",
+        "responsibleLabel": "Responsable",
+        "responsibleHint": "Qui s'occupe de cette écriture. N'entraîne aucun mouvement d'argent - utilisez les dépenses partagées pour régler.",
+        "responsibleFilterTo": "Uniquement les écritures de {{name}}",
+        "clearResponsibleFilter": "Effacer le filtre responsable",
+        "groupByResponsible": "Par responsable",
+        "responsibleNobody": "Personne",
+        "responsibleFilterEmptyTitle": "Aucune écriture pour cette personne",
+        "responsibleFilterEmptyDescription": "Personne n'est responsable d'une écriture ce mois-ci avec cette sélection.",
+        "handoverToSplit": "Basculer vers les dépenses partagées",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plan : {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Afficher l’onglet cycle",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "Modifier aussi les entrées existantes",
         "healthVisibilityApplyHint": "Enregistré. Faut-il aussi modifier les entrées existantes de {{area}} ?",
         "healthVisibilityApplied": "{{count}} entrées modifiées.",
-        "healthVisibilityApplied_one": "Une entrée modifiée."
+        "healthVisibilityApplied_one": "Une entrée modifiée.",
+        "mealTypeNamesLabel": "Vos propres noms",
+        "mealTypeNamesHint": "Comment votre foyer appelle les quatre repas. Laissez vide pour le nom intégré. Le nom s'affiche tel quel dans toutes les langues.",
+        "mealTypeNamesSaved": "Noms enregistrés."
     },
     "login": {
         "tagline": "Bon retour sur votre planificateur familial.",
@@ -2757,7 +2779,12 @@
         "sourceNative": "Natif",
         "sourceAll": "Tous",
         "sourceFilterLabel": "Filtrer par source",
-        "plannedThisWeek": "Prévu cette semaine"
+        "plannedThisWeek": "Prévu cette semaine",
+        "imageLabel": "Image",
+        "imageChoose": "Choisir une image",
+        "imageRemove": "Supprimer l'image",
+        "imageHint": "Une image par recette. Elle apparaît dans le planificateur de repas et sur la tuile d'aperçu.",
+        "imageTooLarge": "L'image reste trop volumineuse après réduction."
     },
     "search": {
         "emptyHint": "Saisis au moins 2 caractères pour chercher dans les tâches, rendez-vous, notes, contacts, courses et santé.",
@@ -3766,7 +3793,9 @@
         "completedOn": "Terminé le {{date}}",
         "completedToast": "Abonnement terminé.",
         "endsAfter": "Encore {{count}} paiements",
-        "logoTypeError": "Utilisez une image PNG, JPEG, WebP ou SVG."
+        "logoTypeError": "Utilisez une image PNG, JPEG, WebP ou SVG.",
+        "accountUsernameLabel": "Enregistré sous",
+        "accountUsernameHint": "Adresse e-mail ou nom d'utilisateur. Ce n'est pas un champ de mot de passe - Yuvomi n'enregistre aucun mot de passe."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}} : {{name}}",
         "icsCalendarName": "Inventaire Yuvomi",
         "removeBookingAction": "Retirer « {{title}} »",
-        "photoTooLarge": "La photo reste trop volumineuse après redimensionnement."
+        "photoTooLarge": "La photo reste trop volumineuse après redimensionnement.",
+        "accountUsernameLabel": "Enregistré sous",
+        "accountUsernameHint": "Adresse e-mail ou nom d'utilisateur. Ce n'est pas un champ de mot de passe - Yuvomi n'enregistre aucun mot de passe."
     },
     "documentAttach": {
         "label": "Pièces jointes",

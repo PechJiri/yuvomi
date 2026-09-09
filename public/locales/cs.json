@@ -596,7 +596,15 @@
         "toPantryNothing": "Do zásob se nic nepřidalo. Otevři „Do zásob\" znovu a zkontroluj množství.",
         "reorderHandle": "Změnit pořadí: {{name}}",
         "reorderHandleHint": "Přetáhněte nebo použijte šipky k seřazení",
-        "reorderPosition": "Pozice {{index}} z {{total}}"
+        "reorderPosition": "Pozice {{index}} z {{total}}",
+        "priceLabel": "Cena",
+        "storeLabel": "Obchod",
+        "storePlaceholder": "Vyberte nebo napište",
+        "manageStores": "Spravovat obchody",
+        "storesHint": "Obchody, kde nakupujete. Cena bez obchodu odpoví jen napůl.",
+        "storeDeleteConfirm": "Smazat obchod „{{name}}“?",
+        "storeDeleteConfirmDetail": "Položky tohoto obchodu zůstanou zachovány i s cenou - prázdné bude jen přiřazení obchodu. Náhradní obchod se nedoplňuje.",
+        "addStore": "Nový obchod"
     },
     "meals": {
         "randomizeSuccess_few": "Naplánována {{count}} jídla.",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "Již zaplacené splátky",
         "loanPaidInstallmentsHint": "Pro půjčku, která již běží. Tyto splátky se doplní, ale nezaúčtují se do rozpočtu.",
         "loanPaymentTypeLocked": "Příjem nebo výdaj se řídí typem půjčky a mění se tam.",
-        "planHistoricNote": "Měřeno vůči vašemu aktuálnímu plánu. Yuvomi si nepamatuje, jaký byl plán v dřívějším měsíci."
+        "planHistoricNote": "Měřeno vůči vašemu aktuálnímu plánu. Yuvomi si nepamatuje, jaký byl plán v dřívějším měsíci.",
+        "recurringEditSeriesHint": "První záznam série je zároveň její šablonou - název, částka, kategorie a účet se změní i tam, i když leží v minulosti.",
+        "responsibleLabel": "Odpovídá",
+        "responsibleHint": "Kdo se o tento záznam stará. Nepřesouvá peníze - k vyrovnání slouží sdílené výdaje.",
+        "responsibleFilterTo": "Jen záznamy: {{name}}",
+        "clearResponsibleFilter": "Zrušit filtr odpovědnosti",
+        "groupByResponsible": "Podle odpovědnosti",
+        "responsibleNobody": "Nikdo",
+        "responsibleFilterEmptyTitle": "Pro tuto osobu není žádný záznam",
+        "responsibleFilterEmptyDescription": "V tomto měsíci nikdo neodpovídá za záznam v tomto výběru.",
+        "handoverToSplit": "Převést do sdílených výdajů",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plán: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Zobrazit kartu cyklu",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "Upravit i stávající záznamy",
         "healthVisibilityApplyHint": "Uloženo. Mají se upravit i stávající záznamy v oblasti {{area}}?",
         "healthVisibilityApplied": "Upraveno záznamů: {{count}}.",
-        "healthVisibilityApplied_one": "Upraven jeden záznam."
+        "healthVisibilityApplied_one": "Upraven jeden záznam.",
+        "mealTypeNamesLabel": "Vlastní názvy",
+        "mealTypeNamesHint": "Jak vaše domácnost nazývá čtyři jídla. Ponechte prázdné pro vestavěný název. Název se ve všech jazycích zobrazí přesně tak, jak jej napíšete.",
+        "mealTypeNamesSaved": "Názvy uloženy."
     },
     "login": {
         "tagline": "Vítejte zpět ve svém rodinném plánovači.",
@@ -3472,7 +3494,12 @@
         "sourceNative": "Vlastní",
         "sourceAll": "Vše",
         "sourceFilterLabel": "Filtrovat podle zdroje",
-        "plannedThisWeek": "Naplánováno na tento týden"
+        "plannedThisWeek": "Naplánováno na tento týden",
+        "imageLabel": "Obrázek",
+        "imageChoose": "Vybrat obrázek",
+        "imageRemove": "Odebrat obrázek",
+        "imageHint": "Jeden obrázek na recept. Zobrazí se v jídelním plánu a na dlaždici přehledu.",
+        "imageTooLarge": "Obrázek je i po zmenšení příliš velký."
     },
     "wmo": {
         "0": "Jasno",
@@ -3766,7 +3793,9 @@
         "completedOn": "Dokončeno {{date}}",
         "completedToast": "Předplatné dokončeno.",
         "endsAfter": "Zbývá {{count}} plateb",
-        "logoTypeError": "Použijte prosím obrázek ve formátu PNG, JPEG, WebP nebo SVG."
+        "logoTypeError": "Použijte prosím obrázek ve formátu PNG, JPEG, WebP nebo SVG.",
+        "accountUsernameLabel": "Registrováno na",
+        "accountUsernameHint": "E-mailová adresa nebo uživatelské jméno. Není to pole pro heslo - Yuvomi hesla neukládá."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Inventář Yuvomi",
         "removeBookingAction": "Odebrat „{{title}}“",
-        "photoTooLarge": "Fotografie je po zmenšení stále příliš velká."
+        "photoTooLarge": "Fotografie je po zmenšení stále příliš velká.",
+        "accountUsernameLabel": "Registrováno na",
+        "accountUsernameHint": "E-mailová adresa nebo uživatelské jméno. Není to pole pro heslo - Yuvomi hesla neukládá."
     },
     "documentAttach": {
         "label": "Přílohy",

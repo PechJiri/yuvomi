@@ -5096,3 +5096,33 @@ svg.weather-forecast__icon {
   border-color: var(--color-text-primary);
   box-shadow: var(--shadow-sm);
 }
+
+/* Vorschaubild in der Mahlzeitenkachel (#1059) - nur wo es eins gibt, siehe
+   renderTodayMeals(). Es sitzt IN der Titelzeile und ist so hoch wie sie, damit
+   ein bebilderter Slot nicht hoeher wird als ein textiger daneben. */
+.meal-slot__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1h);
+  min-width: 0;
+}
+
+.meal-slot__title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meal-slot__thumb {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.meal-slot__thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

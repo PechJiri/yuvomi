@@ -202,6 +202,14 @@ function validatePayload(body, { partial = false } = {}) {
     try { parseDateKey(body.next_payment_date); } catch (err) { errors.push(err.message); }
   }
   if (body.website_url && !URL_RE.test(body.website_url)) errors.push('Website URL must use HTTP or HTTPS.');
+  // Konto/Benutzername, unter dem das Abo laeuft (#1004). KEIN Passwortfeld:
+  // die Spalte ist unverschluesselt und wird durchsucht, weil ein Benutzername
+  // ohne sein Passwort keinen Schutz braucht. Hier liegt sie in einer Zeile,
+  // die owner_id und visibility bereits traegt - sie folgt beiden ohne Zutun.
+  if (body.account_username !== undefined && body.account_username !== null
+      && String(body.account_username).length > 200) {
+    errors.push('Account name must be 200 characters or fewer.');
+  }
   if (body.logo_data && (!String(body.logo_data).startsWith('data:image/') || String(body.logo_data).length > 700000)) {
     errors.push('Logo must be an image data URL smaller than 500 KB.');
   } else if (body.logo_data && /;base64,/i.test(String(body.logo_data))
@@ -617,15 +625,16 @@ router.post('/', async (req, res) => {
       INSERT INTO budget_subscriptions
         (name, description, amount, currency, billing_cycle, cycle_interval, next_payment_date,
          category_id, payment_method_id, reminder_days, enabled, website_url, logo_data,
-         brand_color, notes, created_by, owner_id, visibility,
+         brand_color, notes, account_username, created_by, owner_id, visibility,
          end_type, end_date, occurrence_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       req.body.name.trim(), req.body.description?.trim() || null, Number(req.body.amount), validated.currency,
       req.body.billing_cycle, validated.cycleInterval, req.body.next_payment_date,
       req.body.category_id || null, req.body.payment_method_id || null, validated.reminderDays,
       req.body.enabled === false ? 0 : 1, req.body.website_url?.trim() || null, req.body.logo_data || null,
-      req.body.brand_color || null, req.body.notes?.trim() || null, me, me, visibility,
+      req.body.brand_color || null, req.body.notes?.trim() || null,
+      req.body.account_username?.trim() || null, me, me, visibility,
       endType, endDate, occurrenceCount,
     );
     let row = loadSubscription(result.lastInsertRowid);
@@ -673,7 +682,7 @@ router.put('/:id', async (req, res) => {
       UPDATE budget_subscriptions SET
         name = ?, description = ?, amount = ?, currency = ?, billing_cycle = ?, cycle_interval = ?,
         next_payment_date = ?, category_id = ?, payment_method_id = ?, reminder_days = ?, enabled = ?,
-        website_url = ?, logo_data = ?, brand_color = ?, notes = ?, visibility = ?,
+        website_url = ?, logo_data = ?, brand_color = ?, notes = ?, account_username = ?, visibility = ?,
         end_type = ?, end_date = ?, occurrence_count = ?, completed_at = ?
       WHERE id = ?
     `).run(
@@ -684,7 +693,8 @@ router.put('/:id', async (req, res) => {
       value('payment_method_id', current.payment_method_id) || null,
       validated.reminderDays ?? current.reminder_days, nextEnabled,
       value('website_url', current.website_url)?.trim() || null, value('logo_data', current.logo_data) || null,
-      value('brand_color', current.brand_color) || null, value('notes', current.notes)?.trim() || null, nextVisibility,
+      value('brand_color', current.brand_color) || null, value('notes', current.notes)?.trim() || null,
+      value('account_username', current.account_username)?.trim() || null, nextVisibility,
       endType, endDate, occurrenceCount, completedAt, id,
     );
     let row = loadSubscription(id);

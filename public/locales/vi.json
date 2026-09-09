@@ -596,7 +596,15 @@
         "toPantryNothing": "Không có gì được thêm vào kho. Mở lại \"Vào kho\" và kiểm tra số lượng.",
         "reorderHandle": "Sắp xếp lại: {{name}}",
         "reorderHandleHint": "Kéo hoặc dùng phím mũi tên để sắp xếp",
-        "reorderPosition": "Vị trí {{index}} trên {{total}}"
+        "reorderPosition": "Vị trí {{index}} trên {{total}}",
+        "priceLabel": "Giá",
+        "storeLabel": "Cửa hàng",
+        "storePlaceholder": "Chọn hoặc nhập",
+        "manageStores": "Quản lý cửa hàng",
+        "storesHint": "Những cửa hàng bạn mua sắm. Giá mà không có cửa hàng chỉ trả lời một nửa.",
+        "storeDeleteConfirm": "Xóa cửa hàng “{{name}}”?",
+        "storeDeleteConfirmDetail": "Các món của cửa hàng này vẫn còn, giá cũng vậy - chỉ phần gán cửa hàng trở nên trống. Ở đây không có cửa hàng thay thế.",
+        "addStore": "Cửa hàng mới"
     },
     "meals": {
         "randomizeSuccess_few": "Đã lên kế hoạch {{count}} bữa ăn.",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "Số kỳ đã trả",
         "loanPaidInstallmentsHint": "Dành cho khoản vay đang trả dở. Các kỳ này được ghi nhận nhưng không hạch toán vào ngân sách.",
         "loanPaymentTypeLocked": "Thu nhập hay chi phí phụ thuộc vào loại khoản vay và được thay đổi ở đó.",
-        "planHistoricNote": "Được đối chiếu với kế hoạch hiện tại của bạn. Yuvomi không lưu kế hoạch của tháng trước đó."
+        "planHistoricNote": "Được đối chiếu với kế hoạch hiện tại của bạn. Yuvomi không lưu kế hoạch của tháng trước đó.",
+        "recurringEditSeriesHint": "Mục đầu tiên của chuỗi cũng chính là mẫu của nó - tiêu đề, số tiền, danh mục và tài khoản cũng thay đổi ở đó, ngay cả khi nó đã ở trong quá khứ.",
+        "responsibleLabel": "Người phụ trách",
+        "responsibleHint": "Ai lo khoản này. Không chuyển tiền - dùng chi tiêu chung để thanh toán với nhau.",
+        "responsibleFilterTo": "Chỉ các mục của {{name}}",
+        "clearResponsibleFilter": "Xóa bộ lọc người phụ trách",
+        "groupByResponsible": "Theo người phụ trách",
+        "responsibleNobody": "Không ai",
+        "responsibleFilterEmptyTitle": "Không có mục nào cho người này",
+        "responsibleFilterEmptyDescription": "Tháng này không ai phụ trách mục nào trong lựa chọn này.",
+        "handoverToSplit": "Chuyển sang chi tiêu chung",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (kế hoạch: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Hiện tab chu kỳ",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "Đổi cả các mục hiện có",
         "healthVisibilityApplyHint": "Đã lưu. Có đổi cả các mục hiện có trong {{area}} không?",
         "healthVisibilityApplied": "Đã đổi {{count}} mục.",
-        "healthVisibilityApplied_one": "Đã đổi một mục."
+        "healthVisibilityApplied_one": "Đã đổi một mục.",
+        "mealTypeNamesLabel": "Tên riêng của bạn",
+        "mealTypeNamesHint": "Gia đình bạn gọi bốn bữa ăn là gì. Để trống để dùng tên mặc định. Tên hiển thị giống nhau trong mọi ngôn ngữ.",
+        "mealTypeNamesSaved": "Đã lưu tên."
     },
     "login": {
         "tagline": "Chào mừng bạn trở lại trình lập kế hoạch gia đình.",
@@ -2848,7 +2870,12 @@
         "sourceNative": "Gốc",
         "sourceAll": "Tất cả",
         "sourceFilterLabel": "Lọc theo nguồn",
-        "plannedThisWeek": "Đã lên kế hoạch tuần này"
+        "plannedThisWeek": "Đã lên kế hoạch tuần này",
+        "imageLabel": "Hình ảnh",
+        "imageChoose": "Chọn hình ảnh",
+        "imageRemove": "Xóa hình ảnh",
+        "imageHint": "Một hình cho mỗi công thức. Hình hiện trong kế hoạch bữa ăn và trên ô tổng quan.",
+        "imageTooLarge": "Hình vẫn quá lớn sau khi thu nhỏ."
     },
     "search": {
         "emptyHint": "Nhập ít nhất 2 ký tự để tìm trong công việc, sự kiện, ghi chú, danh bạ, mua sắm và sức khỏe.",
@@ -3766,7 +3793,9 @@
         "completedOn": "Hoàn tất vào {{date}}",
         "completedToast": "Đã hoàn tất gói đăng ký.",
         "endsAfter": "Còn {{count}} lần thanh toán",
-        "logoTypeError": "Sử dụng ảnh PNG, JPEG, WebP hoặc SVG."
+        "logoTypeError": "Sử dụng ảnh PNG, JPEG, WebP hoặc SVG.",
+        "accountUsernameLabel": "Đăng ký dưới tên",
+        "accountUsernameHint": "Địa chỉ e-mail hoặc tên đăng nhập. Đây không phải ô mật khẩu - Yuvomi không lưu mật khẩu."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Tài sản Yuvomi",
         "removeBookingAction": "Gỡ \"{{title}}\"",
-        "photoTooLarge": "Ảnh vẫn quá lớn sau khi thay đổi kích thước."
+        "photoTooLarge": "Ảnh vẫn quá lớn sau khi thay đổi kích thước.",
+        "accountUsernameLabel": "Đăng ký dưới tên",
+        "accountUsernameHint": "Địa chỉ e-mail hoặc tên đăng nhập. Đây không phải ô mật khẩu - Yuvomi không lưu mật khẩu."
     },
     "documentAttach": {
         "label": "Tệp đính kèm",

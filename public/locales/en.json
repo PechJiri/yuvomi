@@ -596,7 +596,15 @@
         "toPantryNothing": "Nothing was added to the pantry. Open \"To the pantry\" again and check the amounts.",
         "reorderHandle": "Reorder: {{name}}",
         "reorderHandleHint": "Drag or use the arrow keys to reorder",
-        "reorderPosition": "Position {{index}} of {{total}}"
+        "reorderPosition": "Position {{index}} of {{total}}",
+        "priceLabel": "Price",
+        "storeLabel": "Shop",
+        "storePlaceholder": "Choose or type",
+        "manageStores": "Manage shops",
+        "storesHint": "The shops you buy at. A price without a shop answers only half the question.",
+        "storeDeleteConfirm": "Delete shop “{{name}}”?",
+        "storeDeleteConfirmDetail": "Items from this shop stay, and so do their prices - only the shop assignment is empty afterwards. There is no replacement shop.",
+        "addStore": "New shop"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} meals planned.",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "Installments already paid",
         "loanPaidInstallmentsHint": "For a loan that is already running. These installments are recorded but not booked to the budget.",
         "loanPaymentTypeLocked": "Income or expense follows the loan type and is changed there.",
-        "planHistoricNote": "Measured against your current plan. Yuvomi does not record what the plan was in an earlier month."
+        "planHistoricNote": "Measured against your current plan. Yuvomi does not record what the plan was in an earlier month.",
+        "recurringEditSeriesHint": "The series' first entry is also its template - title, amount, category and account change there too, even if it lies in the past.",
+        "responsibleLabel": "Responsible",
+        "responsibleHint": "Who takes care of this entry. Moves no money - use Split Expenses to settle up.",
+        "responsibleFilterTo": "Only entries for {{name}}",
+        "clearResponsibleFilter": "Clear responsible filter",
+        "groupByResponsible": "By responsible",
+        "responsibleNobody": "Nobody responsible",
+        "responsibleFilterEmptyTitle": "No entry for this person",
+        "responsibleFilterEmptyDescription": "Nobody is responsible for an entry in this month under this selection.",
+        "handoverToSplit": "Move to Split Expenses",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plan: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Show cycle tab",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "Move existing entries too",
         "healthVisibilityApplyHint": "Saved. Should the existing entries under {{area}} be changed as well?",
         "healthVisibilityApplied": "{{count}} entries changed.",
-        "healthVisibilityApplied_one": "One entry changed."
+        "healthVisibilityApplied_one": "One entry changed.",
+        "mealTypeNamesLabel": "Your own names",
+        "mealTypeNamesHint": "What your household calls the four meals. Leave empty for the built-in name. The name shows in every language exactly as you type it.",
+        "mealTypeNamesSaved": "Names saved."
     },
     "login": {
         "tagline": "Welcome back to your family planner.",
@@ -2848,7 +2870,12 @@
         "sourceNative": "Native",
         "sourceAll": "All",
         "sourceFilterLabel": "Filter by source",
-        "plannedThisWeek": "Planned this week"
+        "plannedThisWeek": "Planned this week",
+        "imageLabel": "Image",
+        "imageChoose": "Choose image",
+        "imageRemove": "Remove image",
+        "imageHint": "One image per recipe. It shows in the meal planner and on the overview tile.",
+        "imageTooLarge": "The image is still too large after resizing."
     },
     "search": {
         "emptyHint": "Type at least 2 characters to search tasks, events, notes, contacts, shopping and health.",
@@ -3766,7 +3793,9 @@
         "completedOn": "Completed on {{date}}",
         "completedToast": "Subscription completed.",
         "endsAfter": "{{count}} payments left",
-        "logoTypeError": "Use a PNG, JPEG, WebP or SVG image."
+        "logoTypeError": "Use a PNG, JPEG, WebP or SVG image.",
+        "accountUsernameLabel": "Registered under",
+        "accountUsernameHint": "E-mail address or username. Not a password field - Yuvomi does not store passwords."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi Inventory",
         "removeBookingAction": "Remove \"{{title}}\"",
-        "photoTooLarge": "Photo is still too large after resizing."
+        "photoTooLarge": "Photo is still too large after resizing.",
+        "accountUsernameLabel": "Registered under",
+        "accountUsernameHint": "E-mail address or username. Not a password field - Yuvomi does not store passwords."
     },
     "documentAttach": {
         "label": "Attachments",

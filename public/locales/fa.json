@@ -608,7 +608,15 @@
         "toPantryNothing": "چیزی به انبار افزوده نشد. «به انبار» را دوباره باز کنید و مقدارها را بررسی کنید.",
         "reorderHandle": "تغییر ترتیب: {{name}}",
         "reorderHandleHint": "برای مرتب‌سازی بکشید یا از کلیدهای جهت‌نما استفاده کنید",
-        "reorderPosition": "جایگاه {{index}} از {{total}}"
+        "reorderPosition": "جایگاه {{index}} از {{total}}",
+        "priceLabel": "قیمت",
+        "storeLabel": "فروشگاه",
+        "storePlaceholder": "انتخاب کنید یا بنویسید",
+        "manageStores": "مدیریت فروشگاه‌ها",
+        "storesHint": "فروشگاه‌هایی که از آن‌ها خرید می‌کنید. قیمت بدون فروشگاه تنها نیمی از پرسش را پاسخ می‌دهد.",
+        "storeDeleteConfirm": "فروشگاه «{{name}}» حذف شود؟",
+        "storeDeleteConfirmDetail": "کالاهای این فروشگاه و قیمتشان باقی می‌مانند - فقط انتساب فروشگاه خالی می‌شود. جایگزینی برای فروشگاه وجود ندارد.",
+        "addStore": "فروشگاه جدید"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} وعده برنامه‌ریزی شد.",
@@ -1495,7 +1503,18 @@
         "loanPaidInstallmentsLabel": "اقساط پرداخت‌شده",
         "loanPaidInstallmentsHint": "برای وامی که از قبل در جریان است. این اقساط ثبت می‌شوند اما در بودجه لحاظ نمی‌شوند.",
         "loanPaymentTypeLocked": "درآمد یا هزینه بودن از نوع وام پیروی می‌کند و آنجا تغییر می‌کند.",
-        "planHistoricNote": "بر اساس برنامهٔ فعلی شما سنجیده شده است. Yuvomi نگه نمی‌دارد که برنامه در ماه‌های گذشته چه بوده است."
+        "planHistoricNote": "بر اساس برنامهٔ فعلی شما سنجیده شده است. Yuvomi نگه نمی‌دارد که برنامه در ماه‌های گذشته چه بوده است.",
+        "recurringEditSeriesHint": "نخستین مدخل مجموعه همزمان الگوی آن است - عنوان، مبلغ، دسته و حساب در آنجا هم تغییر می‌کنند، حتی اگر در گذشته باشد.",
+        "responsibleLabel": "مسئول",
+        "responsibleHint": "چه کسی این مورد را رسیدگی می‌کند. پولی جابه‌جا نمی‌شود - برای تسویه از هزینه‌های مشترک استفاده کنید.",
+        "responsibleFilterTo": "فقط موارد {{name}}",
+        "clearResponsibleFilter": "پاک کردن صافی مسئول",
+        "groupByResponsible": "بر پایه مسئول",
+        "responsibleNobody": "هیچ‌کس",
+        "responsibleFilterEmptyTitle": "موردی برای این شخص نیست",
+        "responsibleFilterEmptyDescription": "در این ماه هیچ‌کس در این گزینش مسئول موردی نیست.",
+        "handoverToSplit": "انتقال به هزینه‌های مشترک",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (طرح: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "نمایش برگهٔ چرخه",
@@ -2613,7 +2632,10 @@
         "healthVisibilityApply": "ورودی‌های موجود هم تغییر کنند",
         "healthVisibilityApplyHint": "ذخیره شد. ورودی‌های موجود در {{area}} هم تغییر کنند؟",
         "healthVisibilityApplied": "{{count}} ورودی تغییر کرد.",
-        "healthVisibilityApplied_one": "یک ورودی تغییر کرد."
+        "healthVisibilityApplied_one": "یک ورودی تغییر کرد.",
+        "mealTypeNamesLabel": "نام‌های دلخواه",
+        "mealTypeNamesHint": "خانواده شما چهار وعده را چه می‌نامد. برای نام پیش‌فرض خالی بگذارید. نام در همه زبان‌ها دقیقاً همان‌طور که می‌نویسید نمایش داده می‌شود.",
+        "mealTypeNamesSaved": "نام‌ها ذخیره شد."
     },
     "login": {
         "tagline": "دوباره به برنامه‌ریز خانوادگی‌تان خوش آمدید.",
@@ -2860,7 +2882,12 @@
         "sourceNative": "بومی",
         "sourceAll": "همه",
         "sourceFilterLabel": "فیلتر بر اساس منبع",
-        "plannedThisWeek": "برنامه‌ریزی‌شده برای این هفته"
+        "plannedThisWeek": "برنامه‌ریزی‌شده برای این هفته",
+        "imageLabel": "تصویر",
+        "imageChoose": "انتخاب تصویر",
+        "imageRemove": "حذف تصویر",
+        "imageHint": "یک تصویر برای هر دستور پخت. در برنامه غذایی و کاشی نمای کلی دیده می‌شود.",
+        "imageTooLarge": "تصویر پس از کوچک‌سازی هنوز بزرگ است."
     },
     "onboarding": {
         "step1Title": "به {{name}} خوش آمدید",
@@ -3766,7 +3793,9 @@
         "completedOn": "تکمیل در {{date}}",
         "completedToast": "اشتراک تکمیل شد.",
         "endsAfter": "{{count}} پرداخت باقی‌مانده",
-        "logoTypeError": "لطفاً از تصویر PNG، JPEG، WebP یا SVG استفاده کنید."
+        "logoTypeError": "لطفاً از تصویر PNG، JPEG، WebP یا SVG استفاده کنید.",
+        "accountUsernameLabel": "ثبت‌شده با",
+        "accountUsernameHint": "نشانی رایانامه یا نام کاربری. این قسمت گذرواژه نیست - Yuvomi گذرواژه ذخیره نمی‌کند."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "اموال Yuvomi",
         "removeBookingAction": "حذف «{{title}}»",
-        "photoTooLarge": "عکس پس از کوچک‌سازی هنوز بیش از حد بزرگ است."
+        "photoTooLarge": "عکس پس از کوچک‌سازی هنوز بیش از حد بزرگ است.",
+        "accountUsernameLabel": "ثبت‌شده با",
+        "accountUsernameHint": "نشانی رایانامه یا نام کاربری. این قسمت گذرواژه نیست - Yuvomi گذرواژه ذخیره نمی‌کند."
     },
     "documentAttach": {
         "label": "پیوست‌ها",

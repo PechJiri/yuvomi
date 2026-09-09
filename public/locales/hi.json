@@ -596,7 +596,15 @@
         "toPantryNothing": "भंडार में कुछ नहीं जोड़ा गया. „भंडार में\" फिर खोलें और मात्रा जाँचें.",
         "reorderHandle": "क्रम बदलें: {{name}}",
         "reorderHandleHint": "क्रम बदलने के लिए खींचें या तीर कुंजियों का उपयोग करें",
-        "reorderPosition": "{{total}} में से स्थान {{index}}"
+        "reorderPosition": "{{total}} में से स्थान {{index}}",
+        "priceLabel": "मूल्य",
+        "storeLabel": "दुकान",
+        "storePlaceholder": "चुनें या लिखें",
+        "manageStores": "दुकानें प्रबंधित करें",
+        "storesHint": "वे दुकानें जहाँ आप खरीदते हैं। दुकान के बिना कीमत आधा ही उत्तर देती है।",
+        "storeDeleteConfirm": "दुकान “{{name}}” हटाएँ?",
+        "storeDeleteConfirmDetail": "इस दुकान की चीज़ें और उनकी कीमत बनी रहती हैं - सिर्फ़ दुकान का चुनाव खाली हो जाता है। यहाँ कोई वैकल्पिक दुकान नहीं मिलती।",
+        "addStore": "नई दुकान"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} भोजन योजनाबद्ध किए गए।",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "पहले से चुकाई गई किस्तें",
         "loanPaidInstallmentsHint": "पहले से चल रहे ऋण के लिए। ये किस्तें दर्ज होती हैं, पर बजट में नहीं जोड़ी जातीं।",
         "loanPaymentTypeLocked": "आय या व्यय ऋण के प्रकार पर निर्भर करता है और वहीं बदला जाता है।",
-        "planHistoricNote": "आपकी मौजूदा योजना के आधार पर मापा गया। Yuvomi यह नहीं रखता कि पिछले महीने योजना क्या थी।"
+        "planHistoricNote": "आपकी मौजूदा योजना के आधार पर मापा गया। Yuvomi यह नहीं रखता कि पिछले महीने योजना क्या थी।",
+        "recurringEditSeriesHint": "श्रृंखला की पहली प्रविष्टि ही उसका टेम्पलेट भी है - शीर्षक, राशि, श्रेणी और खाता वहां भी बदल जाते हैं, भले ही वह अतीत में हो।",
+        "responsibleLabel": "जिम्मेदार",
+        "responsibleHint": "इस प्रविष्टि की देखभाल कौन करता है। इससे पैसा नहीं चलता - हिसाब बराबर करने के लिए साझा खर्च हैं।",
+        "responsibleFilterTo": "केवल {{name}} की प्रविष्टियां",
+        "clearResponsibleFilter": "जिम्मेदार फ़िल्टर हटाएं",
+        "groupByResponsible": "जिम्मेदार के अनुसार",
+        "responsibleNobody": "कोई नहीं",
+        "responsibleFilterEmptyTitle": "इस व्यक्ति के लिए कोई प्रविष्टि नहीं",
+        "responsibleFilterEmptyDescription": "इस चयन में इस माह किसी प्रविष्टि के लिए कोई जिम्मेदार नहीं है।",
+        "handoverToSplit": "साझा खर्च में ले जाएं",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (योजना: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "चक्र टैब दिखाएँ",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "मौजूदा प्रविष्टियाँ भी बदलें",
         "healthVisibilityApplyHint": "सहेजा गया। क्या {{area}} की मौजूदा प्रविष्टियाँ भी बदली जाएँ?",
         "healthVisibilityApplied": "{{count}} प्रविष्टियाँ बदली गईं।",
-        "healthVisibilityApplied_one": "एक प्रविष्टि बदली गई।"
+        "healthVisibilityApplied_one": "एक प्रविष्टि बदली गई।",
+        "mealTypeNamesLabel": "अपने नाम",
+        "mealTypeNamesHint": "आपका परिवार चारों भोजन को क्या कहता है। अंतर्निहित नाम के लिए खाली छोड़ें। नाम हर भाषा में वैसा ही दिखता है जैसा आप लिखते हैं।",
+        "mealTypeNamesSaved": "नाम सहेजे गए।"
     },
     "login": {
         "tagline": "अपने पारिवारिक प्लानर में फिर से आपका स्वागत है।",
@@ -2757,7 +2779,12 @@
         "sourceNative": "मूल",
         "sourceAll": "सभी",
         "sourceFilterLabel": "स्रोत के अनुसार फ़िल्टर करें",
-        "plannedThisWeek": "इस सप्ताह नियोजित"
+        "plannedThisWeek": "इस सप्ताह नियोजित",
+        "imageLabel": "छवि",
+        "imageChoose": "छवि चुनें",
+        "imageRemove": "छवि हटाएं",
+        "imageHint": "हर रेसिपी के लिए एक छवि। यह भोजन योजना और अवलोकन टाइल में दिखती है।",
+        "imageTooLarge": "छवि छोटा करने के बाद भी बहुत बड़ी है।"
     },
     "search": {
         "emptyHint": "कार्य, ईवेंट, नोट्स, संपर्क, खरीदारी और स्वास्थ्य में खोजने के लिए कम से कम 2 अक्षर लिखें।",
@@ -3766,7 +3793,9 @@
         "completedOn": "{{date}} को पूर्ण",
         "completedToast": "सदस्यता पूर्ण हुई।",
         "endsAfter": "{{count}} भुगतान शेष",
-        "logoTypeError": "PNG, JPEG, WebP या SVG चित्र इस्तेमाल करें।"
+        "logoTypeError": "PNG, JPEG, WebP या SVG चित्र इस्तेमाल करें।",
+        "accountUsernameLabel": "इसके नाम पंजीकृत",
+        "accountUsernameHint": "ईमेल पता या उपयोगकर्ता नाम। यह पासवर्ड फ़ील्ड नहीं है - Yuvomi पासवर्ड सहेजता नहीं है।"
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi इन्वेंटरी",
         "removeBookingAction": "\"{{title}}\" हटाएँ",
-        "photoTooLarge": "आकार बदलने के बाद भी फ़ोटो बहुत बड़ा है।"
+        "photoTooLarge": "आकार बदलने के बाद भी फ़ोटो बहुत बड़ा है।",
+        "accountUsernameLabel": "इसके नाम पंजीकृत",
+        "accountUsernameHint": "ईमेल पता या उपयोगकर्ता नाम। यह पासवर्ड फ़ील्ड नहीं है - Yuvomi पासवर्ड सहेजता नहीं है।"
     },
     "documentAttach": {
         "label": "अनुलग्नक",

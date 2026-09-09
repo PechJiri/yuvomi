@@ -17,6 +17,7 @@ import {
   wireBlurValidation,
   reportFieldError,
   confirmModal,
+  refocusAfterRender,
 } from '/components/modal.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { emptyStateEl } from '/utils/empty-state.js';
@@ -61,16 +62,38 @@ async function loadCategories() {
 async function openLocationManager() {
   await import('/components/category-manager.js');
 
-  let changed = false;
-  const onChanged = async () => { changed = true; try { await loadLocations(); } catch { /* Fehler meldet der Manager selbst */ } };
+  // Die Auffrischung haengt am Ereignis, nicht am Schliessen: beim Loeschen
+  // raeumt `confirmOverModal` das Modal darunter ab, bevor `api.delete` laeuft
+  // (siehe `_notifyChanged` in components/category-manager.js). Ein in onClose
+  // ausgewerteter Merker stuende hier auf false - und genau das Loeschen ist
+  // der Fall, der die Liste veralten laesst.
+  const onChanged = async () => {
+    try {
+      await loadLocations();
+      // Loeschen einer Location NULLt location_id betroffener Items
+      // server-seitig - die Liste muss neu geladen werden, sonst zeigt sie
+      // veraltete location_path-Werte bis zum naechsten vollen Reload.
+      await loadItems();
+      renderList();
+      updateAttentionBadge();
+      refocusAfterRender();
+    } catch (err) {
+      // NICHT „meldet der Manager selbst": der meldet nur seine eigene
+      // Mutation, und die ist hier schon durch - `_notifyChanged()` kommt erst
+      // nach ihrem Erfolg. Was hier ankommt, ist ein Fehler DIESER
+      // Auffrischung, und ohne Meldung zeigte die Seite den alten Stand
+      // weiter, obwohl der Server die Gegenstaende bereits umgehaengt hat.
+      console.error('[Inventory] Auffrischen nach Ort-Aenderung fehlgeschlagen:', err);
+      window.yuvomi?.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
+    }
+  };
 
-  let manager = null;
   openSharedModal({
     title: t('inventory.manageLocations'),
     size: 'lg',
     content: '<yuvomi-category-manager></yuvomi-category-manager>',
     onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-category-manager');
+      const manager = panel.querySelector('yuvomi-category-manager');
       manager.addEventListener('category-manager-changed', onChanged);
       manager.configure({
         basePath: '/inventory/locations',
@@ -83,18 +106,8 @@ async function openLocationManager() {
         subDeleteDetailKey: 'inventory.locationDeleteConfirmDetail',
       });
     },
-    onClose: async () => {
-      manager?.removeEventListener('category-manager-changed', onChanged);
-      manager = null;
-      if (changed) {
-        // Loeschen einer Location NULLt location_id betroffener Items
-        // server-seitig - die Liste muss neu geladen werden, sonst zeigt sie
-        // veraltete location_path-Werte bis zum naechsten vollen Reload.
-        await loadItems();
-        renderList();
-        updateAttentionBadge();
-      }
-    },
+    // Bewusst KEIN onClose, das den Listener abmeldet - es liefe vor dem
+    // Loeschen. Das Element entsteht je Oeffnen neu und geht mit dem Overlay.
   });
 }
 
@@ -104,15 +117,31 @@ async function openLocationManager() {
 async function openCategoryManager() {
   await import('/components/category-manager.js');
 
-  let changed = false;
-  const onChanged = async () => { changed = true; try { await loadCategories(); } catch { /* Fehler meldet der Manager selbst */ } };
+  // Wie bei den Orten: das Ereignis traegt die Auffrischung, nicht das
+  // Schliessen (siehe `_notifyChanged` in components/category-manager.js).
+  const onChanged = async () => {
+    try {
+      await loadCategories();
+      // Loeschen einer Kategorie weist betroffene Items server-seitig
+      // 'other' zu - die Liste muss neu geladen werden, sonst zeigt sie
+      // veraltete category_name-Werte bis zum naechsten vollen Reload.
+      await loadItems();
+      renderList();
+      updateAttentionBadge();
+      refocusAfterRender();
+    } catch (err) {
+      // Wie beim Ort-Manager: hier landet nur ein Fehler der Auffrischung,
+      // nie einer der Mutation - die hat der Manager schon quittiert.
+      console.error('[Inventory] Auffrischen nach Kategorie-Aenderung fehlgeschlagen:', err);
+      window.yuvomi?.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
+    }
+  };
 
-  let manager = null;
   openSharedModal({
     title: t('inventory.manageCategories'),
     content: '<yuvomi-category-manager></yuvomi-category-manager>',
     onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-category-manager');
+      const manager = panel.querySelector('yuvomi-category-manager');
       manager.addEventListener('category-manager-changed', onChanged);
       manager.configure({
         basePath: '/inventory/categories',
@@ -124,18 +153,8 @@ async function openCategoryManager() {
         deleteDetailKey: 'inventory.categoryDeleteConfirmDetail',
       });
     },
-    onClose: async () => {
-      manager?.removeEventListener('category-manager-changed', onChanged);
-      manager = null;
-      if (changed) {
-        // Loeschen einer Kategorie weist betroffene Items server-seitig
-        // 'other' zu - die Liste muss neu geladen werden, sonst zeigt sie
-        // veraltete category_name-Werte bis zum naechsten vollen Reload.
-        await loadItems();
-        renderList();
-        updateAttentionBadge();
-      }
-    },
+    // Bewusst KEIN onClose, das den Listener abmeldet - es liefe vor dem
+    // Loeschen. Das Element entsteht je Oeffnen neu und geht mit dem Overlay.
   });
 }
 
@@ -743,6 +762,11 @@ function renderItemDetail(item) {
     { icon: 'calendar', label: t('inventory.purchaseDateLabel'), value: item.purchase_date ? formatDate(item.purchase_date) : '' },
     { icon: 'banknote', label: t('inventory.purchasePriceLabel'), value: item.purchase_price != null ? formatMoney(item.purchase_price, item.currency) : '' },
     { icon: 'store', label: t('inventory.vendorLabel'), value: item.vendor || '' },
+    // Konto, unter dem das Geraet registriert ist (#1004) - eine Adresse oder ein
+    // Benutzername, nie ein Passwort. Steht bei den uebrigen Herkunftsangaben,
+    // weil es dieselbe Art Frage beantwortet: woher kommt das Ding, und unter
+    // wessen Namen laeuft es.
+    { icon: 'at-sign', label: t('inventory.accountUsernameLabel'), value: item.account_username || '' },
     { icon: 'shield', label: t('inventory.warrantyMonthsLabel'), value: warrantyDetailValue(item) },
     { icon: 'gauge', label: t('inventory.conditionLabel'), value: t(`inventory.condition${item.condition.charAt(0).toUpperCase()}${item.condition.slice(1)}`) },
     { icon: 'info', label: t('inventory.statusLabel'), value: statusLabel(item.status) },
@@ -1253,6 +1277,12 @@ function buildItemForm({ mode, item = null }) {
             <label class="form-label" for="inv-vendor">${esc(t('inventory.vendorLabel'))}</label>
             <input id="inv-vendor" class="form-input" type="text">
           </div>
+          <div class="form-group">
+            <label class="form-label" for="inv-account">${esc(t('inventory.accountUsernameLabel'))}</label>
+            <input id="inv-account" class="form-input" type="text" maxlength="200"
+                   autocomplete="off" spellcheck="false">
+            <p class="form-hint">${esc(t('inventory.accountUsernameHint'))}</p>
+          </div>
         </div>
         <div class="inventory-form-row">
           <div class="form-group">
@@ -1305,6 +1335,7 @@ function buildItemForm({ mode, item = null }) {
     panel.querySelector('#inv-model').value = isEdit && item.model ? item.model : '';
     panel.querySelector('#inv-serial').value = isEdit && item.serial_number ? item.serial_number : '';
     panel.querySelector('#inv-vendor').value = isEdit && item.vendor ? item.vendor : '';
+    panel.querySelector('#inv-account').value = isEdit && item.account_username ? item.account_username : '';
     panel.querySelector('#inv-warranty').value = isEdit && item.warranty_months != null ? String(item.warranty_months) : '';
     panel.querySelector('#inv-condition').value = isEdit ? item.condition : 'good';
     panel.querySelector('#inv-notes').value = isEdit && item.notes ? item.notes : '';
@@ -1424,6 +1455,7 @@ function buildItemForm({ mode, item = null }) {
     panel.querySelector('#inv-delete')?.addEventListener('click', async () => {
       await closeSharedModal({ force: true });
       await removeItem(item);
+      refocusAfterRender();
     });
     // `.modal-panel__footer` scoped, NICHT der ganze panel: sonst matcht dies
     // zuerst den Header-X (`.modal-panel__close`, gleiches data-action), der
@@ -1463,6 +1495,7 @@ async function saveItem(panel, mode, item, attachments, pickedBooking, photoData
     model: panel.querySelector('#inv-model').value.trim() || null,
     serial_number: panel.querySelector('#inv-serial').value.trim() || null,
     vendor: panel.querySelector('#inv-vendor').value.trim() || null,
+    account_username: panel.querySelector('#inv-account').value.trim() || null,
     warranty_months: warrantyRaw === '' ? null : Number(warrantyRaw),
     condition: panel.querySelector('#inv-condition').value,
     notes: panel.querySelector('#inv-notes').value.trim() || null,

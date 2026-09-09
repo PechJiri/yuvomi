@@ -608,7 +608,15 @@
         "toPantryNothing": "식료품 저장고에 아무것도 추가되지 않았습니다. \"저장고로\"를 다시 열어 수량을 확인하세요.",
         "reorderHandle": "순서 변경: {{name}}",
         "reorderHandleHint": "끌거나 화살표 키로 순서를 변경하세요",
-        "reorderPosition": "{{total}}개 중 {{index}}번째"
+        "reorderPosition": "{{total}}개 중 {{index}}번째",
+        "priceLabel": "가격",
+        "storeLabel": "상점",
+        "storePlaceholder": "선택하거나 입력",
+        "manageStores": "상점 관리",
+        "storesHint": "장을 보는 상점입니다. 상점 없는 가격은 절반만 답합니다.",
+        "storeDeleteConfirm": "상점 “{{name}}”을(를) 삭제할까요?",
+        "storeDeleteConfirmDetail": "이 상점의 항목과 가격은 그대로 남고, 상점 지정만 비워집니다. 대체 상점은 채워지지 않습니다.",
+        "addStore": "새 상점"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}}개의 식사가 계획되었습니다.",
@@ -1495,7 +1503,18 @@
         "loanPaidInstallmentsLabel": "이미 상환한 회차",
         "loanPaidInstallmentsHint": "이미 상환 중인 대출용입니다. 해당 회차는 기록되지만 가계부에는 반영되지 않습니다.",
         "loanPaymentTypeLocked": "수입인지 지출인지는 대출 유형을 따르며 거기에서 변경합니다.",
-        "planHistoricNote": "현재 계획을 기준으로 비교한 값입니다. Yuvomi는 이전 달의 계획이 얼마였는지 보관하지 않습니다."
+        "planHistoricNote": "현재 계획을 기준으로 비교한 값입니다. Yuvomi는 이전 달의 계획이 얼마였는지 보관하지 않습니다.",
+        "recurringEditSeriesHint": "시리즈의 첫 항목은 동시에 템플릿이기도 합니다. 제목, 금액, 카테고리, 계좌가 그곳에서도 함께 바뀌며, 과거 날짜여도 마찬가지입니다.",
+        "responsibleLabel": "담당",
+        "responsibleHint": "이 항목을 맡은 사람입니다. 돈은 이동하지 않으며, 정산은 공동 지출에서 합니다.",
+        "responsibleFilterTo": "{{name}}의 항목만",
+        "clearResponsibleFilter": "담당 필터 해제",
+        "groupByResponsible": "담당별",
+        "responsibleNobody": "담당 없음",
+        "responsibleFilterEmptyTitle": "이 사람의 항목이 없습니다",
+        "responsibleFilterEmptyDescription": "이 선택에서 이번 달에는 어떤 항목에도 담당자가 없습니다.",
+        "handoverToSplit": "공동 지출로 옮기기",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (계획: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "주기 탭 표시",
@@ -2613,7 +2632,10 @@
         "healthVisibilityApply": "기존 기록도 변경",
         "healthVisibilityApplyHint": "저장했습니다. {{area}}의 기존 기록도 변경할까요?",
         "healthVisibilityApplied": "기록 {{count}}건을 변경했습니다.",
-        "healthVisibilityApplied_one": "기록 1건을 변경했습니다."
+        "healthVisibilityApplied_one": "기록 1건을 변경했습니다.",
+        "mealTypeNamesLabel": "직접 지은 이름",
+        "mealTypeNamesHint": "가정에서 네 가지 식사를 부르는 이름입니다. 비워 두면 기본 이름을 사용합니다. 이름은 입력한 그대로 모든 언어에서 표시됩니다.",
+        "mealTypeNamesSaved": "이름을 저장했습니다."
     },
     "login": {
         "tagline": "가족 플래너에 다시 오신 것을 환영합니다.",
@@ -2860,7 +2882,12 @@
         "sourceNative": "기본",
         "sourceAll": "전체",
         "sourceFilterLabel": "출처별로 필터링",
-        "plannedThisWeek": "이번 주에 계획됨"
+        "plannedThisWeek": "이번 주에 계획됨",
+        "imageLabel": "이미지",
+        "imageChoose": "이미지 선택",
+        "imageRemove": "이미지 삭제",
+        "imageHint": "레시피당 한 장. 식단표와 개요 타일에 표시됩니다.",
+        "imageTooLarge": "축소한 뒤에도 이미지가 너무 큽니다."
     },
     "onboarding": {
         "step1Title": "{{name}}에 오신 것을 환영합니다",
@@ -3766,7 +3793,9 @@
         "completedOn": "{{date}}에 완료됨",
         "completedToast": "구독이 완료되었습니다.",
         "endsAfter": "{{count}}회 결제 남음",
-        "logoTypeError": "PNG, JPEG, WebP 또는 SVG 이미지를 사용하세요."
+        "logoTypeError": "PNG, JPEG, WebP 또는 SVG 이미지를 사용하세요.",
+        "accountUsernameLabel": "등록 계정",
+        "accountUsernameHint": "이메일 주소 또는 사용자 이름. 비밀번호 입력란이 아닙니다. Yuvomi는 비밀번호를 저장하지 않습니다."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi 소지품",
         "removeBookingAction": "\"{{title}}\" 제거",
-        "photoTooLarge": "축소 후에도 사진이 너무 큽니다."
+        "photoTooLarge": "축소 후에도 사진이 너무 큽니다.",
+        "accountUsernameLabel": "등록 계정",
+        "accountUsernameHint": "이메일 주소 또는 사용자 이름. 비밀번호 입력란이 아닙니다. Yuvomi는 비밀번호를 저장하지 않습니다."
     },
     "documentAttach": {
         "label": "첨부",

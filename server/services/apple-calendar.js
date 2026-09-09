@@ -31,6 +31,7 @@ import { vtimezoneFor } from '../utils/vtimezone.js';
 import { householdTimeZone } from '../utils/timezone.js';
 import { createCalDAVClient } from '../utils/caldav-client.js';
 import { nearestIcalColorName } from '../utils/ical-color.js';
+import { outboundEvent } from './outbound-dtstart.js';
 
 const APPLE_COLOR = '#FC3C44';
 
@@ -194,7 +195,9 @@ function buildICS(event, householdZone = null) {
   // Zeiten samt Zone zentral (#938). Vorher schnitt dieser Pfad die Trennzeichen
   // aus dem gespeicherten Wert und schickte die Ziffern ohne Zonenangabe los -
   // 10 Uhr auf wessen Uhr auch immer.
-  const when = eventDateTimeFields(event, householdZone);
+  // Start/Ende mit der eigenen Wiederholungsregel in Einklang (#986); ein
+  // importiertes DTSTART bleibt unberuehrt (#756).
+  const when = eventDateTimeFields(outboundEvent(event), householdZone);
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',

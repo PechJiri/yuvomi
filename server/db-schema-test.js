@@ -1113,9 +1113,9 @@ const MIGRATIONS_SQL = {
       END;
     `,
 
-  // SQL for migration v190 (mirrored from db.js MIGRATIONS):
+  // SQL for migration v194 (mirrored from db.js MIGRATIONS):
   // Linked replacements keep their original recurrence slot identity.
-  190: `
+  194: `
     ALTER TABLE calendar_events ADD COLUMN recurrence_parent_id INTEGER
       REFERENCES calendar_events(id) ON DELETE CASCADE;
     ALTER TABLE calendar_events ADD COLUMN recurrence_id TEXT;

@@ -1316,3 +1316,49 @@
     display: none;
   }
 }
+
+/* Vorschaubild einer geplanten Mahlzeit (#1059).
+ *
+ * NUR DIE BEBILDERTE KARTE WIRD ZUM GRID, jede andere bleibt die Spalten-Flex,
+ * die sie war. Die erste Fassung gab JEDER Karte einen Bildslot, damit alle
+ * gleich weit einruecken - und machte damit genau die Layout-Aenderung, die das
+ * Ticket ausschliesst ("a missing picture is a quiet gap, not a layout
+ * change"): gemessen an der Wochenansicht kostete der Slot 32px plus Abstand
+ * von einer rund 100px breiten Spalte, in JEDER Zelle. Ein Haushalt ohne
+ * Mealie oder Tandoor hat gar keine Bilder; er haette 28 bedeutungslose
+ * Besteck-Symbole bekommen und dafuer ein Drittel seiner Titelbreite bezahlt.
+ *
+ * Die Regel des Tickets ist die ZEILENHOEHE, und die haelt: der Slot ist
+ * kleiner als die Karte hoch ist, eine bebilderte Karte ist also genauso hoch
+ * wie ihre textige Nachbarin (gemessen 121px zu 121px an derselben Karte). */
+.meal-card__open--with-thumb {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-2);
+  align-items: center;
+  justify-items: start;
+}
+
+.meal-card__thumb {
+  grid-row: 1 / -1;
+  width: var(--target-sm);
+  height: var(--target-sm);
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.meal-card__thumb-img {
+  width: 100%;
+  height: 100%;
+  /* Schneiden statt verzerren - Provider liefern jedes Seitenverhaeltnis. */
+  object-fit: cover;
+}
+
+.meal-card__thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-2);
+  color: var(--color-text-tertiary);
+}

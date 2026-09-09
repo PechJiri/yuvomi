@@ -596,7 +596,15 @@
         "toPantryNothing": "Kilere hiçbir şey eklenmedi. \"Kilere\" seçeneğini yeniden aç ve miktarları kontrol et.",
         "reorderHandle": "Sırayı değiştir: {{name}}",
         "reorderHandleHint": "Sıralamak için sürükleyin veya ok tuşlarını kullanın",
-        "reorderPosition": "{{total}} öğeden {{index}}. sırada"
+        "reorderPosition": "{{total}} öğeden {{index}}. sırada",
+        "priceLabel": "Fiyat",
+        "storeLabel": "Mağaza",
+        "storePlaceholder": "Seçin veya yazın",
+        "manageStores": "Mağazaları yönet",
+        "storesHint": "Alışveriş yaptığınız mağazalar. Mağazasız bir fiyat sorunun yarısını yanıtlar.",
+        "storeDeleteConfirm": "“{{name}}” mağazası silinsin mi?",
+        "storeDeleteConfirmDetail": "Bu mağazanın ürünleri ve fiyatları kalır - yalnızca mağaza ataması boşalır. Yerine geçecek bir mağaza yoktur.",
+        "addStore": "Yeni mağaza"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} öğün planlandı.",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "Halihazırda ödenen taksitler",
         "loanPaidInstallmentsHint": "Zaten devam eden bir kredi için. Bu taksitler kaydedilir, ancak bütçeye işlenmez.",
         "loanPaymentTypeLocked": "Gelir mi gider mi olduğu kredi türüne bağlıdır ve orada değiştirilir.",
-        "planHistoricNote": "Mevcut planınıza göre ölçülmüştür. Yuvomi, önceki bir aydaki planın ne olduğunu saklamaz."
+        "planHistoricNote": "Mevcut planınıza göre ölçülmüştür. Yuvomi, önceki bir aydaki planın ne olduğunu saklamaz.",
+        "recurringEditSeriesHint": "Serinin ilk kaydı aynı zamanda şablonudur - başlık, tutar, kategori ve hesap orada da değişir, geçmişte olsa bile.",
+        "responsibleLabel": "Sorumlu",
+        "responsibleHint": "Bu kaydı kim üstleniyor. Para hareketi oluşturmaz - hesaplaşmak için paylaşılan giderleri kullanın.",
+        "responsibleFilterTo": "Yalnızca {{name}} kayıtları",
+        "clearResponsibleFilter": "Sorumlu filtresini kaldır",
+        "groupByResponsible": "Sorumluya göre",
+        "responsibleNobody": "Kimse",
+        "responsibleFilterEmptyTitle": "Bu kişi için kayıt yok",
+        "responsibleFilterEmptyDescription": "Bu seçimde bu ay hiçbir kayıttan kimse sorumlu değil.",
+        "handoverToSplit": "Paylaşılan giderlere aktar",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plana göre: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Döngü sekmesini göster",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "Mevcut kayıtları da değiştir",
         "healthVisibilityApplyHint": "Kaydedildi. {{area}} altındaki mevcut kayıtlar da değiştirilsin mi?",
         "healthVisibilityApplied": "{{count}} kayıt değiştirildi.",
-        "healthVisibilityApplied_one": "Bir kayıt değiştirildi."
+        "healthVisibilityApplied_one": "Bir kayıt değiştirildi.",
+        "mealTypeNamesLabel": "Kendi adlarınız",
+        "mealTypeNamesHint": "Haneniz dört öğünü nasıl adlandırıyor. Yerleşik ad için boş bırakın. Ad, her dilde yazdığınız gibi görünür.",
+        "mealTypeNamesSaved": "Adlar kaydedildi."
     },
     "login": {
         "tagline": "Aile planlayıcına tekrar hoş geldin.",
@@ -2757,7 +2779,12 @@
         "sourceNative": "Yerel",
         "sourceAll": "Tümü",
         "sourceFilterLabel": "Kaynağa göre filtrele",
-        "plannedThisWeek": "Bu hafta planlandı"
+        "plannedThisWeek": "Bu hafta planlandı",
+        "imageLabel": "Görsel",
+        "imageChoose": "Görsel seç",
+        "imageRemove": "Görseli kaldır",
+        "imageHint": "Tarif başına bir görsel. Yemek planında ve genel bakış kutusunda görünür.",
+        "imageTooLarge": "Görsel küçültüldükten sonra hâlâ çok büyük."
     },
     "search": {
         "emptyHint": "Görevler, etkinlikler, notlar, kişiler, alışveriş ve sağlıkta aramak için en az 2 karakter yaz.",
@@ -3766,7 +3793,9 @@
         "completedOn": "{{date}} tarihinde tamamlandı",
         "completedToast": "Abonelik tamamlandı.",
         "endsAfter": "{{count}} ödeme kaldı",
-        "logoTypeError": "PNG, JPEG, WebP veya SVG resmi kullanın."
+        "logoTypeError": "PNG, JPEG, WebP veya SVG resmi kullanın.",
+        "accountUsernameLabel": "Şu adla kayıtlı",
+        "accountUsernameHint": "E-posta adresi veya kullanıcı adı. Parola alanı değildir - Yuvomi parola saklamaz."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi Envanter",
         "removeBookingAction": "\"{{title}}\" kaldır",
-        "photoTooLarge": "Fotoğraf yeniden boyutlandırmadan sonra hâlâ çok büyük."
+        "photoTooLarge": "Fotoğraf yeniden boyutlandırmadan sonra hâlâ çok büyük.",
+        "accountUsernameLabel": "Şu adla kayıtlı",
+        "accountUsernameHint": "E-posta adresi veya kullanıcı adı. Parola alanı değildir - Yuvomi parola saklamaz."
     },
     "documentAttach": {
         "label": "Ekler",

@@ -77,7 +77,7 @@ function createDatabase() {
   const database = new DatabaseSync(':memory:');
   database.exec('PRAGMA foreign_keys = ON;');
   database.exec(MIGRATIONS_SQL[1]);
-  database.exec(MIGRATIONS_SQL[44]); // search index rebuilt by migration 190
+  database.exec(MIGRATIONS_SQL[44]); // search index rebuilt by migration 194
   database.exec(MIGRATIONS_SQL[26]); // family document ACLs
   database.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
   database.exec(MIGRATIONS_SQL[174]); // generated name-day event owner
@@ -112,7 +112,7 @@ function createDatabase() {
       PRIMARY KEY (event_id, account_id)
     );
   `);
-  database.exec(MIGRATIONS_SQL[190]);
+  database.exec(MIGRATIONS_SQL[194]);
   database.exec(`
     ALTER TABLE calendar_events ADD COLUMN countdown INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE calendar_events ADD COLUMN attachment_name TEXT;
@@ -257,7 +257,7 @@ function assertInvalidIdentity(master, recurrenceId) {
   );
 }
 
-test('migration 190 links one replacement to one original series slot', () => {
+test('migration 194 links one replacement to one original series slot', () => {
   const database = createDatabase();
   const parent = insertSeries(database);
   const child = insertEvent(database, {
@@ -275,7 +275,7 @@ test('migration 190 links one replacement to one original series slot', () => {
   assert.equal(database.prepare('SELECT id FROM calendar_events WHERE id = ?').get(child), undefined);
 });
 
-test('migration 190 adds nullable metadata and the parent/start lookup index', () => {
+test('migration 194 adds nullable metadata and the parent/start lookup index', () => {
   const database = createDatabase();
   const columns = new Map(database.prepare('PRAGMA table_info(calendar_events)').all().map((column) => [column.name, column]));
 

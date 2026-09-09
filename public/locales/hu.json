@@ -596,7 +596,15 @@
         "toPantryNothing": "Semmi sem került a kamrába. Nyisd meg újra a „A kamrába\" pontot, és ellenőrizd a mennyiségeket.",
         "reorderHandle": "Sorrend módosítása: {{name}}",
         "reorderHandleHint": "Húzza vagy használja a nyílbillentyűket a rendezéshez",
-        "reorderPosition": "{{index}}. pozíció, összesen {{total}}"
+        "reorderPosition": "{{index}}. pozíció, összesen {{total}}",
+        "priceLabel": "Ár",
+        "storeLabel": "Bolt",
+        "storePlaceholder": "Válasszon vagy írjon",
+        "manageStores": "Boltok kezelése",
+        "storesHint": "A boltok, ahol vásároltok. Az ár bolt nélkül csak félig válaszol.",
+        "storeDeleteConfirm": "Törli a(z) „{{name}}” üzletet?",
+        "storeDeleteConfirmDetail": "Az üzlethez tartozó tételek és az áruk is megmaradnak - csak az üzlet hozzárendelése lesz üres. Helyettesítő üzlet itt nincs.",
+        "addStore": "Új üzlet"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} étel megtervezve.",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "Már kifizetett részletek",
         "loanPaidInstallmentsHint": "Már futó kölcsönhöz. Ezek a részletek rögzülnek, de nem kerülnek be a költségvetésbe.",
         "loanPaymentTypeLocked": "A bevétel vagy kiadás a kölcsön típusát követi, és ott módosítható.",
-        "planHistoricNote": "A jelenlegi tervedhez mérve. A Yuvomi nem őrzi meg, mi volt a terv egy korábbi hónapban."
+        "planHistoricNote": "A jelenlegi tervedhez mérve. A Yuvomi nem őrzi meg, mi volt a terv egy korábbi hónapban.",
+        "recurringEditSeriesHint": "A sorozat első tétele egyben a sablonja is - a cím, az összeg, a kategória és a számla ott is módosul, még akkor is, ha a múltban van.",
+        "responsibleLabel": "Felelős",
+        "responsibleHint": "Ki intézi ezt a tételt. Nem mozgat pénzt - az elszámoláshoz a közös kiadások vannak.",
+        "responsibleFilterTo": "Csak {{name}} tételei",
+        "clearResponsibleFilter": "Felelős szűrő törlése",
+        "groupByResponsible": "Felelős szerint",
+        "responsibleNobody": "Senki",
+        "responsibleFilterEmptyTitle": "Nincs tétel ehhez a személyhez",
+        "responsibleFilterEmptyDescription": "Ebben a hónapban senki sem felelős tételért ebben a válogatásban.",
+        "handoverToSplit": "Áthelyezés a közös kiadásokba",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (terv: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Ciklus fül megjelenítése",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "A meglévő bejegyzések is változzanak",
         "healthVisibilityApplyHint": "Mentve. A(z) {{area}} meglévő bejegyzései is változzanak?",
         "healthVisibilityApplied": "{{count}} bejegyzés módosítva.",
-        "healthVisibilityApplied_one": "Egy bejegyzés módosítva."
+        "healthVisibilityApplied_one": "Egy bejegyzés módosítva.",
+        "mealTypeNamesLabel": "Saját elnevezések",
+        "mealTypeNamesHint": "Hogyan hívja a háztartásod a négy étkezést. Hagyd üresen a beépített névhez. A név minden nyelven pontosan úgy jelenik meg, ahogy beírod.",
+        "mealTypeNamesSaved": "Elnevezések elmentve."
     },
     "login": {
         "tagline": "Üdv újra a családi tervezőben.",
@@ -2848,7 +2870,12 @@
         "sourceNative": "Natív",
         "sourceAll": "Összes",
         "sourceFilterLabel": "Szűrés forrás szerint",
-        "plannedThisWeek": "Erre a hétre betervezve"
+        "plannedThisWeek": "Erre a hétre betervezve",
+        "imageLabel": "Kép",
+        "imageChoose": "Kép választása",
+        "imageRemove": "Kép eltávolítása",
+        "imageHint": "Receptenként egy kép. Megjelenik az étkezési tervben és az áttekintő csempén.",
+        "imageTooLarge": "A kép kicsinyítés után is túl nagy."
     },
     "search": {
         "emptyHint": "Írj be legalább 2 karaktert a feladatok, események, jegyzetek, névjegyek, bevásárlás és egészség kereséséhez.",
@@ -3766,7 +3793,9 @@
         "completedOn": "Befejezve: {{date}}",
         "completedToast": "Előfizetés befejezve.",
         "endsAfter": "Még {{count}} fizetés",
-        "logoTypeError": "Használjon PNG, JPEG, WebP vagy SVG képet."
+        "logoTypeError": "Használjon PNG, JPEG, WebP vagy SVG képet.",
+        "accountUsernameLabel": "Regisztrálva erre",
+        "accountUsernameHint": "E-mail-cím vagy felhasználónév. Ez nem jelszómező - a Yuvomi nem tárol jelszavakat."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi leltár",
         "removeBookingAction": "„{{title}}” eltávolítása",
-        "photoTooLarge": "A fotó még mindig túl nagy az átméretezés után."
+        "photoTooLarge": "A fotó még mindig túl nagy az átméretezés után.",
+        "accountUsernameLabel": "Regisztrálva erre",
+        "accountUsernameHint": "E-mail-cím vagy felhasználónév. Ez nem jelszómező - a Yuvomi nem tárol jelszavakat."
     },
     "documentAttach": {
         "label": "Mellékletek",

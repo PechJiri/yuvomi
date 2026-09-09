@@ -36,7 +36,9 @@ async function apiFetch(path, options = {}, _retried = false) {
 
   const method = options.method ?? 'GET';
   const stateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
-  const { headers: optionHeaders = {}, ...fetchOptions } = options;
+  // `withSource` ist KEINE fetch-Option und wird deshalb hier herausgeloest,
+  // bevor der Rest weitergereicht wird.
+  const { headers: optionHeaders = {}, withSource = false, ...fetchOptions } = options;
 
   let response;
   try {
@@ -108,6 +110,20 @@ async function apiFetch(path, options = {}, _retried = false) {
 
   if (stateChanging) notifyCountedMutation(path);
 
+  // `withSource` beantwortet EINE Frage: kam diese Antwort aus dem
+  // Offline-Cache des Service Workers?
+  //
+  // `networkFirstApi` in `sw.js` setzt `x-cached-at` nur beim ABLEGEN und gibt
+  // die Netzantwort unveraendert zurueck - der Header ist damit das eindeutige
+  // Merkmal, und ohne aktiven Service Worker gibt es ihn nie. Ein Cache-Treffer
+  // kommt mit dem urspruenglichen Status 200 zurueck, ist also von einer
+  // frischen Antwort sonst nicht zu unterscheiden.
+  //
+  // Am ERGEBNIS und nicht in einem Modulfeld: zwei gleichzeitige Anfragen
+  // haetten sich einen gemeinsamen Merker gegenseitig ueberschrieben, und die
+  // Frage stellt sich gerade dort, wo mehrere Rundlaeufe offen sind.
+  if (withSource) return { data, fromCache: response.headers.has('x-cached-at') };
+
   return data;
 }
 
@@ -159,6 +175,16 @@ class ApiError extends Error {
 
 const api = {
   get: (path) => apiFetch(path, { method: 'GET' }),
+
+  /**
+   * Wie `get`, liefert aber `{ data, fromCache }` statt nur den Rumpf.
+   *
+   * Fuer Aufrufer, die eine Antwort AUS DEM CACHE nicht wie eine frische
+   * behandeln duerfen. Der Einkauf ist der erste: er haelt Merker fuer
+   * ausstehende Abhak-Vorgaenge und darf sie erst raeumen, wenn eine Antwort
+   * beweist, dass der Server den Wert kennt - eine gecachte beweist nichts.
+   */
+  getWithSource: (path) => apiFetch(path, { method: 'GET', withSource: true }),
 
   post: (path, body, opts = {}) => apiFetch(path, {
     method: 'POST',

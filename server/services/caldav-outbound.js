@@ -18,6 +18,7 @@ import { eventDateTimeFields } from '../utils/ics-datetime.js';
 import { householdTimeZone } from '../utils/timezone.js';
 import * as db from '../db.js';
 import { nearestIcalColorName } from '../utils/ical-color.js';
+import { outboundEvent } from './outbound-dtstart.js';
 
 const log = createLogger('CalDAVOutbound');
 
@@ -43,7 +44,9 @@ const label = (source) => (source === 'apple' ? 'Apple' : 'CalDAV');
  * @returns {{ fields: object, tzid: string|null }}
  */
 export function icsFieldsForEvent(event, householdZone = null) {
-  const when = eventDateTimeFields(event, householdZone);
+  // Start/Ende mit der eigenen Wiederholungsregel in Einklang (#986); ein
+  // importiertes DTSTART bleibt unberuehrt (#756).
+  const when = eventDateTimeFields(outboundEvent(event), householdZone);
 
   const fields = {
     SUMMARY:     event.title,

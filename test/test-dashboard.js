@@ -59,6 +59,7 @@ db.exec(`
   );
 `);
 db.exec(MIGRATIONS_SQL[1]);
+db.exec(MIGRATIONS_SQL[2]);  // sync_config - traegt die Haushaltszone (siehe unten)
 db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions (EXDATE, #489)
 
 // Testdaten einfügen
@@ -77,6 +78,16 @@ const uid2 = u2.lastInsertRowid;
 // `inOneHour` bleibt ein echter Instant und damit korrekt in UTC.
 const today = toLocalDateKey();
 const tomorrow = addLocalDays(today, 1);
+
+// DIE HAUSHALTSZONE MUSS DIESELBE SEIN, AUS DER DIE SAAT IHREN TAG NIMMT.
+// Serverseitig beantwortet `todayKey()` die Frage "welcher Tag ist heute" aus
+// `sync_config.household_timezone`; fehlt der Eintrag, faellt es still auf die
+// Zone des RECHNERS zurueck. Genau dieser stille Rueckfall hat hier zweimal
+// zugeschlagen (siehe den Kommentar oben zu 00:00-02:00 CEST, und #1076). Er
+// stimmte bisher nur zufaellig mit `toLocalDateKey()` ueberein - jetzt steht es
+// da, und der Waechter darunter faellt, wenn es jemand auseinanderzieht.
+db.prepare('INSERT INTO sync_config (key, value) VALUES (?, ?)')
+  .run('household_timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
 const currentMonth = today.slice(0, 7);
 const inOneHour = new Date(Date.now() + 3600000).toISOString();
 const in30h = toLocalDateKey(new Date(Date.now() + 30 * 3600000));
@@ -328,19 +339,102 @@ test('formatDueDate liest due_date/due_time in der Anzeigezone, nicht im Browser
   }
 });
 
-test('formatDueDate: eine Faelligkeit spaeter am Tag ist nicht schon ueberfaellig', async () => {
+/* Die Grenze zwischen „gleich faellig" und „schon vorbei" - an JEDER Minute des
+ * Tages, nicht an der, die gerade zufaellig ist.
+ *
+ * Diese Probe erbte ihre Eingabe von der echten Uhr: sie las `nowFields()`,
+ * rechnete `Date.UTC(...) + 60000` und reichte nur STUNDE UND MINUTE des
+ * Ergebnisses weiter, den Tag aber unveraendert aus dem Vorher. Um 23:59 der
+ * Anzeigezone faellt die eine Minute auf den naechsten Tag: die Uhrzeit sprang
+ * auf 00:00, der Tag blieb stehen, und die angebliche „Minute in der Zukunft"
+ * war in Wahrheit 23 Stunden und 59 Minuten VERGANGENHEIT. `formatDueDate`
+ * antwortete voellig richtig „ueberfaellig", der Test nannte das einen Fehler.
+ *
+ * Ein Tageswechsel ist nicht die Zeitzone des RECHNERS - der spielt hier keine
+ * Rolle, weil `zonedFields()` mit gesetzter Anzeigezone ueber
+ * `Intl.DateTimeFormat` liest und `Date.UTC`/`getUTC*` reine Feldarithmetik
+ * sind. Gemessen: unter TZ=UTC, TZ=Europe/Berlin und TZ=America/Los_Angeles
+ * faellt exakt dieselbe eine Minute (2026-09-09T09:59Z = 23:59 in Honolulu).
+ * Die Suite war deshalb 1439 Minuten am Tag gruen und blind, und der eine rote
+ * Lauf sah aus wie eine Zonenabhaengigkeit, weil er nur dem einen Rechner
+ * begegnete, der gerade lief.
+ *
+ * Deshalb steht hier BEIDES still: die Anzeigezone (wie in den Proben darueber)
+ * und die Uhr. Zwischen dem Stellen und dem Zuruecksetzen liegt kein `await` -
+ * die Tests dieser Datei laufen verschraenkt, und ein `await` mitten drin
+ * uebergaebe einer anderen Probe eine gestellte Uhr und eine fremde Zone.
+ */
+test('formatDueDate: die Faelligkeitsgrenze haelt an jeder Minute des Tages', async () => {
   const tz = await import('/utils/timezone.js');
   const { __test } = await import('../public/pages/dashboard.js');
+
+  // Ab hier synchron.
+  const RealDate = Date;
+  let fixedMs = RealDate.UTC(2026, 8, 9);
+  class FrozenDate extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [fixedMs])); }
+    static now() { return fixedMs; }
+  }
+
+  const p2 = (n) => String(n).padStart(2, '0');
+  const dayOf = (f) => `${f.year}-${p2(f.month)}-${p2(f.day)}`;
+  // Wanduhr-Felder plus/minus Minuten - dieselbe Feldarithmetik, die
+  // `formatDueDate` intern fuehrt, und diesmal MIT dem Tagesuebertrag.
+  const shiftWallMinutes = (f, minutes) => {
+    const d = new RealDate(RealDate.UTC(f.year, f.month - 1, f.day, f.hour, f.minute) + minutes * 60000);
+    return {
+      day: `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`,
+      time: `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`,
+    };
+  };
+
   try {
-    tz.setDisplayTimeZone('Pacific/Honolulu');
-    const now = tz.nowFields();
-    const p2 = (n) => String(n).padStart(2, '0');
-    const today = `${now.year}-${p2(now.month)}-${p2(now.day)}`;
-    // Eine Minute in der Zukunft, in der Zone gerechnet, in der die Anzeige liest.
-    const later = new Date(Date.UTC(now.year, now.month - 1, now.day, now.hour, now.minute) + 60000);
-    const res = __test.formatDueDate(today, `${p2(later.getUTCHours())}:${p2(later.getUTCMinutes())}`);
-    nodeAssert.equal(res.overdue, false, `nicht ueberfaellig, erhalten: ${res.text}`);
+    globalThis.Date = FrozenDate;
+    // Eine westlich von UTC (-10), eine knapp oestlich (+2) und eine am
+    // aeussersten Ostrand (+14): der Tageswechsel der Anzeigezone faellt in
+    // jeder auf eine andere UTC-Minute, und in Kiritimati liegt er sogar auf
+    // einem anderen UTC-Datum.
+    for (const zone of ['Pacific/Honolulu', 'Europe/Berlin', 'Pacific/Kiritimati']) {
+      tz.setDisplayTimeZone(zone);
+      let sawLastMinuteOfDay = 0;
+
+      // Ein voller Tag im Minutenraster - damit ist die 23:59 der Zone
+      // zwangslaeufig dabei, in welcher Zone auch immer.
+      for (let i = 0; i < 1440; i++) {
+        fixedMs = RealDate.UTC(2026, 8, 9) + i * 60000;
+        const now = tz.nowFields();
+        const when = `${zone} @ ${dayOf(now)} ${p2(now.hour)}:${p2(now.minute)}`;
+        if (now.hour === 23 && now.minute === 59) sawLastMinuteOfDay += 1;
+
+        // Eine Minute spaeter ist noch nicht vorbei - auch wenn sie ueber
+        // Mitternacht faellt.
+        const future = shiftWallMinutes(now, 1);
+        const ahead = __test.formatDueDate(future.day, future.time);
+        nodeAssert.equal(ahead.overdue, false,
+          `${when}: eine Minute spaeter (${future.day} ${future.time}) ist nicht ueberfaellig, erhalten: ${ahead.text}`);
+
+        // Und eine Minute frueher ist es. Ohne diese Haelfte bestuende die Probe
+        // auch dann, wenn `formatDueDate` gar nichts mehr ueberfaellig nennt.
+        const past = shiftWallMinutes(now, -1);
+        const behind = __test.formatDueDate(past.day, past.time);
+        nodeAssert.equal(behind.overdue, true,
+          `${when}: eine Minute frueher (${past.day} ${past.time}) ist ueberfaellig, erhalten: ${behind.text}`);
+
+        // Die Grenze selbst: genau jetzt faellig ist noch nicht vorbei. Ohne
+        // diesen Fall bliebe ein `<=` statt `<` in `formatDueDate` unbemerkt -
+        // gemessen: die Probe war mit dieser Aenderung gruen.
+        const same = shiftWallMinutes(now, 0);
+        const onTime = __test.formatDueDate(same.day, same.time);
+        nodeAssert.equal(onTime.overdue, false,
+          `${when}: genau jetzt faellig (${same.day} ${same.time}) ist noch nicht ueberfaellig, erhalten: ${onTime.text}`);
+      }
+
+      // Sonst haette das Raster die Stelle, um die es geht, gar nicht getroffen.
+      nodeAssert.equal(sawLastMinuteOfDay, 1,
+        `${zone}: das Raster muss den Tageswechsel genau einmal enthalten, gezaehlt: ${sawLastMinuteOfDay}`);
+    }
   } finally {
+    globalThis.Date = RealDate;
     tz.setDisplayTimeZone(null);
   }
 });
@@ -742,10 +836,41 @@ test('Angepinnte Notizen: nicht angepinnte werden ausgeschlossen', () => {
 // --------------------------------------------------------
 // Tests: Geburtstage
 // --------------------------------------------------------
+test('Saattag und Haushaltstag sind derselbe Tag', async () => {
+  // Der Nagel, auf dem die halbe Datei haengt: 36 Stellen saeen ihre Daten mit
+  // `toLocalDateKey()`, und der Server liest sie ueber die Haushaltszone zurueck.
+  // Laufen die beiden auseinander, faellt nicht dieser Test, sondern irgendein
+  // anderer, ein paar Stunden am Tag, und die Ursache steht nirgends. Deshalb
+  // hier, mit Namen, und zwar an BEIDEN Enden des Tages.
+  const { todayKey } = await import('../server/utils/timezone.js');
+  for (const stunde of ['00:00:01', '12:00:00', '23:59:59']) {
+    nodeAssert.equal(
+      todayKey(db, new Date(`${today}T${stunde}`)),
+      today,
+      `Haushaltszone und Saatzone driften auseinander (${stunde}): ` +
+      `sync_config sagt ${db.prepare("SELECT value FROM sync_config WHERE key='household_timezone'").get()?.value}`
+    );
+  }
+});
+
+/* Nachgesehen, weil ein Testfehler ueber Kalendertage sonst leicht einen
+ * Produktfehler versteckt: hier ist keiner dahinter. Alle Aufrufer von
+ * `hydrateBirthday` (server/routes/birthdays.js dreimal, server/routes/
+ * dashboard.js ueber `hydrateBirthdayOccurrences`) uebergeben gar kein `from`
+ * und bekommen `new Date()` - einen echten Zeitpunkt, den `todayKey` korrekt
+ * in den Haushaltstag umrechnet. Nur der Test baute sich einen Zeitpunkt, der
+ * nicht der Tag war, den er meinte.
+ */
 test('Geburtstage: haushaltsweit, sortiert nach nächstem Geburtstag', () => {
   const rows = db.prepare('SELECT * FROM birthdays ORDER BY name COLLATE NOCASE ASC').all();
   const birthdays = rows
-    .map((row) => hydrateBirthday(db, row, new Date(`${today}T12:00:00Z`)))
+    // Mittag des gesaeten Tages in der HAUSHALTSZONE, nicht 12:00 UTC. Mit dem
+    // `Z` stand hier ein Instant, der ab einem Zonenversatz von +12 schon auf dem
+    // FOLGETAG liegt: unter Pacific/Kiritimati (+14) hielt `hydrateBirthday` den
+    // 11. fuer heute, waehrend die Saat auf dem 10. lag, und "Morgen Geburtstag"
+    // bekam `days_until: 0`. Ohne das `Z` liest `new Date` lokal, also in
+    // derselben Zone, aus der `toLocalDateKey()` den Saattag genommen hat.
+    .map((row) => hydrateBirthday(db, row, new Date(`${today}T12:00:00`)))
     .sort((a, b) => a.days_until - b.days_until || a.name.localeCompare(b.name))
     .slice(0, 3);
 
@@ -754,6 +879,65 @@ test('Geburtstage: haushaltsweit, sortiert nach nächstem Geburtstag', () => {
   assert(birthdays.some((birthday) => birthday.name === 'Heute Geburtstag' && birthday.days_until === 0),
     'Eigener heutiger Geburtstag muss enthalten sein');
   assert(birthdays.some((birthday) => birthday.name === 'Anderer Nutzer'), 'Geburtstag eines anderen Nutzers muss enthalten sein');
+});
+
+/* Und die Zone einmal WEG von der des Rechners.
+ *
+ * Die geteilte Datenbank oben setzt `household_timezone` bewusst auf die Zone
+ * der Maschine, damit Saattag und Haushaltstag zusammenfallen. Der Preis dafuer
+ * ist, dass in dieser Datenbank beide Uhren dasselbe sagen: ob `hydrateBirthday`
+ * den Stichtag aus der HAUSHALTSZONE nimmt oder einfach aus der des Servers,
+ * ist dort nicht zu unterscheiden. Der Waechter `Saattag und Haushaltstag sind
+ * derselbe Tag` bliebe gruen, wenn jemand die Haushaltszone ganz herausnaehme.
+ *
+ * Diese Probe stellt deshalb eine eigene Datenbank hin, in der die
+ * Haushaltszone NICHT die der Maschine ist, und liest EINEN Zeitpunkt zweimal,
+ * in zwei Zonen beiderseits der Datumsgrenze. Weil beide Antworten aus
+ * demselben Zeitpunkt kommen und sich unterscheiden MUESSEN, kann keine
+ * Fassung sie erfuellen, die stattdessen die Zone der Maschine liest - die ist
+ * innerhalb eines Laufs konstant.
+ */
+test('Geburtstage: der Stichtag folgt der Haushaltszone, nicht der des Servers', () => {
+  const zdb = new DatabaseSync(':memory:');
+  zdb.exec('PRAGMA foreign_keys = ON;');
+  zdb.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY, description TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    );
+  `);
+  zdb.exec(MIGRATIONS_SQL[1]);
+  zdb.exec(MIGRATIONS_SQL[2]); // sync_config - traegt die Haushaltszone, hier bewusst eine fremde
+
+  const zoneUser = zdb.prepare(`INSERT INTO users (username, display_name, password_hash, avatar_color)
+    VALUES ('zonen-test', 'Zonen Test', 'x', '#FF9500')`).run().lastInsertRowid;
+  zdb.prepare(`INSERT INTO birthdays (name, birth_date, created_by)
+    VALUES ('Zonenkind', '2012-06-16', ?)`).run(zoneUser);
+  const row = zdb.prepare('SELECT * FROM birthdays').get();
+
+  const setZone = (zone) => zdb.prepare(`
+    INSERT INTO sync_config (key, value) VALUES ('household_timezone', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(zone);
+
+  // EIN Zeitpunkt, der die Zonen trennt: 2026-06-15T12:00:00Z ist in Kiritimati
+  // (+14) bereits der 16. um 02:00, in Los Angeles (-7) noch der 15. um 05:00.
+  const at = new Date('2026-06-15T12:00:00Z');
+
+  setZone('Pacific/Kiritimati');
+  const east = hydrateBirthday(zdb, row, at);
+  assert(east.days_until === 0,
+    `Haushalt auf Kiritimati: am 16. ist der Geburtstag heute, erhalten days_until=${east.days_until} (next_birthday ${east.next_birthday})`);
+
+  setZone('America/Los_Angeles');
+  const west = hydrateBirthday(zdb, row, at);
+  assert(west.days_until === 1,
+    `Haushalt auf Los Angeles: derselbe Zeitpunkt ist noch der 15., der Geburtstag also morgen, erhalten days_until=${west.days_until} (next_birthday ${west.next_birthday})`);
+
+  // Und die beiden muessen sich unterscheiden - sonst hat die Zone gar nichts
+  // entschieden und beide Zweige lasen dieselbe (Server-)Uhr.
+  assert(east.days_until !== west.days_until,
+    'derselbe Zeitpunkt muss in beiden Haushaltszonen einen anderen Stichtag ergeben');
 });
 
 test('Dashboard-Geburtstagswidget lädt Geburtstage haushaltsweit (Issue #406)', async () => {

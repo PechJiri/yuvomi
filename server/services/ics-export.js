@@ -10,6 +10,7 @@ import {
   householdTimeZone, isValidTimeZone, localToUTC, utcToWall,
 } from '../utils/timezone.js';
 import { formatWall, vtimezoneFor } from '../utils/vtimezone.js';
+import { outboundDateRange } from './outbound-dtstart.js';
 import { rruleLine } from './recurrence.js';
 import {
   BODY_FREE_EVENT_COLUMNS, eventProjectionSql, resolveProjectedEventRows,
@@ -182,27 +183,34 @@ function buildVEvent(
   const lines = ['BEGIN:VEVENT'];
   lines.push(`UID:event-${recurrenceMaster?.id ?? ev.id}@yuvomi`);
   lines.push(`DTSTAMP:${dtstamp}`);
+  // DTSTART mit der eigenen Regel in Einklang (#986) - nur fuer selbst angelegte
+  // Serien; ein importiertes DTSTART geht Wort fuer Wort zurueck (#756).
+  // Begruendung in services/outbound-dtstart.js. DAS ENDE WANDERT MIT: es ist
+  // ein absoluter Zeitstempel, kein Abstand - bliebe es stehen, endete der
+  // Termin vor seinem Beginn.
+  const { start_datetime: dtstart, end_datetime: dtende } = outboundDateRange(ev);
+
   if (recurrenceMaster) {
     lines.push(recurrenceSlotProp(
       'RECURRENCE-ID', recurrenceMaster, ev.recurrence_id, feedZone
     ));
   }
   if (ev.all_day) {
-    lines.push(`DTSTART;VALUE=DATE:${formatDate(ev.start_datetime)}`);
+    lines.push(`DTSTART;VALUE=DATE:${formatDate(dtstart)}`);
     // DTEND ist exklusiv: Yuvomi speichert das letzte sichtbare Datum → +1 Tag.
-    const endKey = ev.end_datetime || ev.start_datetime;
+    const endKey = dtende || dtstart;
     lines.push(`DTEND;VALUE=DATE:${addDaysDateKey(endKey, 1)}`);
   } else if (usesTzid(ev)) {
     // Wiederkehrende Serie mit Zone: lokale Wanduhrzeit + TZID, damit der Abonnent
     // pro Vorkommen DST-korrekt expandiert (statt fixem UTC-Suffix → Winter-Drift, #549).
-    lines.push(`DTSTART;TZID=${ev.tzid}:${formatWall(ev.start_datetime, ev.tzid)}`);
-    if (ev.end_datetime) lines.push(`DTEND;TZID=${ev.tzid}:${formatWall(ev.end_datetime, ev.tzid)}`);
+    lines.push(`DTSTART;TZID=${ev.tzid}:${formatWall(dtstart, ev.tzid)}`);
+    if (dtende) lines.push(`DTEND;TZID=${ev.tzid}:${formatWall(dtende, ev.tzid)}`);
   } else {
     // Extern synchronisierte Events tragen ein explizites Z/Offset → echte UTC-Konvertierung.
     // Lokal angelegte Events sind naiv (keine Z/Offset) → Wanduhrzeit des Haushalts,
     // an dessen Zone verankert statt floating (#818).
-    lines.push(stampProp('DTSTART', ev.start_datetime, feedZone));
-    if (ev.end_datetime) lines.push(stampProp('DTEND', ev.end_datetime, feedZone));
+    lines.push(stampProp('DTSTART', dtstart, feedZone));
+    if (dtende) lines.push(stampProp('DTEND', dtende, feedZone));
   }
   // Opt-in (#482): zugewiesene Personen als Titel-Suffix "(Name, Name)".
   // Escaping erfolgt über den zusammengesetzten String, damit Kommata/Semikola

@@ -53,35 +53,81 @@ function reachableFiles(entry, staticOnly = false) {
   return seen;
 }
 
+/** Statisch importierte Nachbardateien samt der Namen, die von dort kommen. */
+const STATIC_BINDINGS = /^\s*import\s+([^;]+?)\s+from\s+['"](\.[^'"]+)['"]/gm;
+
+function staticHelpers(entry) {
+  const src = readFileSync(entry, 'utf8');
+  const helpers = [];
+  for (const match of src.matchAll(STATIC_BINDINGS)) {
+    const clause = match[1];
+    const names = [
+      // `import { a, b as c } from …` - gebunden wird der rechte Name.
+      ...(clause.match(/\{([^}]*)\}/)?.[1] ?? '')
+        .split(',')
+        .map((part) => part.trim().split(/\s+as\s+/).pop())
+        .filter(Boolean),
+      // `import x from …` - der Default steht vor der Klammer.
+      ...(clause.replace(/\{[^}]*\}/g, '').split(',').map((n) => n.trim()).filter((n) => /^\w+$/.test(n))),
+    ];
+    helpers.push({ file: resolve(dirname(entry), match[2]), names });
+  }
+  return helpers;
+}
+
 /**
  * Setzt die Suite DB_PATH selbst - und zwar wirksam? Verlangt einen nicht
  * leeren Wert (db.js behandelt '' wie nicht gesetzt) und eine Zuweisung, die
  * vor jedem dynamischen Import steht, über den db.js geladen wird.
  * Erreicht ein statischer Import db.js, kann keine Zuweisung mehr helfen.
  */
-function setsDbPathInTime(entry) {
+function setsDbPathInTime(entry, seen = new Set()) {
+  if (seen.has(entry) || !existsSync(entry)) return false;
+  seen.add(entry);
   if (reachableFiles(entry, true).has(DB_MODULE)) return false;
 
   const src = readFileSync(entry, 'utf8');
-  // Die rechte Seite ist oft ein berechneter Pfad (join(os.tmpdir(), …)), nicht
-  // bloß ein Literal. Abgelehnt wird nur der nachweislich wirkungslose Fall:
-  // der leere String, den db.js wie "nicht gesetzt" behandelt.
+
+  // Ab welcher Stelle steht DB_PATH? Es gibt drei Formen, und alle drei sind
+  // dieselbe Regel - "gesetzt, bevor db.js lädt" - nur verschieden weit weg.
+  const from = [];
+
+  // ERSTE FORM: die Zuweisung hier. Die rechte Seite ist oft ein berechneter
+  // Pfad (join(os.tmpdir(), …)), nicht bloß ein Literal. Abgelehnt wird nur
+  // der nachweislich wirkungslose Fall: der leere String, den db.js wie
+  // "nicht gesetzt" behandelt.
   //
   // ZWEITE FORM: `freshTestDbPath()` aus test/tmp-db.js. Sie setzt DB_PATH
   // ebenfalls, nur eine Datei weiter - und räumt zusätzlich die Datei eines
   // abgebrochenen Vorlaufs weg, bevor sie sie öffnet. Dieser Guard prüfte
   // vorher die SCHREIBWEISE und nicht die Regel: als die neun Datei-Suiten auf
   // den Helfer umzogen, meldete er sie alle als Verstoß, obwohl sie DB_PATH
-  // strenger setzen als zuvor. Was zählt, ist "gesetzt, bevor db.js lädt".
+  // strenger setzen als zuvor.
   const assignment = /process\.env\.DB_PATH\s*=\s*([^;\n]+)|freshTestDbPath\s*\(\s*['"][^'"]+['"]\s*\)/.exec(src);
-  if (!assignment) return false;
-  if (assignment[1] !== undefined && /^(['"])\s*\1$/.test(assignment[1].trim())) return false;
+  const emptyValue = assignment?.[1] !== undefined && /^(['"])\s*\1$/.test(assignment[1].trim());
+  if (assignment && !emptyValue) from.push(assignment.index);
+
+  // DRITTE FORM: ein statisch importierter Helfer erledigt beides - er setzt
+  // DB_PATH und lädt db.js danach selbst (test/server-ready.js startet so den
+  // ganzen Server). Dann steht hier kein DB_PATH mehr, und der Guard meldete
+  // die Suite als Verstoß, obwohl die Reihenfolge im Helfer stimmt. Geprüft
+  // wird sie deshalb dort - mit derselben Funktion, eine Ebene tiefer.
+  for (const helper of staticHelpers(entry)) {
+    if (!setsDbPathInTime(helper.file, seen)) continue;
+    for (const name of helper.names) {
+      const call = new RegExp(`\\b${name}\\s*\\(`).exec(src);
+      if (call) from.push(call.index);
+    }
+  }
+
+  if (!from.length) return false;
+  const first = Math.min(...from);
 
   const loadPositions = [...src.matchAll(DYNAMIC_IMPORT)]
     .filter((m) => reachableFiles(resolve(dirname(entry), m[1])).has(DB_MODULE))
     .map((m) => m.index);
 
-  return loadPositions.every((pos) => assignment.index < pos);
+  return loadPositions.every((pos) => first < pos);
 }
 
 /**
@@ -174,6 +220,27 @@ test('die Reihenfolgeprüfung erkennt wirkungslose Zuweisungen', () => {
     const helperTooLate = write('helper-late.js',
       `import * as db from '${dbPath}';\nimport { freshTestDbPath } from './tmp-db.js';\nfreshTestDbPath('x');\n`);
     assert.strictEqual(setsDbPathInTime(helperTooLate), false, 'statischer Import schlägt auch den Helfer');
+
+    // DRITTE FORM: der Helfer setzt DB_PATH und lädt db.js selbst - in der
+    // Suite steht dann nur noch sein Aufruf. So arbeitet test/server-ready.js.
+    write('good-helper.js',
+      `process.env.DB_PATH = ':memory:';\nexport async function boot() { return import('${dbPath}'); }\n`);
+    const viaBoot = write('via-boot.js',
+      `import { boot } from './good-helper.js';\nawait boot();\n`);
+    assert.strictEqual(setsDbPathInTime(viaBoot), true, 'Helfer, der DB_PATH setzt und db.js lädt, zählt');
+
+    // Und die Gegenprobe dazu: derselbe Aufbau, nur setzt der Helfer DB_PATH
+    // erst NACH seinem eigenen Import. Dann darf auch der Aufruf nichts retten.
+    write('bad-helper.js',
+      `const db = await import('${dbPath}');\nprocess.env.DB_PATH = ':memory:';\nexport function boot() {}\n`);
+    const viaBadBoot = write('via-bad-boot.js',
+      `import { boot } from './bad-helper.js';\nboot();\n`);
+    assert.strictEqual(setsDbPathInTime(viaBadBoot), false, 'ein Helfer mit falscher Reihenfolge zählt nicht');
+
+    // Der Aufruf muss VOR dem eigenen db.js-Import der Suite stehen.
+    const callTooLate = write('call-late.js',
+      `import { boot } from './good-helper.js';\nconst db = await import('${dbPath}');\nawait boot();\n`);
+    assert.strictEqual(setsDbPathInTime(callTooLate), false, 'Helferaufruf nach dem eigenen Import zählt nicht');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

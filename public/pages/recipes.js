@@ -20,6 +20,8 @@ import '/components/datepicker.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { mountEmptyState, mountLoadError } from '/utils/empty-state.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
+import { mealTypeList, ensureMealTypeNames } from '/utils/meal-types.js';
+import { recipeThumbEl } from '/utils/recipe-thumb.js';
 
 let _container = null;
 /** Handle des geteilten Suchfelds (setValue/clear), gesetzt in render(). */
@@ -69,43 +71,21 @@ function sourceBadge(recipe) {
   return badge;
 }
 
-// Vorschaubild für ein gespiegeltes Rezept. Ohne Bild in Mealie (kein
-// provider_has_image aus dem letzten Sync) direkt der Platzhalter - kein
-// Thumbnail-Request, der ohnehin nur in einem 404 endet (bekannter Mealie-
-// eigener Logspam, siehe mealie-recipes/mealie#4804). Mit Bild wird echt
-// geladen, fällt aber per onerror auf denselben Platzhalter zurück, falls das
-// Bild zwischen dem letzten Sync und jetzt in Mealie gelöscht wurde - sonst
-// stünde ein kaputtes Bild-Icon in der Zeile, bis der nächste Sync es merkt.
+// Vorschaubild fuer ein gespiegeltes Rezept. Die beiden Faelle - kein Bild beim
+// Provider, Bild seit dem letzten Sync verschwunden - stehen samt Begruendung in
+// utils/recipe-thumb.js; seit #1059 zeigen auch Planer und Uebersichtskachel
+// dasselbe Bild und teilen sich denselben Ruecksturz.
 function recipeThumb(recipe) {
-  const slot = document.createElement('span');
-  slot.className = 'recipe-row__thumb';
-  if (!recipe.provider_has_image) {
-    slot.classList.add('recipe-row__thumb--placeholder');
-    slot.insertAdjacentHTML('beforeend', '<i data-lucide="utensils" class="icon-sm" aria-hidden="true"></i>');
-    return slot;
-  }
-  const img = document.createElement('img');
-  img.className = 'recipe-row__thumb-img';
-  img.src = `/api/v1/recipes/${recipe.id}/provider-thumbnail`;
-  img.alt = '';
-  img.loading = 'lazy';
-  img.addEventListener('error', () => {
-    img.remove();
-    slot.classList.add('recipe-row__thumb--placeholder');
-    slot.insertAdjacentHTML('beforeend', '<i data-lucide="utensils" class="icon-sm" aria-hidden="true"></i>');
-    if (window.lucide) window.lucide.createIcons({ el: slot });
-  }, { once: true });
-  slot.appendChild(img);
-  return slot;
+  return recipeThumbEl({
+    recipeId: recipe.id,
+    hasImage: recipe.provider_has_image,
+    hasOwnImage: recipe.has_own_image,
+    className: 'recipe-row__thumb',
+  });
 }
 
 function mealTypeOptions() {
-  return [
-    { key: 'breakfast', label: t('meals.typeBreakfast') },
-    { key: 'lunch', label: t('meals.typeLunch') },
-    { key: 'dinner', label: t('meals.typeDinner') },
-    { key: 'snack', label: t('meals.typeSnack') },
-  ];
+  return mealTypeList().map(({ key, label }) => ({ key, label }));
 }
 
 /**
@@ -298,7 +278,7 @@ export async function render(container) {
 
   if (window.lucide) window.lucide.createIcons({ el: container });
 
-  await Promise.all([loadRecipes(), loadCategories(), loadShoppingLists(), loadPlannedRecipes()]);
+  await Promise.all([loadRecipes(), loadCategories(), loadShoppingLists(), loadPlannedRecipes(), ensureMealTypeNames()]);
   renderSourceFilter();
   renderRecipeList();
 
@@ -841,6 +821,20 @@ function openRecipeModal(mode, recipe = null) {
           <label class="form-label" for="recipe-notes">${t('recipes.notesLabel')}</label>
           <textarea id="recipe-notes" class="form-input" rows="3" placeholder="${t('recipes.notesPlaceholder')}"></textarea>
         </div>
+        ${/* Ein eigenes Bild (#1059, Schritt 2) - fuer gespiegelte Rezepte
+            * ausgeblendet: die sind hier ohnehin schreibgeschuetzt, ihr Inhalt
+            * gehoert dem Provider. */ ''}
+        <div class="form-group" id="recipe-image-group"${isEdit && recipe?.source !== 'native' ? ' hidden' : ''}>
+          <label class="form-label">${t('recipes.imageLabel')}</label>
+          <div class="recipe-image-editor">
+            <button type="button" class="recipe-image-preview" id="recipe-image-preview"
+                    aria-label="${esc(t('recipes.imageLabel'))}"></button>
+            <input class="sr-only" id="recipe-image" type="file" accept="image/png,image/jpeg,image/webp">
+            <button type="button" class="btn btn--secondary btn--sm" id="recipe-image-pick">${t('recipes.imageChoose')}</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="recipe-image-remove">${t('recipes.imageRemove')}</button>
+          </div>
+          <p class="form-hint">${t('recipes.imageHint')}</p>
+        </div>
         <div class="form-group">
           <label class="form-label" for="recipe-url">${t('recipes.urlLabel')}</label>
           <input id="recipe-url" class="form-input" type="url" placeholder="${t('recipes.urlPlaceholder')}">
@@ -855,6 +849,64 @@ function openRecipeModal(mode, recipe = null) {
       panel.querySelector('#recipe-title').value = isEdit ? recipe.title : '';
       panel.querySelector('#recipe-notes').value = isEdit && recipe.notes ? recipe.notes : '';
       panel.querySelector('#recipe-url').value = isEdit && recipe.recipe_url ? recipe.recipe_url : '';
+
+      /* BILD (#1059, Schritt 2) - dasselbe Vorgehen wie beim Gegenstandsfoto:
+       * Auswahl, Zuschnitt und Groessenpruefung macht `pickCroppedImage`.
+       *
+       * `bildStand` traegt DREI Zustaende, und die dritte ist der Grund fuer die
+       * Fallunterscheidung beim Speichern: `undefined` heisst "nicht angefasst"
+       * (der Server laesst das gespeicherte Bild stehen), `null` heisst "entfernt",
+       * eine Data-URL heisst "das hier". Ohne den Unterschied schickte jedes
+       * Speichern eines bebilderten Rezepts entweder null (Bild weg) oder muesste
+       * die ganze Data-URL erneut hochladen. */
+      let bildStand;
+      const bildVorschau = panel.querySelector('#recipe-image-preview');
+      const bildInput = panel.querySelector('#recipe-image');
+      const zeigeBild = () => {
+        if (!bildVorschau) return;
+        bildVorschau.replaceChildren();
+        // Beim Bearbeiten kommt das gespeicherte Bild ueber die Route, nicht aus
+        // den Listendaten - dort steht nur das Flag (die Data-URL waere zu gross).
+        const quelle = bildStand !== undefined
+          ? bildStand
+          : (isEdit && recipe?.has_own_image ? `/api/v1/recipes/${recipe.id}/image` : null);
+        if (quelle) {
+          const img = document.createElement('img');
+          img.className = 'recipe-image-preview__img';
+          img.src = quelle;
+          img.alt = '';
+          bildVorschau.appendChild(img);
+        } else {
+          bildVorschau.insertAdjacentHTML('beforeend', '<i data-lucide="image-plus" class="icon-md" aria-hidden="true"></i>');
+          if (window.lucide) window.lucide.createIcons({ el: bildVorschau });
+        }
+      };
+      zeigeBild();
+      bildVorschau?.addEventListener('click', () => bildInput?.click());
+      panel.querySelector('#recipe-image-pick')?.addEventListener('click', () => bildInput?.click());
+      bildInput?.addEventListener('change', async (e) => {
+        const datei = e.target.files?.[0];
+        // Sofort zuruecksetzen: sonst feuert dieselbe Datei nach einem
+        // abgebrochenen Zuschnitt kein zweites `change`.
+        e.target.value = '';
+        try {
+          const { pickCroppedImage } = await import('/utils/avatar-crop.js');
+          const zugeschnitten = await pickCroppedImage(datei, {
+            messageKeys: { dataTooLarge: 'recipes.imageTooLarge' },
+          });
+          if (zugeschnitten === undefined) return; // abgebrochen
+          bildStand = zugeschnitten;
+          zeigeBild();
+        } catch (err) {
+          window.yuvomi?.showToast(err.message, 'danger');
+        }
+      });
+      panel.querySelector('#recipe-image-remove')?.addEventListener('click', () => {
+        bildStand = null;
+        zeigeBild();
+      });
+      panel.dataset.bildGesetzt = '';
+      panel._bildStand = () => bildStand;
       const selectedMealTypes = normalizeRecipeMealTypes(isEdit ? recipe.meal_types : RECIPE_MEAL_TYPE_KEYS);
       panel.querySelectorAll('#recipe-meal-types input[type="checkbox"]').forEach((input) => {
         input.checked = selectedMealTypes.includes(input.value);
@@ -916,14 +968,19 @@ async function saveRecipe(panel, mode, recipe) {
     if (name) ingredients.push({ name, quantity, category });
   });
 
+  // Nur mitschicken, wenn der Nutzer das Bild angefasst hat: ein fehlendes Feld
+  // laesst das gespeicherte stehen (#1059).
+  const bildStand = panel._bildStand?.();
+  const bildFeld = bildStand === undefined ? {} : { image_data: bildStand };
+
   saveBtn.disabled = true;
 
   try {
     if (mode === 'create') {
-      const res = await api.post('/recipes', { title, notes, recipe_url, meal_types, ingredients });
+      const res = await api.post('/recipes', { title, notes, recipe_url, meal_types, ingredients, ...bildFeld });
       state.recipes.push(res.data);
     } else {
-      const res = await api.put(`/recipes/${recipe.id}`, { title, notes, recipe_url, meal_types, ingredients });
+      const res = await api.put(`/recipes/${recipe.id}`, { title, notes, recipe_url, meal_types, ingredients, ...bildFeld });
       const idx = state.recipes.findIndex((r) => r.id === recipe.id);
       if (idx >= 0) state.recipes[idx] = res.data;
     }

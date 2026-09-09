@@ -9,7 +9,7 @@ import { stagger, vibrate, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
-import { promptModal, openModal, closeModal, confirmModal, reportFieldError } from '/components/modal.js';
+import { promptModal, openModal, closeModal, confirmModal, reportFieldError, refocusAfterRender } from '/components/modal.js';
 import { DEFAULT_CATEGORY_NAME, categoryLabel } from '/utils/shopping-categories.js';
 import { addLocalDays, todayKey } from '/utils/date.js';
 import { renderKitchenTabsBar, refreshKitchenBadges } from '/utils/kitchen-tabs.js';
@@ -19,6 +19,8 @@ import '/components/category-manager.js';
 import { findPageFab } from '/utils/fab.js';
 import { setBulkPill, clearBulkPill, bulkPillLayer } from '/utils/bulk-pill.js';
 import { makeSortable } from '/utils/sortable.js';
+import { amountPlaceholder, centsToAmountInput, amountInputToCents, toDecimalString, breaksOffAtSeparator } from '/utils/money.js';
+
 
 // --------------------------------------------------------
 // Konstanten
@@ -44,6 +46,8 @@ const state = {
   items:         [],
   activeList:    null,
   categories:    [],   // { id, name, icon, sort_order }[]
+  stores:        [],   // verwaltete Laeden fuer den Preis am Artikel (#1003)
+  currency:      'EUR',// Haushaltswaehrung, nur fuer die Preisdarstellung
   /** Zwei getrennte Ladewege, zwei getrennte Fehler - sie haben verschiedene
    *  Wiederholungen: die Listen holt die ganze Seite neu, die Artikel nur die
    *  aktive Liste. Ein gemeinsames Feld hätte den einen Fehler mit der
@@ -267,31 +271,212 @@ function resetPillMachine() {
   pillOwnerContainer = null;
 }
 
+/**
+ * DIE ABSICHT, NICHT DER STAND.
+ *
+ * `state.items` traegt ausschliesslich, was der Server zuletzt gesagt hat. Was
+ * der Nutzer WILL, steht hier: id -> { value, seq, listId, delta }. Die Zeile
+ * zeigt die Ueberlagerung von beidem (`checkedOf`).
+ *
+ * Der Vorlaeufer vermischte die zwei in einem Feld. Dann braucht ein
+ * Fehlschlag eine Ruecksprung-Grundlage, die Grundlage braucht eine
+ * Bestaetigungsnummer, die Bestaetigung eine Ladenummer - sechs Felder, die
+ * sich gegenseitig ueberschreiben, und sieben Review-Runden lang fand jede
+ * neue Wache eine neue Reihenfolge zwischen ihnen. Getrennt gehalten gibt es
+ * keinen Wert mehr, der veralten kann: ein Ruecksprung ist das ENTFERNEN der
+ * Absicht, und was dann steht, ist der Serverstand.
+ *
+ * Vier Regeln, mehr nicht:
+ *   - Antippen setzt die Absicht.
+ *   - Scheitert der Schreibvorgang, faellt sie. Sie war nie wahr.
+ *   - Traegt eine Ladeantwort den gewollten Wert, faellt sie. Sie ist erfuellt.
+ *   - Gelingt der Schreibvorgang und sagt eine SPAETER begonnene Antwort etwas
+ *     anderes, faellt sie auch: der Server hat sie gesehen und seither
+ *     geaendert - jemand anderes im Haushalt. Ohne diese Regel lebte die
+ *     Absicht ewig weiter und niemand koennte die Zeile je zurueckholen.
+ *
+ * Der Schreib-ERFOLG allein raeumt bewusst nichts: die ueberholende Antwort
+ * kommt gerade danach, und wer hier raeumte, liesse sie den Stand
+ * zurueckdrehen. Er vermerkt nur `settledAt`, damit die vierte Regel weiss, ab
+ * wann eine Antwort etwas ueber diese Absicht aussagen KANN.
+ *
+ * Was der Umbau wegnimmt, sind `rollback` und `confirmedAt` - genau die zwei
+ * Felder, die vier Review-Runden lang Befunde erzeugt haben, weil sie einen
+ * WERT festhielten, der veralten konnte. `settledAt` haelt keinen Wert fest,
+ * sondern eine Reihenfolge, und hat nie einen Befund erzeugt. `delta` ist die
+ * Buchungsquittung des Zaehlers: was beim Setzen gebucht wurde, damit das
+ * Zuruecknehmen exakt dasselbe abzieht.
+ */
+const intents = new Map();
+/** Monotone Folgenummer, damit ein zweites Antippen das erste ueberstimmt. */
+let _checkSeq = 0;
+/**
+ * Wann der Server einen Artikel zuletzt BESTAETIGT hat: id -> Ladenummer.
+ *
+ * Sie haengt am Artikel, nicht an der Absicht - denn sie ueberlebt diese. Wer
+ * zweimal antippt, ersetzt die Absicht; die Bestaetigung des ersten Antippens
+ * gilt trotzdem weiter, und eine Ladeantwort, die VOR ihr begann, darf den
+ * Wert dieses Artikels nicht zurueckdrehen. Die uebrigen Artikel und die
+ * Kategorien derselben Antwort landen ganz normal - deshalb je Artikel und
+ * nicht als Wache ueber die ganze Antwort.
+ */
+const settledAt = new Map();
+
+/**
+ * Die Nummer des zuletzt ANGEWANDTEN Ladevorgangs, je Liste.
+ *
+ * Die einzige verbliebene Zeitrechnung, und sie gehoert zum LADEN, nicht zur
+ * Absicht: zwei Auffrischungen koennen sich ueberholen, und eine aeltere
+ * Antwort darf den Stand nicht ueberschreiben, den eine juengere schon gesetzt
+ * hat. Je Liste, weil ein Laden von Liste B ueber Liste A nichts aussagt.
+ */
+let _loadSeq = 0;
+const _appliedLoad = new Map();
+/**
+ * Zu welcher Liste `state.items` gerade gehoert.
+ *
+ * `_appliedLoad` merkt sich je Liste, ob schon etwas Netzfrisches ankam -
+ * `state.items` haelt aber immer nur EINE Liste. Ohne diese Unterscheidung
+ * lehnte die Cache-Wache unten die gecachte Antwort fuer A ab, weil A irgendwann
+ * einmal geladen war, und `switchList` zeichnete danach die noch liegenden
+ * Artikel von B unter dem Reiter von A - ohne Fehlermeldung, und jede weitere
+ * Aktion traf die falsche Liste.
+ */
+let _itemsListId = null;
+
+/**
+ * Den Bestand verwerfen - und mit ihm die Zugehoerigkeit.
+ *
+ * Die beiden gehoeren zusammen, und getrennt gesetzt laufen sie auseinander:
+ * nach `state.items = []` im Fehlerzweig behauptete `_itemsListId` weiter, der
+ * (leere) Bestand gehoere zu dieser Liste, und die Wache in `loadItems` lehnte
+ * die einzige brauchbare Antwort - die gecachte - als Rueckschritt ab. Der
+ * Aufrufer loeschte den Fehler, und die Liste stand als echt leer da.
+ */
+function clearItems() {
+  state.items = [];
+  _itemsListId = null;
+}
+
+/** Was die Zeile ZEIGT: die Absicht, sonst der Serverstand. */
+function checkedOf(item) {
+  const intent = intents.get(item?.id);
+  return intent ? intent.value : (item?.is_checked ?? 0);
+}
+
+/**
+ * Erfuellte Absichten fallen lassen: die Antwort traegt, was gewollt war.
+ *
+ * Der Vergleich ist der ganze Trick. Er braucht keine Uhr und keine
+ * Ladenummer - eine Antwort, die den gewollten Wert traegt, BEWEIST, dass der
+ * Server ihn hat, ganz gleich wann sie losgeschickt wurde. Und eine, die ihn
+ * nicht traegt, beweist nichts: sie kann aelter sein als die Bearbeitung, aus
+ * dem Offline-Cache kommen oder von einer fremden Aenderung erzaehlen. In
+ * allen drei Faellen ist Warten richtig.
+ */
+function settleIntents(items, listId, { fromCache = false, startedAt = 0 } = {}) {
+  // Eine Antwort aus dem Offline-Cache beweist nichts: sie kann beliebig alt
+  // sein, und traegt sie den gewollten Wert zufaellig doch (zweimal antippen
+  // fuehrt zum Ausgangswert zurueck), waere die Absicht faelschlich erfuellt.
+  if (fromCache) return;
+  for (const item of items) {
+    const intent = intents.get(item.id);
+    if (!intent || intent.listId !== listId) continue;
+    // Erfuellt: die Antwort traegt, was gewollt war.
+    const erfuellt = item.is_checked === intent.value;
+    // Ueberholt: der Server hat diesen Artikel bestaetigt, und DIESE Antwort
+    // begann danach - was sie sagt, ist juenger als die eigene Bearbeitung.
+    const bestaetigt = settledAt.get(item.id);
+    const ueberholt = bestaetigt != null && bestaetigt < startedAt;
+    if (erfuellt || ueberholt) intents.delete(item.id);
+  }
+}
+
 async function toggleShoppingItem(id, checked, container) {
   const newVal = checked ? 0 : 1;
+  const listId = state.activeListId;
+  const item   = state.items.find((i) => i.id === id);
 
-  const item = state.items.find((i) => i.id === id);
+  // EINE ABSICHT, DIE HIER ERSETZT WIRD, MUSS ZWEI DINGE HINTERLASSEN.
+  //
+  // Ihre Zaehlerbuchung: die wird zurueckgenommen, denn die neue bucht gleich
+  // ihre eigene. Sonst blieb die des ersten Antippens stehen, wenn dessen
+  // Schreibvorgang spaeter schweigend scheitert (er ist ja ueberstimmt).
+  //
+  // Und ihren bestaetigten Wert: hat der Server sie schon angenommen, ist das
+  // ab jetzt der SERVERSTAND. Ohne diese Zeile ging die Bestaetigung mit der
+  // Absicht verloren, und ein Fehlschlag der neuen sprang an ihr vorbei auf
+  // einen Stand zurueck, den der Server nicht mehr hatte.
+  const vorher = intents.get(id);
+  if (vorher) updateListCounter(vorher.listId, 0, -vorher.delta);
+
+  // Das Delta zaehlt gegen den SERVERSTAND, nicht gegen das Gezeigte: so ist
+  // jede Absicht fuer sich verrechenbar, und ihr Zuruecknehmen trifft genau
+  // ihre eigene Buchung.
+  const delta = (newVal ? 1 : 0) - (item?.is_checked ? 1 : 0);
+
+  const seq = ++_checkSeq;
+  intents.set(id, { value: newVal, seq, listId, delta });
   if (item) {
-    item.is_checked = newVal;
     // Nur die betroffene Zeile aktualisieren — kein Komplett-Re-Render,
     // damit die Scroll-Position der Liste erhalten bleibt (Issue #276).
     updateItemRow(container, item);
     // userChecked NUR beim Abhaken selbst (#1039): das Zurueckholen eines
     // Artikels eroeffnet keinen neuen Feedback-Batch.
     updateCheckedActions(container, { userChecked: newVal === 1 });
-    updateListCounter(state.activeListId, 0, newVal ? 1 : -1);
+    updateListCounter(listId, 0, delta);
     renderTabs(container);
   }
 
   try {
     await api.patch(`/shopping/items/${id}`, { is_checked: newVal });
+    // BEWUSST OHNE AUFRAEUMEN. Die Absicht faellt erst, wenn eine Ladeantwort
+    // den Wert traegt (`settleIntents`) - der Erfolg allein beweist der Zeile
+    // nichts gegen eine Antwort, die gleich danach mit dem alten Stand kommt.
+    //
+    // Eine Ausnahme: ist diese Absicht schon ueberstimmt, wird ihr Ausgang
+    // sonst gar nicht verbucht. Der Server steht jetzt auf `newVal`, also
+    // gehoert das in den SERVERSTAND - nicht in die Absicht, die einem
+    // spaeteren Antippen gehoert.
+    // Der Server traegt jetzt `newVal` - das ist ab hier der SERVERSTAND, ganz
+    // gleich ob diese Absicht noch die aktuelle ist. Der Zeitstempel daneben
+    // schuetzt ihn vor einer Antwort, die vorher losgeschickt wurde.
+    const current = state.items.find((i) => i.id === id);
+    if (current) {
+      // Verschiebt die Bestaetigung den Serverstand unter einer noch offenen
+      // Absicht weg, war deren Buchung gegen die ALTE Basis gerechnet. Die
+      // Anzeige aendert sich nicht (die Absicht ueberlagert weiter), also darf
+      // der Zaehler jetzt nicht wandern - aber das Delta muss mitziehen,
+      // damit sein Zuruecknehmen spaeter auf dem richtigen Wert landet.
+      const offen = intents.get(id);
+      if (offen) offen.delta -= (newVal ? 1 : 0) - (current.is_checked ? 1 : 0);
+      current.is_checked = newVal;
+    }
+    settledAt.set(id, _loadSeq);
     vibrate(10);
   } catch (err) {
-    if (item) {
-      item.is_checked = checked;
-      updateItemRow(container, item);
-      updateCheckedActions(container);
-      updateListCounter(state.activeListId, 0, newVal ? -1 : 1);
+    // ZWEI GRUENDE, WARUM DIE EIGENE ABSICHT NICHT MEHR DA IST, und sie fuehren
+    // auseinander. Ueberstimmt: ein neueres Antippen steht an, dessen Ausgang
+    // entscheidet ueber Zeile, Zaehler UND Meldung - hier ist nichts zu tun.
+    // Erfuellt: eine Antwort trug den Wert schon, weil jemand anderes im
+    // Haushalt dasselbe getan hat. Dann steht die Zeile richtig, aber der
+    // EIGENE Schreibvorgang ist trotzdem gescheitert und gehoert gemeldet.
+    const intent = intents.get(id);
+    if (intent && intent.seq !== seq) return;
+    if (intent) {
+      // DIE ABSICHT FAELLT, mehr passiert nicht. Was die Zeile danach zeigt,
+      // ist der Serverstand - der aktuellste, den wir haben, auch wenn eine
+      // Auffrischung ihn zwischendurch ausgetauscht hat. Es gibt keinen
+      // gemerkten Wert mehr, der dabei veralten koennte.
+      intents.delete(id);
+      // Der Zaehler nimmt GENAU die Buchung zurueck, die das Setzen gemacht
+      // hat - deshalb liegt sie in der Absicht und wird nicht neu berechnet.
+      updateListCounter(intent.listId, 0, -intent.delta);
+      const current = state.items.find((i) => i.id === id);
+      if (current) {
+        updateItemRow(container, current);
+        updateCheckedActions(container);
+      }
       renderTabs(container);
     }
     window.yuvomi.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
@@ -312,6 +497,23 @@ async function toggleShoppingItem(id, checked, container) {
 function deleteItemUndoable(id, container) {
   const item     = state.items.find((i) => i.id === id);
   const snapshot = item ? { ...item } : null;
+  // Was die Zeile ZEIGT - danach richtet sich, was der Zaehler abzieht. Der
+  // Schnappschuss daneben traegt den Serverstand, weil `state.items` nur den
+  // fuehrt; eine noch laufende Absicht bleibt in ihrer Karte liegen und
+  // ueberlagert den Artikel wieder, wenn das Loeschen zurueckgenommen wird.
+  //
+  // FRUEHER STAND HIER EIN SONDERFALL: der Merker musste beim Loeschen
+  // aufgeraeumt und der Schnappschuss von einem optimistischen Wert
+  // zurueckgezogen werden, sonst buchte ein spaeterer Fehlschlag ein zweites
+  // Mal (gemessen: `item_total: 0, item_checked: -1`). Mit getrennter Absicht
+  // gibt es nichts zurueckzuziehen und nichts doppelt zu buchen.
+  const gebucht = Boolean(item && checkedOf(item));
+  // DIE BUCHUNG DER OFFENEN ABSICHT IST MIT DIESEM LOESCHEN ABGEGOLTEN: der
+  // Zaehler zieht gleich die ANZEIGE ab, und die enthaelt sie. Bliebe die
+  // Quittung stehen, buchte ein spaeterer Fehlschlag ein zweites Mal ab -
+  // gemessen `item_checked: -1` an einer einelementigen Liste.
+  const offen = intents.get(id);
+  if (offen) offen.delta = 0;
   // DIE LISTE GEHOERT ZUR AKTION, NICHT ZUM ZEITPUNKT DER RUECKNAHME. Das
   // Undo-Fenster ist fuenf Sekunden lang, und ein Listenwechsel darin tauscht
   // `state.items` samt `state.activeListId` aus. Wer danach zurueckholte, legte
@@ -323,12 +525,19 @@ function deleteItemUndoable(id, container) {
   // Optimistisch entfernen
   state.items = state.items.filter((i) => i.id !== id);
   updateItemsList(container);
-  updateListCounter(listId, -1, snapshot?.is_checked ? -1 : 0);
+  updateListCounter(listId, -1, gebucht ? -1 : 0);
   renderTabs(container);
 
   scheduleUndoableDelete({
     message: t('shopping.itemDeletedToast', { name: snapshot?.name ?? '' }),
-    commit: ({ keepalive }) => api.delete(`/shopping/items/${id}`, { keepalive }),
+    commit: async ({ keepalive }) => {
+      await api.delete(`/shopping/items/${id}`, { keepalive });
+      // Endgueltig weg: die Absicht kann von keiner Antwort mehr erfuellt oder
+      // ueberholt werden und laege sonst tot in der Karte. Bis hierher bleibt
+      // sie liegen - ein Zuruecknehmen im Undo-Fenster braucht sie, damit die
+      // wiederhergestellte Zeile zeigt, was der Server inzwischen hat.
+      intents.delete(id);
+    },
     restore: (err) => {
       if (snapshot) {
         // Der sichtbare Zustand nur, wenn die Liste noch die gezeigte ist -
@@ -340,7 +549,14 @@ function deleteItemUndoable(id, container) {
           state.items.sort((a, b) => a.id - b.id);
           updateItemsList(container);
         }
-        updateListCounter(listId, 1, snapshot.is_checked ? 1 : 0);
+        // Zurueckgeholt wird die ANZEIGE, also samt der noch offenen Absicht -
+        // und damit ist deren Quittung wieder gueltig. Sie wird berechnet,
+        // nicht aufbewahrt: der Abstand zwischen dem, was sie will, und dem
+        // Serverstand des Schnappschusses.
+        if (offen && intents.get(id) === offen) {
+          offen.delta = (offen.value ? 1 : 0) - (snapshot.is_checked ? 1 : 0);
+        }
+        updateListCounter(listId, 1, checkedOf(snapshot) ? 1 : 0);
         renderTabs(container);
       }
       if (err) window.yuvomi.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
@@ -398,6 +614,7 @@ function renderTabs(container) {
           { action: 'import-meals', label: t('shopping.importMeals'), icon: 'utensils' },
           { action: 'send-list', label: t('shopping.sendList'), icon: 'mail' },
           { action: 'manage-categories', label: t('shopping.manageCategories'), icon: 'tags' },
+          { action: 'manage-stores', label: t('shopping.manageStores'), icon: 'store' },
           { action: 'delete-list', label: t('shopping.deleteListLabel'), icon: 'trash', id: state.activeList.id, danger: true },
         ],
       })}
@@ -429,7 +646,7 @@ function renderTabs(container) {
  */
 async function openSendListDialog(container) {
   const listId = state.activeListId;
-  const openCount = state.items.filter((item) => !item.is_checked).length;
+  const openCount = state.items.filter((item) => !checkedOf(item)).length;
   if (!openCount) {
     window.yuvomi.showToast(t('shopping.sendListEmpty'), 'warning');
     return;
@@ -746,9 +963,9 @@ function renderItemTags(tags) {
 }
 
 function renderItem(item) {
-  const isDone = Boolean(item.is_checked);
+  const isDone = Boolean(checkedOf(item));
   return `
-    <div class="swipe-row" data-swipe-id="${item.id}" data-swipe-checked="${item.is_checked}">
+    <div class="swipe-row" data-swipe-id="${item.id}" data-swipe-checked="${checkedOf(item)}">
       <div class="swipe-reveal swipe-reveal--done swipe-reveal--leading" aria-hidden="true">
         <i data-lucide="${isDone ? 'rotate-ccw' : 'check'}" class="icon-xl" aria-hidden="true"></i>
         <span>${isDone ? t('shopping.swipeBack') : t('shopping.swipeCheck')}</span>
@@ -760,7 +977,7 @@ function renderItem(item) {
       <div class="list-row shopping-item ${isDone ? 'shopping-item--checked' : ''}"
            data-item-id="${item.id}">
         <button class="item-check ${isDone ? 'item-check--checked' : ''}"
-                data-action="toggle-item" data-id="${item.id}" data-checked="${item.is_checked}"
+                data-action="toggle-item" data-id="${item.id}" data-checked="${checkedOf(item)}"
                 aria-label="${isDone ? t('shopping.markUndoneLabel', { name: esc(item.name) }) : t('shopping.markDoneLabel', { name: esc(item.name) })}">
           <i data-lucide="check" class="item-check__icon" aria-hidden="true"></i>
         </button>
@@ -1279,16 +1496,16 @@ function wireSwipeGestures(container) {
 function updateItemRow(container, item) {
   const row = container.querySelector(`.swipe-row[data-swipe-id="${item.id}"]`);
   if (!row) return;
-  const isDone = Boolean(item.is_checked);
+  const isDone = Boolean(checkedOf(item));
 
-  row.dataset.swipeChecked = String(item.is_checked);
+  row.dataset.swipeChecked = String(checkedOf(item));
 
   row.querySelector('.shopping-item')?.classList.toggle('shopping-item--checked', isDone);
 
   const checkBtn = row.querySelector('.item-check');
   if (checkBtn) {
     checkBtn.classList.toggle('item-check--checked', isDone);
-    checkBtn.dataset.checked = String(item.is_checked);
+    checkBtn.dataset.checked = String(checkedOf(item));
     checkBtn.setAttribute('aria-label', isDone
       ? t('shopping.markUndoneLabel', { name: item.name })
       : t('shopping.markDoneLabel', { name: item.name }));
@@ -1416,6 +1633,45 @@ function openItemDetails(itemId, container) {
             </select>
           </div>
         </div>
+        ${/* PREIS UND LADEN (#1003).
+            *
+            * NICHT ALS ZWANGSDIALOG BEIM ABHAKEN. Das Ticket sagt "erfasst,
+            * wenn man abhakt - da ist die Zahl bekannt", und das stimmt; ein
+            * Dialog, der sich bei JEDEM Haken oeffnet, waere im Laden aber
+            * unertraeglich: das Abhaken ist die schnellste Geste der App und
+            * bleibt es. Die Felder stehen deshalb hier, wo der Artikel ohnehin
+            * geoeffnet wird - nachtragen statt unterbrechen.
+            *
+            * Betont bei einem abgehakten Artikel: dann ist die Frage aktuell. */ ''}
+        <div class="pantry-form-row">
+          <div class="form-group">
+            <label class="form-label" for="item-details-price">${t('shopping.priceLabel')}</label>
+            <input class="form-input" type="text" id="item-details-price" inputmode="decimal"
+                   placeholder="${esc(amountPlaceholder(state.currency))}"
+                   value="${item.price_cents != null ? esc(centsToAmountInput(item.price_cents, state.currency)) : ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="item-details-store">${t('shopping.storeLabel')}</label>
+            ${/* COMBOBOX, KEIN SELECT (#1003).
+                *
+                * Eine reine Auswahlliste ist bei einem frischen Haushalt leer und
+                * bleibt es: der erste Laden muesste anderswo entstehen. Ein Knopf
+                * daneben hilft hier nicht - das geteilte Modal kennt bewusst kein
+                * Stacking (siehe modal.js), ein Manager darueber raeumte dieses
+                * Formular samt getippter Eingaben weg.
+                *
+                * Also tippen oder waehlen: die Liste kommt als datalist dazu, und
+                * ein unbekannter Name legt beim Speichern den Laden an. Umbenennen
+                * und Loeschen liegen im Listenmenue, wo der Manager ein Dialog
+                * erster Ebene sein darf. */ ''}
+            <input class="form-input" type="text" id="item-details-store" list="item-details-store-options"
+                   autocomplete="off" placeholder="${esc(t('shopping.storePlaceholder'))}"
+                   value="${esc(state.stores.find((st) => st.id === item.store_id)?.name ?? '')}">
+            <datalist id="item-details-store-options">
+              ${state.stores.map((st) => `<option value="${esc(st.name)}"></option>`).join('')}
+            </datalist>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label" for="item-details-url">${t('shopping.urlLabel')}</label>
           <input class="form-input" type="url" id="item-details-url" inputmode="url"
@@ -1459,14 +1715,44 @@ function openItemDetails(itemId, container) {
           reportFieldError(nameEl, t('common.nameRequired'));
           return;
         }
-        const payload = {
-          name,
-          quantity: qtyEl.value.trim() || null,
-          category: catEl.value,
-          notes: notesEl.value.trim() || null,
-          url: urlEl.value.trim() || null,
-        };
+        const priceEl = panel.querySelector('#item-details-price');
+        const storeEl = panel.querySelector('#item-details-store');
+        // Der Preis kommt als Text herein und geht als ganze Cent hinaus: Geld
+        // als Gleitkomma summiert sich sichtbar falsch, und die Historie, die
+        // spaeter darauf aufbaut, addiert genau solche Zahlen. Ein leeres Feld
+        // heisst "kein Preis", nicht "null Cent".
+        const priceRoh = priceEl?.value.trim() ?? '';
+        const priceCents = priceRoh === '' ? null : amountInputToCents(priceRoh, state.currency);
+        if (priceRoh !== '' && priceCents === null) {
+          reportFieldError(priceEl, t('budget.validAmountRequired'));
+          return;
+        }
         try {
+          // Der Laden kommt als Name herein, die Zeile speichert eine ID. Ein
+          // Name, den es noch nicht gibt, entsteht hier - der Server gibt bei
+          // einem schon vorhandenen Namen dieselbe Zeile zurueck (COLLATE
+          // NOCASE), zwei Schreibweisen werden also nicht zu zwei Laeden.
+          const storeName = storeEl?.value.trim() ?? '';
+          let storeId = null;
+          if (storeName) {
+            const bekannt = state.stores.find((st) => st.name.toLowerCase() === storeName.toLowerCase());
+            if (bekannt) {
+              storeId = bekannt.id;
+            } else {
+              const angelegt = await api.post('/shopping/stores', { name: storeName });
+              state.stores.push(angelegt.data);
+              storeId = angelegt.data.id;
+            }
+          }
+          const payload = {
+            name,
+            quantity: qtyEl.value.trim() || null,
+            category: catEl.value,
+            notes: notesEl.value.trim() || null,
+            url: urlEl.value.trim() || null,
+            price_cents: priceCents,
+            store_id: storeId,
+          };
           const data = await api.patch(`/shopping/items/${item.id}`, payload);
           const categoryChanged = data.data.category !== item.category;
           Object.assign(item, data.data);
@@ -1521,12 +1807,46 @@ function parseShoppingQuantity(raw) {
   const text = String(raw ?? '').trim();
   if (!text) return fallback;
 
+  // Dieselbe Umschrift wie die Betragsfelder (utils/money.js): sie leitet Ziffern
+  // und Dezimaltrenner aus der eingestellten Region ab. Ein eigenes
+  // `replace(',', '.')` stand hier und war in beide Richtungen falsch - unter
+  // en-US gruppiert das Komma Tausender, aus „1,000 g" wurde die Menge 1, und
+  // unter ar oder fa kam eine Eingabe in östlichen Ziffern gar nicht erst an
+  // (`\d` ist ASCII). Beides ohne Fehlermeldung: die Zeile im Übernahme-Dialog
+  // stand einfach auf 1.
+  //
+  // `freeText`, weil hier nur der ANFANG gelesen wird: eine Gruppierung weiter
+  // hinten geht diese Zerlegung nichts an. Ohne das fiel „6 × 1.000 ml" auf die
+  // Menge 1 zurueck, obwohl die 6 eindeutig ist.
+  //
+  // Eine gruppierte Zahl weist die Umschrift ab und liefert einen leeren String.
+  // Dann bleibt es beim Standard, statt zwischen 1 und 1000 zu raten - dieselbe
+  // Entscheidung wie beim Preis, hier aber mit dem sanfteren Ausgang: der Dialog
+  // zeigt die Menge in einem Feld, das sich korrigieren lässt.
+  const decimal = toDecimalString(text, { freeText: true });
+  if (!decimal) return fallback;
+
   // Die Einheit braucht eine Wortgrenze davor, sonst schluckt `\b` sie bei
   // Schreibweisen wie „3x" nicht und die Menge fiele auf 1 zurück.
-  const match = text.match(/^(\d+(?:[.,]\d+)?)\s*(?:(kg|g|ml|l)\b)?/i);
+  // Der Trenner ist hier immer der Punkt - die Umschrift oben hat den der Region
+  // bereits übersetzt.
+  const match = decimal.match(/^(\d+(?:\.\d+)?)\s*(?:(kg|g|ml|l)\b)?/i);
   if (!match) return fallback;
 
-  const quantity = Number(match[1].replace(',', '.'));
+  // Bricht die Zahl mitten in einem Trennzeichen ab, ist sie nicht gelesen,
+  // sondern abgeschnitten. Die Umschrift weist zwar eine erkannte Gruppierung
+  // ab, aber nicht jede: „٢٬٥٠" hat nur zwei Stellen hinter dem Trenner, ist
+  // also kein Gruppierungsmuster - und ein Trenner, den die Region nicht kennt,
+  // steht ohnehin einfach da (unter fa trennt das ASCII-Komma nichts). Diese
+  // Regex liest nur den ANFANG und nähme daraus wortlos die 2.
+  //
+  // Über die geteilte Prüfung aus utils/money.js, die genau die Trennzeichen der
+  // wählbaren Regionen kennt: „irgendein Zeichen zwischen zwei Ziffern" war zu
+  // breit und traf „2x500 g" mit, also die Multiplikator-Schreibweise, die zwei
+  // Zeilen weiter oben ausdrücklich lesbar bleiben soll.
+  if (breaksOffAtSeparator(decimal.slice(match[1].length))) return fallback;
+
+  const quantity = Number(match[1]);
   if (!Number.isFinite(quantity) || quantity <= 0) return fallback;
 
   return { quantity, unit: match[2] ? match[2].toLowerCase() : 'pcs' };
@@ -1540,7 +1860,7 @@ function parseShoppingQuantity(raw) {
  * Vorrat einen Tap entfernt.
  */
 async function openPantryTransfer(container) {
-  const checked = state.items.filter((i) => i.is_checked);
+  const checked = state.items.filter((i) => checkedOf(i));
   if (!checked.length) return;
 
   let locations = [];
@@ -1628,7 +1948,7 @@ async function openPantryTransfer(container) {
             // Daten löschen kann (siehe routes/pantry.js).
             await api.delete(`/shopping/${listId}/items/checked`);
             const removed = checked.length;
-            state.items = state.items.filter((i) => !i.is_checked);
+            state.items = state.items.filter((i) => !checkedOf(i));
             updateItemsList(container);
             updateListCounter(listId, -removed, -removed);
             renderTabs(container);
@@ -1684,7 +2004,7 @@ async function openPantryTransfer(container) {
  * aber nie von sich aus eine neue.
  */
 function updateCheckedActions(container, { userChecked = false } = {}) {
-  const checkedCount = state.items.filter((i) => i.is_checked).length;
+  const checkedCount = state.items.filter((i) => checkedOf(i)).length;
   if (!checkedCount) {
     clearPillTimer();
     pillPhase = 'idle';
@@ -1758,7 +2078,7 @@ function updateCheckedActions(container, { userChecked = false } = {}) {
  * Shell und ist von dort aus nicht mehr erreichbar - sie ruft direkt.
  */
 function clearCheckedUndoable(container) {
-  const checked = state.items.filter((i) => i.is_checked);
+  const checked = state.items.filter((i) => checkedOf(i));
   const count   = checked.length;
   if (!count) return;
 
@@ -1771,7 +2091,7 @@ function clearCheckedUndoable(container) {
   const listId = state.activeListId;
 
   // Optimistisch entfernen
-  state.items = state.items.filter((i) => !i.is_checked);
+  state.items = state.items.filter((i) => !checkedOf(i));
   updateItemsList(container);
   updateListCounter(listId, -count, -count);
   renderTabs(container);
@@ -1923,9 +2243,77 @@ async function loadCategories() {
   }
 }
 
+/* Laeden und Waehrung fuer das Preisfeld (#1003).
+ *
+ * Beide Ausfaelle sind still und harmlos: ohne Laeden bleibt die Auswahl leer
+ * (der Preis laesst sich trotzdem eintragen), ohne Waehrung gilt EUR. Ein
+ * Einkaufszettel, der wegen eines Nebenfeldes gar nicht aufgeht, waere der
+ * schlechtere Tausch. */
+async function loadStores() {
+  try {
+    const data   = await api.get('/shopping/stores');
+    state.stores = data.data ?? [];
+  } catch {
+    state.stores = [];
+  }
+  try {
+    const prefs    = await api.get('/preferences');
+    state.currency = prefs.data?.currency ?? 'EUR';
+  } catch { /* EUR bleibt */ }
+}
+
 async function loadItems(listId) {
-  const data       = await api.get(`/shopping/${listId}/items`);
-  state.items      = data.data ?? [];
+  const startedAt  = ++_loadSeq;
+  // `getWithSource`, weil dieser Pfad in der Offline-Whitelist des Service
+  // Workers steht (`API_CACHE_WHITELIST` in sw.js): faellt das Netz aus, kommt
+  // die zuletzt gecachte Antwort mit Status 200 zurueck, und die ist von einer
+  // frischen sonst nicht zu unterscheiden.
+  const { data, fromCache } = await api.getWithSource(`/shopping/${listId}/items`);
+  // Ein Rundlauf kann von einem Listenwechsel ueberholt werden. Alle sechs
+  // Aufrufer laden die GERADE aktive Liste - `switchList` setzt
+  // `state.activeListId` sogar vor dem Warten -, die Antworten kommen aber in
+  // beliebiger Reihenfolge zurueck. Wer nicht mehr die aktive Liste ist, darf
+  // den globalen Stand nicht mehr anfassen: sonst stuenden die Artikel der
+  // alten Liste unter dem neuen Reiter, und die naechste Bearbeitung traefe
+  // die falschen. Das Fenster ist seit #1066 breiter geworden, weil die
+  // Auffrischung des Kategorie-Managers laeuft, waehrend die Seite wieder
+  // bedienbar ist.
+  if (state.activeListId !== listId) return;
+  // Wer aelter ist als das, was schon steht, fasst den Stand nicht mehr an.
+  // Die Wache darueber deckt das nicht ab: dieselbe Liste, zwei Rundlaeufe.
+  // Nur eine netzfrische Antwort setzt die Marke - bei wackligem Netz scheitert
+  // die spaeter begonnene Anfrage oft zuerst und wird aus dem Cache bedient.
+  if (startedAt < (_appliedLoad.get(listId) ?? 0)) return;
+  // EINE GECACHTE ANTWORT ERSETZT KEINEN FRISCHEREN STAND. Sie ist beliebig
+  // alt; steht fuer diese Liste schon etwas Netzfrisches, waere sie ein
+  // Rueckschritt - offline gehoert der zuletzt bekannte Stand auf den Schirm,
+  // nicht ein aelterer. Nur wenn noch gar nichts geladen wurde, ist sie das
+  // Beste, was es gibt.
+  // ... aber nur, wenn `state.items` diese Liste ueberhaupt zeigt. Gehoert der
+  // Bestand einer anderen, ist die gecachte Antwort das Beste, was es gibt -
+  // und allemal besser als die Artikel der falschen Liste.
+  if (fromCache && _appliedLoad.has(listId) && _itemsListId === listId) return;
+  if (!fromCache) _appliedLoad.set(listId, startedAt);
+
+  // `state.items` traegt NUR den Serverstand - die Absichten liegen daneben und
+  // ueberlagern beim Zeichnen. Deshalb wird hier nichts aufgetragen; es faellt
+  // nur, was die Antwort erfuellt hat.
+  // EIN BESTAETIGTER ARTIKEL WIRD VON EINER AELTEREN ANTWORT NICHT
+  // ZURUECKGEDREHT. Die Antwort selbst bleibt gueltig - ihre uebrigen Artikel,
+  // die Liste und die Kategorien werden gebraucht -, nur der eine Wert, von
+  // dem wir sicher wissen, dass er juenger ist, bleibt stehen.
+  const vorherige = new Map(state.items.map((i) => [i.id, i]));
+  const frisch = data.data ?? [];
+  for (const item of frisch) {
+    const bestaetigt = settledAt.get(item.id);
+    if (bestaetigt != null && bestaetigt >= startedAt) {
+      const alt = vorherige.get(item.id);
+      if (alt) item.is_checked = alt.is_checked;
+    }
+  }
+  state.items = frisch;
+  _itemsListId = listId;
+  settleIntents(state.items, listId, { fromCache, startedAt });
   state.activeList = data.list ?? null;
   // Kategorien aus API-Antwort übernehmen wenn vorhanden (immer aktuell)
   if (data.categories?.length) state.categories = data.categories;
@@ -1948,7 +2336,7 @@ async function switchList(listId, container) {
     state.itemsError = null;
   } catch (err) {
     console.error('[Shopping] loadItems Fehler:', err);
-    state.items = [];
+    clearItems();
     state.activeList = state.lists.find((l) => l.id === listId) ?? null;
     state.itemsError = err;
   }
@@ -2049,6 +2437,11 @@ function wireListContentEvents(container) {
       openCategoryManager(container);
     }
 
+    // ---- Laeden verwalten (#1003) ----
+    if (action === 'manage-stores') {
+      openStoreManager(container);
+    }
+
     if (action === 'import-meals') {
       openMealPlanImport(container);
     }
@@ -2111,7 +2504,7 @@ function wireListContentEvents(container) {
       if (state.activeListId) {
         await switchList(state.activeListId, container);
       } else {
-        state.items = [];
+        clearItems();
         state.activeList = null;
         renderTabs(container);
         renderListContent(container);
@@ -2165,23 +2558,129 @@ function wireListContentEvents(container) {
  * @param {object}  [opts]
  * @param {boolean} [opts.fromDeepLink] true, wenn via ?manage=categories geöffnet
  */
+/**
+ * Laeden verwalten (#1003) - derselbe Manager wie fuer die Kategorien.
+ *
+ * Eine eigene Komponente waere die zweite Bauart fuer dieselbe Sache: eine
+ * kurze, benannte Liste anlegen, umbenennen, loeschen. Der Manager kann das
+ * bereits und braucht nur einen anderen `basePath`; deshalb hat der Server oben
+ * ein PUT bekommen, das die Form spricht, die diese Komponente erwartet.
+ *
+ * Er haengt im Listenmenue und nicht im Artikel-Dialog: das geteilte Modal
+ * kennt kein Stacking, ein Manager ueber dem Formular raeumte es weg. Angelegt
+ * wird ein Laden deshalb beim Speichern des Artikels (siehe Combobox oben),
+ * umbenannt und geloescht hier.
+ * @param {Element} container Seiten-Container
+ */
+function openStoreManager(container) {
+  // Die Arbeit haengt am Ereignis, nicht am Schliessen: `confirmOverModal`
+  // raeumt beim Loeschen das Modal darunter gleich mit ab, das
+  // `category-manager-changed` kommt also erst DANACH. Ein in onClose
+  // ausgewerteter Merker stuende hier auf false, und `state.stores` boete
+  // weiter einen Laden an, den es nicht mehr gibt - die naechste Speicherung
+  // liefe in die 400-Antwort des Servers (gemessen 08.09.).
+  const onChanged = async () => {
+    await Promise.all([loadStores(), loadItems(state.activeListId)]);
+    updateItemsList(container);
+  };
+
+  openModal({
+    title: t('shopping.manageStores'),
+    content: '<yuvomi-category-manager></yuvomi-category-manager>',
+    onSave: (panel) => {
+      const manager = panel.querySelector('yuvomi-category-manager');
+      if (!manager) return;
+      manager.addEventListener('category-manager-changed', onChanged);
+      manager.configure({
+        basePath: '/shopping/stores',
+        titleKey: 'shopping.manageStores',
+        hintKey: 'shopping.storesHint',
+        // Der Standard liest "Neue Kategorie" - in einem Dialog mit dem Titel
+        // "Laeden verwalten" waere das derselbe Bruch wie beim Vorrat.
+        addPlaceholderKey: 'shopping.addStore',
+        // Frage UND Folgentext: der Standard fragte "Kategorie ... loeschen?"
+        // in einem Dialog, der "Laeden verwalten" heisst. Der Fremdschluessel
+        // steht ausserdem auf SET NULL, nicht auf einer Ersatzzuordnung wie bei
+        // den Kategorien dieses Moduls.
+        deleteConfirmKey: 'shopping.storeDeleteConfirm',
+        deleteDetailKey: 'shopping.storeDeleteConfirmDetail',
+      });
+    },
+    // Bewusst KEIN onClose, das den Listener abmeldet: gemessen kommt das
+    // Ereignis des Loeschens erst, wenn das Element schon aus dem Dokument ist
+    // (confirmOverModal raeumt das Modal darunter mit ab, api.delete laeuft
+    // danach weiter). Wer beim Schliessen abmeldet, verpasst genau die
+    // Aenderung, die state.stores veralten laesst - und der Artikel-Dialog boete
+    // danach einen Laden an, den der Server nicht mehr kennt (400 beim
+    // Speichern). Das Element entsteht je Oeffnen neu und wird mit dem Overlay
+    // verworfen; der Listener geht mit ihm.
+  });
+}
+
 async function openCategoryManager(container, { fromDeepLink = false } = {}) {
   const { openModal } = await import('/components/modal.js');
 
-  let changed = false;
   // Die geteilte Komponente (Audit F-15) dispatcht ohne Detail — der lokale
   // State wird nach jeder Mutation frisch vom Server geladen.
+  //
+  // Und wie beim Laden-Manager oben haengt die Auffrischung am Ereignis, nicht
+  // am Schliessen: beim Loeschen raeumt `confirmOverModal` das Modal darunter
+  // ab, bevor `api.delete` laeuft. Ein in onClose ausgewerteter `changed`-Merker
+  // stuende genau dann auf false, und die sichtbare Liste behielte ihre
+  // Gruppierung nach einer Kategorie, die es nicht mehr gibt.
+  //
+  // Und es reichen NICHT die Kategorien allein. Anders als Aufgaben, Kontakte
+  // und Budget, die ueber einen stabilen `key` zeigen, steht die Kategorie im
+  // Einkauf als NAME in `shopping_items.category` - der Server schreibt also in
+  // die Artikelzeilen: Umbenennen per `UPDATE shopping_items SET category = ?`,
+  // Loeschen weist sie der naechsten Kategorie zu. `loadCategories()` fasst
+  // `state.items` nicht an, und `groupItemsByCategory` liest den Namen von dort;
+  // die Zeilen landeten sonst unter der alten Ueberschrift am Listenende.
   const onCategoriesChanged = async () => {
-    changed = true;
+    // Die Seite kann unter diesem Handler weggezogen sein. Kommt der Manager
+    // aus dem Deep-Link `?manage=categories`, navigiert onClose sofort auf
+    // /shopping - und weil diese Seite kein `update()` anbietet, baut der Router
+    // sie ganz neu auf (`content.replaceChildren(...)` plus frisches
+    // `render()`). Beim Loeschen laeuft dieser Handler erst DANACH: `container`
+    // waere ein abgehaengter Knoten, und der neue Aufbau hat ohnehin schon
+    // frisch geladen. Dieselbe Regel wie bei der Sammelaktions-Pille (#1039).
+    if (!container.isConnected) return;
     await loadCategories();
+    const listId = state.activeListId;
+    if (listId) {
+      try {
+        await loadItems(listId);
+        // Hat der Nutzer waehrenddessen die Liste gewechselt, gehoert das
+        // Rendern `switchList` - `loadItems` hat den Stand oben schon
+        // unangetastet gelassen.
+        if (state.activeListId !== listId) return;
+        state.itemsError = null;
+      } catch (err) {
+        // Ohne dieses catch bliebe eine unbeobachtete Rejection zurueck:
+        // `_notifyChanged()` dispatcht synchron und sieht die Promise dieses
+        // Listeners nie. Der Server hat die Artikel dann schon umgeschrieben,
+        // und die Liste zeigte stillschweigend den alten Stand weiter - hier
+        // stattdessen die Fehlerkarte mit Wiederholung, wie bei `switchList`.
+        console.error('[Shopping] loadItems Fehler:', err);
+        // Auch der Fehlerfall gehoert der Liste, fuer die geladen wurde: sonst
+        // leerte ein Fehler der alten Liste die Artikel der neuen.
+        if (state.activeListId !== listId) return;
+        state.items      = [];
+        state.itemsError = err;
+      }
+    }
+    if (state.activeList) {
+      renderListContent(container);
+      wireListContentEvents(container);
+    }
+    refocusAfterRender();
   };
 
-  let manager = null;
   openModal({
     title: t('shopping.manageCategories'),
     content: '<yuvomi-category-manager></yuvomi-category-manager>',
     onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-category-manager');
+      const manager = panel.querySelector('yuvomi-category-manager');
       if (!manager) return;
       manager.addEventListener('category-manager-changed', onCategoriesChanged);
       manager.configure({
@@ -2194,15 +2693,10 @@ async function openCategoryManager(container, { fromDeepLink = false } = {}) {
         deleteDetailKey: 'shopping.categoryDeleteConfirmDetail',
       });
     },
+    // onClose traegt nur noch, was wirklich am Schliessen haengt. Kein
+    // Listener-Abmelden: das liefe vor dem Loeschen, und das Element entsteht
+    // je Oeffnen neu und geht mit dem Overlay.
     onClose: () => {
-      // Listener-Cleanup, damit beim Modal-Reuse kein Leak entsteht.
-      manager?.removeEventListener('category-manager-changed', onCategoriesChanged);
-      manager = null;
-      // Bei Mutationen die sichtbare Liste neu aufbauen (Gruppierung/Quick-Add-Select).
-      if (changed && state.activeList) {
-        renderListContent(container);
-        wireListContentEvents(container);
-      }
       // Deep-Link-Query entfernen, wenn der Manager über die URL geöffnet wurde.
       if (fromDeepLink && new URLSearchParams(window.location.search).has('manage')) {
         window.yuvomi?.navigate?.('/shopping');
@@ -2241,7 +2735,7 @@ export async function render(container, { user }) {
     // loadCategories() und loadLists() fangen selbst; der äußere catch ist das
     // Netz für alles Unerwartete und bildet es auf denselben Fehlerzustand ab,
     // statt die Ausnahme in den globalen Fehlerbildschirm laufen zu lassen.
-    await Promise.all([loadCategories(), loadLists()]);
+    await Promise.all([loadCategories(), loadStores(), loadLists()]);
     if (!state.listsError && state.lists.length) {
       const listParam = parseInt(new URLSearchParams(window.location.search).get('list'), 10) || null;
       const target = listParam && state.lists.find((l) => l.id === listParam);
@@ -2251,7 +2745,7 @@ export async function render(container, { user }) {
         await loadItems(state.activeListId);
       } catch (err) {
         console.error('[Shopping] loadItems Fehler:', err);
-        state.items = [];
+        clearItems();
         state.activeList = state.lists.find((l) => l.id === state.activeListId) ?? null;
         state.itemsError = err;
       }
@@ -2338,6 +2832,9 @@ export async function render(container, { user }) {
 
 export const __test = {
   shouldIgnoreShoppingRowToggle,
+  // Mengen-Zerlegung fuer den Vorrats-Uebertrag: haengt an der Format-Locale,
+  // ist also nur verhaltensgetrieben pruefbar (siehe test-shopping-ux.js).
+  parseShoppingQuantity,
   // Kategorie-Einklappen (#1039): reine Schluessel-/Speicherfunktionen, ohne
   // DOM. `state` bleibt bewusst ERREICHBAR, nicht ERSETZBAR - Tests lesen und
   // schreiben ihre Felder direkt, wie beim Muster in test-health-meds.js.
@@ -2357,4 +2854,21 @@ export const __test = {
   getPillPhaseForTest: () => pillPhase,
   setPillInteractingForTest: (value) => { pillInteracting = value; },
   setBulkPillHoldMsForTest: (ms) => { BULK_PILL_HOLD_MS_OVERRIDE = ms; },
+  // Abhaken gegen ueberholende Auffrischung: nur als Verhaltenstest pruefbar,
+  // weil der Fehler in der REIHENFOLGE zweier Rundlaeufe steckt und nicht im
+  // Vorhandensein einer Wache. Beide Wege gehoeren dazu - der Merker wird beim
+  // Abhaken gesetzt und beim Laden gelesen.
+  toggleShoppingItem,
+  loadItems,
+  deleteItemUndoable,
+  // Die Absichten-Karte und ihre Lesefunktion: die Tests pruefen an ihnen die
+  // Trennung selbst - dass `state.items` den Serverstand behaelt und die Zeile
+  // die Ueberlagerung zeigt.
+  intents,
+  checkedOf,
+  // Die Ladeordnung ueberlebt sonst von Test zu Test: `_loadSeq` waechst
+  // global, und eine Wasserstandsmarke aus einem frueheren Fall verwirft die
+  // Auffrischung des naechsten. Aufraeumen gehoert an den ANFANG jedes Falls.
+  clearItems,
+  resetLoadOrderForTest: () => { _appliedLoad.clear(); settledAt.clear(); _itemsListId = null; },
 };

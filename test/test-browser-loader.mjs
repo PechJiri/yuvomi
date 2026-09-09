@@ -11,12 +11,34 @@ const STUBS = {
     export function clearApiCache() {}
   `,
   '/api.js': `
+    // Tests, die eine REIHENFOLGE pruefen (die Antwort kommt NACH der
+    // Bearbeitung), brauchen die Kontrolle ueber den Zeitpunkt der Aufloesung.
+    // Sie setzen globalThis.__apiStub = { get, patch, ... }; ohne das bleibt es
+    // bei der stummen Antwort wie bisher - dasselbe Muster wie __formatLocale
+    // weiter unten. Jede Methode steht ausgeschrieben da und nicht als Fabrik:
+    // test:frontend-audit liest diesen Stub als TEXT und prueft die Schreibweise
+    // "patch: async" samt der auth-Namen. Und KEINE Backticks in diesem
+    // Kommentar - der Stub IST ein Template-Literal, ein Backtick darin beendet
+    // ihn mitten im Text.
+    const viaStub = (name, args, fallback) => (
+      typeof globalThis.__apiStub?.[name] === 'function'
+        ? globalThis.__apiStub[name](...args)
+        : fallback
+    );
     export const api = {
-      get: async () => ({ data: null }),
-      post: async () => ({ data: null }),
-      put: async () => ({ data: null }),
-      patch: async () => ({ data: null }),
-      delete: async () => ({ data: null }),
+      get: async (...a) => viaStub('get', a, { data: null }),
+      // Liefert im Echtbetrieb { data, fromCache } - siehe api.js. Der Stub
+      // faellt auf 'get' zurueck, damit Suiten, die die Cache-Herkunft gar
+      // nicht pruefen, nichts davon wissen muessen.
+      getWithSource: async (...a) => (
+        typeof globalThis.__apiStub?.getWithSource === 'function'
+          ? globalThis.__apiStub.getWithSource(...a)
+          : { data: await viaStub('get', a, { data: null }), fromCache: false }
+      ),
+      post: async (...a) => viaStub('post', a, { data: null }),
+      put: async (...a) => viaStub('put', a, { data: null }),
+      patch: async (...a) => viaStub('patch', a, { data: null }),
+      delete: async (...a) => viaStub('delete', a, { data: null }),
     };
     export const auth = {
       me: async () => ({ user: null }),
@@ -50,8 +72,13 @@ const STUBS = {
     export const initI18n = async () => {};
     export const setLocale = async () => {};
     export const getLocale = () => 'de';
-    export const getFormatLocale = () => 'de';
-    export const getNumberFormat = (options = {}) => new Intl.NumberFormat('de', options);
+    // Die Format-Locale ist im Browser eine Einstellung des Haushalts und
+    // entscheidet ueber Ziffernsystem, Dezimaltrenner und Gruppierung. Tests, die
+    // genau das pruefen (utils/money.js und alles, was dessen Umschrift nutzt),
+    // setzen globalThis.__formatLocale; ohne das bleibt es bei 'de' wie bisher.
+    export const getFormatLocale = () => globalThis.__formatLocale ?? 'de';
+    export const getNumberFormat = (options = {}) =>
+      new Intl.NumberFormat(globalThis.__formatLocale ?? 'de', options);
     export const getSupportedLocales = () => ['de', 'en'];
     export const formatDate = (d) => String(d);
     export const formatDayMonth = (d) => String(d);
@@ -91,6 +118,8 @@ const STUBS = {
     export const btnLoading = () => {};
     export const btnSuccess = () => {};
     export const btnError = () => {};
+    export const refocusAfterRender = () => {};
+    export const forgetRestore = () => {};
   `,
   '/components/detail-view.js': `
     export const openDetailView = () => ({ update: () => true, isOpen: () => true });

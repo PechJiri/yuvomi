@@ -608,7 +608,15 @@
         "toPantryNothing": "Walang naidagdag sa paminggalan. Buksan ulit ang \"Sa paminggalan\" at suriin ang mga dami.",
         "reorderHandle": "Ayusin ang pagkakasunod: {{name}}",
         "reorderHandleHint": "I-drag o gamitin ang arrow keys para mag-ayos",
-        "reorderPosition": "Posisyon {{index}} ng {{total}}"
+        "reorderPosition": "Posisyon {{index}} ng {{total}}",
+        "priceLabel": "Presyo",
+        "storeLabel": "Tindahan",
+        "storePlaceholder": "Pumili o mag-type",
+        "manageStores": "Pamahalaan ang mga tindahan",
+        "storesHint": "Ang mga tindahang pinamimilihan ninyo. Ang presyo na walang tindahan ay kalahating sagot lamang.",
+        "storeDeleteConfirm": "Burahin ang tindahang “{{name}}”?",
+        "storeDeleteConfirmDetail": "Mananatili ang mga bagay ng tindahang ito pati ang presyo nila - ang takda ng tindahan lang ang mawawalan ng laman. Walang kapalit na tindahan dito.",
+        "addStore": "Bagong tindahan"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} na pagkain ang naplano.",
@@ -1495,7 +1503,18 @@
         "loanPaidInstallmentsLabel": "Mga hulog na nabayaran na",
         "loanPaidInstallmentsHint": "Para sa utang na tumatakbo na. Naitatala ang mga hulog na ito ngunit hindi ibinibilang sa badyet.",
         "loanPaymentTypeLocked": "Ang kita o gastos ay sumusunod sa uri ng utang at doon binabago.",
-        "planHistoricNote": "Sinusukat laban sa iyong kasalukuyang plano. Hindi itinatala ng Yuvomi kung ano ang plano noong nakaraang buwan."
+        "planHistoricNote": "Sinusukat laban sa iyong kasalukuyang plano. Hindi itinatala ng Yuvomi kung ano ang plano noong nakaraang buwan.",
+        "recurringEditSeriesHint": "Ang unang entry ng serye ay siya ring template nito - nagbabago rin doon ang pamagat, halaga, kategorya at account, kahit nakaraan na ito.",
+        "responsibleLabel": "Responsable",
+        "responsibleHint": "Kung sino ang nag-aasikaso ng entry na ito. Walang perang inililipat - gamitin ang shared expenses para maghatian.",
+        "responsibleFilterTo": "Mga entry lang ni {{name}}",
+        "clearResponsibleFilter": "Alisin ang filter ng responsable",
+        "groupByResponsible": "Ayon sa responsable",
+        "responsibleNobody": "Walang responsable",
+        "responsibleFilterEmptyTitle": "Walang entry para sa taong ito",
+        "responsibleFilterEmptyDescription": "Walang responsable sa anumang entry ngayong buwan sa piniling ito.",
+        "handoverToSplit": "Ilipat sa shared expenses",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plano: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Ipakita ang tab ng siklo",
@@ -2613,7 +2632,10 @@
         "healthVisibilityApply": "Baguhin din ang mga umiiral na entry",
         "healthVisibilityApplyHint": "Nai-save. Baguhin din ba ang mga umiiral na entry sa {{area}}?",
         "healthVisibilityApplied": "{{count}} entry ang binago.",
-        "healthVisibilityApplied_one": "Isang entry ang binago."
+        "healthVisibilityApplied_one": "Isang entry ang binago.",
+        "mealTypeNamesLabel": "Sarili mong mga pangalan",
+        "mealTypeNamesHint": "Kung ano ang tawag ng inyong sambahayan sa apat na pagkain. Iwanang blangko para sa nakatakdang pangalan. Lumalabas ang pangalan sa lahat ng wika nang eksakto tulad ng iyong isinulat.",
+        "mealTypeNamesSaved": "Na-save ang mga pangalan."
     },
     "login": {
         "tagline": "Maligayang pagbabalik sa iyong family planner.",
@@ -2860,7 +2882,12 @@
         "sourceNative": "Katutubo",
         "sourceAll": "Lahat",
         "sourceFilterLabel": "I-filter ayon sa pinagmulan",
-        "plannedThisWeek": "Nakaplano ngayong linggo"
+        "plannedThisWeek": "Nakaplano ngayong linggo",
+        "imageLabel": "Larawan",
+        "imageChoose": "Pumili ng larawan",
+        "imageRemove": "Alisin ang larawan",
+        "imageHint": "Isang larawan bawat resipe. Lumalabas ito sa tagaplano ng pagkain at sa overview tile.",
+        "imageTooLarge": "Masyado pa ring malaki ang larawan pagkatapos paliitin."
     },
     "onboarding": {
         "step1Title": "Maligayang pagdating sa {{name}}",
@@ -3766,7 +3793,9 @@
         "completedOn": "Natapos noong {{date}}",
         "completedToast": "Natapos ang subscription.",
         "endsAfter": "{{count}} bayad na lang ang natitira",
-        "logoTypeError": "Gumamit ng larawang PNG, JPEG, WebP o SVG."
+        "logoTypeError": "Gumamit ng larawang PNG, JPEG, WebP o SVG.",
+        "accountUsernameLabel": "Nakarehistro sa",
+        "accountUsernameHint": "Email address o username. Hindi ito password field - hindi nag-iimbak ng password ang Yuvomi."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Imbentaryo ng Yuvomi",
         "removeBookingAction": "Alisin ang \"{{title}}\"",
-        "photoTooLarge": "Masyado pa ring malaki ang larawan pagkatapos bawasan ang laki."
+        "photoTooLarge": "Masyado pa ring malaki ang larawan pagkatapos bawasan ang laki.",
+        "accountUsernameLabel": "Nakarehistro sa",
+        "accountUsernameHint": "Email address o username. Hindi ito password field - hindi nag-iimbak ng password ang Yuvomi."
     },
     "documentAttach": {
         "label": "Mga kalakip",

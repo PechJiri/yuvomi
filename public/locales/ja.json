@@ -596,7 +596,15 @@
         "toPantryNothing": "パントリーには何も追加されませんでした。「パントリーへ」をもう一度開いて数量を確認してください。",
         "reorderHandle": "並べ替え: {{name}}",
         "reorderHandleHint": "ドラッグまたは矢印キーで並べ替え",
-        "reorderPosition": "{{total}} 件中 {{index}} 番目"
+        "reorderPosition": "{{total}} 件中 {{index}} 番目",
+        "priceLabel": "価格",
+        "storeLabel": "店",
+        "storePlaceholder": "選ぶか入力",
+        "manageStores": "店を管理",
+        "storesHint": "買い物をする店です。店のない価格は半分の答えにしかなりません。",
+        "storeDeleteConfirm": "店「{{name}}」を削除しますか？",
+        "storeDeleteConfirmDetail": "この店の品物とその価格はそのまま残ります。空になるのは店の割り当てだけで、代わりの店は入りません。",
+        "addStore": "新しい店"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} 件の食事を計画しました。",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "支払い済みの回数",
         "loanPaidInstallmentsHint": "すでに返済中のローン用です。これらの回は記録されますが、家計簿には計上されません。",
         "loanPaymentTypeLocked": "収入か支出かは貸付・借入の別に従い、そちらで変更します。",
-        "planHistoricNote": "現在の予算計画と比較しています。Yuvomi は過去の月の計画内容を保存していません。"
+        "planHistoricNote": "現在の予算計画と比較しています。Yuvomi は過去の月の計画内容を保存していません。",
+        "recurringEditSeriesHint": "シリーズの最初の項目はテンプレートでもあります。タイトル、金額、カテゴリー、口座はそこでも変更され、過去の日付であっても同様です。",
+        "responsibleLabel": "担当",
+        "responsibleHint": "この記録を担当する人。お金は動きません。精算は共有支出で行います。",
+        "responsibleFilterTo": "{{name}} の記録のみ",
+        "clearResponsibleFilter": "担当フィルターを解除",
+        "groupByResponsible": "担当ごと",
+        "responsibleNobody": "担当なし",
+        "responsibleFilterEmptyTitle": "この人の記録はありません",
+        "responsibleFilterEmptyDescription": "この選択では、今月どの記録にも担当者がいません。",
+        "handoverToSplit": "共有支出に移す",
+        "loanRemainingInstallmentsForecast": "{{forecast}}（計画: {{plan}}）"
     },
     "settings": {
         "healthCycleEnableLabel": "周期タブを表示",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "既存の記録も変更する",
         "healthVisibilityApplyHint": "保存しました。{{area}} の既存の記録も変更しますか？",
         "healthVisibilityApplied": "{{count}} 件の記録を変更しました。",
-        "healthVisibilityApplied_one": "1 件の記録を変更しました。"
+        "healthVisibilityApplied_one": "1 件の記録を変更しました。",
+        "mealTypeNamesLabel": "独自の名前",
+        "mealTypeNamesHint": "この家庭で四つの食事を何と呼ぶか。空欄にすると既定の名前を使います。名前は入力したまま、すべての言語で表示されます。",
+        "mealTypeNamesSaved": "名前を保存しました。"
     },
     "login": {
         "tagline": "家族のプランナーへおかえりなさい。",
@@ -2757,7 +2779,12 @@
         "sourceNative": "ネイティブ",
         "sourceAll": "すべて",
         "sourceFilterLabel": "ソースで絞り込み",
-        "plannedThisWeek": "今週の予定あり"
+        "plannedThisWeek": "今週の予定あり",
+        "imageLabel": "画像",
+        "imageChoose": "画像を選ぶ",
+        "imageRemove": "画像を削除",
+        "imageHint": "レシピごとに1枚。食事計画と概要タイルに表示されます。",
+        "imageTooLarge": "縮小してもまだ大きすぎます。"
     },
     "search": {
         "emptyHint": "2文字以上入力すると、タスク・予定・メモ・連絡先・買い物・健康を検索できます。",
@@ -3766,7 +3793,9 @@
         "completedOn": "{{date}}に完了",
         "completedToast": "サブスクリプションが完了しました。",
         "endsAfter": "残り{{count}}回の支払い",
-        "logoTypeError": "PNG、JPEG、WebP、SVG画像を使用してください。"
+        "logoTypeError": "PNG、JPEG、WebP、SVG画像を使用してください。",
+        "accountUsernameLabel": "登録先アカウント",
+        "accountUsernameHint": "メールアドレスまたはユーザー名。パスワード欄ではありません。Yuvomi はパスワードを保存しません。"
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Yuvomi 持ち物",
         "removeBookingAction": "「{{title}}」を外す",
-        "photoTooLarge": "縮小後も写真が大きすぎます。"
+        "photoTooLarge": "縮小後も写真が大きすぎます。",
+        "accountUsernameLabel": "登録先アカウント",
+        "accountUsernameHint": "メールアドレスまたはユーザー名。パスワード欄ではありません。Yuvomi はパスワードを保存しません。"
     },
     "documentAttach": {
         "label": "添付",

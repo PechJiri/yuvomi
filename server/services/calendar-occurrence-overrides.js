@@ -12,7 +12,7 @@ import {
 import {
   dropInheritedEventReminders, eventAuthorId, fanOutEventReminders,
 } from './event-reminder-fanout.js';
-import { utcToWall } from '../utils/timezone.js';
+import { utcToWall, shiftDateKey } from '../utils/timezone.js';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('CalendarOccurrenceOverrides');
@@ -158,10 +158,22 @@ export function baseOccurrenceFor(master, recurrenceId) {
     throw invalidRecurrenceIdentity('recurrence_id must identify a recurring series date.');
   }
 
+  // EIN TAG LUFT AUF BEIDEN SEITEN, und zwar seit #985: das Fenster [from, to]
+  // wird in UTC-Tagen gefuehrt, die Expansionsschleife laeuft bei einer Serie,
+  // deren lokaler und UTC-Tag auseinandergehen, aber auf dem LOKALEN Datum.
+  // Ein Punktfenster [recurrenceId, recurrenceId] verfehlt das gesuchte
+  // Vorkommen dann um genau einen Tag - `while (currentDate <= to)` bricht ab,
+  // bevor es entsteht. Gemessen an der Tokio-Probe in test-ics-export.js:
+  // Master 07.01. 08:00 Tokio = 06.01. 23:00 UTC, gesucht `2026-01-07`, die
+  // Schleife steht bei diesem Vorkommen auf dem lokalen `2026-01-08`.
+  // Mehr als ein Tag kann es nicht sein: weiter als um einen Kalendertag
+  // koennen UTC und Ortszeit nicht auseinanderliegen. Die AUSWAHL bleibt exakt -
+  // gefiltert wird unveraendert auf `recurrence_identity === recurrenceId`, das
+  // groessere Fenster liefert nur die Kandidaten.
   const occurrences = expandRecurringEvents(
     [master],
-    recurrenceId,
-    recurrenceId,
+    shiftDateKey(recurrenceId, -1),
+    shiftDateKey(recurrenceId, 1),
     new Map(),
     {
       includeRecurrenceIdentity: true,

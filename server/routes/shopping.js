@@ -329,6 +329,95 @@ router.get('/suggestions', (req, res) => {
 
 // --------------------------------------------------------
 // PATCH /api/v1/shopping/items/:itemId
+// --------------------------------------------------------
+// Laeden (#1003) - eine verwaltete Liste, kein Freitext.
+//
+// Ein Haushalt besucht wenige genug Laeden, dass Pflegen billig ist; Freitext
+// ist ab der ersten Woche unordentlich ("REWE", "Rewe", "rewe City" waeren
+// drei). Deshalb eine winzige CRUD-Flaeche statt eines Textfelds.
+// --------------------------------------------------------
+
+// GET /api/v1/shopping/stores  -> { data: Store[] }
+router.get('/stores', (_req, res) => {
+  try {
+    const stores = db.get().prepare('SELECT * FROM shopping_stores ORDER BY name COLLATE NOCASE ASC').all();
+    res.json({ data: stores });
+  } catch (err) {
+    log.error('GET /stores error:', err);
+    res.status(500).json({ error: 'Internal error', code: 500 });
+  }
+});
+
+// POST /api/v1/shopping/stores  Body: { name }
+router.post('/stores', (req, res) => {
+  try {
+    const vName = str(req.body.name, 'Name', { max: MAX_SHORT });
+    const errors = collectErrors([vName]);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+
+    // Derselbe Laden zweimal ist kein Fehler des Nutzers, sondern schon da:
+    // die vorhandene Zeile zurueckgeben statt einen Konflikt zu melden.
+    const vorhanden = db.get().prepare('SELECT * FROM shopping_stores WHERE name = ? COLLATE NOCASE').get(vName.value);
+    if (vorhanden) return res.status(200).json({ data: vorhanden });
+
+    const result = db.get().prepare(
+      'INSERT INTO shopping_stores (name, created_by) VALUES (?, ?)'
+    ).run(vName.value, req.authUserId || req.session.userId);
+    res.status(201).json({ data: db.get().prepare('SELECT * FROM shopping_stores WHERE id = ?').get(result.lastInsertRowid) });
+  } catch (err) {
+    log.error('POST /stores error:', err);
+    res.status(500).json({ error: 'Internal error', code: 500 });
+  }
+});
+
+// PUT /api/v1/shopping/stores/:id  Body: { name }
+//
+// Umbenennen statt neu anlegen: der Laden haengt an bezahlten Preisen, und ein
+// Tippfehler soll die Historie nicht spalten. Die Form (PUT mit { name }) ist
+// die, die der geteilte Kategorie-Manager erwartet - so verwaltet dieselbe
+// Komponente Kategorien und Laeden, ohne einen zweiten Schirm.
+router.put('/stores/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'Invalid store ID.', code: 400 });
+    const store = db.get().prepare('SELECT * FROM shopping_stores WHERE id = ?').get(id);
+    if (!store) return res.status(404).json({ error: 'Store not found.', code: 404 });
+
+    const vName = str(req.body.name, 'Name', { max: MAX_SHORT });
+    const errors = collectErrors([vName]);
+    if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+
+    const kollision = db.get().prepare(
+      'SELECT id FROM shopping_stores WHERE name = ? COLLATE NOCASE AND id != ?'
+    ).get(vName.value, id);
+    if (kollision) return res.status(409).json({ error: 'Diesen Laden gibt es schon.', code: 409 });
+
+    db.get().prepare('UPDATE shopping_stores SET name = ? WHERE id = ?').run(vName.value, id);
+    res.json({ data: db.get().prepare('SELECT * FROM shopping_stores WHERE id = ?').get(id) });
+  } catch (err) {
+    log.error('PUT /stores/:id error:', err);
+    res.status(500).json({ error: 'Internal error', code: 500 });
+  }
+});
+
+// DELETE /api/v1/shopping/stores/:id
+router.delete('/stores/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'Invalid store ID.', code: 400 });
+    const store = db.get().prepare('SELECT id FROM shopping_stores WHERE id = ?').get(id);
+    if (!store) return res.status(404).json({ error: 'Store not found.', code: 404 });
+    // Der Fremdschluessel steht auf SET NULL: bezahlte Preise bleiben stehen,
+    // sie verlieren nur ihren Laden. Was einmal bezahlt wurde, bleibt wahr.
+    db.get().prepare('DELETE FROM shopping_stores WHERE id = ?').run(id);
+    res.status(204).end();
+  } catch (err) {
+    log.error('DELETE /stores/:id error:', err);
+    res.status(500).json({ error: 'Internal error', code: 500 });
+  }
+});
+
+// --------------------------------------------------------
 // Artikel aktualisieren (is_checked, name, quantity, category, notes, url).
 // Body: { is_checked?, name?, quantity?, category?, notes?, url? }
 // Response: { data: ShoppingItem }
@@ -349,6 +438,53 @@ router.patch('/items/:itemId', (req, res) => {
       url: urlVal = item.url,
     } = req.body;
 
+    /* PREIS UND LADEN (#1003, erster Schnitt).
+     *
+     * Beide sind optional und werden beim ABHAKEN erfasst - das ist der
+     * Augenblick, in dem die Zahl bekannt ist. Ein Preis, der beim Anlegen
+     * eingetippt wird, ist eine Schaetzung; einer beim Abhaken ist eine
+     * Tatsache.
+     *
+     * Nicht mitgeschickt heisst unveraendert, `null` loescht - dieselbe
+     * Unterscheidung wie beim Rezeptbild und aus demselben Grund: sonst raeumt
+     * jedes Teil-Update, etwa das blosse Umsortieren, den Preis ab.
+     */
+    const priceGiven = req.body.price_cents !== undefined;
+    let priceCents = item.price_cents;
+    if (priceGiven) {
+      const roh = req.body.price_cents;
+      if (roh === null || roh === '') priceCents = null;
+      else {
+        const n = Number(roh);
+        // Ganze Cent, nicht negativ, und eine Obergrenze, damit ein Vertipper
+        // nicht als Millionenbetrag in der spaeteren Historie steht.
+        if (!Number.isInteger(n) || n < 0 || n > 100_000_000) {
+          return res.status(400).json({ error: 'price_cents muss eine ganze Zahl in Cent zwischen 0 und 100000000 sein.', code: 400 });
+        }
+        priceCents = n;
+      }
+    }
+
+    const storeGiven = req.body.store_id !== undefined;
+    let storeId = item.store_id;
+    if (storeGiven) {
+      const roh = req.body.store_id;
+      if (roh === null || roh === '') storeId = null;
+      else {
+        const n = Number(roh);
+        if (!Number.isInteger(n) || n <= 0) {
+          return res.status(400).json({ error: 'store_id muss eine Laden-ID sein.', code: 400 });
+        }
+        // Ein unbekannter Laden wird abgelehnt statt still verworfen: anders als
+        // bei einer Personenauswahl ist das hier ein Aufruffehler - die Liste
+        // der Laeden ist verwaltet und kurz.
+        if (!db.get().prepare('SELECT 1 FROM shopping_stores WHERE id = ?').get(n)) {
+          return res.status(400).json({ error: 'Unbekannter Laden.', code: 400 });
+        }
+        storeId = n;
+      }
+    }
+
     if (!name?.trim()) return res.status(400).json({ error: 'name darf nicht leer sein.', code: 400 });
 
     const validNames = validCategoryNames();
@@ -363,9 +499,11 @@ router.patch('/items/:itemId', (req, res) => {
 
     db.get().prepare(`
       UPDATE shopping_items
-      SET is_checked = ?, name = ?, quantity = ?, category = ?, notes = ?, url = ?
+      SET is_checked = ?, name = ?, quantity = ?, category = ?, notes = ?, url = ?,
+          price_cents = ?, store_id = ?
       WHERE id = ?
-    `).run(is_checked ? 1 : 0, name.trim(), quantity ?? null, category, vNotes.value, vUrl.value, req.params.itemId);
+    `).run(is_checked ? 1 : 0, name.trim(), quantity ?? null, category, vNotes.value, vUrl.value,
+      priceCents ?? null, storeId ?? null, req.params.itemId);
 
     // Kategoriewechsel heißt Positionswechsel: die Handsortierung zählt je
     // Kategorie (#678), der alte Rang gilt in der neuen Nachbarschaft nicht.

@@ -12,7 +12,7 @@ import {
   budgetVisibilityWhere, budgetScopeWhere, budgetDetailsHiddenWhere, canEditEntry,
   resolveBudgetMode, maskBudgetEntry, BUDGET_MASKED_CATEGORY,
 } from '../../services/budget-visibility.js';
-import { computeLoanSchedule, remainingPrincipalFromPayments } from '../../services/loan-amortization.js';
+import { computeLoanSchedule, remainingPrincipalFromPayments, remainingInstallmentsForBalance } from '../../services/loan-amortization.js';
 import { todayKey } from '../../utils/timezone.js';
 
 // --------------------------------------------------------
@@ -336,6 +336,11 @@ export function generateRecurringInstances(database, month) {
        created_by, owner_id, visibility, is_pending, account_id)
     VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
   `);
+  // Die Zustaendigen des Originals auf die frische Instanz kopieren (#1057).
+  const copyResponsiblesStmt = database.prepare(`
+    INSERT OR IGNORE INTO budget_entry_responsibles (entry_id, user_id)
+    SELECT ?, user_id FROM budget_entry_responsibles WHERE entry_id = ?
+  `);
 
   for (const orig of originals) {
     const interval = orig.recurrence_interval || 'monthly';
@@ -381,11 +386,18 @@ export function generateRecurringInstances(database, month) {
       // Kontosaldo für eine Abbuchung, die noch gar nicht stattgefunden hat.
       // Ohne Konto bleibt der Saldo exakt so, wie er vor #973 war.
       const inheritsAccount = orig.recurrence_virtual ? null : (orig.account_id ?? null);
-      insertStmt.run(
+      const created = insertStmt.run(
         orig.title, orig.amount, orig.category, orig.subcategory || '', date,
         orig.id, orig.created_by, orig.owner_id, orig.visibility || 'shared',
         orig.recurrence_confirm ? 1 : 0, inheritsAccount,
       );
+
+      // ZUSTAENDIGE ERBEN MIT (#1057). Anders als das Konto gilt das auch fuer
+      // virtuelle Serien: das Etikett bewegt kein Geld, es kann also keinen
+      // Saldo verfaelschen - und "wer kuemmert sich darum" ist am Planwert
+      // genauso richtig wie an der Zahlung. Als eigene Anweisung statt im
+      // INSERT, weil die Zustaendigkeit in einer n:m-Tabelle liegt.
+      copyResponsiblesStmt.run(created.lastInsertRowid, orig.id);
     }
   }
 }
@@ -675,6 +687,10 @@ export function loanSummaryRow(loan, baseCurrency = budgetCurrency()) {
     remaining_amount: remainingAmount,
     remaining_principal: remainingPrincipal,
     remaining_installments: remainingInstallments,
+    // Dieselbe Zahl, aber am Kontostand statt am Vertrag gerechnet (#964).
+    // Ohne Zinsteil oder bei nicht amortisierender Rate bleibt sie null, und die
+    // Oberflaeche zeigt dann allein die Planzahl.
+    remaining_installments_forecast: forecastRemainingInstallments(loan, interest, paidInstallments),
     is_settled: settled,
     next_installment_number: !settled ? paidInstallments + 1 : null,
     next_due_month: !settled ? addMonths(loan.start_month, paidInstallments) : null,
@@ -721,6 +737,34 @@ export function loanInterestSummary(loan, payments = []) {
   };
 }
 
+/**
+ * Die Restlaufzeit, die dem Geld folgt (#964).
+ *
+ * `remaining_installments` an der Zeile zaehlt weiter die ungebuchten
+ * PLAN-Raten - das beschreibt den Vertrag und bleibt stehen. Diese Zahl daneben
+ * beantwortet die andere Frage: wie viele Raten sind es bei der REALEN
+ * Restschuld noch? Wer sondertilgt, sieht sie sinken, waehrend die Planzahl
+ * unveraendert bleibt; die Oberflaeche zeigt beide, damit der Vertragsblick
+ * nicht still verschwindet.
+ *
+ * `null`, wo die Frage keinen Sinn hat: zinsfreie Darlehen (dort IST die
+ * Planzahl die Antwort), nicht amortisierende Raten, und alles, was
+ * computeLoanSchedule schon nicht rechnen konnte.
+ */
+function forecastRemainingInstallments(loan, interest, paidInstallments) {
+  if (!interest) return null;
+  const zahl = remainingInstallmentsForBalance({
+    balance: interest.remaining_principal,
+    monthlyPayment: interest.monthly_payment,
+    fixedRate: loan.fixed_rate,
+    interestMode: loan.interest_mode,
+    fixedPeriodMonths: loan.fixed_period_months,
+    followupRate: loan.followup_rate,
+    paidInstallments,
+  });
+  return zahl;
+}
+
 export function loadLoan(id, baseCurrency = budgetCurrency()) {
   const loan = db.get().prepare(`
     SELECT l.*, u.display_name AS creator_name
@@ -745,9 +789,64 @@ export function refreshLoanStatus(loanId) {
   return loan;
 }
 
+/* DIE ZUSTAENDIGEN EINER BUCHUNG ALS JSON (#1057).
+ *
+ * Als Unterabfrage und nicht als JOIN: ein JOIN auf eine n:m-Tabelle
+ * vervielfacht die Zeile je zustaendiger Person, und jede Summe darueber waere
+ * still falsch. Dieselbe Form, die der Kalender fuer `assigned_users` benutzt.
+ *
+ * Der Baustein erwartet die Buchung als `b` - alle drei Lesepfade dieses Moduls
+ * benennen sie so.
+ */
+export const RESPONSIBLE_USERS_SQL = `(
+  SELECT json_group_array(json_object(
+    'id', ru.id, 'display_name', ru.display_name, 'color', ru.avatar_color
+  ))
+  FROM budget_entry_responsibles ber JOIN users ru ON ru.id = ber.user_id
+  WHERE ber.entry_id = b.id
+) AS responsible_users_json`;
+
+/**
+ * Die Zustaendigen einer Buchung ersetzen (#1057).
+ *
+ * ERSETZEN, NICHT ERGAENZEN: das Formular sendet die vollstaendige Auswahl, und
+ * "niemand" muss ausdrueckbar sein. Ein leeres Array loescht also alle Zeilen.
+ * `undefined` dagegen heisst "nicht mitgeschickt" und laesst alles stehen -
+ * sonst raeumte jeder Teil-Request (etwa das Abhaken einer Buchung) die
+ * Zustaendigkeit ab.
+ *
+ * @param {number} entryId
+ * @param {Array<number>|undefined} rawUserIds
+ */
+export function replaceResponsibles(entryId, rawUserIds) {
+  if (rawUserIds === undefined) return;
+  const ids = Array.isArray(rawUserIds)
+    ? [...new Set(rawUserIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+    : [];
+  db.get().prepare('DELETE FROM budget_entry_responsibles WHERE entry_id = ?').run(entryId);
+  if (!ids.length) return;
+  // Unbekannte IDs fallen still weg statt den Request zu kippen: die Auswahl
+  // kann eine Person nennen, die zwischen Laden und Absenden entfernt wurde.
+  const ins = db.get().prepare(`
+    INSERT OR IGNORE INTO budget_entry_responsibles (entry_id, user_id)
+    SELECT ?, id FROM users WHERE id = ?
+  `);
+  for (const id of ids) ins.run(entryId, id);
+}
+
+/** Das JSON aus RESPONSIBLE_USERS_SQL in ein Array wandeln. */
+export function withResponsibles(row) {
+  if (!row) return row;
+  const { responsible_users_json, ...rest } = row;
+  let parsed = [];
+  try { parsed = responsible_users_json ? JSON.parse(responsible_users_json) : []; } catch { parsed = []; }
+  return { ...rest, responsible_users: parsed };
+}
+
 export function entryWithLoanMeta(id) {
-  return db.get().prepare(`
+  return withResponsibles(db.get().prepare(`
     SELECT b.*, u.display_name AS creator_name,
+           ${RESPONSIBLE_USERS_SQL},
            p.id AS loan_payment_id,
            p.loan_id AS loan_id,
            p.installment_number AS loan_installment_number,
@@ -758,7 +857,7 @@ export function entryWithLoanMeta(id) {
     LEFT JOIN budget_loan_payments p ON p.budget_entry_id = b.id
     LEFT JOIN budget_loans l ON l.id = p.loan_id
     WHERE b.id = ?
-  `).get(id);
+  `).get(id));
 }
 
 // --------------------------------------------------------

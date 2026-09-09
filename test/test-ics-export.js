@@ -67,14 +67,14 @@ d2.exec(MIGRATIONS_SQL[10]);
 d2.exec(MIGRATIONS_SQL[11]);
 d2.exec(`CREATE VIRTUAL TABLE search_index USING fts5(
   entity UNINDEXED, entity_id UNINDEXED, title, body
-);`); // migration 190 rebuilds the event slice
+);`); // migration 194 rebuilds the event slice
 d2.exec(MIGRATIONS_SQL[27]); // legacy calendar attachment bodies
 d2.exec(MIGRATIONS_SQL[61]);
 d2.exec("ALTER TABLE calendar_events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'all';");
 d2.exec(MIGRATIONS_SQL[80]);
 d2.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions (EXDATE, #489)
 d2.exec(MIGRATIONS_SQL[97]); // calendar_events.tzid (DST-Export, #549)
-d2.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides
+d2.exec(MIGRATIONS_SQL[194]); // linked occurrence overrides
 d2.exec(`CREATE TABLE IF NOT EXISTS event_assignments (
   event_id INTEGER NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
   user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -344,7 +344,17 @@ test('buildFeed: TZID-Override nutzt bei negativem Mitternachtsversatz den DST-B
   const master = eventBlock(ics, 'OverrideLosAngelesMaster');
   const child = eventBlock(ics, 'OverrideLosAngelesMoved');
   assert(!master?.includes('EXDATE;TZID=America/Los_Angeles:'), 'Linked slot darf nicht zugleich EXDATE sein: ' + master);
-  assert(child?.includes('RECURRENCE-ID;TZID=America/Los_Angeles:20260308T183000'), 'RECURRENCE-ID muss den DST-korrigierten Basis-Instant nutzen: ' + child);
+  // 17:30, NICHT 18:30 - nachgezogen beim Rebase auf main (#985/#549).
+  //
+  // Der Master ist "taeglich 17:30 Ortszeit" (2026-03-08T01:30Z = 07.03. 17:30 LA),
+  // und zwischen dem ersten und dem zweiten Vorkommen liegt die US-Umstellung vom
+  // 08.03.2026. Diese Probe erwartete bis hierher 18:30 und schrieb damit die alte
+  // Rechnung fest: fester UTC-Suffix (01:30Z) je Vorkommen, wodurch die ORTSZEIT
+  // ueber die Grenze springt. Genau diese Drift ist der Fehler aus #549, den #985
+  // behoben hat - seither wird je Vorkommen die lokale Wanduhrzeit gehalten und
+  // nach UTC zurueckgerechnet (2026-03-09T00:30Z). Derselbe Slot, benannt nach der
+  // Ortszeit, die er wirklich hat.
+  assert(child?.includes('RECURRENCE-ID;TZID=America/Los_Angeles:20260308T173000'), 'RECURRENCE-ID muss den DST-korrigierten Basis-Instant nutzen: ' + child);
 });
 
 test('buildFeed: verschobener Ersatz behält seinen abgelaufenen Master im Feed', () => {

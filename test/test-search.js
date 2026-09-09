@@ -36,7 +36,7 @@ db.exec(MIGRATIONS_SQL[1]);
 db.exec(MIGRATIONS_SQL[44]);
 db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
 db.exec(MIGRATIONS_SQL[27]); // legacy calendar attachment body
-db.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides
+db.exec(MIGRATIONS_SQL[194]); // linked occurrence overrides
 // Migration 65: health tables (medications, health_activities) the search reads from.
 db.exec(MIGRATIONS_SQL[65]);
 // Migration 66: FTS triggers + backfill for medications and health activities.

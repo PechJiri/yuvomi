@@ -608,7 +608,15 @@
         "toPantryNothing": "Nic nie zostało dodane do spiżarni. Otwórz ponownie „Do spiżarni\" i sprawdź ilości.",
         "reorderHandle": "Zmień kolejność: {{name}}",
         "reorderHandleHint": "Przeciągnij lub użyj strzałek, aby zmienić kolejność",
-        "reorderPosition": "Pozycja {{index}} z {{total}}"
+        "reorderPosition": "Pozycja {{index}} z {{total}}",
+        "priceLabel": "Cena",
+        "storeLabel": "Sklep",
+        "storePlaceholder": "Wybierz lub wpisz",
+        "manageStores": "Zarządzaj sklepami",
+        "storesHint": "Sklepy, w których kupujecie. Cena bez sklepu odpowiada tylko na pół pytania.",
+        "storeDeleteConfirm": "Usunąć sklep „{{name}}”?",
+        "storeDeleteConfirmDetail": "Pozycje z tego sklepu pozostaną wraz z ceną - puste będzie tylko przypisanie sklepu. Nie ma tu sklepu zastępczego.",
+        "addStore": "Nowy sklep"
     },
     "meals": {
         "randomizeSuccess_few": "Zaplanowano {{count}} posiłki.",
@@ -1495,7 +1503,18 @@
         "loanPaidInstallmentsLabel": "Już zapłacone raty",
         "loanPaidInstallmentsHint": "Dla pożyczki, która już trwa. Te raty zostaną uzupełnione, ale nie trafią do budżetu.",
         "loanPaymentTypeLocked": "Przychód lub wydatek wynika z rodzaju pożyczki i tam się go zmienia.",
-        "planHistoricNote": "Mierzone względem Twojego bieżącego planu. Yuvomi nie zapisuje, jaki był plan we wcześniejszym miesiącu."
+        "planHistoricNote": "Mierzone względem Twojego bieżącego planu. Yuvomi nie zapisuje, jaki był plan we wcześniejszym miesiącu.",
+        "recurringEditSeriesHint": "Pierwszy wpis serii jest zarazem jej szablonem - tytuł, kwota, kategoria i konto zmieniają się także tam, nawet jeśli jest w przeszłości.",
+        "responsibleLabel": "Odpowiedzialny",
+        "responsibleHint": "Kto zajmuje się tym wpisem. Nie przenosi pieniędzy - do rozliczeń służą wydatki wspólne.",
+        "responsibleFilterTo": "Tylko wpisy: {{name}}",
+        "clearResponsibleFilter": "Wyczyść filtr odpowiedzialnego",
+        "groupByResponsible": "Wg odpowiedzialnego",
+        "responsibleNobody": "Nikt",
+        "responsibleFilterEmptyTitle": "Brak wpisów dla tej osoby",
+        "responsibleFilterEmptyDescription": "W tym miesiącu nikt nie odpowiada za wpis w tym wyborze.",
+        "handoverToSplit": "Przenieś do wydatków wspólnych",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (wg planu: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Pokaż kartę cyklu",
@@ -2613,7 +2632,10 @@
         "healthVisibilityApply": "Zmień też istniejące wpisy",
         "healthVisibilityApplyHint": "Zapisano. Czy zmienić także istniejące wpisy w obszarze {{area}}?",
         "healthVisibilityApplied": "Zmieniono wpisów: {{count}}.",
-        "healthVisibilityApplied_one": "Zmieniono jeden wpis."
+        "healthVisibilityApplied_one": "Zmieniono jeden wpis.",
+        "mealTypeNamesLabel": "Własne nazwy",
+        "mealTypeNamesHint": "Jak twoje gospodarstwo domowe nazywa cztery posiłki. Pozostaw puste, aby użyć nazwy wbudowanej. Nazwa wyświetla się tak samo we wszystkich językach.",
+        "mealTypeNamesSaved": "Nazwy zapisane."
     },
     "login": {
         "tagline": "Witaj ponownie w swoim planerze rodzinnym.",
@@ -2860,7 +2882,12 @@
         "sourceNative": "Lokalny",
         "sourceAll": "Wszystkie",
         "sourceFilterLabel": "Filtruj według źródła",
-        "plannedThisWeek": "Zaplanowane na ten tydzień"
+        "plannedThisWeek": "Zaplanowane na ten tydzień",
+        "imageLabel": "Obraz",
+        "imageChoose": "Wybierz obraz",
+        "imageRemove": "Usuń obraz",
+        "imageHint": "Jeden obraz na przepis. Pojawia się w planie posiłków i na kafelku przeglądu.",
+        "imageTooLarge": "Obraz jest nadal za duży po zmniejszeniu."
     },
     "onboarding": {
         "step1Title": "Witaj w {{name}}",
@@ -3766,7 +3793,9 @@
         "completedOn": "Zakończono {{date}}",
         "completedToast": "Subskrypcja zakończona.",
         "endsAfter": "Pozostało {{count}} płatności",
-        "logoTypeError": "Proszę użyć pliku PNG, JPEG, WebP lub SVG."
+        "logoTypeError": "Proszę użyć pliku PNG, JPEG, WebP lub SVG.",
+        "accountUsernameLabel": "Zarejestrowano na",
+        "accountUsernameHint": "Adres e-mail lub nazwa użytkownika. To nie jest pole hasła - Yuvomi nie przechowuje haseł."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Inwentarz Yuvomi",
         "removeBookingAction": "Usuń „{{title}}”",
-        "photoTooLarge": "Zdjęcie jest nadal za duże po zmniejszeniu."
+        "photoTooLarge": "Zdjęcie jest nadal za duże po zmniejszeniu.",
+        "accountUsernameLabel": "Zarejestrowano na",
+        "accountUsernameHint": "Adres e-mail lub nazwa użytkownika. To nie jest pole hasła - Yuvomi nie przechowuje haseł."
     },
     "documentAttach": {
         "label": "Załączniki",

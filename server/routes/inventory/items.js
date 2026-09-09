@@ -128,9 +128,12 @@ function loadItems({ category, locationId, status, q } = {}, userId) {
   if (locationId !== undefined) { clauses.push('ii.location_id = ?'); params.push(locationId); }
   if (status !== undefined) { clauses.push('ii.status = ?'); params.push(status); }
   if (q) {
-    clauses.push('(ii.name LIKE ? OR ii.brand LIKE ? OR ii.model LIKE ? OR ii.serial_number LIKE ?)');
+    // account_username ist mitgesucht (#1004): das Feld traegt kein Geheimnis,
+    // und "wo ist das Geraet, das unter dieser Adresse laeuft" ist genau die
+    // Frage, fuer die es angelegt wurde.
+    clauses.push('(ii.name LIKE ? OR ii.brand LIKE ? OR ii.model LIKE ? OR ii.serial_number LIKE ? OR ii.account_username LIKE ?)');
     const like = `%${q}%`;
-    params.push(like, like, like, like);
+    params.push(like, like, like, like, like);
   }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const rows = db.get().prepare(`
@@ -223,6 +226,16 @@ function validateItemFields(body) {
   const vVendor = str(body.vendor, 'Haendler', { max: MAX_SHORT, required: false });
   results.push(vVendor);
   values.vendor = vVendor.value;
+
+  // Unter welchem Konto der Gegenstand registriert ist (#1004) - eine Adresse
+  // oder ein Benutzername, KEIN Passwort. Deshalb steht das Feld hier bei den
+  // gewoehnlichen Textspalten und nicht in einem eigenen, verschluesselten
+  // Topf: ein Benutzername ohne sein Passwort ist ein Telefonbucheintrag.
+  // Haushaltsweit sichtbar wie jede andere Spalte dieser Tabelle - inventory_items
+  // hat weder owner_id noch visibility (#467, Entscheidung in #1004).
+  const vAccount = str(body.account_username, 'Konto', { max: MAX_SHORT, required: false });
+  results.push(vAccount);
+  values.account_username = vAccount.value;
 
   if (body.warranty_months === null || body.warranty_months === '' || body.warranty_months === undefined) {
     values.warranty_months = null;
@@ -341,13 +354,13 @@ router.post('/', (req, res) => {
         INSERT INTO inventory_items
           (name, brand, model, serial_number, category, location_id, purchase_date,
            purchase_price, currency, vendor, warranty_months, condition,
-           status, notes, photo_data, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           status, notes, photo_data, account_username, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         values.name, values.brand, values.model, values.serial_number, values.category,
         values.location_id, values.purchase_date, values.purchase_price,
         values.currency, values.vendor, values.warranty_months, values.condition, values.status,
-        values.notes, values.photo_data, userId,
+        values.notes, values.photo_data, values.account_username, userId,
       );
 
       syncReminder({
@@ -414,13 +427,14 @@ router.put('/:id', (req, res) => {
         UPDATE inventory_items
         SET name = ?, brand = ?, model = ?, serial_number = ?, category = ?, location_id = ?,
             purchase_date = ?, purchase_price = ?, currency = ?, vendor = ?,
-            warranty_months = ?, condition = ?, status = ?, notes = ?, photo_data = ?
+            warranty_months = ?, condition = ?, status = ?, notes = ?, photo_data = ?,
+            account_username = ?
         WHERE id = ?
       `).run(
         values.name, values.brand, values.model, values.serial_number, values.category,
         values.location_id, values.purchase_date, values.purchase_price,
         values.currency, values.vendor, values.warranty_months, values.condition, values.status,
-        values.notes, values.photo_data, item.id,
+        values.notes, values.photo_data, values.account_username, item.id,
       );
 
       syncReminder({

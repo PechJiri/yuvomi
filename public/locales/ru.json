@@ -596,7 +596,15 @@
         "toPantryNothing": "В запасы ничего не добавлено. Откройте «В запасы» снова и проверьте количество.",
         "reorderHandle": "Изменить порядок: {{name}}",
         "reorderHandleHint": "Перетащите или используйте стрелки для сортировки",
-        "reorderPosition": "Позиция {{index}} из {{total}}"
+        "reorderPosition": "Позиция {{index}} из {{total}}",
+        "priceLabel": "Цена",
+        "storeLabel": "Магазин",
+        "storePlaceholder": "Выберите или введите",
+        "manageStores": "Управление магазинами",
+        "storesHint": "Магазины, где вы покупаете. Цена без магазина отвечает лишь наполовину.",
+        "storeDeleteConfirm": "Удалить магазин «{{name}}»?",
+        "storeDeleteConfirmDetail": "Товары этого магазина останутся вместе с ценой - пустым будет только поле магазина. Замены магазина здесь нет.",
+        "addStore": "Новый магазин"
     },
     "meals": {
         "randomizeSuccess_few": "Запланировано {{count}} приёма пищи.",
@@ -1483,7 +1491,18 @@
         "loanPaidInstallmentsLabel": "Уже оплаченные платежи",
         "loanPaidInstallmentsHint": "Для займа, который уже выплачивается. Эти платежи фиксируются, но не проводятся по бюджету.",
         "loanPaymentTypeLocked": "Доход или расход следует типу займа и меняется там.",
-        "planHistoricNote": "Сравнение с вашим текущим планом. Yuvomi не хранит, каким план был в прошлом месяце."
+        "planHistoricNote": "Сравнение с вашим текущим планом. Yuvomi не хранит, каким план был в прошлом месяце.",
+        "recurringEditSeriesHint": "Первая запись серии одновременно является её шаблоном - заголовок, сумма, категория и счёт меняются и там, даже если она в прошлом.",
+        "responsibleLabel": "Ответственный",
+        "responsibleHint": "Кто занимается этой записью. Деньги не перемещаются - для расчётов есть общие расходы.",
+        "responsibleFilterTo": "Только записи: {{name}}",
+        "clearResponsibleFilter": "Сбросить фильтр по ответственному",
+        "groupByResponsible": "По ответственному",
+        "responsibleNobody": "Никто",
+        "responsibleFilterEmptyTitle": "Для этого человека нет записей",
+        "responsibleFilterEmptyDescription": "В этом месяце никто не отвечает за запись в этой выборке.",
+        "handoverToSplit": "Перенести в общие расходы",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (план: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Показать вкладку цикла",
@@ -2601,7 +2620,10 @@
         "healthVisibilityApply": "Изменить и существующие записи",
         "healthVisibilityApplyHint": "Сохранено. Изменить также существующие записи в разделе {{area}}?",
         "healthVisibilityApplied": "Изменено записей: {{count}}.",
-        "healthVisibilityApplied_one": "Изменена одна запись."
+        "healthVisibilityApplied_one": "Изменена одна запись.",
+        "mealTypeNamesLabel": "Свои названия",
+        "mealTypeNamesHint": "Как ваша семья называет четыре приёма пищи. Оставьте пустым, чтобы использовать встроенное название. Название отображается одинаково на всех языках.",
+        "mealTypeNamesSaved": "Названия сохранены."
     },
     "login": {
         "tagline": "С возвращением в ваш семейный планировщик.",
@@ -2757,7 +2779,12 @@
         "sourceNative": "Локальный",
         "sourceAll": "Все",
         "sourceFilterLabel": "Фильтр по источнику",
-        "plannedThisWeek": "Запланировано на этой неделе"
+        "plannedThisWeek": "Запланировано на этой неделе",
+        "imageLabel": "Изображение",
+        "imageChoose": "Выбрать изображение",
+        "imageRemove": "Удалить изображение",
+        "imageHint": "Одно изображение на рецепт. Оно появляется в плане питания и на плитке обзора.",
+        "imageTooLarge": "Изображение всё ещё слишком велико после уменьшения."
     },
     "search": {
         "emptyHint": "Введите минимум 2 символа для поиска по задачам, событиям, заметкам, контактам, покупкам и здоровью.",
@@ -3766,7 +3793,9 @@
         "completedOn": "Завершено {{date}}",
         "completedToast": "Подписка завершена.",
         "endsAfter": "Осталось {{count}} платежей",
-        "logoTypeError": "Используйте изображение PNG, JPEG, WebP или SVG."
+        "logoTypeError": "Используйте изображение PNG, JPEG, WebP или SVG.",
+        "accountUsernameLabel": "Зарегистрировано на",
+        "accountUsernameHint": "Адрес электронной почты или имя пользователя. Это не поле пароля - Yuvomi не хранит пароли."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Инвентарь Yuvomi",
         "removeBookingAction": "Убрать «{{title}}»",
-        "photoTooLarge": "Фото всё ещё слишком большое после изменения размера."
+        "photoTooLarge": "Фото всё ещё слишком большое после изменения размера.",
+        "accountUsernameLabel": "Зарегистрировано на",
+        "accountUsernameHint": "Адрес электронной почты или имя пользователя. Это не поле пароля - Yuvomi не хранит пароли."
     },
     "documentAttach": {
         "label": "Вложения",

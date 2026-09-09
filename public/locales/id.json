@@ -608,7 +608,15 @@
         "toPantryNothing": "Tidak ada yang ditambahkan ke penyimpanan. Buka \"Ke penyimpanan\" lagi dan periksa jumlahnya.",
         "reorderHandle": "Ubah urutan: {{name}}",
         "reorderHandleHint": "Seret atau gunakan tombol panah untuk mengurutkan",
-        "reorderPosition": "Posisi {{index}} dari {{total}}"
+        "reorderPosition": "Posisi {{index}} dari {{total}}",
+        "priceLabel": "Harga",
+        "storeLabel": "Toko",
+        "storePlaceholder": "Pilih atau ketik",
+        "manageStores": "Kelola toko",
+        "storesHint": "Toko tempat kalian berbelanja. Harga tanpa toko hanya menjawab separuh.",
+        "storeDeleteConfirm": "Hapus toko “{{name}}”?",
+        "storeDeleteConfirmDetail": "Barang dari toko ini tetap ada, harganya juga - hanya penetapan tokonya yang menjadi kosong. Tidak ada toko pengganti di sini.",
+        "addStore": "Toko baru"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} makanan direncanakan.",
@@ -1495,7 +1503,18 @@
         "loanPaidInstallmentsLabel": "Cicilan yang sudah dibayar",
         "loanPaidInstallmentsHint": "Untuk pinjaman yang sudah berjalan. Cicilan ini dicatat, tetapi tidak dibukukan ke anggaran.",
         "loanPaymentTypeLocked": "Pemasukan atau pengeluaran mengikuti jenis pinjaman dan diubah di sana.",
-        "planHistoricNote": "Diukur terhadap rencana Anda saat ini. Yuvomi tidak menyimpan berapa rencana pada bulan sebelumnya."
+        "planHistoricNote": "Diukur terhadap rencana Anda saat ini. Yuvomi tidak menyimpan berapa rencana pada bulan sebelumnya.",
+        "recurringEditSeriesHint": "Entri pertama dalam seri ini sekaligus templatnya - judul, jumlah, kategori, dan akun ikut berubah di sana, meskipun sudah lewat.",
+        "responsibleLabel": "Penanggung jawab",
+        "responsibleHint": "Siapa yang mengurus entri ini. Tidak memindahkan uang - untuk penyelesaian gunakan pengeluaran bersama.",
+        "responsibleFilterTo": "Hanya entri {{name}}",
+        "clearResponsibleFilter": "Hapus filter penanggung jawab",
+        "groupByResponsible": "Menurut penanggung jawab",
+        "responsibleNobody": "Tidak ada",
+        "responsibleFilterEmptyTitle": "Tidak ada entri untuk orang ini",
+        "responsibleFilterEmptyDescription": "Tidak ada yang bertanggung jawab atas entri bulan ini dalam pilihan ini.",
+        "handoverToSplit": "Pindahkan ke pengeluaran bersama",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (rencana: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Tampilkan tab siklus",
@@ -2613,7 +2632,10 @@
         "healthVisibilityApply": "Ubah juga entri yang ada",
         "healthVisibilityApplyHint": "Tersimpan. Ubah juga entri yang ada di {{area}}?",
         "healthVisibilityApplied": "{{count}} entri diubah.",
-        "healthVisibilityApplied_one": "Satu entri diubah."
+        "healthVisibilityApplied_one": "Satu entri diubah.",
+        "mealTypeNamesLabel": "Nama sendiri",
+        "mealTypeNamesHint": "Sebutan rumah tangga Anda untuk keempat waktu makan. Biarkan kosong untuk nama bawaan. Nama tampil sama persis di semua bahasa.",
+        "mealTypeNamesSaved": "Nama disimpan."
     },
     "login": {
         "tagline": "Selamat datang kembali di perencana keluarga Anda.",
@@ -2860,7 +2882,12 @@
         "sourceNative": "Asli",
         "sourceAll": "Semua",
         "sourceFilterLabel": "Filter menurut sumber",
-        "plannedThisWeek": "Direncanakan minggu ini"
+        "plannedThisWeek": "Direncanakan minggu ini",
+        "imageLabel": "Gambar",
+        "imageChoose": "Pilih gambar",
+        "imageRemove": "Hapus gambar",
+        "imageHint": "Satu gambar per resep. Tampil di rencana makan dan di kartu ringkasan.",
+        "imageTooLarge": "Gambar masih terlalu besar setelah diperkecil."
     },
     "onboarding": {
         "step1Title": "Selamat datang di {{name}}",
@@ -3766,7 +3793,9 @@
         "completedOn": "Selesai pada {{date}}",
         "completedToast": "Langganan selesai.",
         "endsAfter": "Tersisa {{count}} pembayaran",
-        "logoTypeError": "Gunakan gambar PNG, JPEG, WebP, atau SVG."
+        "logoTypeError": "Gunakan gambar PNG, JPEG, WebP, atau SVG.",
+        "accountUsernameLabel": "Terdaftar atas nama",
+        "accountUsernameHint": "Alamat email atau nama pengguna. Bukan kolom kata sandi - Yuvomi tidak menyimpan kata sandi."
     },
     "health": {
         "tabs": {
@@ -4683,7 +4712,9 @@
         "icsTrackedDateSummary": "{{label}}: {{name}}",
         "icsCalendarName": "Inventaris Yuvomi",
         "removeBookingAction": "Hapus \"{{title}}\"",
-        "photoTooLarge": "Foto masih terlalu besar setelah diperkecil."
+        "photoTooLarge": "Foto masih terlalu besar setelah diperkecil.",
+        "accountUsernameLabel": "Terdaftar atas nama",
+        "accountUsernameHint": "Alamat email atau nama pengguna. Bukan kolom kata sandi - Yuvomi tidak menyimpan kata sandi."
     },
     "documentAttach": {
         "label": "Lampiran",

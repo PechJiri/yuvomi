@@ -4,35 +4,16 @@
  * aber ein bestehendes Passwort nicht mehr ändern. Dieser Test deckt das
  * optionale `password`-Feld von PATCH /api/v1/auth/users/:id ab.
  */
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
-const tmpDir = mkdtempSync(join(tmpdir(), 'oikos-admin-pwreset-test-'));
+import { startTestServer, cookieHeader } from './server-ready.js';
 
-process.env.SESSION_SECRET = 'test-admin-pwreset-secret-minimum-32ch';
-process.env.DB_PATH = join(tmpDir, 'test.db');
-process.env.SESSION_SECURE = 'false';
-process.env.PORT = '13098';
-
-const { default: app } = await import('../server/index.js');
-await new Promise((r) => setTimeout(r, 400));
-
-const BASE = 'http://localhost:13098';
-
-function cookieHeader(setCookie) {
-  return String(setCookie || '')
-    .split(/,(?=\s*[^;,]+=)/)
-    .map((cookie) => cookie.split(';')[0].trim())
-    .filter(Boolean)
-    .join('; ');
-}
-
-after(() => {
-  rmSync(tmpDir, { recursive: true, force: true });
-  process.exit(0);
+// Start, Portwahl und Abbau liegen im Helfer - inklusive des Grundes, warum
+// hier kein `process.exit(0)` mehr steht.
+const { baseUrl: BASE } = await startTestServer({
+  name: 'admin-password-reset',
+  env: { SESSION_SECRET: 'test-admin-pwreset-secret-minimum-32ch' },
 });
 
 async function login(username, password) {

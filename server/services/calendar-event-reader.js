@@ -152,9 +152,11 @@ export function getUpcomingEvents(d, {
     SELECT ${eventProjectionSql(d, 'e', BODY_FREE_EVENT_COLUMNS)},
            u_assigned.display_name AS assigned_name,
            u_assigned.avatar_color AS assigned_color,
-           ec.name  AS cal_name,
-           -- Zwei Toepfe fuer dieselbe geerbte Farbe: CalDAV/Google ueber
-           -- calendar_ref_id, ICS-Abos ueber subscription_id (#891).
+           -- Zwei Toepfe fuer denselben Namen und dieselbe geerbte Farbe:
+           -- CalDAV/Google ueber calendar_ref_id, ICS-Abos ueber
+           -- subscription_id (#891). Der Name las erst nur ec.name und blieb
+           -- am Abo-Termin NULL, obwohl dessen Farbe schon herauskam (#1064).
+           COALESCE(ec.name, isub.name)   AS cal_name,
            COALESCE(ec.color, isub.color) AS cal_color,
            COALESCE(bd.name, nd.name) AS birthday_name,
            bd.birth_date AS birthday_date,

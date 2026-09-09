@@ -69,7 +69,7 @@ test('vor Migration 76 ist der Ort nicht indexiert', () => {
 // Migration 76 anwenden: Trigger neu, Ort in den Body, Bestandszeilen backfillen.
 db.exec(MIGRATIONS_SQL[76]);
 db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions
-db.exec(MIGRATIONS_SQL[190]); // linked occurrence overrides + occurrence-aware FTS
+db.exec(MIGRATIONS_SQL[194]); // linked occurrence overrides + occurrence-aware FTS
 
 test('Migration 76 backfillt bestehende Termine mit ihrem Ort', () => {
   const hits = search('Zahnarztpraxis');
@@ -213,7 +213,7 @@ test('JSON-escaped override field names remain searchable after insert, update a
     assert(search(keyword).length === 0, `${field}: stale INSERT value remains indexed`);
     assert(search(`Updated${keyword}`).some(({ id }) => id === Number(childId)), `${field}: escaped UPDATE value is missing`);
   }
-  const migration = MIGRATIONS_SQL[190];
+  const migration = MIGRATIONS_SQL[194];
   db.exec(migration.slice(migration.lastIndexOf("DELETE FROM search_index WHERE entity = 'event';")));
   for (const [field, , keyword] of cases) {
     assert(search(`Updated${keyword}`).length === 1, `${field}: escaped backfill value is missing`);
@@ -233,7 +233,7 @@ test('invalid or non-array override metadata neither aborts FTS writes nor index
   }
   assert(search('Qzxinvalidmetadata').length === 0, 'invalid metadata indexed an inherited INSERT value');
   assert(search('Qzxinvalidupdated').length === 0, 'invalid metadata indexed an inherited UPDATE value');
-  const migration = MIGRATIONS_SQL[190];
+  const migration = MIGRATIONS_SQL[194];
   db.exec(migration.slice(migration.lastIndexOf("DELETE FROM search_index WHERE entity = 'event';")));
   assert(search('Qzxinvalidupdated').length === 0, 'invalid metadata indexed inherited text during backfill');
 });

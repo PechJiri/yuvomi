@@ -28,6 +28,40 @@ const router = express.Router();
 const VALID_MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'];
 const DEFAULT_MEAL_TYPES = VALID_MEAL_TYPES.join(',');
 
+/* HAUSHALTSNAMEN DER VIER SLOTS (#1058).
+ *
+ * Ein Name je Slot, wie der Haushalt ihn tippt - KEINE Uebersetzung. Er steht
+ * in jeder Sprache so da, wie er eingegeben wurde: `fr`, `fr-CA` und `fr-BE`
+ * sind sich beim Abendessen nicht einig, und keine Locale-Datei kann das je
+ * Haushalt aufloesen. Ein leerer Name heisst "nimm das eingebaute Wort".
+ *
+ * ALS JSON, NICHT KOMMASEPARIERT wie `visible_meal_types` nebenan: ein Name
+ * darf ein Komma enthalten ("Znuni, spaet"), und ein `split(',')` machte
+ * daraus zwei. Derselbe Grund, aus dem ein Doppelpunkt-Schluessel kein
+ * `split(':')` vertraegt.
+ *
+ * Der Slot-SCHLUESSEL bleibt unberuehrt - `meals.meal_type` traegt eine
+ * CHECK-Constraint, Rezept-Eignung und die Mealie/Tandoor-Zuordnung haengen
+ * daran. Umbenennen ist deshalb ein Anzeigename ueber einem stabilen Wert und
+ * migriert nichts (#514). */
+const MAX_MEAL_TYPE_NAME = 40;
+
+/** Gespeicherte Namen als Objekt - unbekannte Slots und leere Werte fallen weg. */
+function parseMealTypeNames(raw) {
+  if (!raw) return {};
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { return {}; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const out = {};
+  // Allowlist statt Denylist: ein Slot, den es nicht (mehr) gibt, kommt nicht
+  // durch, egal was in der Zeile steht.
+  for (const type of VALID_MEAL_TYPES) {
+    const value = typeof parsed[type] === 'string' ? parsed[type].trim() : '';
+    if (value) out[type] = value.slice(0, MAX_MEAL_TYPE_NAME);
+  }
+  return out;
+}
+
 const DEFAULT_CURRENCY = 'EUR';
 const DEFAULT_APP_NAME = 'Yuvomi';
 
@@ -498,6 +532,7 @@ router.get('/', (req, res) => {
   try {
     const raw = cfgGet('visible_meal_types') ?? DEFAULT_MEAL_TYPES;
     const visibleMealTypes = raw.split(',').filter((t) => VALID_MEAL_TYPES.includes(t));
+    const mealTypeNames = parseMealTypeNames(cfgGet('meal_type_names'));
     const currency = cfgGet('currency') ?? DEFAULT_CURRENCY;
     const dateFormat = VALID_DATE_FORMATS.includes(cfgGet('date_format')) ? cfgGet('date_format') : DEFAULT_DATE_FORMAT;
     const timeFormat = VALID_TIME_FORMATS.includes(cfgGet('time_format')) ? cfgGet('time_format') : DEFAULT_TIME_FORMAT;
@@ -511,6 +546,7 @@ router.get('/', (req, res) => {
     res.json({
       data: {
         visible_meal_types: visibleMealTypes,
+        meal_type_names: mealTypeNames,
         currency,
         date_format: dateFormat,
         time_format: timeFormat,
@@ -586,7 +622,7 @@ router.get('/', (req, res) => {
 
 router.put('/', (req, res) => {
   try {
-    const { visible_meal_types, currency, date_format, time_format, week_start, region, timezone, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, rewards_require_approval, tasks_subtasks_expanded, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
+    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, rewards_require_approval, tasks_subtasks_expanded, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
 
     if (visible_meal_types !== undefined) {
       if (!Array.isArray(visible_meal_types)) {
@@ -597,6 +633,34 @@ router.put('/', (req, res) => {
         return res.status(400).json({ error: 'Mindestens ein Mahlzeit-Typ muss aktiv sein', code: 400 });
       }
       cfgSet('visible_meal_types', filtered.join(','));
+    }
+
+    if (meal_type_names !== undefined) {
+      if (meal_type_names === null) {
+        cfgSet('meal_type_names', '');
+      } else if (typeof meal_type_names !== 'object' || Array.isArray(meal_type_names)) {
+        return res.status(400).json({ error: 'meal_type_names muss ein Objekt sein', code: 400 });
+      } else {
+        // Jeder gesendete Wert muss ein String sein - eine Zahl oder ein
+        // verschachteltes Objekt waere ein Aufruffehler und soll nicht still
+        // als leerer Name durchgehen. Welche SLOTS gelten, entscheidet dagegen
+        // die Allowlist in parseMealTypeNames(): ein unbekannter Slot ist kein
+        // Fehler des Aufrufers, sondern nichts, was wir speichern.
+        for (const [slot, value] of Object.entries(meal_type_names)) {
+          if (value !== null && typeof value !== 'string') {
+            return res.status(400).json({ error: `meal_type_names.${slot} muss ein String sein`, code: 400 });
+          }
+          if (typeof value === 'string' && value.trim().length > MAX_MEAL_TYPE_NAME) {
+            return res.status(400).json({ error: `meal_type_names.${slot}: maximal ${MAX_MEAL_TYPE_NAME} Zeichen`, code: 400 });
+          }
+        }
+        // Ueber parseMealTypeNames normalisiert speichern (getrimmt, leere
+        // Namen fallen raus): so steht in der Zeile genau das, was der
+        // Lesepfad ohnehin daraus machen wuerde, und ein leeres Objekt ist die
+        // Rueckkehr zu den eingebauten Woertern.
+        const names = parseMealTypeNames(JSON.stringify(meal_type_names));
+        cfgSet('meal_type_names', Object.keys(names).length ? JSON.stringify(names) : '');
+      }
     }
 
     if (currency !== undefined) {
@@ -1181,10 +1245,15 @@ router.put('/', (req, res) => {
     const savedModuleOrder = parseModuleOrder(cfgUserGet('module_order', req.authUserId) ?? cfgGet('module_order'));
     const savedMobileNavOrder = parseMobileNavOrder(cfgUserGet('mobile_nav_order', req.authUserId));
     const savedHousekeepingPaymentTasks = cfgGet('housekeeping_payment_tasks') === '1';
+    // AUS DER DATENBANK ZURUECKLESEN, nicht aus dem Request: der Client sieht so
+    // genau das, was gespeichert wurde - getrimmt, gekappt, unbekannte Slots
+    // schon aussortiert - statt seiner eigenen Eingabe.
+    const savedMealTypeNames = parseMealTypeNames(cfgGet('meal_type_names'));
 
     res.json({
       data: {
         visible_meal_types: savedMealTypes,
+        meal_type_names: savedMealTypeNames,
         currency: savedCurrency,
         date_format: savedDateFormat,
         time_format: savedTimeFormat,

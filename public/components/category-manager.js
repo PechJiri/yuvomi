@@ -6,11 +6,15 @@
  *
  * Verhalten:
  *   - configure({ basePath, groups, supportsSubcategories, labelResolver, titleKey, hintKey,
- *                 deleteDetailKey, subDeleteDetailKey })
+ *                 deleteConfirmKey, deleteDetailKey, subDeleteDetailKey })
  *   - Lädt via api.get(basePath); mutiert über post/put/patch/delete relativ zu basePath
  *   - Dispatcht nach jeder Mutation `category-manager-changed`
  *   - Zeigt Server-Guard-Fehler (in-use/last) als Toast
  *   - Räumt Listener in disconnectedCallback() auf
+ *
+ * VERTRAG FUER AUFRUFER: die Auffrischung gehoert in den Ereignis-Handler, nicht
+ * in ein onClose des Modals, und niemand meldet sich beim Schliessen ab. Grund
+ * steht bei `_notifyChanged()`.
  */
 import { api } from '/api.js';
 import { t } from '/i18n.js';
@@ -57,6 +61,10 @@ class CategoryManagerElement extends HTMLElement {
     // Vorrat laesst sie unzugeordnet zurueck. Ein geteilter Folgentext waere
     // fuer zwei der fuenf Aufrufer schlicht falsch - dieselbe Falle wie beim
     // Platzhalter oben, nur folgenreicher.
+    // Auch die FRAGE gehoert dem Aufrufer, nicht nur die Folgenbeschreibung:
+    // wer Laeden verwaltet, liest sonst "Kategorie „Rewe" loeschen?" in einem
+    // Dialog, der "Laeden verwalten" heisst.
+    this._deleteConfirmKey = 'category.deleteConfirm';
     this._deleteDetailKey = 'category.deleteConfirmDetail';
     this._subDeleteDetailKey = 'category.deleteSubConfirmDetail';
     // OPT-IN: nur wer eine Palette mitgibt, bekommt die Farbwahl. Fuenf der
@@ -78,6 +86,7 @@ class CategoryManagerElement extends HTMLElement {
     if (opts.hintKey) this._hintKey = opts.hintKey;
     if (opts.addPlaceholderKey) this._addPlaceholderKey = opts.addPlaceholderKey;
     if (Array.isArray(opts.colors)) this._colors = opts.colors;
+    if (opts.deleteConfirmKey) this._deleteConfirmKey = opts.deleteConfirmKey;
     if (opts.deleteDetailKey) this._deleteDetailKey = opts.deleteDetailKey;
     if (opts.subDeleteDetailKey) this._subDeleteDetailKey = opts.subDeleteDetailKey;
     this._renderShell();
@@ -480,6 +489,24 @@ class CategoryManagerElement extends HTMLElement {
       </ul>`;
   }
 
+  /**
+   * BEIM LOESCHEN KOMMT DIESES EREIGNIS, WENN DAS ELEMENT SCHON AUS DEM DOKUMENT
+   * IST (gemessen 08.09.2026 im laufenden Browser: `document.contains(el)` ist
+   * dann false).
+   *
+   * `_delete()` fragt ueber `confirmOverModal`, und das schliesst nach einem Ja
+   * das Modal darunter gleich mit ab (`closeModal({ force: true })`), BEVOR es
+   * zurueckkehrt - `api.delete` laeuft also erst danach. Fuer die Aufrufer folgen
+   * daraus zwei Dinge, und beide gelten fuer JEDEN von ihnen:
+   *
+   *   - Kein `removeEventListener` in onClose. Wer beim Schliessen abmeldet,
+   *     verpasst genau die Loeschung - und behaelt einen lokalen Stand, der eine
+   *     Kategorie anbietet, die der Server nicht mehr kennt. Ein Leck entsteht
+   *     dadurch nicht: das Element entsteht je Oeffnen neu und wird mit dem
+   *     Overlay verworfen, der Listener geht mit ihm.
+   *   - Kein `changed`-Merker, der in onClose ausgewertet wird. Er stuende beim
+   *     Loeschen auf false. Die Auffrischung gehoert in den Handler selbst.
+   */
   _notifyChanged() {
     this.dispatchEvent(new CustomEvent('category-manager-changed', { bubbles: true }));
   }
@@ -716,7 +743,7 @@ class CategoryManagerElement extends HTMLElement {
     if (!cat) return;
     const { confirmOverModal } = await import('/components/modal.js');
     const confirmed = await confirmOverModal(
-      t('category.deleteConfirm', { name: this._labelResolver(cat) }),
+      t(this._deleteConfirmKey, { name: this._labelResolver(cat) }),
       { danger: true, confirmLabel: t('common.delete'), detail: t(this._deleteDetailKey) }
     );
     if (!confirmed) return;

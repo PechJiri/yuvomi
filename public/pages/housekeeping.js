@@ -9,7 +9,7 @@ import { t, formatDate, formatTime, getLocale, getNumberFormat } from '/i18n.js'
 import { esc } from '/utils/html.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { emptyStateHTML, mountLoadError } from '/utils/empty-state.js';
-import { openModal, closeModal, confirmModal } from '/components/modal.js';
+import { openModal, closeModal, confirmModal, refocusAfterRender } from '/components/modal.js';
 import { createPageFab, setPageFabAction } from '/utils/fab.js';
 import { wireTablist } from '/utils/tablist.js';
 import { wireScrollFade } from '/utils/ux.js';
@@ -662,6 +662,7 @@ function openVisitReportModal(visit, content = null) {
           closeModal({ force: true });
           await loadData();
           if (content?.isConnected) renderReports(content);
+          refocusAfterRender();
         } catch (err) {
           window.yuvomi?.showToast(err.message, 'danger');
         }

@@ -178,6 +178,36 @@ test('GET /items: Volltextsuche ueber Name/Marke/Modell/Seriennummer', async () 
   assert.equal((await call('GET', '/items?q=NichtsPasstHier')).body.data.length, 0);
 });
 
+// --------------------------------------------------------
+// account_username (#1004) - die Kontoangabe OHNE das Geheimnis
+// --------------------------------------------------------
+test('POST /items: account_username wird gespeichert und zurueckgegeben', async () => {
+  const r = await call('POST', '/items', { name: 'Smart-Steckdose', account_username: 'haushalt@example.org' });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.account_username, 'haushalt@example.org');
+  assert.equal((await call('GET', `/items/${r.body.data.id}`)).body.data.account_username, 'haushalt@example.org');
+});
+
+test('PUT /items: account_username laesst sich aendern und wieder leeren', async () => {
+  const created = await call('POST', '/items', { name: 'Router', account_username: 'alt@example.org' });
+  const id = created.body.data.id;
+  const changed = await call('PUT', `/items/${id}`, { name: 'Router', account_username: 'neu@example.org' });
+  assert.equal(changed.body.data.account_username, 'neu@example.org');
+  // Leer heisst "nicht gesetzt", nicht die leere Zeichenkette - sonst stuende in
+  // der Detailzeile ein leerer Wert statt gar keiner.
+  const cleared = await call('PUT', `/items/${id}`, { name: 'Router', account_username: '' });
+  assert.equal(cleared.body.data.account_username, null);
+});
+
+test('GET /items: die Volltextsuche findet auch ueber account_username', async () => {
+  // Der eigentliche Zweck des Feldes: "unter welcher Adresse laeuft das Ding".
+  // Waere die Spalte nur gespeichert und nicht gesucht, muesste man sie an jedem
+  // Gegenstand einzeln aufklappen.
+  await call('POST', '/items', { name: 'Heizungssteuerung', account_username: 'technik@example.org' });
+  const hits = (await call('GET', '/items?q=technik@example')).body.data;
+  assert.ok(hits.some((i) => i.name === 'Heizungssteuerung'));
+});
+
 test('POST /items: gueltiges photo_data wird uebernommen und zurueckgegeben', async () => {
   const validPhoto = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
   const r = await call('POST', '/items', { name: 'Item With Photo', photo_data: validPhoto });

@@ -14,6 +14,14 @@
 
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 process.env.DB_PATH = ':memory:';
+// Die Zone gehoert festgenagelt wie DB_PATH darueber. Ohne Vorgabe faellt
+// `serverTimeZone()` auf die Zone des Rechners zurueck, und dann prueft jede
+// Maschine etwas anderes: die Probe zu `timezone_effective` weiter unten stand
+// fest auf 'Pacific/Auckland' und war auf einer Maschine in Auckland
+// unerfuellbar ("Expected actual to be strictly unequal to: 'Pacific/Auckland'").
+// Genauso halten es test-household-timezone.js, test-display-timezone.js,
+// test-countdown.js und test-tasks-recurrence.js.
+process.env.TZ = 'UTC';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -107,6 +115,52 @@ test('PUT visible_meal_types: gültige Teilmenge persistiert + filtert Unbekannt
 });
 
 // --------------------------------------------------------
+// meal_type_names (#1058) - Haushaltsnamen ueber stabilen Slot-Schluesseln
+// --------------------------------------------------------
+test('PUT meal_type_names: Nicht-Objekt -> 400', async () => {
+  assert.equal((await put({ meal_type_names: 'Zmittag' })).status, 400);
+  assert.equal((await put({ meal_type_names: ['Zmittag'] })).status, 400);
+});
+test('PUT meal_type_names: Nicht-String als Wert -> 400', async () => {
+  assert.equal((await put({ meal_type_names: { lunch: 42 } })).status, 400);
+});
+test('PUT meal_type_names: zu langer Name -> 400', async () => {
+  assert.equal((await put({ meal_type_names: { lunch: 'x'.repeat(41) } })).status, 400);
+  assert.equal((await put({ meal_type_names: { lunch: 'x'.repeat(40) } })).status, 200);
+});
+test('PUT meal_type_names: Name wird gespeichert und wieder gelesen', async () => {
+  // Ein Komma im Namen ist der Grund fuer JSON statt der kommaseparierten Form
+  // von visible_meal_types nebenan: ein split(',') machte hier zwei Namen.
+  const { status, body } = await put({ meal_type_names: { lunch: '  Zmittag  ', snack: 'Znueni, spaet' } });
+  assert.equal(status, 200);
+  assert.deepEqual(body.data.meal_type_names, { lunch: 'Zmittag', snack: 'Znueni, spaet' });
+  assert.deepEqual((await get()).body.data.meal_type_names, { lunch: 'Zmittag', snack: 'Znueni, spaet' });
+});
+test('PUT meal_type_names: unbekannter Slot faellt weg, ohne den Request zu kippen', async () => {
+  const { status, body } = await put({ meal_type_names: { lunch: 'Zmittag', brunch: 'Elf Uhr' } });
+  assert.equal(status, 200);
+  assert.deepEqual(body.data.meal_type_names, { lunch: 'Zmittag' });
+});
+test('PUT meal_type_names: leerer Name entfernt ihn - das eingebaute Wort gilt wieder', async () => {
+  await put({ meal_type_names: { lunch: 'Zmittag', snack: 'Znueni' } });
+  const { body } = await put({ meal_type_names: { lunch: '', snack: 'Znueni' } });
+  assert.deepEqual(body.data.meal_type_names, { snack: 'Znueni' });
+  // Und der Weg ganz zurueck: null loescht die Zeile, GET faellt auf {} zurueck.
+  await put({ meal_type_names: null });
+  assert.deepEqual((await get()).body.data.meal_type_names, {});
+});
+test('GET meal_type_names: eine kaputte Zeile liefert {}, keinen 500er', async () => {
+  // Der Lesepfad darf an handgeschriebenem Muell in sync_config nicht sterben -
+  // sonst nimmt eine unlesbare Zeile die ganze Praeferenz-Antwort mit.
+  db.prepare("INSERT INTO sync_config (key, value) VALUES ('meal_type_names', '{kaputt')"
+    + " ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
+  const { status, body } = await get();
+  assert.equal(status, 200);
+  assert.deepEqual(body.data.meal_type_names, {});
+  await put({ meal_type_names: null });
+});
+
+// --------------------------------------------------------
 // currency / date_format / time_format / region
 // --------------------------------------------------------
 test('PUT currency: ungültig -> 400, gültig -> persist', async () => {
@@ -143,18 +197,43 @@ test('PUT timezone: Mitglied -> 403, ungültig -> 400, gültig -> persist, null 
   assert.equal(cleared.timezone, null);
   assert.ok(cleared.timezone_effective, 'timezone_effective ist nie leer');
 });
+
+/* Der geltende Wert wird POSITIV geprueft, nicht per Verneinung.
+ *
+ * Hier stand `assert.notEqual(fallback.timezone_effective, 'Pacific/Auckland')`
+ * - dieselbe Zone, die zwei Zeilen darueber gesetzt wurde. Zwei Schwaechen in
+ * einer Zeile: auf einer Maschine in Auckland ist der Rueckfall genau dieser
+ * Wert, die Behauptung dort also unerfuellbar (das `process.env.TZ` am
+ * Dateikopf raeumt das aus); und eine Verneinung liesse eine beliebige DRITTE
+ * Zone durch.
+ *
+ * Was `timezone_effective` ohne Einstellung sein soll, steht in
+ * `householdTimeZone()`: der Rueckfall auf `serverTimeZone()`, und der ist hier
+ * auf 'UTC' genagelt.
+ *
+ * DER SOLLWERT IST DESHALB EIN LITERAL UND NICHT `serverTimeZone()`. Stuende
+ * dort der Aufruf, bildete dieselbe Funktion beide Seiten der Zusicherung, und
+ * ein falscher Rueckfallwert verschoebe beide gleichzeitig. Nachgemessen mit
+ * `serverTimeZone()` auf einen festen Fremdwert sabotiert:
+ *
+ *   Sollwert = serverTimeZone()  -> gruen unter UTC, Europe/Berlin, Auckland
+ *   Sollwert = 'UTC' (so wie es jetzt dasteht) -> rot unter allen dreien
+ *
+ * (Eine Sabotage, die nur das Lesen von `TZ` ausbaut, taugt hier NICHT als
+ * Gegenprobe: mit gepinntem `TZ` liefern beide Zweige von `serverTimeZone()`
+ * denselben Wert, sie ist also wirkungslos. Auch gemessen.)
+ */
 test('GET timezone: gewählter Wert und geltender Wert sind zwei Felder', async () => {
   await put({ timezone: 'Pacific/Auckland' });
   const body = (await get()).body.data;
   assert.equal(body.timezone, 'Pacific/Auckland');
   assert.equal(body.timezone_effective, 'Pacific/Auckland');
+
   await put({ timezone: null });
   const fallback = (await get()).body.data;
   assert.equal(fallback.timezone, null);
-  // Ohne Einstellung nennt `timezone_effective` den Rueckfall - nicht null, und
-  // nicht die zuletzt gewaehlte Zone.
-  assert.notEqual(fallback.timezone_effective, 'Pacific/Auckland');
-  assert.ok(fallback.timezone_effective);
+  assert.equal(fallback.timezone_effective, 'UTC',
+    'ohne Einstellung nennt timezone_effective den Serverrueckfall (process.env.TZ am Dateikopf)');
 });
 
 // --------------------------------------------------------

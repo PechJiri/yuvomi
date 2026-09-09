@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { eachRule } from './css-rules.js';
 
 // /i18n.js wird durch test-browser-loader.mjs gemockt (--loader Flag)
-const { wireBlurValidation, btnSuccess, btnError } = await import('../public/components/modal.js');
+const { wireBlurValidation, btnSuccess, btnError, focusRestoreTarget, rememberFocus } = await import('../public/components/modal.js');
 
 // matchMedia und document.createElementNS werden von btnSuccess/btnError benötigt
 global.matchMedia = () => ({ matches: false });
@@ -35,6 +35,10 @@ global.document = {
   createElementNS: (_ns, tag) => _makeSvgEl(tag),
   // _ensureFieldError legt die Fehlermeldung als <p> an.
   createElement: (tag) => ({ tagName: tag.toUpperCase(), className: '', id: '', textContent: '' }),
+  // Der Focus-Restore sucht ueber id und ueber die data-Attribute nach einem
+  // Ersatz; die Sonden unten bestuecken beides je Fall.
+  getElementById: () => null,
+  getElementsByTagName: () => [],
 };
 
 const _origSetTimeout = setTimeout;
@@ -362,4 +366,467 @@ test('#805: .modal-panel ist auf jeder Breite der Containing Block', () => {
     + `Media-Query (gefunden in: ${regeln.map((r) => r.at.join(' ') || 'Basis').join(' | ') || 'keiner Regel'}). `
     + 'Sonst haengen absolut positionierte Nachfahren am .modal-overlay statt am Panel (#805).',
   );
+});
+
+
+// --------------------------------------------------------
+// Focus-Restore, wenn der Ausloeser ausgetauscht wurde
+// --------------------------------------------------------
+
+/* WARUM VERHALTENSTESTS UND KEIN QUELLTEXT-GUARD: der Fehler steckt nicht in
+ * der Schreibweise, sondern in der FRAGE, welches Element am Ende den Fokus
+ * bekommt. Ein Guard auf „prueft isConnected" bliebe gruen, wenn die Pruefung
+ * da stuende und der Rueckfall trotzdem `document.body` traefe - und genau das
+ * war der Befund: `.focus()` auf einem abgehaengten Knoten ist ein No-op, ohne
+ * Fehler und ohne Spur. Die Sonden messen deshalb das ERGEBNIS.
+ *
+ * Gemessen wird `rememberFocus()` + `focusRestoreTarget()` und nicht der volle
+ * Weg oeffnen-austauschen-schliessen: der braeuchte ein echtes DOM samt
+ * HTML-Parser fuer `insertAdjacentHTML`, und das Projekt haelt sich bewusst
+ * frei von jsdom. Die Entscheidung liegt vollstaendig in diesen beiden
+ * Funktionen; dass `_doClose` sie benutzt und danach nachfasst, halten die
+ * letzten beiden Sonden fest.
+ *
+ * Die Mechanik des Nachfassens ist ausserhalb dieser Suite im Browser gemessen
+ * worden (Chrome 152, Puppeteer gegen eine statische Nachbau-Seite): ohne sie
+ * landet der Fokus nach `closeModal(); renderGrid();` auf BODY, mit ihr auf dem
+ * neu gebauten Knoten.
+ *
+ * ZWEI GEGENPROBEN, beide durch TOT STELLEN statt Loeschen - ein entfernter
+ * Codeblock haette nur einen ReferenceError geworfen und nichts bewiesen. Die
+ * Zahlen stehen bei den jeweiligen Sonden.
+ */
+
+/**
+ * Element-Attrappe: was `rememberFocus()` liest - plus die Attribute.
+ *
+ * `attrs` beginnt LEER, seit der Review zu #1069 zeigte, dass die Seitenwurzel
+ * nicht ueberall fokussierbar ist: eine Attrappe, die ein tabindex immer zu
+ * haben scheint, kann den Fall nie sehen - wie das `<main>` der Auth-Seiten.
+ */
+function makeNode(tag, { id = '', cls = null, data = {}, connected = true, attrs = {}, row = null } = {}) {
+  return {
+    tagName: tag.toUpperCase(), id, isConnected: connected, dataset: { ...data },
+    _attrs: { ...attrs },
+    getAttribute: (name) => (name === 'class' ? cls : null),
+    // Der Zeilen-Vorfahre: bei Listenzeilen traegt er die Identitaet, nicht der
+    // Knopf. `row` ist dessen data-id, oder null wenn es keinen gibt.
+    closest: (sel) => (sel === '[data-id]' && row !== null ? { dataset: { id: row } } : null),
+    hasAttribute(n) { return n in this._attrs; },
+    setAttribute(n, v) { this._attrs[n] = String(v); },    focus() { this._focused = true; },
+  };
+}
+
+/** Bestueckt die Suchwege von `document` fuer die Dauer eines Falls. */
+function withDom({ byId = {}, byTag = {} }, fn) {
+  const vorherId  = global.document.getElementById;
+  const vorherTag = global.document.getElementsByTagName;
+  global.document.getElementById = (id) => byId[id] ?? null;
+  global.document.getElementsByTagName = (tag) => byTag[tag] ?? [];
+  try { return fn(); } finally {
+    global.document.getElementById = vorherId;
+    global.document.getElementsByTagName = vorherTag;
+  }
+}
+
+test('der Fokus geht auf den Ausloeser zurueck, solange er im Dokument haengt', () => {
+  const knopf = makeNode('button', { id: 'budget-manage-categories' });
+  withDom({}, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(knopf)), knopf,
+      'ein lebender Ausloeser bleibt das Ziel - der Rueckfall darf den Normalfall nicht umleiten');
+  });
+});
+
+/* Der urspruenglich gemeldete Fall: `#budget-manage-categories` liegt in
+ * `#budget-body`, genau dem Bereich, den `renderBody()` austauscht. */
+test('ein ausgetauschter Ausloeser wird ueber seine id wiedergefunden', () => {
+  const alt = makeNode('button', { id: 'budget-manage-categories', connected: false });
+  const neu = makeNode('button', { id: 'budget-manage-categories' });
+  withDom({ byId: { 'budget-manage-categories': neu, 'main-content': makeNode('main', { id: 'main-content' }) } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), neu,
+      'steht unter derselben id ein lebendes Element, gehoert ihm der Fokus');
+  });
+});
+
+/* DER HAEUFIGE FALL, und er hat keine id. Eine Notizkarte heisst
+ * `.note-card[data-id="42"]`, eine Mahlzeit-Zelle traegt `data-action`,
+ * `data-date` und `data-type`. Bei 83 Modal-Oeffnungen im Projekt ist die
+ * Listenzeile der typische Ausloeser, nicht der Toolbar-Knopf mit id. */
+test('eine Listenzeile ohne id wird ueber ihre data-Attribute wiedergefunden', () => {
+  const alt = makeNode('button', { cls: 'note-card', data: { id: '42' }, connected: false });
+  const neu = makeNode('button', { cls: 'note-card', data: { id: '42' } });
+  const fremd = makeNode('button', { cls: 'note-card', data: { id: '43' } });
+  withDom({ byTag: { BUTTON: [fremd, neu] }, byId: { 'main-content': makeNode('main', { id: 'main-content' }) } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), neu,
+      'die neu gebaute Zeile mit denselben data-Werten muss den Fokus bekommen, nicht die Nachbarzeile');
+  });
+});
+
+test('eine andere Klasse gilt nicht als dieselbe Zeile', () => {
+  const alt = makeNode('button', { cls: 'note-card', data: { id: '42' }, connected: false });
+  const andere = makeNode('button', { cls: 'task-row', data: { id: '42' } });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [andere] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
+      'gleiche data-id in einer anderen Liste ist ein anderes Element - lieber die Wurzel als das falsche Ziel');
+  });
+});
+
+/* Ohne data-Attribute wird NICHT geraten: Tag und Klasse allein treffen
+ * irgendeinen Knopf derselben Sorte. Ein falsches Fokusziel ist schlimmer als
+ * keines - es setzt den Nutzer an eine Stelle, die er nicht gewaehlt hat. */
+test('ohne id und ohne data-Attribute wird nicht geraten, sondern die Wurzel genommen', () => {
+  const alt = makeNode('button', { cls: 'btn btn--ghost', connected: false });
+  const gleichartig = makeNode('button', { cls: 'btn btn--ghost' });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [gleichartig] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
+      'ein gleich aussehender Knopf ist nicht derselbe Knopf');
+  });
+});
+
+test('verschwundener Ausloeser ohne Ersatz landet auf der Seitenwurzel', () => {
+  const alt = makeNode('button', { id: 'contacts-manage-cats', connected: false });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
+      'findet die Suche nichts, bleibt die Seitenwurzel - document.body ist kein Fokusziel');
+  });
+});
+
+/* Anmelde- und Setup-Seiten laufen ohne die App-Shell, es gibt dort kein
+ * `#main-content`. Dann ohne Ziel schliessen statt zu werfen. */
+test('ohne Seitenwurzel liefert der Rueckfall null statt zu werfen', () => {
+  const alt = makeNode('button', { id: 'setup-btn', connected: false });
+  withDom({}, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), null,
+      'ausserhalb der App-Shell gibt es keine Wurzel');
+  });
+});
+
+test('ohne gemerkten Ausloeser bleibt es bei null', () => {
+  withDom({ byId: { 'main-content': makeNode('main', { id: 'main-content' }) } }, () => {
+    assert.equal(focusRestoreTarget(null), null, 'nie ein Ausloeser gemerkt, also nichts zurueckzugeben');
+    assert.equal(rememberFocus(null), null, 'und kein Merkzettel fuer nichts');
+  });
+});
+
+/* `document.body` traegt kein `focus`, taucht aber als `activeElement` auf,
+ * sobald vorher schon Fokus verloren ging. Ein Merkzettel darauf haette den
+ * Wiederfinder auf BODY losgeschickt. */
+test('ein Knoten ohne focus() bekommt keinen Merkzettel', () => {
+  assert.equal(rememberFocus({ tagName: 'DIV' }), null, 'ohne focus() ist es kein Fokusziel');
+});
+
+/* `document.body` ERBT `focus()` von HTMLElement - eine Attrappe ohne die
+ * Methode prueft die Ablehnung deshalb gar nicht (genau dieser Fehler stand
+ * hier, Review zu #1070). Der Merker auf `body` waere toedlich: `isConnected`
+ * immer wahr, der Fokus schon darauf, also braeche jedes Nachfassen sofort ab. */
+test('document.body bekommt keinen Merkzettel, obwohl es focus() hat', () => {
+  const body = { tagName: 'BODY', focus() {}, id: '', dataset: {}, isConnected: true };
+  assert.equal(rememberFocus(body), null,
+    'body ist kein Fokusziel, sondern das Fehlen eines - als Merker schaltet es das '
+    + 'Nachfassen fuer diesen Schliessvorgang dauerhaft ab');
+});
+
+/* GEGENPROBE 1 (durchgefuehrt): in `focusRestoreTarget` ein `return memo.el;`
+ * vor die `isConnected`-Weiche, die Funktion also auf das alte Verhalten
+ * zurueckgenommen. Gemessen 6 von 30 rot - alle Wiederfinde-Sonden, waehrend
+ * der Normalfall gruen blieb (richtig: den deckt das alte Verhalten mit ab). */
+
+/* DIE VERDRAHTUNG. Die Sonden oben pruefen die Entscheidung; diese halten fest,
+ * dass `_doClose` sie stellt und danach nachfasst. Ohne sie bliebe die Suite
+ * gruen, waehrend der Schliesspfad weiter direkt auf dem gemerkten Zeiger
+ * fokussiert - die Funktionen waeren geprueft und ungenutzt.
+ *
+ * GEGENPROBE 2 (durchgefuehrt): `_doClose` fokussiert wieder direkt und das
+ * Nachfassen wird nicht gerufen, beide Funktionen bleiben vollstaendig stehen.
+ * Gemessen 2 von 30 rot - genau diese beiden Sonden. */
+test('_doClose fokussiert das Ergebnis des Rueckfalls, nicht den gemerkten Zeiger', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const doClose = src.match(/function _doClose\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(doClose, '_doClose nicht gefunden');
+  assert.match(doClose, /focusRestoreTarget\(merkzettel\)/,
+    '_doClose muss das Fokusziel ueber focusRestoreTarget() bestimmen');
+  assert.doesNotMatch(doClose, /previouslyFocused\.focus\(/,
+    '_doClose darf nicht mehr direkt auf dem gemerkten Zeiger fokussieren - '
+    + 'genau dieser Aufruf ist auf einem abgehaengten Knoten ein stiller No-op');
+});
+
+test('_doClose fasst nach, und das Nachfassen behaelt seine Wachen', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const doClose = src.match(/function _doClose\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(doClose, /_refocusIfDropped\(merkzettel, gesetzt\)/,
+    '_doClose muss nachfassen - und zwar auf dem TATSAECHLICH gesetzten Ziel');
+  assert.match(doClose, /_fokussiereMitRueckfall\(restoreTarget\)/,
+    'nimmt der Ersatz den Fokus nicht an, muss _doClose auf die Wurzel ausweichen');
+
+  // Die Wachen sitzen in `_tryRefocus`, das sich beide Wege teilen: das
+  // automatische Nachfassen und der oeffentliche `refocusAfterRender()`. Eine
+  // zweite Kopie waere die Stelle, an der sie auseinanderlaufen.
+  const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(wachen, '_tryRefocus nicht gefunden');
+  assert.match(wachen, /ziel\.isConnected && document\.activeElement === ziel && !istRueckfall/,
+    'nicht die ANWESENHEIT des Ziels beendet den Lauf, sondern sein FOKUSBESITZ - eine Zeile auf '
+    + '`display: none` haengt weiter im Dokument und haelt trotzdem keinen Fokus');
+  assert.match(wachen, /document\.activeElement === document\.body/,
+    'hat die Seite selbst etwas fokussiert, ist ihre Wahl die bessere');
+  assert.match(wachen, /if \(activeOverlay\) return;/,
+    'sonst risse das Nachfassen den Fokus aus einem Modal, das in derselben Geste aufgegangen ist');
+  assert.doesNotMatch(wachen, /ersatz === ziel\) return|\|\| ersatz === ziel/,
+    'ein Abbruch bei "derselbe Ersatz" verfehlt den Fall, der hierher fuehrt: das Ziel haelt den '
+    + 'Fokus nicht, ist aber noch verbunden - dann gibt focusRestoreTarget es unveraendert zurueck, '
+    + 'und der Rueckfall auf die Wurzel wuerde nie erreicht');
+  assert.match(wachen, /_fokussiereMitRueckfall\(ersatz\)/,
+    'der Versuch muss durch die Wirkungspruefung mit Rueckfall laufen');
+
+  const oeffentlich = src.match(/export function refocusAfterRender\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(oeffentlich, /_tryRefocus\(/,
+    'der oeffentliche Griff muss durch dieselben Wachen wie das automatische Nachfassen');
+
+  // Die Wirkungspruefung ist der Kern: `.focus()` meldet nicht, ob es griff.
+  const fok = src.match(/function _fokussiere\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(fok, /return document\.activeElement === el;/,
+    '_fokussiere muss zurueckmelden, OB der Fokus angekommen ist - ein disabled oder '
+    + 'ausgeblendeter Ersatz nimmt ihn nicht an, und genau das ist der stille Ausfall');
+});
+
+test('ein vorhandenes tabindex wird nicht ueberschrieben', () => {
+  const alt = makeNode('button', { id: 'irgendwas', connected: false });
+  const wurzel = makeNode('main', { id: 'main-content', attrs: { tabindex: '0' } });
+  withDom({ byId: { 'main-content': wurzel } }, () => {
+    focusRestoreTarget(rememberFocus(alt));
+    assert.equal(wurzel._attrs.tabindex, '0',
+      'eine Seite, die ihrer Wurzel bewusst ein anderes tabindex gibt, behaelt es');
+  });
+});
+
+/* ZWEITER REVIEW-BEFUND ZU #1069: der Ausloeser KANN die Seitenwurzel sein.
+ *
+ * Ein Dialog, der geoeffnet wird, waehrend der Fokus auf `#main-content` liegt
+ * (Tastenkuerzel, programmatisches Oeffnen), merkt sich die Wurzel als
+ * Ausloeser. Beim Schliessen findet die id-Suche dann die NEUE Wurzel und gab
+ * sie direkt zurueck - am Fokussierbar-Machen vorbei. Auf einer Auth-Seite ist
+ * das wieder ein `<main>` ohne tabindex und `.focus()` wieder ein No-op.
+ */
+test('auch ein Ersatz, der selbst die Seitenwurzel ist, wird fokussierbar gemacht', () => {
+  const alt = makeNode('main', { id: 'main-content', connected: false });
+  const neueWurzel = makeNode('main', { id: 'main-content' });        // Auth-Seite: kein tabindex
+  withDom({ byId: { 'main-content': neueWurzel } }, () => {
+    const ziel = focusRestoreTarget(rememberFocus(alt));
+    assert.equal(ziel, neueWurzel, 'die neue Wurzel ist das Ziel');
+    assert.equal(ziel.hasAttribute('tabindex'), true,
+      'die id-Suche darf nicht am Fokussierbar-Machen vorbeifuehren - sonst ist `.focus()` '
+      + 'auf der Auth-Seite wieder ein stiller No-op');
+  });
+});
+
+/* REVIEW-BEFUND ZU #1070: bei Listenzeilen traegt der Knopf keine Identitaet.
+ *
+ * `<div class="list-row" data-id="42"><button class="list-row__main"
+ * data-action="open-detail">` - so bauen inventory und pantry ihre Zeilen. Tag,
+ * Klasse und `data-action` sind bei JEDER Zeile gleich; nur der Vorfahre
+ * unterscheidet sie. Ohne den Anker gewann der erste Treffer, und der Fokus
+ * landete nach dem Speichern zuverlaessig auf Zeile eins statt auf der Zeile,
+ * aus der der Dialog kam.
+ */
+test('eine Zeile wird ueber ihren Vorfahren unterschieden, nicht ueber den Knopf allein', () => {
+  const opts = { cls: 'list-row__main', data: { action: 'open-detail' } };
+  const alt   = makeNode('button', { ...opts, row: '42', connected: false });
+  const zeile1 = makeNode('button', { ...opts, row: '7' });
+  const zeile42 = makeNode('button', { ...opts, row: '42' });
+  withDom({ byTag: { BUTTON: [zeile1, zeile42] }, byId: { 'main-content': makeNode('main', { id: 'main-content' }) } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), zeile42,
+      'der Fokus gehoert der Zeile, aus der der Dialog kam - nicht der ersten der Liste');
+  });
+});
+
+/* Bleiben mehrere Kandidaten, ist keiner nachweislich der gesuchte. Dann ist
+ * die Wurzel die ehrlichere Antwort: ein falsches Fokusziel setzt den Nutzer an
+ * eine Stelle, die er nicht gewaehlt hat. */
+test('mehrdeutige Treffer werden abgelehnt statt geraten', () => {
+  const opts = { cls: 'list-row__main', data: { action: 'open-detail' } };
+  const alt = makeNode('button', { ...opts, connected: false });   // kein row-Anker
+  const a = makeNode('button', opts);
+  const b = makeNode('button', opts);
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [a, b] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
+      'zwei gleich aussehende Zeilen: lieber die Wurzel als die falsche');
+  });
+});
+
+/* REVIEW ZU #1070, RUNDE 5. Zwei Faelle, in denen `.focus()` wieder still
+ * fehlschlaegt oder ein Fokus an falscher Stelle haengen bleibt.
+ */
+
+/* Ein neu gebauter Knopf kann DEAKTIVIERT sein - in rewards wird der
+ * Einloesen-Knopf es, sobald die Punkte nicht mehr reichen. Er ist dann der
+ * eindeutige Treffer und nimmt den Fokus trotzdem nicht an. Ohne Rueckmeldung
+ * bliebe der Fokus auf `body`, und die Wache `ziel.isConnected` haette jeden
+ * weiteren Versuch abgewiesen. */
+test('_fokussiere meldet, ob der Fokus wirklich angekommen ist', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const fok = src.match(/function _fokussiere\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fok, '_fokussiere nicht gefunden');
+  assert.match(fok, /return document\.activeElement === el;/,
+    '`.focus()` meldet nichts - erst der Vergleich mit activeElement zeigt, ob es griff');
+  const mit = src.match(/function _fokussiereMitRueckfall\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(mit, '_fokussiereMitRueckfall nicht gefunden');
+  assert.match(mit, /PAGE_ROOT_ID/,
+    'griff der Fokus nicht, muss auf die Seitenwurzel ausgewichen werden - sonst bleibt er auf body');
+});
+
+/* Ein Loader, der den Ausloeser sofort gegen ein Skelett tauscht und ihn erst
+ * nach der Abfrage neu baut, laesst den Frame-Lauf auf der Wurzel landen. Ohne
+ * die Ausnahme fuer den eigenen Rueckfall haetten `isConnected` und
+ * `activeElement` danach jeden weiteren Versuch abgewiesen. */
+test('ein Fokus auf der Seitenwurzel darf spaeter vom echten Ziel abgeloest werden', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(wachen, /const istRueckfall = ziel\.id === PAGE_ROOT_ID;/,
+    'der eigene Rueckfall muss als solcher erkannt werden');
+  assert.match(wachen, /document\.activeElement === document\.body \|\| document\.activeElement === ziel/,
+    'liegt der Fokus auf dem Ziel selbst, gilt das als "noch niemand hat gewaehlt" - sonst bliebe '
+    + 'er am Rueckfall haengen, obwohl der Knopf laengst wieder da ist');
+});
+
+/* Ein Knoten kann im Dokument haengen und trotzdem unbedienbar sein: der
+ * Loesch-Weg der Aufgaben setzt die Zeile auf `display: none`, statt sie zu
+ * entfernen. Der Fokus faellt dabei auf `body`, der Knoten bleibt verbunden -
+ * eine Wache auf `isConnected` allein haette hier abgebrochen (Review zu #1070).
+ */
+test('ein verbundenes, aber unbedienbares Ziel beendet den Lauf nicht', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.doesNotMatch(wachen, /if \(ziel\.isConnected\)\s*return;/,
+    'die Anwesenheit allein darf den Lauf nicht beenden - sie sagt nichts darueber, '
+    + 'ob das Ziel den Fokus auch haelt');
+  assert.match(wachen, /document\.activeElement === ziel/,
+    'geprueft gehoert der Fokusbesitz');
+});
+
+/* REVIEW ZU #1070: nicht jedes data-Feld traegt Identitaet.
+ *
+ * Der Umbenennen-Knopf einer Teilaufgabe fuehrt `data-action` und `data-id` -
+ * aber auch `data-title`, und genau das aendert sich beim Umbenennen. Ein
+ * Vergleich auf Gleichheit ALLER Felder findet den neu gebauten Knopf danach
+ * nie wieder und faellt auf die Wurzel zurueck: die Funktion waere in genau dem
+ * Fall unwirksam, fuer den sie gebaut ist.
+ */
+test('ein geaendertes Nutzlast-Feld verhindert das Wiederfinden nicht', () => {
+  const gemeinsam = { cls: 'subtask-item__action' };
+  const alt = makeNode('button', { ...gemeinsam, data: { action: 'rename-subtask', id: '7', title: 'Alt' }, connected: false });
+  const neu = makeNode('button', { ...gemeinsam, data: { action: 'rename-subtask', id: '7', title: 'Neu' } });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [neu] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), neu,
+      'die Identitaet steht in action und id - ein geaenderter Titel darf den Knopf nicht verstecken');
+  });
+});
+
+/* Der zweite Anlauf besteht weiter auf Eindeutigkeit: zwei Teilaufgaben mit
+ * derselben action, aber verschiedenen ids bleiben unterscheidbar, und wo die
+ * identitaetstragenden Felder selbst mehrdeutig sind, wird nichts geraten. */
+test('der zweite Anlauf raet nicht - Mehrdeutigkeit bleibt Mehrdeutigkeit', () => {
+  const gemeinsam = { cls: 'subtask-item__action' };
+  const alt = makeNode('button', { ...gemeinsam, data: { action: 'rename-subtask', title: 'Alt' }, connected: false });
+  const a = makeNode('button', { ...gemeinsam, data: { action: 'rename-subtask', title: 'X' } });
+  const b = makeNode('button', { ...gemeinsam, data: { action: 'rename-subtask', title: 'Y' } });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [a, b] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
+      'ohne unterscheidende id bleiben zwei Kandidaten - dann die Wurzel statt der falschen');
+  });
+});
+
+/* DER MERKER GILT FUER SEINEN VORGANG, NICHT FUER EINEN AUFRUF.
+ *
+ * Ein Schliessvorgang kann mehrfach neu aufbauen - das Loeschen eines
+ * Budget-Plans rendert sofort und noch einmal, wenn jemand den
+ * Toast-Rueckgaengig drueckt. Beide Male ist derselbe Knopf gemeint. Ein
+ * Merker, der beim ersten Gebrauch verfaellt, macht den zweiten Weg wirkungslos
+ * (Review zu #1070, nachdem ein frueherer Anlauf genau das eingebaut hatte).
+ *
+ * Gegen den anderen Fehler - der Merker wirkt weiter, wo diese Schicht gar
+ * nicht geschlossen hat - hilft nicht der Verbrauch, sondern das gezielte
+ * Verwerfen: `closeDetailView()` kehrt im Popover-Zweig frueh zurueck und ruft
+ * dafuer `forgetRestore()`.
+ */
+test('refocusAfterRender behaelt seinen Merker fuer weitere Neuaufbauten', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const fn = src.match(/export function refocusAfterRender\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'refocusAfterRender nicht gefunden');
+  assert.doesNotMatch(fn, /_lastRestore = null/,
+    'der Merker darf beim Gebrauch NICHT verfallen - ein Vorgang kann mehrfach neu aufbauen, '
+    + 'und der zweite Weg (Toast-Rueckgaengig) meint denselben Knopf');
+  assert.match(src, /export function forgetRestore\(\)/,
+    'zum Verwerfen braucht es einen eigenen Griff fuer alle, die an dieser Schicht vorbei schliessen');
+});
+
+/* Wer an modal.js vorbei schliesst, muss den Merker verwerfen - sonst wirkt er
+ * dort weiter, wo diese Schicht nicht beteiligt war, und setzt den Fokus in
+ * einen fremden Zusammenhang. */
+test('closeDetailView verwirft den Merker, wenn es am Modal vorbei schliesst', () => {
+  const src = readFileSync(new URL('../public/components/detail-view.js', import.meta.url), 'utf8');
+  const fn = src.match(/export function closeDetailView\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'closeDetailView nicht gefunden');
+  assert.match(fn, /forgetRestore\(\)/,
+    'der Popover-Zweig kehrt ohne closeModal() zurueck - ohne Verwerfen bliebe der Merker '
+    + 'des vorigen Dialogs stehen');
+});
+
+/* REVIEW ZU #1070: die Klasse ist Darstellung, keine Identitaet.
+ *
+ * Eine Mahlzeitenkarte traegt `meal-card__open--with-thumb`, sobald ihr Rezept
+ * ein Bild hat. Wer beim Bearbeiten eines hinzufuegt, aendert damit die Klasse
+ * des Knopfes, ueber den er gekommen ist - ein exakter Klassenvergleich findet
+ * ihn danach nicht wieder. Derselbe Fehlertyp wie beim veraenderlichen
+ * data-Feld, nur eine Ebene weiter.
+ */
+test('eine geaenderte Modifier-Klasse verhindert das Wiederfinden nicht', () => {
+  // `data-meal-id`, wie das echte Markup es schreibt - NICHT `data-id`. Die
+  // erste Fassung dieser Sonde erfand `{ action, id }` und prueste damit einen
+  // Fall, den es nicht gibt; der Produktivknopf waere durchgefallen (Review zu
+  // #1070). Das Repo fuehrt 24 solcher Schluesselfelder.
+  const alt = makeNode('button', { cls: 'meal-card__open', data: { action: 'edit-meal', mealId: '9' }, connected: false });
+  const neu = makeNode('button', { cls: 'meal-card__open meal-card__open--with-thumb', data: { action: 'edit-meal', mealId: '9' } });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [neu] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), neu,
+      'die Identitaet steht in action und id - eine Darstellungsklasse darf den Knopf nicht verstecken');
+  });
+});
+
+/* Auch der dritte Anlauf raet nicht: zwei Karten mit derselben action, aber
+ * verschiedenen ids bleiben unterscheidbar; ohne unterscheidende id bleibt es
+ * bei der Wurzel. */
+test('der Anlauf ohne Klasse besteht weiter auf Eindeutigkeit', () => {
+  // Keiner der beiden traegt die Klasse des Ausloesers - erst der dritte Anlauf
+  // sieht sie, und dort sind sie nicht zu unterscheiden.
+  const alt = makeNode('button', { cls: 'meal-card__open', data: { action: 'edit-meal', mealId: '9' }, connected: false });
+  const a = makeNode('button', { cls: 'meal-card__open--with-thumb', data: { action: 'edit-meal', mealId: '9' } });
+  const b = makeNode('button', { cls: 'meal-card__open--compact', data: { action: 'edit-meal', mealId: '9' } });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [a, b] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
+      'ohne unterscheidende id bleiben zwei Kandidaten - dann die Wurzel statt der falschen');
+  });
+});
+
+/* REVIEW ZU #1070: das Ergebnis des Nachfassens gehoert in den Merker zurueck.
+ *
+ * Weicht `_fokussiereMitRueckfall` auf die Wurzel aus, sitzt der Fokus dort -
+ * der Merker zeigte aber weiter auf das alte, abgehaengte Element. Der naechste
+ * Lauf urteilte damit ueber ein Ziel, das es nicht mehr gibt, und verlor den
+ * frisch wieder aufgebauten Knopf.
+ */
+test('_tryRefocus schreibt das tatsaechlich gesetzte Ziel in den Merker zurueck', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const fn = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, '_tryRefocus nicht gefunden');
+  assert.match(fn, /const gesetzt = _fokussiereMitRueckfall\(ersatz\)/,
+    'der Rueckgabewert traegt, WO der Fokus wirklich gelandet ist - er darf nicht verfallen');
+  assert.match(fn, /_lastRestore\.ziel = gesetzt/,
+    'ohne das Zurueckschreiben urteilt der naechste Lauf ueber ein Ziel, das es nicht mehr gibt');
 });
