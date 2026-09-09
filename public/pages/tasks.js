@@ -1539,7 +1539,14 @@ function openTaskCategoryManager(container) {
         return;
       }
       renderTaskList(container);
-    } catch { /* Fehler wurde bereits vom Manager als Toast angezeigt */ }
+    } catch (err) {
+      // NICHT „meldet der Manager selbst": der quittiert nur seine eigene
+      // Mutation, und `_notifyChanged()` kommt erst nach deren Erfolg. Was hier
+      // ankommt, ist immer ein Fehler DIESER Auffrischung - und der erklaert als
+      // einziger, warum die Seite den alten Stand behaelt.
+      console.error('[Tasks] Auffrischen nach Kategorie-Aenderung fehlgeschlagen:', err);
+      window.yuvomi?.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
+    }
   };
   openSharedModal({
     title: t('tasks.manageCategories'),

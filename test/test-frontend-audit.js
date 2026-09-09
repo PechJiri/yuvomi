@@ -10235,19 +10235,47 @@ test('shopping: eine ueberholte Artikel-Antwort fasst den Stand nicht mehr an', 
     'Erfolg UND Fehler muessen pruefen, ob die Liste noch dieselbe ist');
 });
 
-// Der Manager quittiert nur seine eigene Mutation - `_notifyChanged()` kommt
-// erst nach deren Erfolg. Was im Handler ankommt, ist ein Fehler der
-// AUFFRISCHUNG, und den verschluckte ein leeres catch.
-test('inventory: ein Fehler beim Auffrischen wird gemeldet, nicht verschluckt', () => {
-  const src = read('../public/pages/inventory.js');
-  for (const name of ['openLocationManager', 'openCategoryManager']) {
-    const fn = src.match(new RegExp(`async function ${name}[\\s\\S]*?\\n\\}`))?.[0] ?? '';
-    assert.ok(fn, `${name} nicht gefunden`);
-    assert.doesNotMatch(fn, /catch \{ \/\* Fehler meldet der Manager selbst \*\/ \}/,
-      `${name}: das leere catch verschluckt den Fehler der Auffrischung`);
-    assert.match(fn, /catch \(err\)[\s\S]*?showToast\(/,
-      `${name}: ein Fehler der Auffrischung muss den Nutzer erreichen`);
+// Der Manager quittiert nur seine EIGENE Mutation: `_notifyChanged()` kommt erst
+// nach deren Erfolg. Was im Handler eines Aufrufers ankommt, ist deshalb immer
+// ein Fehler der AUFFRISCHUNG - und der erklaert als einziger, warum die Seite
+// den alten Stand behaelt, obwohl der Server schon umgeschrieben hat.
+//
+// Als allgemeine Regel und nicht je Seite: die erste Fassung nannte nur
+// inventory, und genau daneben blieben pantry, tasks und contacts mit demselben
+// leeren catch stehen (Review-Runde 6). Ein `catch {` ohne Bindung wirft das
+// Fehlerobjekt weg und kann per Konstruktion nichts melden; `catch (err)` mit
+// Toast besteht, ebenso ein Handler ganz ohne catch, dessen Lader selbst melden
+// (so macht es budget).
+test('kein Nutzer des Category-Managers verschluckt den Fehler seiner Auffrischung', () => {
+  const nutzer = walkJsFiles('../public/').filter((file) => (
+    file !== '../public/components/category-manager.js' && read(file).includes('yuvomi-category-manager')
+  ));
+  assert.ok(nutzer.length >= 5, `nur ${nutzer.length} Nutzer des Category-Managers gefunden`);
+
+  let geprueft = 0;
+  for (const file of nutzer) {
+    const src = read(file);
+    const label = file.slice('../public/'.length);
+    // Jede Stelle, nicht die erste: inventory mountet zwei Manager.
+    const re = /addEventListener\(\s*'category-manager-changed'/g;
+    let treffer;
+    while ((treffer = re.exec(src)) !== null) {
+      // Die umschliessende Funktion: rueckwaerts bis zur naechsten Deklaration
+      // auf Spaltenposition 0, vorwaerts bis zu ihrer schliessenden Klammer.
+      const kopf = src.lastIndexOf('\nfunction ', treffer.index);
+      const akopf = src.lastIndexOf('\nasync function ', treffer.index);
+      const von = Math.max(kopf, akopf);
+      assert.notEqual(von, -1, `${label}: umschliessende Funktion nicht gefunden`);
+      const bis = src.indexOf('\n}', treffer.index);
+      const fn = src.slice(von, bis);
+      geprueft += 1;
+      assert.doesNotMatch(fn, /catch\s*\{/,
+        `${label}: ein bindungsloses \`catch {\` wirft das Fehlerobjekt weg und kann den `
+        + 'Fehler der Auffrischung nicht melden - `catch (err)` mit Toast oder Fehlerzustand');
+    }
   }
+  // Faellt die Erkennung der Funktionen aus, soll der Test das sagen.
+  assert.ok(geprueft >= 7, `nur ${geprueft} Handler gefunden`);
 });
 
 // Der Knopf, der den Manager oeffnet, liegt in `#budget-body` - genau dem
