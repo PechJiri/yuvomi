@@ -16051,6 +16051,13 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
       const schliesst = schliessNamen(lines);
       lines.forEach((zeile, i) => {
         if (!istSchliessen(zeile, schliesst)) return;
+        // EIN VERZOEGERTES SCHLIESSEN IST HIER KEINES. `setTimeout(() =>
+        // closeModal(...), 700)` in tasks.js laeuft erst, wenn der Block
+        // laengst durch ist - der Merker, auf den `refocusAfterRender()`
+        // zurueckgreift, entsteht aber erst IN `_doClose`. Ein Aufruf im Block
+        // koennte dort also nichts bewirken, und ihn zu verlangen hiesse, toten
+        // Code zu fordern (Review zu #1070).
+        if (/\bsetTimeout\s*\(/.test(zeile)) return;
         // NUR DIE EIGENE EBENE. Alles Tiefere steht in einem Callback, der auf
         // diesem Weg gar nicht laeuft - der Undo-Zweig eines Toasts etwa. Wer
         // ihn mitzaehlt, haelt `deletePlan()` in budget-plans.js fuer gedeckt,
@@ -16259,6 +16266,32 @@ test('kein refocusAfterRender ohne ein Schliessen, auf das es sich beziehen kann
           if (lines[j].match(/^\s*/)[0].length > tiefe) continue;
           if (istSchliessen(lines[j], schliesst)) {
             tot.push(`${datei}:${i + 1} - steht VOR dem Schliessen in Zeile ${j + 1}`);
+            return;
+          }
+        }
+        // (1b) Liegt zwischen dem Schliessen davor und dem Aufruf ueberhaupt
+        // ein Neuaufbau? Ohne einen ist nichts nachzuziehen: `_doClose` hat den
+        // Fokus gerade selbst gesetzt, und zwar auf den frisch gerenderten
+        // Knopf, wenn die Seite VOR dem Schliessen gerendert hat. Genau so
+        // standen zwei Aufrufe in birthdays.js (Review zu #1070).
+        let schliessZeile = -1;
+        for (let j = i - 1; j >= start; j--) {
+          if (!istSchliessen(lines[j], schliesst)) continue;
+          // Ein VERZOEGERTES Schliessen traegt keinen Aufruf: `setTimeout(() =>
+          // closeModal(...), 700)` laeuft erst, wenn der Block durch ist, und
+          // der Merker entsteht erst in `_doClose`. So stand ein toter Aufruf
+          // in tasks.js (Review zu #1070).
+          if (/\bsetTimeout\s*\(/.test(lines[j])) {
+            tot.push(`${datei}:${i + 1} - das Schliessen in Zeile ${j + 1} ist verzoegert, der Merker existiert hier noch nicht`);
+            return;
+          }
+          schliessZeile = j;
+          break;
+        }
+        if (schliessZeile !== -1) {
+          const dazwischen = lines.slice(schliessZeile + 1, i);
+          if (!dazwischen.some((x) => istNeuaufbau(x, rendererIn(lines)))) {
+            tot.push(`${datei}:${i + 1} - zwischen dem Schliessen und dem Aufruf wird nichts neu gebaut`);
             return;
           }
         }

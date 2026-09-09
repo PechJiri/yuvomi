@@ -515,7 +515,18 @@ test('ohne gemerkten Ausloeser bleibt es bei null', () => {
  * sobald vorher schon Fokus verloren ging. Ein Merkzettel darauf haette den
  * Wiederfinder auf BODY losgeschickt. */
 test('ein Knoten ohne focus() bekommt keinen Merkzettel', () => {
-  assert.equal(rememberFocus({ tagName: 'BODY' }), null, 'ohne focus() ist es kein Fokusziel');
+  assert.equal(rememberFocus({ tagName: 'DIV' }), null, 'ohne focus() ist es kein Fokusziel');
+});
+
+/* `document.body` ERBT `focus()` von HTMLElement - eine Attrappe ohne die
+ * Methode prueft die Ablehnung deshalb gar nicht (genau dieser Fehler stand
+ * hier, Review zu #1070). Der Merker auf `body` waere toedlich: `isConnected`
+ * immer wahr, der Fokus schon darauf, also braeche jedes Nachfassen sofort ab. */
+test('document.body bekommt keinen Merkzettel, obwohl es focus() hat', () => {
+  const body = { tagName: 'BODY', focus() {}, id: '', dataset: {}, isConnected: true };
+  assert.equal(rememberFocus(body), null,
+    'body ist kein Fokusziel, sondern das Fehlen eines - als Merker schaltet es das '
+    + 'Nachfassen fuer diesen Schliessvorgang dauerhaft ab');
 });
 
 /* GEGENPROBE 1 (durchgefuehrt): in `focusRestoreTarget` ein `return memo.el;`

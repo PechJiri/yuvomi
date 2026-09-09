@@ -619,7 +619,6 @@ function openBirthdayModal({ mode, birthday = null }) {
           await loadData();
           renderList();
           closeModal({ force: true });
-          refocusAfterRender();
         } catch (err) {
           window.yuvomi?.showToast(err.message, 'danger');
           saveBtn.disabled = false;
@@ -723,7 +722,6 @@ async function openImportModal() {
           await loadData();
           renderList();
           closeModal({ force: true });
-          refocusAfterRender();
         } catch (err) {
           window.yuvomi?.showToast(err.message, 'danger');
           submitBtn.disabled = false;

@@ -582,6 +582,17 @@ function _discardSuspendedModal({ overlay, restoreFocus }) {
  */
 export function rememberFocus(el) {
   if (!el || !el.tagName || typeof el.focus !== 'function') return null;
+  // `document.body` IST KEIN FOKUSZIEL, sondern das Fehlen eines - und es kommt
+  // durch jede Typpruefung, weil es `focus()` von HTMLElement erbt (gemessen:
+  // `typeof document.body.focus === 'function'`). Als Merker waere es toedlich:
+  // `isConnected` ist immer wahr und der Fokus liegt bereits darauf, also braeche
+  // jedes spaetere Nachfassen an seiner ersten Wache ab - das Gegenteil dessen,
+  // wofuer diese Schicht da ist.
+  //
+  // Der Fall ist Alltag, nicht Ausnahme: oeffnet ein Dialog aus einer Zeile, die
+  // selbst nicht fokussierbar ist (ein `<div>`, ein `<tr>`), steht `activeElement`
+  // auf `body` (Review zu #1070).
+  if (el === document.body || el.tagName === 'BODY') return null;
   return {
     el,
     id: el.id || null,
