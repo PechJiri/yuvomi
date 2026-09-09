@@ -1238,7 +1238,6 @@ export async function render(container) {
   try {
     await loadData();
     renderShell(container);
-    refocusAfterRender();
     const editVisitId = new URLSearchParams(window.location.search).get('editVisit');
     if (editVisitId) {
       try {

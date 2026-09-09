@@ -15940,7 +15940,7 @@ function istSchliessen(zeile, namen) {
 function rendererIn(lines) {
   const defs = [];
   lines.forEach((l, i) => {
-    const m = l.match(/^(?:async )?function ([A-Za-z_]\w*)/);
+    const m = l.match(/^(?:export )?(?:async )?function ([A-Za-z_]\w*)/);
     if (m) defs.push({ i, name: m[1] });
   });
   const koerper = defs.map((d, k) => ({
@@ -16111,7 +16111,7 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
       const wrapper = rendererIn(lines);
       const starts = [];
-      lines.forEach((l, i) => { if (/^(async )?function [A-Za-z_]/.test(l)) starts.push(i); });
+      lines.forEach((l, i) => { if (/^(?:export )?(?:async )?function [A-Za-z_]/.test(l)) starts.push(i); });
       starts.forEach((s, k) => {
         const e = k + 1 < starts.length ? starts[k + 1] : lines.length;
         // Nur Funktionen, die selbst einen Dialog oeffnen.
@@ -16216,4 +16216,91 @@ test('jede exportierte close-Fassade steht in SCHLIESS_FASSADEN', () => {
   assert.deepEqual(fehlend, [],
     'Diese exportierten Funktionen schliessen den Dialog, stehen aber nicht in SCHLIESS_FASSADEN - '
     + 'die Focus-Guards sehen ihren Schliess-und-Rendern-Weg deshalb nicht:\n  ' + fehlend.join('\n  '));
+});
+
+
+/* KEIN AUFRUF INS LEERE.
+ *
+ * `refocusAfterRender()` wirkt nur, wenn vorher ein Dialog GESCHLOSSEN wurde:
+ * es greift auf den Merker zurueck, den `_doClose()` setzt, und bricht ab,
+ * solange noch ein Overlay offen ist. Zwei Formen von totem Aufruf sind daran
+ * schon entstanden, beide durch automatisches Einfuegen (Review zu #1070):
+ *
+ *   1. VOR dem Schliessen: `refocusAfterRender(); closeModal(...)` ist ein
+ *      garantierter No-op - der Merker ist noch leer, das Overlay noch offen.
+ *   2. In einer Funktion, die mit Dialogen gar nichts zu tun hat: ein
+ *      fehlerhafter Grenz-Regex hatte den Seiten-`render()` von housekeeping.js
+ *      in den Block eines Modal-Oeffners gefaltet, und der Aufruf landete dort.
+ *
+ * Ein Handler, der WAEHREND des offenen Dialogs rendert, faellt hier bewusst
+ * nicht auf: er steht in einer Funktion, die einen Dialog oeffnet, und greift
+ * genau dann, wenn der Nutzer waehrenddessen schliesst.
+ */
+test('kein refocusAfterRender ohne ein Schliessen, auf das es sich beziehen kann', () => {
+  const tot = [];
+  for (const dir of ['../public/pages', '../public/components']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const schliesst = schliessNamen(lines);
+      const grenzen = [];
+      lines.forEach((l, i) => { if (/^(?:export )?(?:async )?function [A-Za-z_]/.test(l)) grenzen.push(i); });
+      lines.forEach((zeile, i) => {
+        if (!/^\s*refocusAfterRender\(\);\s*$/.test(zeile)) return;
+        const start = [...grenzen].reverse().find((g) => g <= i) ?? 0;
+        const ende = grenzen.find((g) => g > i) ?? lines.length;
+        const funktion = lines.slice(start, ende);
+
+        // (1) Steht im selben Block NACH dem Aufruf ein Schliessen?
+        const tiefe = zeile.match(/^\s*/)[0].length;
+        for (let j = i + 1; j < ende; j++) {
+          if (lines[j].trim() === '') continue;
+          if (lines[j].match(/^\s*/)[0].length < tiefe) break;
+          if (lines[j].match(/^\s*/)[0].length > tiefe) continue;
+          if (istSchliessen(lines[j], schliesst)) {
+            tot.push(`${datei}:${i + 1} - steht VOR dem Schliessen in Zeile ${j + 1}`);
+            return;
+          }
+        }
+        // (2) Hat die Funktion ueberhaupt mit Dialogen zu tun?
+        const beteiligt = funktion.some((x) => istSchliessen(x, schliesst) || /open(Shared)?Modal\s*\(/.test(x));
+        if (!beteiligt) tot.push(`${datei}:${i + 1} - die Funktion oeffnet und schliesst keinen Dialog`);
+      });
+    }
+  }
+  assert.deepEqual(tot, [],
+    'Diese Aufrufe koennen nichts bewirken - refocusAfterRender() braucht ein vorangegangenes '
+    + `Schliessen, sonst ist der Merker leer und das Overlay noch offen:\n  ${tot.join('\n  ')}`);
+});
+
+
+/* FUNKTIONSGRENZEN MUESSEN `export` MITLESEN.
+ *
+ * 36 Dateien unter `public/pages` und `public/components` haben top-level
+ * `export function`/`export async function`. Ein Grenz-Regex ohne dieses
+ * Praefix sieht sie nicht - und faltet damit alles bis zur naechsten
+ * nicht-exportierten Deklaration in den vorigen Block. Genau so geriet der
+ * Seiten-`render()` von housekeeping.js in den Block eines Modal-Oeffners, und
+ * ein Werkzeug setzte dort einen Aufruf ins Leere (Review zu #1070).
+ *
+ * Geprueft wird an einer kuenstlichen Quelle, nicht am Repo: so faellt die
+ * Sonde auch dann, wenn gerade keine echte Datei den Fehler zeigt.
+ */
+test('rendererIn erkennt exportierte Funktionen als Grenze', () => {
+  // Die erste Funktion rendert NICHT; die exportierte danach schon. Wird das
+  // `export` als Grenze uebersehen, faellt deren Rumpf in den Block davor - und
+  // die harmlose Funktion gilt faelschlich als Renderer.
+  const quelle = [
+    'function harmlos() {',
+    '  const x = 1;',
+    '}',
+    'export async function render(container) {',
+    '  renderListe();',
+    '}',
+  ];
+  const namen = rendererIn(quelle);
+  assert.ok(namen.has('render'), '`export async function render` muss als eigene Funktion erkannt werden');
+  assert.ok(!namen.has('harmlos'),
+    'ohne das export-Praefix in der Grenze faellt der Rumpf von `render` in den Block davor, '
+    + 'und `harmlos` gilt als Renderer, obwohl sie nichts rendert');
 });

@@ -618,8 +618,8 @@ function openBirthdayModal({ mode, birthday = null }) {
           }
           await loadData();
           renderList();
-          refocusAfterRender();
           closeModal({ force: true });
+          refocusAfterRender();
         } catch (err) {
           window.yuvomi?.showToast(err.message, 'danger');
           saveBtn.disabled = false;
@@ -722,8 +722,8 @@ async function openImportModal() {
           window.yuvomi?.showToast(t('birthdays.importSuccess', { count: res.data.imported }), 'success');
           await loadData();
           renderList();
-          refocusAfterRender();
           closeModal({ force: true });
+          refocusAfterRender();
         } catch (err) {
           window.yuvomi?.showToast(err.message, 'danger');
           submitBtn.disabled = false;
