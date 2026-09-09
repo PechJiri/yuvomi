@@ -8,11 +8,15 @@
 // Uebertrag Mahlzeit -> Einkaufsliste zum Beispiel aus der Summierung, sodass
 // dieselbe Zutat zweimal untereinander stand statt einmal zusammengezaehlt.
 //
-// Der Client hat dieselbe Aufgabe in public/utils/money.js (`toDecimalString`)
-// und loest sie mit der EINGESTELLTEN Region. Hier geht das nicht - also wird
-// jedes bekannte Ziffernsystem akzeptiert. Das ist keine Unschaerfe, sondern die
-// richtige Haltung fuer eine Leseoperation: was ein Mensch als Zahl geschrieben
-// hat, soll als Zahl ankommen, egal welches System.
+// GETEILT zwischen Client und Server, wie utils/date.js und utils/folder-tree.js:
+// beide Seiten lesen dieselben Mengentexte, und eine zweite Fassung daneben ist
+// genau die Dopplung, gegen die dieses Umfeld schon zweimal angetreten ist.
+//
+// `toDecimalString` in utils/money.js liest mit der EINGESTELLTEN Region, weil
+// eine Eingabe im Zweifel deren Schreibweise folgt. Diese Datei kennt gar keine
+// Region und akzeptiert jedes bekannte System - das ist die richtige Haltung fuer
+// eine Leseoperation: was ein Mensch als Zahl geschrieben hat, soll als Zahl
+// ankommen, egal welches System, und egal ob die Region seither gewechselt hat.
 //
 // Die Zuordnung wird aus Intl ABGELEITET, nicht als Tabelle gepflegt. 770
 // Ziffernzeichen aus 77 Ziffernsystemen (gemessen 09.09.2026) haette niemand
@@ -40,7 +44,27 @@ let digitMap = null;
 
 function buildDigitMap() {
   const map = new Map();
-  for (const system of Intl.supportedValuesOf('numberingSystem')) {
+  // `Intl.supportedValuesOf` ist ES2022. Auf dem Server ist es garantiert (Node
+  // >= 22), im BROWSER nicht - und seit diese Datei auch dort laeuft, haette ein
+  // ungeschuetzter Aufruf einen TypeError durch `toDecimalString` nach oben
+  // gereicht und damit jedes Betrags- und Mengenfeld der App lahmgelegt, statt
+  // nur diese eine Faehigkeit zu verlieren. Gemessen: „is not a function".
+  //
+  // Leere Liste als Rueckfall ist hier die richtige Degradation und nicht die
+  // uebliche Luege („es gibt keine"): der Aufrufer im Client fragt diese Zuordnung
+  // erst, wenn die Ziffern der eingestellten Region nicht greifen. Faellt sie aus,
+  // bleibt genau das Verhalten von vor v2.66 - fremde Ziffern werden nicht
+  // gelesen, alles andere laeuft.
+  //
+  // Dieselbe Absicherung wie bei `Intl.supportedValuesOf('timeZone')` in
+  // settings/pages/personal-appearance.js.
+  let systems = [];
+  try {
+    systems = Intl.supportedValuesOf('numberingSystem');
+  } catch {
+    return map;
+  }
+  for (const system of systems) {
     let digits;
     try {
       const format = new Intl.NumberFormat('en', { numberingSystem: system, useGrouping: false });
@@ -97,6 +121,21 @@ export function toAsciiDigits(value) {
     out += digitMap.get(char) ?? SEPARATORS.get(char) ?? char;
   }
   return out;
+}
+
+/**
+ * Ein einzelnes Zeichen als ASCII-Ziffer, oder null. Fuer Aufrufer, die je
+ * Zeichen entscheiden - utils/money.js gibt den Ziffern der eingestellten Region
+ * den Vortritt und faellt nur hier herein zurueck.
+ */
+export function asciiDigit(char) {
+  if (!digitMap) digitMap = buildDigitMap();
+  return digitMap.get(char) ?? null;
+}
+
+/** Die ASCII-Entsprechung eines fremden Trennzeichens, oder null. */
+export function asciiSeparator(char) {
+  return SEPARATORS.get(char) ?? null;
 }
 
 /** Nur fuer Tests: die Groesse der abgeleiteten Zuordnung. */
