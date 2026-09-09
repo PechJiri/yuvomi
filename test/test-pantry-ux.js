@@ -123,9 +123,11 @@ test('die Antwort landet im NEUEN Artikelobjekt, nicht im abgehaengten', async (
 
   globalThis.__apiStub = {
     get: async () => ({ data: [rice(2)], locations: [], categories: [] }),
-    // Der Server liefert ein Feld mit, das der Client nicht selbst kennt -
-    // daran laesst sich ablesen, WO die Antwort gelandet ist.
-    patch: async (_p, body) => ({ data: rice(body.quantity, { notes: 'vom Server' }) }),
+    // Der Server antwortet mit einer ANDEREN Menge als der optimistischen (er
+    // darf normalisieren oder deckeln). Daran laesst sich ablesen, WO die
+    // Antwort gelandet ist: bliebe es bei der 3, haette sie das abgehaengte
+    // Objekt getroffen.
+    patch: async () => ({ data: rice(2.5) }),
   };
 
   const { row } = makeRow();
@@ -133,9 +135,73 @@ test('die Antwort landet im NEUEN Artikelobjekt, nicht im abgehaengten', async (
   await __test.loadPantry();   // tauscht `state.items` gegen neue Objekte aus
   await settled();
 
+  assert.equal(__test.state.items[0].quantity, 2.5,
+    'ohne frische Aufloesung schreibt die Antwort in ein Objekt, das an nichts mehr haengt');
+});
+
+test('die PATCH-Antwort ueberschreibt keine frisch geladenen Fremdfelder', async () => {
+  // Die Route antwortet mit dem VOLLEN Datensatz, und der ist ein Schnappschuss
+  // vom Zeitpunkt des Schreibvorgangs. Hat jemand anderes inzwischen den Namen
+  // geaendert und eine Auffrischung das gebracht, machte ein `Object.assign`
+  // daraus wieder den alten Stand (Codex-Befund P2 zu PR #1072).
+  resetPantry();
+  __test.state.items = [rice(2)];
+  __test.setQuantityDebounceMsForTest(5);
+
+  globalThis.__apiStub = {
+    // Die Auffrischung bringt den neuen Namen.
+    get: async () => ({ data: [rice(2, { name: 'Basmatireis' })], locations: [], categories: [] }),
+    // Die PATCH-Antwort traegt den alten.
+    patch: async (_p, body) => ({ data: rice(body.quantity, { name: 'Reis' }) }),
+  };
+
+  const { row } = makeRow();
+  __test.adjustQuantity(__test.state.items[0], +1, row);
+  await __test.loadPantry();
+  assert.equal(__test.state.items[0].name, 'Basmatireis');
+  await settled();
+
+  assert.equal(__test.state.items[0].quantity, 3, 'die Menge kommt aus der Antwort');
+  assert.equal(__test.state.items[0].name, 'Basmatireis',
+    'der frisch geladene Name darf nicht auf den Stand der Antwort zurueckfallen');
+});
+
+test('ein zweiter Schritt springt nicht am ersten, erfolgreichen vorbei zurueck', async () => {
+  // Auffrischung startet bei Menge 2, Schritt 1 (2->3) wird BESTAETIGT,
+  // Schritt 2 (3->4) laeuft noch, und dann trifft die alte Antwort ein. Setzte
+  // sie die Ruecksprung-Grundlage auf ihre 2, landete ein Fehlschlag von
+  // Schritt 2 bei 2 - obwohl der Server 3 bestaetigt hat.
+  resetPantry();
+  __test.state.items = [rice(2)];
+  __test.setQuantityDebounceMsForTest(5);
+
+  const toasts = [];
+  global.window.yuvomi.showToast = (msg) => toasts.push(msg);
+  const alt = deferred();
+  let patchZaehler = 0;
+  globalThis.__apiStub = {
+    get: () => alt.promise,
+    patch: async (_p, body) => {
+      patchZaehler += 1;
+      if (patchZaehler === 1) return { data: rice(body.quantity) };   // Schritt 1: Erfolg
+      throw Object.assign(new Error('nope'), { data: { error: 'kaputt' } });
+    },
+  };
+
+  const laden = __test.loadPantry();          // Schnappschuss: 2
+  const { row } = makeRow();
+  __test.adjustQuantity(__test.state.items[0], +1, row);   // 2 -> 3
+  await settled();                                          // bestaetigt
   assert.equal(__test.state.items[0].quantity, 3);
-  assert.equal(__test.state.items[0].notes, 'vom Server',
-    'ohne frische Aufloesung schreibt Object.assign in ein Objekt, das an nichts mehr haengt');
+
+  __test.adjustQuantity(__test.state.items[0], +1, row);   // 3 -> 4, ausstehend
+  alt.resolve({ data: [rice(2)], locations: [], categories: [] });
+  await laden;
+  await settled();                                          // Schritt 2 scheitert
+
+  assert.equal(__test.state.items[0].quantity, 3,
+    'der Ruecksprung gehoert auf die bestaetigte 3, nicht auf die 2 des alten Schnappschusses');
+  delete global.window.yuvomi.showToast;
 });
 
 /** Ein von Hand aufloesbares Versprechen - damit steht die Reihenfolge fest. */

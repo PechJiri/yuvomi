@@ -315,7 +315,7 @@ let _appliedLoad = 0;
  * Nur die Zeilen mit offenem Schreibvorgang; alles andere kommt unveraendert
  * vom Server, denn genau dafuer laeuft die Auffrischung.
  */
-function applyPendingChecks(items, { fromCache = false } = {}) {
+function applyPendingChecks(items, { fromCache = false, startedAt = 0 } = {}) {
   if (!pendingChecks.size) return items;
   for (const item of items) {
     const pending = pendingChecks.get(item.id);
@@ -330,7 +330,15 @@ function applyPendingChecks(items, { fromCache = false } = {}) {
     // Und NICHT aus dem Cache: dessen Wert ist beliebig alt, er waere als
     // „was der Server zuletzt sagte" schlicht falsch. Offline bleibt die
     // Grundlage deshalb die, die vor dem Netzverlust galt.
-    if (!fromCache && pending.settledAt == null) pending.rollback = item.is_checked;
+    //
+    // Ebenso wenig aus einer Antwort, die BEGANN, bevor fuer diesen Artikel
+    // zuletzt bestaetigt wurde (`confirmedAt`): sie kennt den bestaetigten
+    // Wert nicht. Ohne diese Bedingung sprang ein zweites Antippen nach einem
+    // gescheiterten Rundlauf am ersten, ERFOLGREICHEN vorbei zurueck.
+    const kenntBestaetigung = pending.confirmedAt == null || pending.confirmedAt < startedAt;
+    if (!fromCache && pending.settledAt == null && kenntBestaetigung) {
+      pending.rollback = item.is_checked;
+    }
     item.is_checked = pending.value;
   }
   return items;
@@ -355,7 +363,16 @@ async function toggleShoppingItem(id, checked, container) {
   // Ab hier haelt der Merker den Wert, den der Server bekommen soll - auch
   // wenn `state.items` im Rundlauf komplett getauscht wird.
   const seq = ++_checkSeq;
-  pendingChecks.set(id, { value: newVal, seq, rollback: checked });
+  // `confirmedAt` wandert MIT: der Eintrag des vorigen Antippens wird hier
+  // ersetzt, und mit ihm ginge sonst die Information verloren, dass fuer diesen
+  // Artikel bereits erfolgreich geschrieben wurde.
+  const vorher = pendingChecks.get(id);
+  pendingChecks.set(id, {
+    value: newVal,
+    seq,
+    rollback: checked,
+    confirmedAt: vorher?.settledAt ?? vorher?.confirmedAt ?? null,
+  });
 
   try {
     await api.patch(`/shopping/items/${id}`, { is_checked: newVal });
@@ -2164,7 +2181,11 @@ async function loadItems(listId) {
   // Und wer aelter ist als das, was schon steht, fasst den Stand nicht mehr an.
   // Die Wache darueber deckt das nicht ab: dieselbe Liste, zwei Rundlaeufe.
   if (startedAt < _appliedLoad) return;
-  _appliedLoad = startedAt;
+  // Die Marke setzt NUR eine netzfrische Antwort. Sonst haette bei wackligem
+  // Netz die schneller gescheiterte, aus dem Cache bediente Anfrage die Marke
+  // hochgezogen - und die aeltere, aber ECHTE Antwort waere danach als
+  // veraltet verworfen worden. Der Cache haette den frischen Stand verdraengt.
+  if (!fromCache) _appliedLoad = startedAt;
   // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte den Wert
   // beim Lesen schon, seine Antwort ist die frischere Wahrheit - auch wenn
   // inzwischen jemand anderes die Zeile wieder zurueckgeholt hat.
@@ -2181,7 +2202,7 @@ async function loadItems(listId) {
   }
   // Alles Uebrige ueberlebt den Tausch: die Antwort kann einen Schnappschuss
   // tragen, der aelter ist als die laufende Bearbeitung.
-  state.items      = applyPendingChecks(data.data ?? [], { fromCache });
+  state.items      = applyPendingChecks(data.data ?? [], { fromCache, startedAt });
   state.activeList = data.list ?? null;
   // Kategorien aus API-Antwort übernehmen wenn vorhanden (immer aktuell)
   if (data.categories?.length) state.categories = data.categories;

@@ -813,3 +813,68 @@ test('eine gecachte Antwort setzt die Ruecksprung-Grundlage nicht neu', async ()
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
 });
+
+test('eine gecachte Antwort verdraengt keine echte, die spaeter eintrifft', async () => {
+  // Bei wackligem Netz scheitert die SPAETER begonnene Anfrage oft zuerst und
+  // wird aus dem Cache bedient. Zoege sie die Wasserstandsmarke hoch, waere die
+  // frueher begonnene, aber ECHTE Antwort danach „veraltet" - der Cache haette
+  // den frischen Stand verdraengt (Codex-Befund P2 zu PR #1072).
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  const frisch = deferred();
+  const antworten = [
+    () => frisch.promise,                                             // beginnt zuerst, antwortet spaet
+    async () => ({ data: { data: [milk(0)] }, fromCache: true }),     // beginnt spaeter, aus dem Cache
+  ];
+  globalThis.__apiStub = { getWithSource: () => antworten.shift()(), patch: async () => ({ data: null }) };
+
+  const ladenFrisch = __test.loadItems(1);   // startedAt 1
+  await __test.loadItems(1);                 // startedAt 2, aus dem Cache
+
+  frisch.resolve({ data: { data: [milk(1)] }, fromCache: false });
+  await ladenFrisch;
+
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'die echte Antwort muss ankommen, auch wenn eine gecachte spaeter begann');
+  delete globalThis.__apiStub;
+});
+
+test('ein zweites Antippen springt nicht am ersten, erfolgreichen vorbei zurueck', async () => {
+  // Auffrischung startet bei is_checked 0, das erste Antippen (0->1) wird
+  // BESTAETIGT, das zweite (1->0) laeuft noch, dann trifft die alte Antwort
+  // ein. Setzte sie die Ruecksprung-Grundlage auf ihre 0, landete ein
+  // Fehlschlag des zweiten Antippens bei 0 - obwohl der Server 1 bestaetigt hat.
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  global.window.yuvomi.showToast = () => {};
+  const alt = deferred();
+  let patchZaehler = 0;
+  globalThis.__apiStub = {
+    getWithSource: () => alt.promise,
+    patch: async () => {
+      patchZaehler += 1;
+      if (patchZaehler === 1) return { data: null };                  // erstes Antippen: Erfolg
+      throw Object.assign(new Error('nope'), { data: { error: 'kaputt' } });
+    },
+  };
+
+  const laden = __test.loadItems(1);                                   // Schnappschuss: 0
+  await __test.toggleShoppingItem(10, 0, makeNullContainer());         // 0 -> 1, bestaetigt
+  assert.equal(__test.state.items[0].is_checked, 1);
+
+  const zweites = __test.toggleShoppingItem(10, 1, makeNullContainer()); // 1 -> 0, ausstehend
+  alt.resolve({ data: { data: [milk(0)] }, fromCache: false });
+  await laden;
+  await zweites;
+
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'der Ruecksprung gehoert auf die bestaetigte 1, nicht auf die 0 des alten Schnappschusses');
+  delete globalThis.__apiStub;
+  delete global.window.yuvomi.showToast;
+});

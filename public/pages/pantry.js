@@ -161,7 +161,7 @@ function stockBadge(item) {
  * denn genau dafuer laeuft die Auffrischung - eine verworfene Antwort haette
  * auch die frischen Lagerorte mitgenommen.
  */
-function applyPendingQuantities(items) {
+function applyPendingQuantities(items, { startedAt = 0 } = {}) {
   if (!pendingQuantity.size) return items;
   for (const item of items) {
     const pending = pendingQuantity.get(item.id);
@@ -172,7 +172,15 @@ function applyPendingQuantities(items) {
     // Zahl, die der Server nie hatte - und diese Zeile ist die letzte, die den
     // frischen Wert ueberhaupt noch sieht. Nur fuer den noch AUSSTEHENDEN
     // Eintrag: ein bestaetigter springt nirgends mehr zurueck.
-    if (pending.settledAt == null) pending.rollback = Number(item.quantity);
+    //
+    // Und nicht aus einer Antwort, die BEGANN, bevor fuer diesen Artikel
+    // zuletzt bestaetigt wurde (`confirmedAt`) - sie kennt den bestaetigten
+    // Wert nicht. Ohne diese Bedingung sprang ein zweiter Schritt nach einem
+    // gescheiterten PATCH am ersten, ERFOLGREICHEN vorbei zurueck.
+    const kenntBestaetigung = pending.confirmedAt == null || pending.confirmedAt < startedAt;
+    if (pending.settledAt == null && kenntBestaetigung) {
+      pending.rollback = Number(item.quantity);
+    }
     item.quantity = pending.quantity;
   }
   return items;
@@ -184,12 +192,16 @@ async function loadPantry() {
   // Wer aelter ist als das, was schon steht, fasst den Stand nicht mehr an.
   if (startedAt < _pantryAppliedLoad) return;
   _pantryAppliedLoad = startedAt;
+  // Anders als der Einkauf liest der Vorrat mit `api.get`: `/pantry` steht
+  // NICHT in `API_CACHE_WHITELIST` (sw.js), es gibt hier also keine Antwort
+  // aus dem Cache, die die Marke faelschlich hochziehen koennte. Haelt der
+  // Guard in `test-frontend-audit.js` fest.
   // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte die Menge
   // beim Lesen schon, seine Antwort ist die frischere Wahrheit.
   for (const [itemId, entry] of pendingQuantity) {
     if (entry.settledAt != null && entry.settledAt < startedAt) pendingQuantity.delete(itemId);
   }
-  state.items = applyPendingQuantities(res.data ?? []);
+  state.items = applyPendingQuantities(res.data ?? [], { startedAt });
   state.locations = res.locations ?? [];
   state.categories = res.categories ?? [];
 }
@@ -909,7 +921,14 @@ function adjustQuantity(item, direction, row) {
       const entry = pendingQuantity.get(item.id);
       if (entry?.seq !== seq) return;
       const current = state.items.find((i) => i.id === item.id) ?? item;
-      Object.assign(current, res.data);
+      // NUR die Menge, nicht die ganze Zeile. Die Route antwortet mit dem
+      // vollen Datensatz, und der ist ein Schnappschuss vom Zeitpunkt DIESES
+      // Schreibvorgangs: hat jemand anderes inzwischen Name, Ort, Kategorie
+      // oder Notiz geaendert und eine Auffrischung das gebracht, machte ein
+      // `Object.assign` daraus wieder den alten Stand. Autoritativ ist diese
+      // Antwort nur fuer das Feld, das sie geschrieben hat - alles andere holt
+      // die naechste Auffrischung.
+      current.quantity = normalizePantryQuantity(res.data?.quantity, { fallback: next });
       // Der Eintrag bleibt als BESTAETIGT stehen, bis ein Ladevorgang laeuft,
       // der nach dieser Antwort begonnen hat - ohne ihn drehte eine aeltere
       // Auffrischung die Menge zurueck. Timer und `flush` gehen dabei weg: der
@@ -919,6 +938,7 @@ function adjustQuantity(item, direction, row) {
         seq,
         quantity: Number(current.quantity),
         settledAt: _pantryLoadSeq,
+        confirmedAt: _pantryLoadSeq,
       });
       const rowNow = liveRow(item.id, row);
       if (rowNow) refreshRowQuantity(rowNow, current);
@@ -947,6 +967,9 @@ function adjustQuantity(item, direction, row) {
     rollback,
     seq,
     quantity: next,
+    // Wandert MIT: der Eintrag des vorigen Schritts wird hier ersetzt, und mit
+    // ihm ginge sonst verloren, dass fuer diesen Artikel schon bestaetigt wurde.
+    confirmedAt: pending?.settledAt ?? pending?.confirmedAt ?? null,
     flush: () => {
       clearTimeout(timer);
       pendingQuantity.delete(item.id);
