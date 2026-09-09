@@ -15779,3 +15779,58 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
     + 'der Focus-Restore aus closeModal() wird dort weggerendert und landet auf document.body. '
     + `Nach dem Rendern refocusAfterRender() rufen:\n  ${fehlend.join('\n  ')}`);
 });
+
+/* DIE ZWEITE BAUART: ASYNCHRON RENDERN, WAEHREND DER DIALOG NOCH OFFEN IST.
+ *
+ * Der Guard darueber deckt den Handler ab, der nach `closeModal()` rendert.
+ * Dieser hier deckt den Fall, den der Codex-Review zu #1069 gefunden hat und den
+ * beide Guards davor durchliessen, weil in diesem Handler gar kein
+ * `closeModal()` vorkommt:
+ *
+ *   const onChanged = async () => { await loadBudgetMeta(); renderBody(); };
+ *
+ * Schliesst der Nutzer den Dialog, waehrend die Abfrage noch laeuft, ist der
+ * Ausloeser beim Schliessen NOCH VERBUNDEN. Der Restore trifft ihn also
+ * korrekt - und das `renderBody()` danach haengt ihn ab. Im Browser gemessen
+ * (Chrome 152) landet der Fokus dann auf BODY. Das automatische Nachfassen
+ * kommt einen Frame nach dem Schliessen und ist zu diesem Zeitpunkt laengst
+ * vorbei; nur die Seite weiss, wann ihre Abfrage zurueck ist.
+ *
+ * Steht zwischen dem `await` und dem Rendern ein `closeModal()`, ist das der
+ * synchrone Fall aus dem Guard darueber - der Frame deckt ihn, und ein Aufruf
+ * hier waere toter Code. Deshalb sind genau diese Stellen ausgenommen.
+ *
+ * GEGENPROBE: den Aufruf in `openCategoryManager` in `budget.js` entfernen -
+ * genau die Stelle, die der Review nannte. Der Guard faellt dann mit ihr in der
+ * Liste.
+ */
+test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nach', () => {
+  const fehlend = [];
+  for (const dir of ['../public/pages', '../public/components']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const starts = [];
+      lines.forEach((l, i) => { if (/^(async )?function [A-Za-z_]/.test(l)) starts.push(i); });
+      starts.forEach((s, k) => {
+        const e = k + 1 < starts.length ? starts[k + 1] : lines.length;
+        // Nur Funktionen, die selbst einen Dialog oeffnen.
+        if (!lines.slice(s, e).some((l) => /open(Shared)?Modal\s*\(\s*\{/.test(l))) return;
+        for (let j = s; j < e; j++) {
+          if (!/\bawait\s+(load|refresh)[A-Z]\w*\s*\(/.test(lines[j])) continue;
+          const fenster = lines.slice(j + 1, j + 4);
+          if (!fenster.some((x) => /\b(render[A-Z]\w*|update[A-Z]\w*List)\s*\(/.test(x))) continue;
+          // closeModal dazwischen: der synchrone Fall, den der Frame abdeckt.
+          if (fenster.some((x) => /closeModal\s*\(/.test(x))) continue;
+          if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) continue;
+          fehlend.push(`${datei}:${j + 1} (${lines[j].trim().slice(0, 44)})`);
+        }
+      });
+    }
+  }
+  assert.deepEqual(fehlend, [],
+    'Diese Handler rendern asynchron, waehrend ihr Dialog noch offen sein kann. Schliesst der '
+    + 'Nutzer waehrenddessen, trifft der Focus-Restore den noch verbundenen Ausloeser und das '
+    + 'Rendern danach haengt ihn ab - der Fokus faellt auf document.body. '
+    + `Nach dem Rendern refocusAfterRender() rufen:\n  ${fehlend.join('\n  ')}`);
+});

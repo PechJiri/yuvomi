@@ -17,6 +17,7 @@ import {
   wireBlurValidation,
   reportFieldError,
   confirmModal,
+  refocusAfterRender,
 } from '/components/modal.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { emptyStateEl } from '/utils/empty-state.js';
@@ -92,6 +93,7 @@ async function openLocationManager() {
         // veraltete location_path-Werte bis zum naechsten vollen Reload.
         await loadItems();
         renderList();
+        refocusAfterRender();
         updateAttentionBadge();
       }
     },
@@ -133,6 +135,7 @@ async function openCategoryManager() {
         // veraltete category_name-Werte bis zum naechsten vollen Reload.
         await loadItems();
         renderList();
+        refocusAfterRender();
         updateAttentionBadge();
       }
     },

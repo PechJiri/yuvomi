@@ -1481,6 +1481,7 @@ function openAccountModal(account = null) {
           await api.delete(`/budget/accounts/${account.id}`);
           await loadMonth(state.month);
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(t('budget.accountDeletedToast'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
@@ -2041,6 +2042,7 @@ function openCategoryManager() {
   const onChanged = async () => {
     await loadBudgetMeta();
     renderBody();
+    refocusAfterRender();
   };
   openSharedModal({
     title: t('budget.manageCategories'),
@@ -2592,6 +2594,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
             }
             await loadMonth(state.month);
             renderBody();
+            refocusAfterRender();
           } else {
             const res = await api.put(`/budget/${entry.id}`, await withReceipts());
             const idx = state.entries.findIndex((e) => e.id === entry.id);

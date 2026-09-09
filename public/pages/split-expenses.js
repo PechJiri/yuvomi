@@ -1048,6 +1048,7 @@ function openExpenseModal(expense = null, prefill = null) {
         await refreshDashboard();
         await loadGroupData();
         renderAll();
+        refocusAfterRender();
       });
       panel.querySelector('#split-expense-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1256,6 +1257,7 @@ function openGuestModal() {
         await loadGroups();
         await loadGroupData();
         renderAll();
+        refocusAfterRender();
       });
     },
   });

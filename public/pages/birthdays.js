@@ -1,5 +1,5 @@
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, advancedSection } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, advancedSection, refocusAfterRender } from '/components/modal.js';
 import { stagger, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
 import { t, formatDate, parseDateInput, isDateInputValid, getLocale } from '/i18n.js';
@@ -618,6 +618,7 @@ function openBirthdayModal({ mode, birthday = null }) {
           }
           await loadData();
           renderList();
+          refocusAfterRender();
           closeModal({ force: true });
         } catch (err) {
           window.yuvomi?.showToast(err.message, 'danger');
@@ -721,6 +722,7 @@ async function openImportModal() {
           window.yuvomi?.showToast(t('birthdays.importSuccess', { count: res.data.imported }), 'success');
           await loadData();
           renderList();
+          refocusAfterRender();
           closeModal({ force: true });
         } catch (err) {
           window.yuvomi?.showToast(err.message, 'danger');

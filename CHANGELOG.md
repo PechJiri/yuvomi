@@ -196,6 +196,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing where nothing broke. A scanner in the test suite finds the pattern rather than a list of
   files, so a new place that re-renders after an `await` is caught without anyone editing the test.
 
+  A third shape hides between the two and was found in review: a handler that re-renders
+  asynchronously **while the dialog is still open** - `await loadBudgetMeta(); renderBody();` in the
+  category manager. Close the dialog while that request is in flight and the opening button is still
+  connected, so the restore correctly lands on it and the re-render detaches it a moment later.
+  Measured in the browser, focus ends up on `document.body` again. Eleven handlers of that shape now
+  pull focus across their own re-render, with a second scanner holding the line.
+
   Measured across the seven callers of the category manager, exactly one - the budget page - puts
   its button inside the very section it re-renders while the dialog is open. The others keep theirs
   in a toolbar their handler does not touch, and the shopping menu turned out to be a non-case: the
