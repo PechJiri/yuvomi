@@ -1,34 +1,16 @@
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
-const tmpDir = mkdtempSync(join(tmpdir(), 'oikos-setup-test-'));
+import { startTestServer, cookieHeader } from './server-ready.js';
 
-process.env.SESSION_SECRET = 'test-setup-secret-minimum-32-chars-x';
-process.env.DB_PATH = join(tmpDir, 'test.db');
-process.env.SESSION_SECURE = 'false';
-process.env.PORT = '13099';
-process.env.APP_BUILD_REVISION = 'acceptance-route-test';
-
-// Dynamic import so env vars are set before module initialization
-const { default: app } = await import('../server/index.js');
-await new Promise(r => setTimeout(r, 400));
-
-const BASE = 'http://localhost:13099';
-
-function cookieHeader(setCookie) {
-  return String(setCookie || '')
-    .split(/,(?=\s*[^;,]+=)/)
-    .map((cookie) => cookie.split(';')[0].trim())
-    .filter(Boolean)
-    .join('; ');
-}
-
-after(() => {
-  rmSync(tmpDir, { recursive: true, force: true });
-  process.exit(0);
+// Start, Portwahl und Abbau liegen im Helfer - inklusive des Grundes, warum
+// hier kein `process.exit(0)` mehr steht.
+const { baseUrl: BASE } = await startTestServer({
+  prefix: 'oikos-setup-test-',
+  env: {
+    SESSION_SECRET: 'test-setup-secret-minimum-32-chars-x',
+    APP_BUILD_REVISION: 'acceptance-route-test',
+  },
 });
 
 // Validation tests run first (DB is empty at this point)

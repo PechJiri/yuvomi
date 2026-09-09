@@ -7,14 +7,12 @@
  * akzeptiert zusätzlich Alt-Hashes aus nicht-normalisierten Eingaben und meldet
  * sie über `needsRehash` zur stillen Migration.
  */
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import bcrypt from 'bcrypt';
 
 import { hashPassword, normalizePassword, verifyPassword } from '../server/utils/password.js';
+import { startTestServer, cookieHeader } from './server-ready.js';
 
 // „Bärenstark1" in beiden Normalformen - gleiche Zeichen, andere Bytes.
 const NFC = 'Bärenstark1'.normalize('NFC');
@@ -65,35 +63,17 @@ test('verifyPassword scheitert an einem Nicht-bcrypt-Hash statt zu werfen', asyn
 // Integration: Login-, Setup- und Change-Password-Routen
 // --------------------------------------------------------
 
-const tmpDir = mkdtempSync(join(tmpdir(), 'yuvomi-password-nfc-test-'));
-
-process.env.SESSION_SECRET = 'test-password-nfc-secret-minimum-32ch';
-process.env.DB_PATH = join(tmpDir, 'test.db');
-process.env.SESSION_SECURE = 'false';
-process.env.PORT = '13100';
-// Der Login-Limiter zählt Fehlversuche; die Suite prüft mehrere davon bewusst.
-process.env.RATE_LIMIT_MAX_ATTEMPTS = '100';
-
-await import('../server/index.js');
-const db = await import('../server/db.js');
-await new Promise((r) => setTimeout(r, 400));
-
-const BASE = 'http://localhost:13100';
-
-after(() => {
-  rmSync(tmpDir, { recursive: true, force: true });
-  // Verzögert beenden: der Server hält Scheduler-Timer offen, ein sofortiges
-  // process.exit() würde die Meldung des letzten Tests abschneiden.
-  setTimeout(() => process.exit(0), 50);
+// Start, Portwahl und Abbau liegen im Helfer - inklusive des Grundes, warum
+// hier kein `process.exit(0)` mehr steht.
+const { baseUrl: BASE } = await startTestServer({
+  name: 'password-normalization',
+  env: {
+    SESSION_SECRET: 'test-password-nfc-secret-minimum-32ch',
+    // Der Login-Limiter zählt Fehlversuche; die Suite prüft mehrere davon bewusst.
+    RATE_LIMIT_MAX_ATTEMPTS: '100',
+  },
 });
-
-function cookieHeader(setCookie) {
-  return String(setCookie || '')
-    .split(/,(?=\s*[^;,]+=)/)
-    .map((cookie) => cookie.split(';')[0].trim())
-    .filter(Boolean)
-    .join('; ');
-}
+const db = await import('../server/db.js');
 
 async function login(username, password) {
   const res = await fetch(`${BASE}/api/v1/auth/login`, {
