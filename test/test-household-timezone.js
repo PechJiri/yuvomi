@@ -289,7 +289,20 @@ test('Guard: der null-Rueckfall steht nur als Default-Parameter', () => {
   // nicht neben dem `function`. Alle neun heutigen Vorkommen stehen einzeilig;
   // wer das aendert, bekommt hier einen Fehlalarm und keinen blinden Fleck,
   // und das ist die richtige Richtung fuer einen Irrtum.
-  const CALL = /(?:householdTimeZone|todayKey)\s*\(\s*null\s*\)/;
+  //
+  // Das `[,)]` am Ende ist nachgetragen: die erste Fassung endete auf `\)` und
+  // verlangte damit `null` DIREKT vor der Klammer. Sie fing `todayKey(null)`
+  // und liess `todayKey(null, from)` durch - dieselbe uebersprungene
+  // Einstellung, nur mit einem zweiten Argument dahinter. Gemessen am
+  // 2026-09-09: `todayKey(database, from)` -> `todayKey(null, from)` an
+  // server/services/birthdays.js:318 liess diese Suite gruen, waehrend die
+  // einargumentige Schwester eine Zeile darunter sie rot machte. Betroffen ist
+  // nur `todayKey`: `householdTimeZone` nimmt genau ein Argument, die
+  // zweiargumentige Schreibweise gibt es dort nicht. In server/ stehen acht
+  // solche Aufrufstellen (schedule-reminders, cycle-reminders, cycle-ics,
+  // calendar-events, pantry-reminders zweimal, birthdays zweimal) - gezaehlt,
+  // nicht geschaetzt.
+  const CALL = /(?:householdTimeZone|todayKey)\s*\(\s*null\s*[,)]/;
   const DECLARES_FN = /\bfunction\b|=>/;
   const offenders = [];
   for (const file of serverFiles()) {
@@ -306,6 +319,14 @@ test('Guard: der null-Rueckfall steht nur als Default-Parameter', () => {
   assert.ok(CALL.test(bad) && !DECLARES_FN.test(bad), 'ein Rumpf-Aufruf muss auffallen');
   const good = 'function dueField(date, time, tz = householdTimeZone(null)) {';
   assert.ok(CALL.test(good) && DECLARES_FN.test(good), 'ein Default darf durchgehen');
+
+  // Und die zweiargumentige Form, ohne die das `[,)]` oben nur eine Behauptung
+  // waere: die beiden Zeilen darueber matchen auch die alte, auf `\)` endende
+  // Fassung, die Schaerfung selbst bliebe also ungeprueft. Gemessen: mit dieser
+  // Zeile faellt das Zurueckdrehen auf `\)` auf, ohne sie nicht.
+  const badTwoArg = 'const key = todayKey(null, from);';
+  assert.ok(CALL.test(badTwoArg) && !DECLARES_FN.test(badTwoArg),
+    'auch zweiargumentig muss ein Rumpf-Aufruf auffallen');
 });
 
 test('Guard: der Outlook-Push traegt keine fest verdrahtete Zone mehr', () => {
