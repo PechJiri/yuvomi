@@ -122,6 +122,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An ingredient written in the household's own digits now counts towards the shopping list.**
+  Moving a meal plan to the shopping list adds up the same ingredient across meals. The server read
+  the quantity with an ASCII-only pattern, so a Persian, Arabic, Hindi or Thai amount - "۲۵۰ g" -
+  matched nothing at all, and the ingredient dropped out of the totals: the list showed it twice
+  underneath itself instead of once with the sum. A household using its own digits quietly got a
+  worse shopping list than one using Latin ones.
+
+  The server has no locale, so it now accepts every digit system rather than one region's. The
+  mapping is derived from `Intl` rather than kept as a table - 770 digit characters across 77
+  systems is not something anyone would keep current by hand. Only real digits count: the one system
+  whose "five" is an ordinary Chinese character is left out, so a `五` in an ingredient stays a word.
+
+  Two details follow from what a character actually means. The Arabic thousands separator says so
+  unambiguously, unlike a comma, so "١٬٠٠٠ g" now reads as a thousand grams; a plain "1,000 g" is
+  left as it was, because there the server cannot tell grouping from a decimal point. And a fraction
+  stays on the text path rather than being read as its numerator - "١/٢ kg" was never a quantity of
+  one, and neither was "1/2 kg", which had been getting that wrong unnoticed.
+
+  Quantities written with foreign characters go through a stricter reading than plain ASCII ones,
+  because they had no behaviour at all before: a grouping has to look like one along its whole
+  length, several groups are read as one number, and a comma inside Bengali or Devanagari digits is
+  refused rather than guessed - it groups there, so reading it as a decimal point would be off by a
+  thousand, and the server cannot know which was meant. Plain ASCII quantities keep reading exactly
+  as they always have; changing that is a decision of its own.
+
 - **An edit made while the list is refreshing is no longer thrown away.** Checking an item off the
   shopping list, or stepping a pantry quantity up or down, marks the row immediately and sends the
   change to the server behind it. Both pages stay usable while a refresh is in flight - after
@@ -189,6 +214,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   items themselves. The list only reloaded its categories, leaving the affected entries under their
   old heading at the bottom of the list. It now reloads the items with them.
 
+- **A fractional ingredient quantity with a stray separator is no longer scaled into a wrong
+  number.** Scaling a recipe reads a leading fraction like "1 1/2 cups" as well as a plain amount.
+  Where a denominator ran straight into a separator - "1/2,5 cup" - only the "1/2" was read, the
+  result was multiplied, and the leftover ",5 cup" was appended, so doubling it produced "1,5 cup":
+  a quantity that looks deliberate and is wrong. The check that already refused this for plain
+  amounts now covers the fraction forms too, and such a line is left exactly as written.
+
 - **Scaling a recipe now reads and writes ingredient quantities in the region that is actually
   set.** Applying a recipe to a meal and changing the servings factor rescales every ingredient, and
   that step parsed the number itself with the comma hard-wired as a decimal point. Under a region
@@ -234,6 +266,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of a litre each, and the 1.000 further along - which is never read - does not make the line
   unreadable. "1,5 kg", "250 g" and "6 x 1 l" keep reading exactly as they
   did.
+
+- **Closing a dialog no longer drops keyboard focus when the button that opened it was re-rendered
+  meanwhile**. The shared modal layer remembers the element that opened it and hands focus back on
+  close. If the page had swapped that button out in the meantime - the category manager re-renders
+  its section after every rename, reorder or new entry, while the dialog is still open - the
+  remembered pointer referred to a node no longer in the document. Calling `focus()` on it does
+  nothing at all, silently: focus fell to `document.body`, and anyone working by keyboard or screen
+  reader lost their place in the page and had to tab in from the top.
+
+  The layer now checks whether the remembered element is still connected, and falls back in two
+  steps: it looks for a live element under the same id, which finds the button that was rebuilt in
+  the same spot, and otherwise puts focus on the page root - the same target the skip link uses. Not
+  a good place, but a place inside the page, which `document.body` is not. The root is made
+  focusable first: the app shell gives it `tabindex="-1"`, but the five auth pages render their own
+  `<main id="main-content">` without one, and focusing an element that cannot take focus is the very
+  no-op this entry is about.
+
+  Measured across the seven callers of the category manager, exactly one - the budget page - puts
+  its button inside the very section it re-renders. The other six keep theirs in a toolbar their
+  handler does not touch, so they were never affected, and the shopping menu turned out to be a
+  non-case: the popover hands focus back to its trigger before the page handler even runs. The fix
+  sits in the shared layer regardless, because the same break arises anywhere a handler re-renders
+  the region an open dialog was opened from - and it fails silently when it does.
 
 - **Paying extra on a loan now shortens the remaining term, not only the balance** (#964). Since
   #954 the remaining principal follows the money you actually paid, but the remaining term beside it
