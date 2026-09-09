@@ -1455,6 +1455,7 @@ function buildItemForm({ mode, item = null }) {
     panel.querySelector('#inv-delete')?.addEventListener('click', async () => {
       await closeSharedModal({ force: true });
       await removeItem(item);
+      refocusAfterRender();
     });
     // `.modal-panel__footer` scoped, NICHT der ganze panel: sonst matcht dies
     // zuerst den Header-X (`.modal-panel__close`, gleiches data-action), der

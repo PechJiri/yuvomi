@@ -562,8 +562,12 @@ test('_doClose fasst nach, und das Nachfassen behaelt seine Wachen', () => {
     'hat die Seite selbst etwas fokussiert, ist ihre Wahl die bessere');
   assert.match(wachen, /if \(activeOverlay\) return;/,
     'sonst risse das Nachfassen den Fokus aus einem Modal, das in derselben Geste aufgegangen ist');
-  assert.match(wachen, /ersatz === ziel/,
-    'findet der zweite Lauf nichts Besseres, darf er den Fokus nicht erneut bewegen');
+  assert.doesNotMatch(wachen, /ersatz === ziel\) return|\|\| ersatz === ziel/,
+    'ein Abbruch bei "derselbe Ersatz" verfehlt den Fall, der hierher fuehrt: das Ziel haelt den '
+    + 'Fokus nicht, ist aber noch verbunden - dann gibt focusRestoreTarget es unveraendert zurueck, '
+    + 'und der Rueckfall auf die Wurzel wuerde nie erreicht');
+  assert.match(wachen, /_fokussiereMitRueckfall\(ersatz\)/,
+    'der Versuch muss durch die Wirkungspruefung mit Rueckfall laufen');
 
   const oeffentlich = src.match(/export function refocusAfterRender\([\s\S]*?\n\}/)?.[0] ?? '';
   assert.match(oeffentlich, /_tryRefocus\(/,

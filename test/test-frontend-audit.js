@@ -15885,6 +15885,29 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
 });
 
 /**
+ * Wie diese Datei das Schliessen des Dialogs NENNT.
+ *
+ * Vier Seiten importieren `closeModal as closeSharedModal` - ein Guard, der auf
+ * den Originalnamen prueft, sieht ihren gesamten Schliess-und-Rendern-Weg nicht
+ * (Review zu #1070). Der Alias steht im Import und ist von dort ablesbar.
+ */
+function schliessNamen(lines) {
+  const namen = new Set(['closeModal']);
+  const quelle = lines.join('\n');
+  const block = quelle.match(/import\s*\{([\s\S]*?)\}\s*from\s*'\/components\/modal\.js'/);
+  if (block) {
+    for (const m of block[1].matchAll(/closeModal\s+as\s+([A-Za-z_]\w*)/g)) namen.add(m[1]);
+  }
+  return namen;
+}
+
+/** Schliesst diese Zeile den Dialog - unter welchem Namen auch immer? */
+function istSchliessen(zeile, namen) {
+  for (const n of namen) if (new RegExp(`\\b${n}\\s*\\(`).test(zeile)) return true;
+  return false;
+}
+
+/**
  * Die modul-lokalen Funktionen, die die Seite neu aufbauen.
  *
  * Ein Guard, der nur `render…()` und `update…List()` als Neuaufbau zaehlt,
@@ -15979,8 +16002,9 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
       // Neutralisieren, sonst zaehlt ein auskommentierter Aufruf als vorhanden.
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
       const wrapper = rendererIn(lines);
+      const schliesst = schliessNamen(lines);
       lines.forEach((zeile, i) => {
-        if (!/closeModal\s*\(/.test(zeile)) return;
+        if (!istSchliessen(zeile, schliesst)) return;
         // NUR DIE EIGENE EBENE. Alles Tiefere steht in einem Callback, der auf
         // diesem Weg gar nicht laeuft - der Undo-Zweig eines Toasts etwa. Wer
         // ihn mitzaehlt, haelt `deletePlan()` in budget-plans.js fuer gedeckt,
@@ -16051,7 +16075,7 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
           const fenster = blockAb(lines, j);
           if (!fenster.some((x) => istNeuaufbau(x, wrapper))) continue;
           // closeModal dazwischen: der synchrone Fall, den der Frame abdeckt.
-          if (fenster.some((x) => /closeModal\s*\(/.test(x))) continue;
+          if (fenster.some((x) => istSchliessen(x, schliessNamen(lines)))) continue;
           if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) continue;
           fehlend.push(`${datei}:${j + 1} (${lines[j].trim().slice(0, 44)})`);
         }

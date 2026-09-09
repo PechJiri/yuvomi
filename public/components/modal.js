@@ -749,7 +749,14 @@ function _tryRefocus(memo, ziel) {
   const frei = document.activeElement === document.body || document.activeElement === ziel;
   if (!frei) return;
   const ersatz = focusRestoreTarget(memo);
-  if (!ersatz || ersatz === ziel) return;
+  if (!ersatz) return;
+  // AUCH WENN DER ERSATZ DASSELBE ELEMENT IST. Bis hierher kommt nur, wer den
+  // Fokus NICHT haelt - ein erneuter Versuch bewegt also nichts, was jemand
+  // gewaehlt haette. Genau das war die Luecke: eine versteckte Zeile bleibt
+  // verbunden, `focusRestoreTarget` gibt sie darum unveraendert zurueck, und
+  // ein `ersatz === ziel`-Abbruch haette den Rueckfall auf die Wurzel nie
+  // erreicht (Review zu #1070). `_fokussiereMitRueckfall` prueft die Wirkung
+  // und weicht aus, wenn der Fokus nicht ankommt.
   _fokussiereMitRueckfall(ersatz);
 }
 
