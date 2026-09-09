@@ -809,3 +809,20 @@ test('der Anlauf ohne Klasse besteht weiter auf Eindeutigkeit', () => {
       'ohne unterscheidende id bleiben zwei Kandidaten - dann die Wurzel statt der falschen');
   });
 });
+
+/* REVIEW ZU #1070: das Ergebnis des Nachfassens gehoert in den Merker zurueck.
+ *
+ * Weicht `_fokussiereMitRueckfall` auf die Wurzel aus, sitzt der Fokus dort -
+ * der Merker zeigte aber weiter auf das alte, abgehaengte Element. Der naechste
+ * Lauf urteilte damit ueber ein Ziel, das es nicht mehr gibt, und verlor den
+ * frisch wieder aufgebauten Knopf.
+ */
+test('_tryRefocus schreibt das tatsaechlich gesetzte Ziel in den Merker zurueck', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const fn = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, '_tryRefocus nicht gefunden');
+  assert.match(fn, /const gesetzt = _fokussiereMitRueckfall\(ersatz\)/,
+    'der Rueckgabewert traegt, WO der Fokus wirklich gelandet ist - er darf nicht verfallen');
+  assert.match(fn, /_lastRestore\.ziel = gesetzt/,
+    'ohne das Zurueckschreiben urteilt der naechste Lauf ueber ein Ziel, das es nicht mehr gibt');
+});

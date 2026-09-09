@@ -1,5 +1,5 @@
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, advancedSection, refocusAfterRender } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, advancedSection } from '/components/modal.js';
 import { stagger, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
 import { t, formatDate, parseDateInput, isDateInputValid, getLocale } from '/i18n.js';

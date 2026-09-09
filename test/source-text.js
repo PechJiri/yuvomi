@@ -74,10 +74,14 @@ export function withoutBlockComments(src) {
  * passiert, die Gegenprobe zum Guard blieb still. Toter Code besteht einen
  * Textguard, solange der Guard den Text nicht erst neutralisiert.
  *
- * `http://` bleibt heil: der Schnitt greift nur bei einem `//`, dem kein
- * Doppelpunkt vorausgeht. Ohne das verschluckte die Regel den Rest einer Zeile
- * mit einer URL darin - und ein Guard, der eine vorhandene Zeile nicht mehr
- * sieht, meldet einen Fehler, den es nicht gibt.
+ * `http://` bleibt heil: der Schnitt greift nur bei einem `//`, dem weder ein
+ * Doppelpunkt noch ein Backslash vorausgeht. Ohne den Doppelpunkt verschluckte
+ * die Regel den Rest einer Zeile mit einer URL darin; ohne den Backslash
+ * dieselbe Zeile mit einem Regex-Literal wie `/^https?:\/\//i`, dessen
+ * escapter Schraegstrich mit dem schliessenden ein `//` bildet (gemessen an
+ * `documents.js`, `shopping.js` und `personal-feeds.js`). Ein Guard, der eine
+ * vorhandene Zeile nicht mehr sieht, meldet einen Fehler, den es nicht gibt -
+ * oder uebersieht einen, den es gibt.
  *
  * Blockkommentare werden durch Leerzeichen ersetzt, nicht entfernt, damit jede
  * Zeile ihre Nummer behaelt. Der Fixpunkt hat denselben Grund wie oben.
@@ -91,5 +95,5 @@ export function withoutCommentsKeepingLines(src) {
     previous = out;
     out = out.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
   } while (out !== previous);
-  return out.split('\n').map((z) => z.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n');
+  return out.split('\n').map((z) => z.replace(/(^|[^:\\])\/\/.*$/, '$1')).join('\n');
 }

@@ -804,7 +804,13 @@ function _tryRefocus(memo, ziel) {
   // ein `ersatz === ziel`-Abbruch haette den Rueckfall auf die Wurzel nie
   // erreicht (Review zu #1070). `_fokussiereMitRueckfall` prueft die Wirkung
   // und weicht aus, wenn der Fokus nicht ankommt.
-  _fokussiereMitRueckfall(ersatz);
+  const gesetzt = _fokussiereMitRueckfall(ersatz);
+  // DAS ERGEBNIS ZURUECKSCHREIBEN. Sonst zeigt der Merker weiter auf das alte,
+  // inzwischen abgehaengte Element, waehrend der Fokus laengst auf der Wurzel
+  // sitzt - und der naechste Lauf urteilt ueber ein Ziel, das es nicht mehr
+  // gibt. Genau so verlor der spaetere `refocusAfterRender()` den frisch
+  // wieder aufgebauten Knopf (Review zu #1070).
+  if (gesetzt && _lastRestore) _lastRestore.ziel = gesetzt;
 }
 
 function _refocusIfDropped(memo, ziel) {

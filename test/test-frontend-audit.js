@@ -16341,3 +16341,47 @@ test('rendererIn erkennt exportierte Funktionen als Grenze', () => {
     'ohne das export-Praefix in der Grenze faellt der Rumpf von `render` in den Block davor, '
     + 'und `harmlos` gilt als Renderer, obwohl sie nichts rendert');
 });
+
+
+/* DER KOMMENTAR-SCHNITT DARF KEIN REGEX-LITERAL ZERSCHNEIDEN.
+ *
+ * `/^https?:\/\//i` enthaelt ein `//` - der escapte Schraegstrich und der
+ * schliessende bilden eines -, und ein Schnitt dort verschluckt den Rest der
+ * Zeile. Steht darauf ein `refocusAfterRender()` oder ein Rendern, wird es fuer
+ * jeden Scanner unsichtbar. Im Repo kommt das Muster mehrfach vor
+ * (documents.js, shopping.js, personal-feeds.js).
+ */
+test('withoutCommentsKeepingLines laesst Regex-Literale und URLs heil', () => {
+  const mitRegex = String.raw`if (/^https?:\/\//i.test(u)) refocusAfterRender();`;
+  assert.equal(withoutCommentsKeepingLines(mitRegex), mitRegex,
+    'ein Regex-Literal mit Schraegstrichen darf die Zeile nicht abschneiden - sonst wird alles '
+    + 'dahinter fuer die Ratchets unsichtbar');
+
+  const mitUrl = "const u = 'http://x'; renderAll();";
+  assert.equal(withoutCommentsKeepingLines(mitUrl), mitUrl, 'eine URL ist kein Kommentar');
+
+  assert.equal(withoutCommentsKeepingLines('renderAll(); // weg').trim(), 'renderAll();',
+    'ein echter Zeilenkommentar muss weiter fallen');
+});
+
+/* EIN IMPORT OHNE AUFRUF IST TOTER CODE.
+ *
+ * Beim Entfernen der toten Aufrufe blieb in birthdays.js der Import stehen
+ * (Review zu #1070). Er schadet nicht, aber er behauptet eine Beteiligung, die
+ * es nicht gibt - und beim naechsten Lesen sucht jemand den Aufruf.
+ */
+test('wer refocusAfterRender importiert, ruft es auch', () => {
+  const tot = [];
+  for (const dir of ['../public/pages', '../public/components', '../public/settings/pages']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const src = withoutCommentsKeepingLines(read(`${dir}/${datei}`));
+      const importiert = /import\s*\{[^}]*\brefocusAfterRender\b[^}]*\}\s*from\s*'\/components\/modal\.js'/.test(src);
+      if (!importiert) continue;
+      if (/refocusAfterRender\s*\(/.test(src)) continue;
+      tot.push(datei);
+    }
+  }
+  assert.deepEqual(tot, [],
+    `Diese Dateien importieren refocusAfterRender, ohne es zu rufen:\n  ${tot.join('\n  ')}`);
+});
