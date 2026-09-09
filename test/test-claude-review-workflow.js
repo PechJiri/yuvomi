@@ -1,13 +1,16 @@
 /**
  * Modul: Review-Workflow-Guard
- * Zweck: Die vier Bedingungen, ohne die `claude-review` durchlaeuft und nichts
+ * Zweck: Die Bedingungen, ohne die `claude-review` durchlaeuft und nichts
  *        hinterlaesst, stehen fest im Workflow. Jede davon hat schon einmal
  *        mehrere Anlaeufe gekostet, und keine faellt beim Lesen der Datei auf.
+ *        Seit dem 09.09.2026 kommt die Frage dazu, zu WELCHEM Stand die Review
+ *        gesprochen hat - das Urteil darueber faellt
+ *        `.github/scripts/review-verdict.mjs` und haengt in `test:review-proof`.
  * Ausfuehren: npm run test:claude-review-workflow
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const workflow = readFileSync(
   new URL('../.github/workflows/claude-code-review.yml', import.meta.url),
@@ -49,5 +52,89 @@ test('der Nachweis-Schritt prueft die Wirkung, nicht den Ablauf', () => {
   // Ein gruener Haken fuer eine Pruefung, die nie stattgefunden hat, ist
   // schlimmer als gar keiner: er laedt dazu ein, sich auf ihn zu verlassen.
   assert.match(workflow, /Die Review muss gesprochen haben/);
-  assert.match(workflow, /exit 1/);
+  assert.match(workflow, /node \.github\/scripts\/review-verdict\.mjs/);
+});
+
+test('das Urteil liegt ausserhalb des Workflows und ist damit gegenprobierbar', () => {
+  // Eine Urteilslogik, die nur in einem YAML-Schritt lebt, laesst sich nicht
+  // gegen echte Nutzdaten fahren - und ein Waechter, der gruen bleibt, wenn er
+  // rot sein muesste, ist genau die Klasse, um die es hier geht.
+  assert.ok(
+    existsSync(new URL('../.github/scripts/review-verdict.mjs', import.meta.url)),
+    'der Nachweis ruft ein Skript auf, das es nicht gibt'
+  );
+  assert.match(workflow, /--seit "\$SEIT"/);
+  assert.match(workflow, /--ergebnis "\$EXECUTION_FILE"/);
+});
+
+test('der Nachweis zaehlt nicht mehr ueber die Lebensdauer des PR', () => {
+  // DAS WAR DER BLINDE FLECK (#1066, 09.09.2026): drei Zaehler ueber die ganze
+  // Lebensdauer addieren und nur bei Summe null rot werden. Weil das Plugin
+  // abbricht, SOBALD ein claude-Kommentar am PR steht, faerbte genau dieser
+  // Kommentar danach jeden Abbruch gruen. Drei Pushes gingen so durch.
+  assert.doesNotMatch(workflow, /issue \+ review \+ inline/);
+  assert.doesNotMatch(workflow, /-eq 0/);
+});
+
+test('gemessen wird gegen den Laufbeginn, nicht gegen die Commit-Zeit', () => {
+  // DIE COMMIT-ZEIT WAERE DIE NAHELIEGENDE UND FALSCHE WAHL: ein Commit entsteht
+  // oft lange vor seinem Push. Wer B um 10:02 committet, um 10:08 die Review zu
+  // A bekommt und B erst um 10:09 pusht, haette einen Kommentar von 10:08
+  // "nach" B liegen - und der Nachweis haette B fuer geprueft gehalten. Das
+  // waere derselbe blinde Fleck in neuer Form.
+  assert.match(workflow, /^\s+id: stand$/m);
+  assert.match(workflow, /seit=\$\(date -u \+%Y-%m-%dT%H:%M:%SZ\)/);
+  assert.doesNotMatch(workflow, /committer\.date/);
+  assert.match(workflow, /SEIT: \$\{\{ steps\.stand\.outputs\.seit \}\}/);
+});
+
+test('ob ein Stand schon geprueft ist, entscheidet die Commit-Bindung', () => {
+  // Fuer diese zweite Frage ist die Uhr das falsche Mittel: Reviews und
+  // Inline-Anmerkungen tragen die SHA, zu der sie gehoeren. Fehlt sie, laeuft
+  // die Review beim Rerun lieber noch einmal - das kostet, luegt aber nicht.
+  assert.match(workflow, /\.commit_id == env\.HEAD_SHA/);
+  assert.match(workflow, /\(\.original_commit_id \/\/ \.commit_id\) == env\.HEAD_SHA/);
+});
+
+test('der Prompt hebt die Abbruchbedingung auf, sonst prueft nur der erste Push', () => {
+  // Ohne diesen Absatz bricht das Plugin ab dem zweiten Push zugesichert ab,
+  // dann waere ein Nachweis, der pro Push zaehlt, dauerhaft rot. Die Aufhebung
+  // und die engere Zaehlung gehoeren zusammen; eine allein ist ein anderer
+  // blinder Fleck.
+  assert.match(workflow, /ABBRUCHBEDINGUNG[^\n]*GILT\s*\n\s*HIER NICHT/);
+  assert.match(workflow, /github\.event\.pull_request\.head\.sha/);
+});
+
+test('ein Rerun desselben Standes kostet keine zweite Review', () => {
+  assert.match(workflow, /steps\.stand\.outputs\.geprueft != 'true'/);
+});
+
+test('ein Lauf je PR, und zwar der zum neuesten Stand', () => {
+  // Seit jeder Push wirklich geprueft wird, stehen sonst mehrere echte Laeufe
+  // gleichzeitig in der Luft. An #1066 lieferte einer nach 16m55s seinen Befund
+  // zu einem Commit, der da schon zwei Pushes alt war.
+  assert.match(workflow, /^concurrency:$/m);
+  assert.match(workflow, /cancel-in-progress: true/);
+});
+
+test('der Selbst-Uebersprung wird an Zeichengleichheit erkannt', () => {
+  // Die Action vergleicht den Inhalt dieser Datei gegen den Default-Branch und
+  // ueberspringt sich bei Abweichung - mit outcome=success, also demselben
+  // stillen Gruen, das der Nachweis aufdeckt. ZWEI Faelle fallen darunter: ein
+  // PR, der die Datei aendert, UND ein Branch, der sie nicht anfasst, aber
+  // aelter ist als ihre letzte Aenderung. Nach jedem Zug hier ist das
+  // schlagartig jeder offene Branch. Die alte Probe las die Dateiliste des PR
+  // und kannte nur den ersten Fall; der zweite waere rot geworden, ohne dass
+  // jemand etwas falsch gemacht hat.
+  assert.match(workflow, /contents\/\$DATEI\?ref=\$HEAD_SHA/);
+  assert.match(workflow, /contents\/\$DATEI\?ref=\$BASIS/);
+  assert.match(workflow, /\[ "\$kopf" = "\$basis" \]/);
+});
+
+test('Entwurf und Bot-PR sind vom Nachweis ausgenommen', () => {
+  // Bei beiden bricht das Plugin zugesichert ab. Sie stehen im Workflow und
+  // nicht im Urteil, weil der Workflow sie sicher weiss, waehrend das Urteil
+  // sie nur aus dem result-Text raten koennte.
+  assert.match(workflow, /github\.event\.pull_request\.draft != true/);
+  assert.match(workflow, /github\.event\.pull_request\.user\.type != 'Bot'/);
 });
