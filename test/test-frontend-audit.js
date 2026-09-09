@@ -10166,6 +10166,33 @@ test('kein Nutzer des Category-Managers meldet sich vom Aenderungs-Ereignis ab',
   }
 });
 
+// Zwei Folgen davon, dass die Auffrischung jetzt WAEHREND des offenen Managers
+// laeuft statt nach dem Schliessen. Beide traf der Review zu #1066, beide sind
+// je Seite verschieden zu loesen - darum zwei benannte Sonden statt einer Regel.
+
+// Loeschbar ist genau die UNBENUTZTE Kategorie, also gerade die, nach der jemand
+// gefiltert haben kann. Bleibt `activeCategory` danach auf ihrem Key stehen,
+// findet die Chipleiste keinen Chip zum Hervorheben - auch „Alle" nicht - und
+// die Liste filtert weiter jeden Kontakt weg: eine leere Seite ohne sichtbaren
+// Grund.
+test('der Kontakte-Filter loest sich von einer Kategorie, die geloescht wurde', () => {
+  const fn = read('../public/pages/contacts.js').match(/function openContactCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'openContactCategoryManager nicht gefunden');
+  assert.match(fn, /state\.activeCategory[\s\S]*?state\.categories\.some\([\s\S]*?state\.activeCategory\s*=\s*null/,
+    'der Handler muss den aktiven Filter loesen, wenn seine Kategorie nicht mehr in der frischen Liste steht');
+});
+
+// Der Knopf, der den Manager oeffnet, liegt in `#budget-body` - genau dem
+// Bereich, den `renderBody()` austauscht. Nach dem Loeschen hat
+// `confirmOverModal` den Fokus schon dorthin zurueckgegeben, bevor der Handler
+// laeuft; ohne Nachfassen faellt er auf `document.body`.
+test('der Budget-Manager haelt den Fokus auf dem Knopf, den er austauscht', () => {
+  const fn = read('../public/pages/budget.js').match(/function openCategoryManager\(\)[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'openCategoryManager nicht gefunden');
+  assert.match(fn, /document\.activeElement[\s\S]*?renderBody\(\)[\s\S]*?#budget-manage-categories'\)\?\.focus\(\)/,
+    'nach renderBody() muss der Fokus auf den neuen #budget-manage-categories nachgezogen werden');
+});
+
 // Die fuenf Dialoge aus dem urspruenglichen Befund bleiben namentlich verankert:
 // die Regel oben wuerde auch gruen, wenn jemand `danger: true` entfernte, statt
 // die Folgen zu nennen. Bei einem geloeschten Menschen oder einem

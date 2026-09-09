@@ -364,6 +364,15 @@ function openContactCategoryManager() {
     try {
       const res = await api.get('/contacts/categories');
       state.categories = res.data ?? [];
+      // Der aktive Filter kann auf die eben geloeschte Kategorie zeigen -
+      // loeschbar ist genau die UNBENUTZTE, also gerade die, nach der jemand
+      // gefiltert haben kann. `renderCategoryFilters` faende dann keinen Chip
+      // zum Hervorheben (auch „Alle" nicht, denn `activeCategory` ist gesetzt),
+      // waehrend `filterContacts` weiter jeden Kontakt wegfiltert: eine leere
+      // Seite, der man nicht ansieht, warum sie leer ist.
+      if (state.activeCategory && !state.categories.some((c) => c.key === state.activeCategory)) {
+        state.activeCategory = null;
+      }
       renderCategoryFilters();
       renderList();
     } catch { /* Fehler wurde bereits vom Manager als Toast angezeigt */ }

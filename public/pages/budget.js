@@ -2040,7 +2040,13 @@ function openCategoryManager() {
   // (siehe `_notifyChanged` in components/category-manager.js).
   const onChanged = async () => {
     await loadBudgetMeta();
+    // `renderBody()` baut `#budget-body` neu auf - und darin liegt der Knopf,
+    // der diesen Manager geoeffnet hat. Nach dem Loeschen hat `confirmOverModal`
+    // den Fokus schon dorthin zurueckgegeben, bevor dieser Handler laeuft; ohne
+    // das Nachfassen faellt er beim Austausch auf `document.body`.
+    const hadFocus = document.activeElement === _container?.querySelector('#budget-manage-categories');
     renderBody();
+    if (hadFocus) _container?.querySelector('#budget-manage-categories')?.focus();
   };
   openSharedModal({
     title: t('budget.manageCategories'),
