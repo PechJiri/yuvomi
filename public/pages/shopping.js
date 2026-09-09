@@ -271,6 +271,49 @@ function resetPillMachine() {
   pillOwnerContainer = null;
 }
 
+/**
+ * Abhak-Vorgaenge, die noch beim Server sind: id -> { value, seq, settledAt }.
+ *
+ * Die Liste bleibt bedienbar, waehrend eine Auffrischung laeuft (seit #1066
+ * auch die des Kategorie-Managers). Ein GET, der VOR dem PATCH abging, traegt
+ * den alten Wert; seine Antwort ersetzte die eben abgehakte Zeile mit dem
+ * Serverstand von vorher, und der PATCH-Erfolg trug nichts nach - er vibriert
+ * nur. Zeile und Zaehler standen danach auseinander, und das naechste Abhaken
+ * schickte den falschen Wert.
+ *
+ * Eine Folgenummer je Ladeanfrage faengt das NICHT: die ueberholende Antwort
+ * ist die neueste Antwort, sie ist nur aelter als die Bearbeitung. Und eine
+ * Generation je Mutation haette die ganze Auffrischung verworfen - samt der
+ * frischen Kategorienamen, fuer die sie laeuft.
+ */
+const pendingChecks = new Map();
+/** Monotone Folgenummer, damit ein zweites Antippen das erste ueberstimmt. */
+let _checkSeq = 0;
+/**
+ * Monotone Nummer je Ladevorgang.
+ *
+ * Sie beantwortet die einzige Frage, an der ein bestaetigter Merker haengt:
+ * hat der Server den Wert schon gehabt, als er DIESE Antwort las? Ein Merker,
+ * der beim PATCH-Erfolg verschwindet, hilft nicht - die ueberholende Antwort
+ * kommt ja gerade DANACH.
+ */
+let _loadSeq = 0;
+
+/**
+ * Ausstehende Abhak-Werte ueber einen frisch geladenen Bestand legen.
+ *
+ * Nur die Zeilen mit offenem Schreibvorgang; alles andere kommt unveraendert
+ * vom Server, denn genau dafuer laeuft die Auffrischung.
+ */
+function applyPendingChecks(items) {
+  if (!pendingChecks.size) return items;
+  for (const item of items) {
+    const pending = pendingChecks.get(item.id);
+    if (pending) item.is_checked = pending.value;
+  }
+  return items;
+}
+
 async function toggleShoppingItem(id, checked, container) {
   const newVal = checked ? 0 : 1;
 
@@ -287,13 +330,35 @@ async function toggleShoppingItem(id, checked, container) {
     renderTabs(container);
   }
 
+  // Ab hier haelt der Merker den Wert, den der Server bekommen soll - auch
+  // wenn `state.items` im Rundlauf komplett getauscht wird.
+  const seq = ++_checkSeq;
+  pendingChecks.set(id, { value: newVal, seq });
+
   try {
     await api.patch(`/shopping/items/${id}`, { is_checked: newVal });
+    // NICHT loeschen, nur als bestaetigt vermerken - und mit der Nummer des
+    // zuletzt begonnenen Ladevorgangs. Ein Laden, das VOR dieser Bestaetigung
+    // begann, liest beim Server noch den Stand von vorher; erst ein danach
+    // begonnenes traegt den neuen Wert und raeumt den Merker weg (loadItems).
+    // Nur der EIGENE Eintrag: ein zweites Antippen im Rundlauf hat schon den
+    // naechsten Wert hinterlegt, und der gilt.
+    const entry = pendingChecks.get(id);
+    if (entry?.seq === seq) entry.settledAt = _loadSeq;
     vibrate(10);
   } catch (err) {
-    if (item) {
-      item.is_checked = checked;
-      updateItemRow(container, item);
+    // Steht schon ein neuerer Wunsch an, gehoert weder der Ruecksprung noch
+    // die Meldung hierher: dessen eigener Ausgang entscheidet, was die Zeile
+    // zeigt, und zwei Rueckspruenge nacheinander landeten beim falschen Wert.
+    if (pendingChecks.get(id)?.seq !== seq) return;
+    pendingChecks.delete(id);
+    // Die Zeile aus dem AKTUELLEN Bestand holen: eine Auffrischung im Rundlauf
+    // hat `state.items` womoeglich ersetzt, und das oben festgehaltene Objekt
+    // haengt dann an keiner Liste mehr - der Ruecksprung liefe ins Leere.
+    const current = state.items.find((i) => i.id === id);
+    if (current) {
+      current.is_checked = checked;
+      updateItemRow(container, current);
       updateCheckedActions(container);
       updateListCounter(state.activeListId, 0, newVal ? -1 : 1);
       renderTabs(container);
@@ -2051,6 +2116,7 @@ async function loadStores() {
 }
 
 async function loadItems(listId) {
+  const startedAt  = ++_loadSeq;
   const data       = await api.get(`/shopping/${listId}/items`);
   // Ein Rundlauf kann von einem Listenwechsel ueberholt werden. Alle sechs
   // Aufrufer laden die GERADE aktive Liste - `switchList` setzt
@@ -2062,7 +2128,15 @@ async function loadItems(listId) {
   // Auffrischung des Kategorie-Managers laeuft, waehrend die Seite wieder
   // bedienbar ist.
   if (state.activeListId !== listId) return;
-  state.items      = data.data ?? [];
+  // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte den Wert
+  // beim Lesen schon, seine Antwort ist die frischere Wahrheit - auch wenn
+  // inzwischen jemand anderes die Zeile wieder zurueckgeholt hat.
+  for (const [itemId, entry] of pendingChecks) {
+    if (entry.settledAt != null && entry.settledAt < startedAt) pendingChecks.delete(itemId);
+  }
+  // Alles Uebrige ueberlebt den Tausch: die Antwort kann einen Schnappschuss
+  // tragen, der aelter ist als die laufende Bearbeitung.
+  state.items      = applyPendingChecks(data.data ?? []);
   state.activeList = data.list ?? null;
   // Kategorien aus API-Antwort übernehmen wenn vorhanden (immer aktuell)
   if (data.categories?.length) state.categories = data.categories;
@@ -2602,4 +2676,11 @@ export const __test = {
   getPillPhaseForTest: () => pillPhase,
   setPillInteractingForTest: (value) => { pillInteracting = value; },
   setBulkPillHoldMsForTest: (ms) => { BULK_PILL_HOLD_MS_OVERRIDE = ms; },
+  // Abhaken gegen ueberholende Auffrischung: nur als Verhaltenstest pruefbar,
+  // weil der Fehler in der REIHENFOLGE zweier Rundlaeufe steckt und nicht im
+  // Vorhandensein einer Wache. Beide Wege gehoeren dazu - der Merker wird beim
+  // Abhaken gesetzt und beim Laden gelesen.
+  toggleShoppingItem,
+  loadItems,
+  pendingChecks,
 };

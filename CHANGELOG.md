@@ -122,6 +122,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An edit made while the list is refreshing is no longer thrown away.** Checking an item off the
+  shopping list, or stepping a pantry quantity up or down, marks the row immediately and sends the
+  change to the server behind it. Both pages stay usable while a refresh is in flight - after
+  managing categories or storage locations, after switching lists, after importing a meal plan. A
+  refresh that had read the server *before* the edit arrived back *after* it, carrying the older
+  value, and overwrote what had just been changed. The row jumped back, the counter beside the list
+  tab disagreed with it, and the next tap sent the wrong value on - unchecking something the server
+  considered unchecked already.
+
+  The item was never actually lost - the server had it - which is what made this hard to see: a
+  reload showed the right thing, so the wrong row only lasted until the next visit to the page.
+
+  Pending edits now survive a refresh. Each one is remembered until a refresh comes back that
+  demonstrably started after the server confirmed it, and only the affected rows are re-applied on
+  top of the fresh data. Everything else in the response lands untouched, so the refresh still
+  delivers what it ran for. Discarding the whole response instead would have taken the renamed
+  categories with it - the very thing the refresh exists to bring.
+
+  In the pantry the pending step also lost track of its own row: a refresh replaces the stored items
+  with new objects, and the delayed request still held the old one, so the server's answer was
+  written into an item that no longer belonged to anything. The row and the item are now looked up
+  again when the answer arrives.
+
 - **Deleting a category now updates the page behind the dialog**. Every module that offers
   "manage categories" kept showing the category you had just deleted: the filter chips in Contacts,
   the grouping in Shopping, the storage locations in Pantry, the places and categories in Inventory,

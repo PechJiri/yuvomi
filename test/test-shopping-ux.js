@@ -576,3 +576,103 @@ test('parseShoppingQuantity: der Trenner der Region bleibt der Trenner, auch nac
     assert.deepEqual(__test.parseShoppingQuantity('1.000 g'), { quantity: 1, unit: 'g' });
   });
 });
+
+// --------------------------------------------------------
+// Abhaken gegen eine ueberholende Auffrischung
+//
+// WARUM ALS REIHENFOLGE-TEST: der Fehler ist nicht „es fehlt eine Wache",
+// sondern „die Antwort trifft NACH der Bearbeitung ein". Eine Textprobe auf das
+// Vorhandensein von `pendingChecks` bliebe gruen, auch wenn der Merker zum
+// falschen Zeitpunkt geraeumt wird - und genau daran ist die erste Fassung
+// dieses Fixes gescheitert (Loeschen beim PATCH-Erfolg kam zu frueh). Die Tests
+// unten stellen die Reihenfolge deshalb wirklich: der GET wird von Hand
+// aufgeloest, nachdem der PATCH durch ist.
+// --------------------------------------------------------
+
+/** Container ohne DOM: alle Render-Helfer steigen an ihrem Null-Guard aus. */
+function makeNullContainer() {
+  return { querySelector: () => null, querySelectorAll: () => [] };
+}
+
+/** Ein von Hand aufloesbares Versprechen - damit steht die Reihenfolge fest. */
+function deferred() {
+  let resolve;
+  const promise = new Promise((res) => { resolve = res; });
+  return { promise, resolve };
+}
+
+function milk(isChecked) {
+  return { id: 10, name: 'Milch', is_checked: isChecked, category: 'Sonstiges', sort_order: 0 };
+}
+
+test('Abhaken ueberlebt eine Auffrischung, deren GET aelter ist als der PATCH', async () => {
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  const gate = deferred();
+  globalThis.__apiStub = {
+    // Der Schnappschuss dieser Auffrischung ist VOR dem Abhaken entstanden.
+    get: () => gate.promise,
+    patch: async () => ({ data: null }),
+  };
+
+  // 1. Eine Auffrischung geht los (Kategorie-Manager, Ladenverwaltung, Import).
+  const loading = __test.loadItems(1);
+  // 2. Die Liste ist bedienbar: der Nutzer hakt ab, der PATCH ist durch.
+  await __test.toggleShoppingItem(10, 0, makeNullContainer());
+  assert.equal(__test.state.items[0].is_checked, 1, 'optimistisch abgehakt');
+  // 3. ERST JETZT trifft die alte Antwort ein.
+  gate.resolve({ data: [milk(0)] });
+  await loading;
+
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'die alte Antwort darf die Bearbeitung nicht zurueckdrehen');
+  delete globalThis.__apiStub;
+});
+
+test('ein spaeter begonnenes Laden raeumt den Merker - fremde Aenderungen kommen durch', async () => {
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  globalThis.__apiStub = { get: async () => ({ data: [milk(0)] }), patch: async () => ({ data: null }) };
+  await __test.toggleShoppingItem(10, 0, makeNullContainer());
+  assert.equal(__test.state.items[0].is_checked, 1);
+
+  // Dieses Laden beginnt NACH der Bestaetigung: sein Schnappschuss kennt den
+  // Wert, seine Antwort ist die frischere Wahrheit. Haelt der Merker hier noch,
+  // koennte niemand im Haushalt den Artikel je wieder zurueckholen.
+  await __test.loadItems(1);
+  assert.equal(__test.state.items[0].is_checked, 0,
+    'ein Merker, der nie geraeumt wird, macht den Server unwirksam');
+  assert.equal(__test.pendingChecks.size, 0, 'kein Rest im Merker');
+  delete globalThis.__apiStub;
+});
+
+test('scheitert der PATCH, bleibt kein Merker stehen', async () => {
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  const toasts = [];
+  global.window.yuvomi.showToast = (msg, tone) => toasts.push([msg, tone]);
+  globalThis.__apiStub = {
+    get: async () => ({ data: [milk(0)] }),
+    patch: async () => { throw Object.assign(new Error('nope'), { data: { error: 'kaputt' } }); },
+  };
+
+  await __test.toggleShoppingItem(10, 0, makeNullContainer());
+  assert.equal(__test.state.items[0].is_checked, 0, 'zurueckgedreht');
+  assert.equal(__test.pendingChecks.size, 0, 'ein gescheiterter Wunsch darf nichts auftragen');
+  assert.equal(toasts.length, 1);
+
+  // Und die naechste Auffrischung traegt nichts nach.
+  await __test.loadItems(1);
+  assert.equal(__test.state.items[0].is_checked, 0);
+  delete globalThis.__apiStub;
+  delete global.window.yuvomi.showToast;
+});
