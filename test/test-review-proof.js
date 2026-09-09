@@ -338,6 +338,63 @@ test('eine Zusammenfassung ohne SHA zaehlt ueber den Postbefehl des Laufs', () =
   assert.equal(urteil.grund, 'postbefehl');
 });
 
+/* Und dieselbe Vorfahrt gegen die ABBRUCHBEHAUPTUNG - der Fall aus #1082.
+ *
+ * Am 09.09. liefen an einem PR zwei Laeufe hintereinander:
+ *
+ *   Lauf 1  num_turns 21, Verweigerungen 8, Postbefehle 1 von 5 ohne Fehler
+ *   Rerun   num_turns 4,  Verweigerungen 0, Postbefehle 0 von 0
+ *
+ * Der Rerun ist der echte Abbruch und gehoert rot. Lauf 1 hatte geprueft und
+ * gepostet - der Kommentar steht bis heute am PR - und wurde trotzdem rot,
+ * weil sein result-Text nebenbei "already ... commented" sagte. Ein Abbruch im
+ * Tor hinterlaesst aber nichts; wer nachweislich gepostet hat, hat nicht im Tor
+ * abgebrochen.
+ */
+test('ein bewiesener Postbefehl schlaegt die Abbruchbehauptung (#1082)', () => {
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: ABBRUCH,                       // derselbe Text, der #1066 rot faerbt
+    aeusserungen: [],
+    gepostet: zaehleGepostet(fixture.strom.gepostet)
+  });
+  assert.equal(urteil.ausgang, 'geprueft',
+    'ein Lauf, der nachweislich gepostet hat, kann nicht im Tor abgebrochen sein');
+  assert.equal(urteil.grund, 'postbefehl');
+});
+
+test('ein GESCHEITERTER Postbefehl rettet die Abbruchbehauptung nicht', () => {
+  // Die Gegenrichtung, damit die Ausnahme oben nicht zur Tuer wird: `erfolge`
+  // zaehlt nur `tool_result` ohne `is_error`. Ein Versuch allein genuegt nicht.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: ABBRUCH,
+    aeusserungen: [],
+    gepostet: zaehleGepostet(fixture.strom.post_gescheitert)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'schon-kommentiert');
+});
+
+test('die Meldung nennt die Zahl, die der Schritt darueber ausgegeben hat', () => {
+  // Hier stand pauschal "nichts hinterlassen", waehrend der Job-Log zwei Zeilen
+  // hoeher "Aeusserungen von claude seit dem Laufbeginn: 1" ausgab. Zwei Zeilen
+  // desselben Logs widersprachen sich, und der Leser sucht dann falsch.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    ergebnis: fixture.ergebnisse['stumm-unbekannt'],
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z' }],
+    gepostet: zaehleGepostet(fixture.strom.nichts_gepostet)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.neu, 1);
+  assert.match(urteil.meldung, /1 Aeusserung\(en\) nach dem Laufbeginn/);
+  assert.ok(!/in diesem Lauf nichts hinterlassen/.test(urteil.meldung),
+    'die Meldung darf nicht behaupten, es sei gar nichts gesagt worden');
+});
+
 test('ZUORDNUNG AUS ABWESENHEIT TRAEGT NICHT: "Done." bleibt rot', () => {
   // Der Befund aus der zweiten Codex-Runde. Ein Lauf, der still mit "Done."
   // endet, hat nichts gepostet - eine fremde Zusammenfassung (Mention-Pfad oder

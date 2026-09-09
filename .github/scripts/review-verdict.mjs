@@ -200,7 +200,31 @@ export function beurteile({
   if (ergebnis.subtype && ergebnis.subtype !== 'success') {
     return stumm('lauf-fehler', neu, seit, ergebnis);
   }
-  if (bejaht(text, SCHON_KOMMENTIERT)) return stumm('schon-kommentiert', neu, seit, ergebnis);
+  // ... MIT EINER AUSNAHME, und nur mit dieser einen: hat DIESER Lauf
+  // nachweislich gepostet, kann er nicht im Tor abgebrochen sein. Der Abbruch
+  // heisst "ich hoere auf, bevor ich anfange" - er hinterlaesst nichts, und der
+  // Strom eines solchen Laufs traegt entsprechend keinen Postbefehl. Gemessen
+  // an #1082 am 09.09., zwei Laeufe am selben PR:
+  //
+  //   Lauf 1  num_turns 21, Verweigerungen 8, Postbefehle 1 von 5 ohne Fehler
+  //           -> hat geprueft UND gepostet, und wurde trotzdem rot, weil sein
+  //              result-Text nebenbei "already ... commented" sagte
+  //   Rerun   num_turns 4, Verweigerungen 0, Postbefehle 0 von 0
+  //           -> der echte Abbruch. Bleibt rot, und muss es.
+  //
+  // Die Prosa gegen den eigenen Strom des Laufs zu stellen ist genau die
+  // Abwaegung, die dieses Modul sonst ueberall zugunsten des Stroms trifft
+  // ("DER EINE BELEG, DER NICHT AUF PROSA BERUHT", weiter unten). Ein
+  // gescheiterter Postbefehl rettet nichts: `erfolge` zaehlt nur `tool_result`
+  // ohne `is_error`.
+  //
+  // NICHT verallgemeinern: `WARTET_AUF_AGENTEN` bleibt bewusst VOR den Belegen
+  // stehen. Dort sagt der Lauf, dass er noch nicht fertig ist, und eine
+  // unterwegs abgesetzte Anmerkung belegt dann nur einen Teil - hier dagegen
+  // widerspricht der Strom der Behauptung, gar nichts getan zu haben.
+  if (gepostet.erfolge === 0 && bejaht(text, SCHON_KOMMENTIERT)) {
+    return stumm('schon-kommentiert', neu, seit, ergebnis);
+  }
 
   // EIN BELEG FUER UNVOLLSTAENDIGKEIT SCHLAEGT JEDEN BELEG FUER LIEFERUNG.
   // Der Lauf sagt hier selbst, dass er auf seine Agenten wartet - dann ist die
@@ -316,10 +340,18 @@ const DIAGNOSE = {
 };
 
 function stumm(grund, neu, seit, ergebnis) {
+  // Die Zahl, die zwei Zeilen weiter oben im Job-Log steht, muss hier
+  // wiederauftauchen. Stand hier pauschal "nichts hinterlassen", waehrend der
+  // Schritt darueber "Aeusserungen von claude seit dem Laufbeginn: 1" ausgab,
+  // widersprachen sich zwei Zeilen desselben Logs - und der Leser sucht den
+  // Fehler an der falschen Stelle (09.09., #1082).
   const kopf =
     grund === 'kein-stand'
       ? 'Der Nachweis konnte den Laufbeginn nicht bestimmen.'
-      : `Die Review hat in diesem Lauf nichts hinterlassen (nichts nach dem Laufbeginn ${seit}).`;
+      : neu > 0
+        ? `Die Review hat zu diesem Stand nichts Zuzuordnendes hinterlassen: ${neu} ` +
+          `Aeusserung(en) nach dem Laufbeginn ${seit}, aber keine davon belegt DIESEN Lauf.`
+        : `Die Review hat in diesem Lauf nichts hinterlassen (nichts nach dem Laufbeginn ${seit}).`;
   const zahlen = ergebnis
     ? ` num_turns: ${ergebnis.num_turns ?? '?'}, subtype: ${ergebnis.subtype ?? '?'}, ` +
       `Verweigerungen: ${Array.isArray(ergebnis.permission_denials) ? ergebnis.permission_denials.length : '?'}.`
