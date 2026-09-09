@@ -679,8 +679,11 @@ try {
   log.warn('Initial module registry scan failed:', err.message);
 }
 
-app.listen(PORT, () => {
-  logYuvomi.info(`Server running on port ${PORT} | Version ${APP_VERSION}`);
+const server = app.listen(PORT, () => {
+  // Der gebundene Port statt der Wunschangabe: mit PORT=0 vergibt der Kernel
+  // einen freien Port, und genau der gehoert ins Log. Fuer den Regelfall
+  // (PORT=3000) steht dort weiterhin wortgleich dieselbe Zeile.
+  logYuvomi.info(`Server running on port ${server.address()?.port ?? PORT} | Version ${APP_VERSION}`);
   logYuvomi.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
   // Ein Sicherheitsschalter, der still nicht greift, ist schlimmer als keiner:
@@ -695,11 +698,18 @@ app.listen(PORT, () => {
   if (loginWarning) logYuvomi.warn(loginWarning);
 
   // Erster Sync nach 10 Sekunden (warten bis DB vollständig initialisiert)
+  //
+  // `unref()` wie bei den uebrigen Schedulern (push, medication,
+  // recipe-provider, split-expenses): den Prozess am Leben haelt der
+  // Server-Socket, nicht der Sync-Takt. Ohne das blieben nach `server.close()`
+  // zwei Timer offen - und Suiten, die server/index.js als Programm
+  // importieren, muessten den Prozess mit `process.exit(0)` erschlagen, was
+  // den Exit-Code von node:test ueberschreibt (siehe test/server-ready.js).
   setTimeout(() => {
     runSync();
-    setInterval(runSync, SYNC_INTERVAL_MS);
+    setInterval(runSync, SYNC_INTERVAL_MS).unref();
     logSync.info(`Auto-sync active every ${SYNC_INTERVAL_MS / 60_000} minutes.`);
-  }, 10_000);
+  }, 10_000).unref();
 
   // Ein fehlender Mount fuer die lokale Dokumentablage faellt sonst erst auf,
   // wenn die Dateien nach einem Update verschwunden sind (#751).
@@ -715,3 +725,8 @@ app.listen(PORT, () => {
 });
 
 export default app;
+
+// Der laufende HTTP-Server. Tests, die diese Datei als Programm importieren,
+// brauchen ein Handle zum Schliessen - sonst haelt der Socket den Prozess
+// offen und node:test kommt nie zu seinem Exit-Code.
+export { server };
