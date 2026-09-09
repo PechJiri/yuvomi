@@ -2207,11 +2207,26 @@ function renderHistoryPeople() {
       <span class="group-toggle__label">${esc(label)}</span>
     </button>`;
   };
-  // Die Marke ist Schmuck fuer die Vorlesehilfe: den Namen traegt der Knopf.
-  // Ohne `aria-hidden` kaeme er zweimal - einmal als `aria-label`, einmal aus
-  // dem `alt` des Avatarbildes.
+  /* Die Marke ist Schmuck fuer die Vorlesehilfe: den Namen traegt der Knopf.
+   * Ohne `aria-hidden` kaeme er zweimal - einmal als `aria-label`, einmal aus
+   * dem `alt` des Avatarbildes.
+   *
+   * ZWEI RENDERER, ZWEI FELDNAMEN FUER DIESELBE FARBE. `state.users` kommt aus
+   * `/tasks/meta/options` und heisst dort `avatar_color`, so wie es in der
+   * Tabelle steht; `renderAvatarStack` liest `color`, weil es sonst aus
+   * `ASSIGNED_USERS_SQL` gefuettert wird, das genau dafuer umbenennt
+   * (`'color', u.avatar_color`). Beide Seiten sind fuer sich richtig - wer sie
+   * ungefiltert zusammensteckt, bekommt lautlos die Fallback-Farbe fuer JEDEN,
+   * und damit sind zwei Mitglieder mit gleichen Initialen auf dem Telefon nicht
+   * mehr zu unterscheiden. Deshalb hier die Uebersetzung.
+   *
+   * Ein Foto traegt `/meta/options` nicht, also bleiben es Initialen auf der
+   * Nutzerfarbe. Das ist kein Verlust gegenueber dem Nachbarn: `renderUserMulti
+   * Select` wird aus derselben Liste bedient und zeigt aus demselben Grund
+   * ebenfalls keins. Die Farbe ist ohnehin das Identitaetssignal (User-Farben-
+   * Regel), das Bild die Zugabe. */
   const personMark = (u) => `<span class="history-people__mark" aria-hidden="true">${
-    renderAvatarStack([u], { size: 22, maxVisible: 1 })}</span>`;
+    renderAvatarStack([{ ...u, color: u.avatar_color }], { size: 22, maxVisible: 1 })}</span>`;
   // Nur wer wirklich etwas beisteuern kann: die Housekeeping-Konten sind aus
   // /meta/options schon heraus, und ein Haushalt aus einer Person braucht die
   // Auswahl gar nicht.
