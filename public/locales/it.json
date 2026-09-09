@@ -596,7 +596,15 @@
         "toPantryNothing": "Non è stato aggiunto nulla alla dispensa. Riapri «In dispensa» e controlla le quantità.",
         "reorderHandle": "Riordina: {{name}}",
         "reorderHandleHint": "Trascina o usa i tasti freccia per riordinare",
-        "reorderPosition": "Posizione {{index}} di {{total}}"
+        "reorderPosition": "Posizione {{index}} di {{total}}",
+        "priceLabel": "Prezzo",
+        "storeLabel": "Negozio",
+        "storePlaceholder": "Scegli o digita",
+        "manageStores": "Gestisci negozi",
+        "storesHint": "I negozi in cui fate la spesa. Un prezzo senza negozio risponde solo a metà.",
+        "storeDeleteConfirm": "Eliminare il negozio «{{name}}»?",
+        "storeDeleteConfirmDetail": "Gli articoli di questo negozio restano, e anche il loro prezzo: solo l'assegnazione del negozio resta vuota. Qui non c'è un negozio sostitutivo.",
+        "addStore": "Nuovo negozio"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} pasti pianificati.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Nessuno",
         "responsibleFilterEmptyTitle": "Nessuna registrazione per questa persona",
         "responsibleFilterEmptyDescription": "Nessuno è responsabile di una registrazione in questo mese con questa selezione.",
-        "handoverToSplit": "Passa alle spese condivise"
+        "handoverToSplit": "Passa alle spese condivise",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (piano: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Mostra la scheda ciclo",
@@ -2776,7 +2785,12 @@
         "sourceNative": "Nativa",
         "sourceAll": "Tutte",
         "sourceFilterLabel": "Filtra per origine",
-        "plannedThisWeek": "In programma questa settimana"
+        "plannedThisWeek": "In programma questa settimana",
+        "imageLabel": "Immagine",
+        "imageChoose": "Scegli immagine",
+        "imageRemove": "Rimuovi immagine",
+        "imageHint": "Un'immagine per ricetta. Appare nel piano pasti e nel riquadro panoramica.",
+        "imageTooLarge": "L'immagine è ancora troppo grande dopo il ridimensionamento."
     },
     "search": {
         "emptyHint": "Digita almeno 2 caratteri per cercare tra attività, appuntamenti, note, contatti, spesa e salute.",

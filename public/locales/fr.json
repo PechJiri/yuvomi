@@ -596,7 +596,15 @@
         "toPantryNothing": "Rien n'a été ajouté au garde-manger. Ouvrez à nouveau « Vers le garde-manger » et vérifiez les quantités.",
         "reorderHandle": "Réorganiser : {{name}}",
         "reorderHandleHint": "Faites glisser ou utilisez les flèches pour réorganiser",
-        "reorderPosition": "Position {{index}} sur {{total}}"
+        "reorderPosition": "Position {{index}} sur {{total}}",
+        "priceLabel": "Prix",
+        "storeLabel": "Magasin",
+        "storePlaceholder": "Choisir ou saisir",
+        "manageStores": "Gérer les magasins",
+        "storesHint": "Les magasins où vous faites vos courses. Un prix sans magasin ne répond qu'à moitié.",
+        "storeDeleteConfirm": "Supprimer le magasin « {{name}} » ?",
+        "storeDeleteConfirmDetail": "Les articles de ce magasin sont conservés, leur prix aussi - seule l'affectation au magasin devient vide. Il n'y a pas de magasin de remplacement.",
+        "addStore": "Nouveau magasin"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} repas planifiés.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Personne",
         "responsibleFilterEmptyTitle": "Aucune écriture pour cette personne",
         "responsibleFilterEmptyDescription": "Personne n'est responsable d'une écriture ce mois-ci avec cette sélection.",
-        "handoverToSplit": "Basculer vers les dépenses partagées"
+        "handoverToSplit": "Basculer vers les dépenses partagées",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plan : {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Afficher l’onglet cycle",
@@ -2776,7 +2785,12 @@
         "sourceNative": "Natif",
         "sourceAll": "Tous",
         "sourceFilterLabel": "Filtrer par source",
-        "plannedThisWeek": "Prévu cette semaine"
+        "plannedThisWeek": "Prévu cette semaine",
+        "imageLabel": "Image",
+        "imageChoose": "Choisir une image",
+        "imageRemove": "Supprimer l'image",
+        "imageHint": "Une image par recette. Elle apparaît dans le planificateur de repas et sur la tuile d'aperçu.",
+        "imageTooLarge": "L'image reste trop volumineuse après réduction."
     },
     "search": {
         "emptyHint": "Saisis au moins 2 caractères pour chercher dans les tâches, rendez-vous, notes, contacts, courses et santé.",

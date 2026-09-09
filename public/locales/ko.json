@@ -608,7 +608,15 @@
         "toPantryNothing": "식료품 저장고에 아무것도 추가되지 않았습니다. \"저장고로\"를 다시 열어 수량을 확인하세요.",
         "reorderHandle": "순서 변경: {{name}}",
         "reorderHandleHint": "끌거나 화살표 키로 순서를 변경하세요",
-        "reorderPosition": "{{total}}개 중 {{index}}번째"
+        "reorderPosition": "{{total}}개 중 {{index}}번째",
+        "priceLabel": "가격",
+        "storeLabel": "상점",
+        "storePlaceholder": "선택하거나 입력",
+        "manageStores": "상점 관리",
+        "storesHint": "장을 보는 상점입니다. 상점 없는 가격은 절반만 답합니다.",
+        "storeDeleteConfirm": "상점 “{{name}}”을(를) 삭제할까요?",
+        "storeDeleteConfirmDetail": "이 상점의 항목과 가격은 그대로 남고, 상점 지정만 비워집니다. 대체 상점은 채워지지 않습니다.",
+        "addStore": "새 상점"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}}개의 식사가 계획되었습니다.",
@@ -1508,7 +1516,8 @@
         "responsibleNobody": "담당 없음",
         "responsibleFilterEmptyTitle": "이 사람의 항목이 없습니다",
         "responsibleFilterEmptyDescription": "이 선택에서 이번 달에는 어떤 항목에도 담당자가 없습니다.",
-        "handoverToSplit": "공동 지출로 옮기기"
+        "handoverToSplit": "공동 지출로 옮기기",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (계획: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "주기 탭 표시",
@@ -2879,7 +2888,12 @@
         "sourceNative": "기본",
         "sourceAll": "전체",
         "sourceFilterLabel": "출처별로 필터링",
-        "plannedThisWeek": "이번 주에 계획됨"
+        "plannedThisWeek": "이번 주에 계획됨",
+        "imageLabel": "이미지",
+        "imageChoose": "이미지 선택",
+        "imageRemove": "이미지 삭제",
+        "imageHint": "레시피당 한 장. 식단표와 개요 타일에 표시됩니다.",
+        "imageTooLarge": "축소한 뒤에도 이미지가 너무 큽니다."
     },
     "onboarding": {
         "step1Title": "{{name}}에 오신 것을 환영합니다",

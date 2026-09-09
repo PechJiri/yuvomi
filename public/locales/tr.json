@@ -596,7 +596,15 @@
         "toPantryNothing": "Kilere hiçbir şey eklenmedi. \"Kilere\" seçeneğini yeniden aç ve miktarları kontrol et.",
         "reorderHandle": "Sırayı değiştir: {{name}}",
         "reorderHandleHint": "Sıralamak için sürükleyin veya ok tuşlarını kullanın",
-        "reorderPosition": "{{total}} öğeden {{index}}. sırada"
+        "reorderPosition": "{{total}} öğeden {{index}}. sırada",
+        "priceLabel": "Fiyat",
+        "storeLabel": "Mağaza",
+        "storePlaceholder": "Seçin veya yazın",
+        "manageStores": "Mağazaları yönet",
+        "storesHint": "Alışveriş yaptığınız mağazalar. Mağazasız bir fiyat sorunun yarısını yanıtlar.",
+        "storeDeleteConfirm": "“{{name}}” mağazası silinsin mi?",
+        "storeDeleteConfirmDetail": "Bu mağazanın ürünleri ve fiyatları kalır - yalnızca mağaza ataması boşalır. Yerine geçecek bir mağaza yoktur.",
+        "addStore": "Yeni mağaza"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} öğün planlandı.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Kimse",
         "responsibleFilterEmptyTitle": "Bu kişi için kayıt yok",
         "responsibleFilterEmptyDescription": "Bu seçimde bu ay hiçbir kayıttan kimse sorumlu değil.",
-        "handoverToSplit": "Paylaşılan giderlere aktar"
+        "handoverToSplit": "Paylaşılan giderlere aktar",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plana göre: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Döngü sekmesini göster",
@@ -2776,7 +2785,12 @@
         "sourceNative": "Yerel",
         "sourceAll": "Tümü",
         "sourceFilterLabel": "Kaynağa göre filtrele",
-        "plannedThisWeek": "Bu hafta planlandı"
+        "plannedThisWeek": "Bu hafta planlandı",
+        "imageLabel": "Görsel",
+        "imageChoose": "Görsel seç",
+        "imageRemove": "Görseli kaldır",
+        "imageHint": "Tarif başına bir görsel. Yemek planında ve genel bakış kutusunda görünür.",
+        "imageTooLarge": "Görsel küçültüldükten sonra hâlâ çok büyük."
     },
     "search": {
         "emptyHint": "Görevler, etkinlikler, notlar, kişiler, alışveriş ve sağlıkta aramak için en az 2 karakter yaz.",

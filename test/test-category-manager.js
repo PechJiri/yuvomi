@@ -4,6 +4,7 @@
  * Ausführen: node --experimental-sqlite test/test-category-manager.js
  */
 import { readFileSync } from 'node:fs';
+import { eachRule } from './css-rules.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -37,11 +38,18 @@ test('Mutiert über post/put/patch/delete relativ zu basePath', () => {
 test('Dispatcht category-manager-changed nach Mutationen', () => {
   assert(/category-manager-changed/.test(comp), 'Event muss dispatcht werden');
 });
-test('Notizen aktualisieren sich nach Manager-Mutationen über einen lebenszyklusfesten Callback', () => {
-  assert(/this\._onChanged\?\.\(detail\)/.test(comp), 'der Manager muss den direkten Change-Callback aufrufen');
-  assert(/pending\?\.catch/.test(comp), 'ein fehlgeschlagener Seiten-Refresh darf die Mutation nicht als Fehler melden');
+test('Notizen aktualisieren sich nach Manager-Mutationen über das Aenderungs-Ereignis', () => {
+  // Ein Weg, nicht zwei: die Notizen haengen wie die sechs uebrigen Aufrufer am
+  // Ereignis. Das `detail` traegt dabei, was der Refresh fuer sein optimistisches
+  // Entfernen braucht - `_notifyChanged({ action: 'delete', key })` beim Loeschen,
+  // sonst `{}`, worauf `refresh` auf den vollen Nachladen faellt.
+  assert(/dispatchEvent\(new CustomEvent\('category-manager-changed', \{ bubbles: true, detail \}\)\)/.test(comp),
+    'der Manager muss sein Ereignis mit dem detail dispatchen');
   const managerFn = notesPage.match(/function openNoteCategoryManager\(\)[\s\S]*?\n\}/)?.[0] || '';
-  assert(/onChanged:\s*refresh/.test(managerFn), 'Notizen müssen ihren Refresh direkt konfigurieren');
+  assert(/addEventListener\('category-manager-changed', \(e\) => refresh\(e\.detail\)\)/.test(managerFn),
+    'Notizen muessen ihren Refresh an das Ereignis haengen und das detail durchreichen');
+  // Der Grund, aus dem #1066 dieselbe Regel als Wachhund ueber ALLE Aufrufer
+  // gelegt hat: der Loeschdialog schliesst das Modal vor dem DELETE.
   assert(!/removeEventListener\('category-manager-changed'/.test(managerFn),
     'der Notes-Refresh darf nicht mit dem vor DELETE laufenden Modal-Cleanup verschwinden');
 });
@@ -89,8 +97,12 @@ test('Notiz-Kategorien nutzen eine gemeinsame scope-fähige Eingabe und Scope-Ic
 });
 test('Scope-Tooltip und Berechtigungs-Einzüge funktionieren auch in RTL-Sprachen', () => {
   assert(/inset-inline-end:\s*0/.test(compCss), 'Tooltip muss logisch am Inline-Ende verankert sein');
-  assert(/padding-inline-start:\s*var\(--space-8\)/.test(settingsCss), 'Widget-Einzug muss logisch sein');
-  assert(/margin-inline:\s*var\(--space-8\)/.test(settingsCss), 'Capability-Einzug muss logisch sein');
+  const rules = [...eachRule(settingsCss)];
+  const widgets = rules.find((rule) => rule.selector === '.perm-modgroup__widgets' && !rule.at.length)?.body || '';
+  const capabilities = rules.find((rule) => rule.selector === '.perm-modgroup__capabilities' && !rule.at.length)?.body || '';
+  assert(/padding-inline-start:\s*var\(--space-8\)/.test(widgets), 'Widget-Einzug muss logisch sein');
+  assert(!/padding-left\s*:/.test(widgets), 'Widget-Einzug darf kein physisches padding-left nutzen');
+  assert(/margin-inline:\s*var\(--space-8\)/.test(capabilities), 'Capability-Einzug muss logisch sein');
 });
 test('Budget konfiguriert basePath /budget/categories und Gruppen', () => {
   assert(/configure\(/.test(budgetPage), 'configure() muss aufgerufen werden');

@@ -21,6 +21,7 @@ import { householdTimeZone } from '../utils/timezone.js';
 import { createCalDAVClient, supportsComponent } from '../utils/caldav-client.js';
 import { rruleLine } from './recurrence.js';
 import { nearestIcalColorName } from '../utils/ical-color.js';
+import { outboundEvent } from './outbound-dtstart.js';
 
 // Reused functions from apple-calendar.js
 import {
@@ -41,7 +42,9 @@ function buildCalDAVICS(event, householdZone = null) {
   // Die Zeiten und ihre Zone bestimmt eventDateTimeFields; bis #938 stand hier
   // ein blankes `DTSTART:20260830T100000`, das keinen Zeitpunkt bezeichnet,
   // sondern eine Uhrzeit ohne Uhr.
-  const when = eventDateTimeFields(event, householdZone);
+  // Start/Ende mit der eigenen Wiederholungsregel in Einklang (#986); ein
+  // importiertes DTSTART bleibt unberuehrt (#756).
+  const when = eventDateTimeFields(outboundEvent(event), householdZone);
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',

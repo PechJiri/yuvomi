@@ -25,6 +25,7 @@ import { decodeHtmlEntities } from '../utils/html-entities.js';
 import { nearestColorId } from '../utils/ical-color.js';
 // Fallback-Zone für den Outbound-Sync, wenn Google für den Zielkalender keine liefert.
 import { householdTimeZone } from '../utils/timezone.js';
+import { outboundEvent } from './outbound-dtstart.js';
 import { assignDefaultToEvent } from './sync-assignment.js';
 import { countSourceEvents, deleteSourceEvents } from './calendar-prune.js';
 import { readSyncOutcome, withSyncOutcome } from './sync-outcome.js';
@@ -1104,7 +1105,11 @@ function normalizeRecurrenceUntil(rule, allDay) {
  * @param {string} [timeZone]  IANA-Zone, in der Google die Wanduhrzeit interpretiert.
  *                             Normalerweise die Zone des Zielkalenders (siehe sync()).
  */
-function localEventToGoogle(event, colorMap = {}, timeZone = householdTimeZone(null)) {
+function localEventToGoogle(rawEvent, colorMap = {}, timeZone = householdTimeZone(null)) {
+  // Start und Ende mit der eigenen Wiederholungsregel in Einklang (#986), bevor
+  // irgendein Feld daraus abgeleitet wird - ein importiertes DTSTART bleibt
+  // unberuehrt (#756). Begruendung in services/outbound-dtstart.js.
+  const event = outboundEvent(rawEvent);
   const allDay = !!event.all_day;
   const gEvent = {
     summary:     event.title,

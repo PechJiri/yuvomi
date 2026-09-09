@@ -10,6 +10,14 @@ export function shoppingPaths() {
       get: op({ summary: 'List shopping categories', tag: 'Shopping' }),
       post: op({ summary: 'Create shopping category', tag: 'Shopping', stateChanging: true, requestBody: jsonBody(null) }),
     },
+    '/api/v1/shopping/stores': {
+      get: op({ summary: 'List the shops a price can be recorded against', tag: 'Shopping', description: 'A managed list rather than free text on the item: a household visits few enough shops that maintaining them is cheap, and free text is messy from the first week ("REWE", "Rewe", "rewe City" would be three).' }),
+      post: op({ summary: 'Add a shop', tag: 'Shopping', stateChanging: true, requestBody: jsonBody(null), description: 'Body: { name }. Adding a shop that already exists returns the existing row with 200 rather than a conflict - that is not a mistake, it is already there.' }),
+    },
+    '/api/v1/shopping/stores/{id}': {
+      put: op({ summary: 'Rename a shop', tag: 'Shopping', params: [idParam()], stateChanging: true, requestBody: jsonBody(null), description: 'Body: { name }. Renaming rather than re-creating, so a typo does not split the purchase history away from the shop it belongs to. 409 when another shop already carries that name.' }),
+      delete: op({ summary: 'Remove a shop', tag: 'Shopping', params: [idParam()], stateChanging: true, description: 'Prices recorded against it keep their value and lose only the shop reference: what was once paid stays true even when the shop leaves the list.' }),
+    },
     '/api/v1/shopping/categories/{catId}': {
       put: op({ summary: 'Update shopping category', tag: 'Shopping', params: [idParam('catId', 'Category ID')], stateChanging: true, requestBody: jsonBody(null) }),
       delete: op({ summary: 'Delete shopping category', tag: 'Shopping', params: [idParam('catId', 'Category ID')], stateChanging: true }),

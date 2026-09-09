@@ -596,7 +596,15 @@
         "toPantryNothing": "Semmi sem került a kamrába. Nyisd meg újra a „A kamrába\" pontot, és ellenőrizd a mennyiségeket.",
         "reorderHandle": "Sorrend módosítása: {{name}}",
         "reorderHandleHint": "Húzza vagy használja a nyílbillentyűket a rendezéshez",
-        "reorderPosition": "{{index}}. pozíció, összesen {{total}}"
+        "reorderPosition": "{{index}}. pozíció, összesen {{total}}",
+        "priceLabel": "Ár",
+        "storeLabel": "Bolt",
+        "storePlaceholder": "Válasszon vagy írjon",
+        "manageStores": "Boltok kezelése",
+        "storesHint": "A boltok, ahol vásároltok. Az ár bolt nélkül csak félig válaszol.",
+        "storeDeleteConfirm": "Törli a(z) „{{name}}” üzletet?",
+        "storeDeleteConfirmDetail": "Az üzlethez tartozó tételek és az áruk is megmaradnak - csak az üzlet hozzárendelése lesz üres. Helyettesítő üzlet itt nincs.",
+        "addStore": "Új üzlet"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} étel megtervezve.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Senki",
         "responsibleFilterEmptyTitle": "Nincs tétel ehhez a személyhez",
         "responsibleFilterEmptyDescription": "Ebben a hónapban senki sem felelős tételért ebben a válogatásban.",
-        "handoverToSplit": "Áthelyezés a közös kiadásokba"
+        "handoverToSplit": "Áthelyezés a közös kiadásokba",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (terv: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Ciklus fül megjelenítése",
@@ -2867,7 +2876,12 @@
         "sourceNative": "Natív",
         "sourceAll": "Összes",
         "sourceFilterLabel": "Szűrés forrás szerint",
-        "plannedThisWeek": "Erre a hétre betervezve"
+        "plannedThisWeek": "Erre a hétre betervezve",
+        "imageLabel": "Kép",
+        "imageChoose": "Kép választása",
+        "imageRemove": "Kép eltávolítása",
+        "imageHint": "Receptenként egy kép. Megjelenik az étkezési tervben és az áttekintő csempén.",
+        "imageTooLarge": "A kép kicsinyítés után is túl nagy."
     },
     "search": {
         "emptyHint": "Írj be legalább 2 karaktert a feladatok, események, jegyzetek, névjegyek, bevásárlás és egészség kereséséhez.",

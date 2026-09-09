@@ -4,13 +4,9 @@
  * accents so client-side duplicate prevention follows the server contract.
  */
 
-export function categoryIdentityKey(value) {
-  return String(value ?? '')
-    .normalize('NFKC')
-    .toUpperCase().toLowerCase()
-    .toUpperCase().toLowerCase()
-    .normalize('NFKC');
-}
+import { categoryNameKey } from './note-category-name.js';
+
+export const categoryIdentityKey = (value) => categoryNameKey(value ?? '');
 
 function identityKey(value) {
   return categoryIdentityKey(String(value ?? '').trim());

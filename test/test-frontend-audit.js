@@ -8,7 +8,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { SETTINGS_DOMAINS, SETTINGS_LEAVES } from '../public/settings/registry.js';
 import { eachRule } from './css-rules.js';
-import { withoutHtmlComments, withoutBlockComments } from './source-text.js';
+import { withoutHtmlComments, withoutBlockComments, withoutCommentsKeepingLines } from './source-text.js';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r/g, '');
 
@@ -2173,9 +2173,10 @@ test('Shopping uses the shared category manager component (Audit F-15)', () => {
   assert.match(shopping, /basePath: '\/shopping\/categories'/);
   assert.match(shopping, /shopping\.manageCategories/);
   assert.match(shopping, /category-manager-changed/);
-  // onClose muss den Listener wieder abräumen (kein Leak bei Modal-Reuse).
+  // Die Auffrischung steht im Ereignis-Handler, nicht in onClose - warum, sagt
+  // die Schwesterregel weiter unten („kein Nutzer ... meldet sich ab").
   const openMgr = shopping.match(/async function openCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
-  assert.match(openMgr, /manager\?\.removeEventListener\('category-manager-changed'/);
+  assert.match(openMgr, /const onCategoriesChanged = async \(\) => \{[\s\S]*?loadCategories\(\)/);
 
   // Die frühere Shopping-Sonderkomponente ist entfernt — kein Duplikat mehr.
   assert.equal(existsSync(new URL('../public/components/shopping-category-manager.js', import.meta.url)), false);
@@ -2248,6 +2249,82 @@ test('browser loader supports personal settings API and auth imports', () => {
   assert.match(source, /getPwaInstallState/);
   assert.match(source, /onPwaInstallStateChanged/);
   assert.match(source, /promptPwaInstall/);
+});
+
+test('wer an der Frische haengt UND offline gecacht wird, liest ueber getWithSource', () => {
+  // DIE KOPPLUNG, DIE SONST STILL IST. Eine Seite, deren Entscheidung von der
+  // FRISCHE einer Antwort abhaengt, darf eine aus dem Offline-Cache nicht wie
+  // eine frische behandeln: `networkFirstApi` gibt sie mit Status 200 zurueck,
+  // sie kann beliebig alt sein, und eine Mutation leert diesen Cache nicht (nur
+  // Logout tut das). Der Merker faellt dann, oder es wird gegen veraltete
+  // Referenzlisten gefiltert.
+  //
+  // DIE BETROFFENEN SEITEN WERDEN ABGELEITET, NICHT GEPFLEGT. Die erste Fassung
+  // fuehrte eine Liste von drei Dateinamen - und liess damit genau die Sorte
+  // Geschwister durch, fuer die sie gedacht war: `pantry.js` fehlte eine Runde
+  // lang, `tasks.js` eine weitere. Erkannt wird die Abhaengigkeit stattdessen an
+  // zwei Strukturmerkmalen, die eine Seite nicht zufaellig traegt:
+  //   - eine `pending…`-Map: ausstehende Schreibvorgaenge, die ein Laden raeumt
+  //   - ein `…Stale`-Feld: „diese Referenzlisten sind nicht nachweislich frisch"
+  // Woran eine Seite erkannt wird, die an der Frische einer Antwort haengt.
+  // Die Liste darf wachsen; dass sie nicht VERALTET, sichert die Selbstprobe
+  // ganz unten.
+  const MARKER = [
+    /const intents\s*=\s*new Map\(/,        // Absichten neben dem Serverstand
+    /const pending[A-Z]\w*\s*=\s*new Map\(/, // aeltere Schreibweise desselben
+    /const settledAt\s*=\s*new Map\(/,       // Bestaetigungszeit je Eintrag
+    /^\s*\w*[sS]tale:\s/m,                   // Referenzlisten mit Frische-Flag
+  ];
+
+  const sw = read('../public/sw.js');
+  const whitelist = sw.match(/const API_CACHE_WHITELIST\s*=\s*\[([^\]]*)\]/)?.[1];
+  assert.ok(whitelist, 'API_CACHE_WHITELIST in sw.js nicht gefunden - der Guard liest ins Leere');
+  const cached = [...whitelist.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+
+  const seiten = readdirSync(new URL('../public/pages/', import.meta.url))
+    .filter((f) => f.endsWith('.js'));
+
+  const verletzt = [];
+  const ungeprueft = [];
+  let geprueft = 0;
+  for (const datei of seiten) {
+    const src = read(`../public/pages/${datei}`);
+    const haengtAnFrische = MARKER.some((re) => re.test(src));
+    if (!haengtAnFrische) { ungeprueft.push({ datei, src }); continue; }
+    // Der Modulpfad einer Seite traegt ihren Dateinamen - und der Guard glaubt
+    // das nicht, sondern verlangt, dass die Seite ihn auch wirklich liest.
+    const pfad = `/${datei.replace(/\.js$/, '')}`;
+    if (!cached.includes(pfad)) continue;
+    if (!new RegExp(`api\\.get(WithSource)?\\([\`'"]${pfad}`).test(src)) continue;
+    geprueft += 1;
+    if (!/getWithSource\(/.test(src)) verletzt.push(`${datei} (Pfad ${pfad})`);
+  }
+
+  // REICHWEITE VOR DEM URTEIL: faende der Guard gar keine Seite, waere er
+  // gruen, ohne je etwas geprueft zu haben - dieselbe Falle wie beim
+  // Browser-Ketten-Guard weiter oben.
+  assert.ok(geprueft > 0,
+    'keine einzige Seite geprueft - Merkmale oder Whitelist-Format haben sich geaendert');
+
+  // UND DIE MERKMALE PRUEFEN SICH SELBST. Eine Seite, die `getWithSource`
+  // benutzt, haengt nachweislich an der Frische - wird sie von keinem Merkmal
+  // erkannt, ist die Merkmalsliste veraltet und der Guard blind.
+  //
+  // Genau das ist am 09.09. passiert: die Merker-Karten hiessen `pendingChecks`
+  // und `pendingQuantity`, der Umbau nannte sie `intents`, und damit sah der
+  // Guard nur noch `tasks.js`. Die Reichweiten-Zusicherung darueber blieb
+  // gruen, weil EINE Seite ja noch erkannt wurde - ein Rueckbau von
+  // `shopping.js` auf `api.get()` waere unbemerkt durchgegangen.
+  const blind = ungeprueft
+    .filter(({ src }) => /getWithSource\(/.test(src))
+    .map(({ datei }) => datei);
+  assert.deepEqual(blind, [],
+    `benutzt getWithSource(), wird aber von keinem Merkmal erkannt: ${blind.join(', ')} - `
+    + 'die Merkmalsliste MARKER ist veraltet, und der Guard prueft diese Seite nicht mehr');
+  assert.deepEqual(verletzt, [],
+    `haengt an der Frische und steht in API_CACHE_WHITELIST, liest aber nicht ueber `
+    + `api.getWithSource(): ${verletzt.join(', ')} - eine gecachte Antwort raeumt dort `
+    + 'den Merker fuer ausstehende Bearbeitungen oder wird als frische Referenz gelesen');
 });
 
 test('legacy settings page remains available during the leaf migration', () => {
@@ -10129,6 +10206,162 @@ test('jeder Nutzer des Category-Managers liefert seinen eigenen Folgentext', () 
   assert.deepEqual(zuKnapp, [], 'zu knapp fuer eine Folgenbeschreibung');
 });
 
+// Schwesterregel zur Delegation oben: derselbe Kreis von Aufrufern, dieselbe
+// Bauart des Guards (Bestand suchen, nicht Namen kennen) - nur geht es hier
+// nicht um den Text, sondern um den Zeitpunkt.
+//
+// Gemessen am 08.09.2026 im laufenden Browser: beim Loeschen fragt die
+// Komponente ueber `confirmOverModal`, und das schliesst nach einem Ja das Modal
+// darunter gleich mit ab (`closeModal({ force: true })`), BEVOR es zurueckkehrt.
+// `api.delete` laeuft erst danach, das `category-manager-changed` kommt also,
+// wenn das Element schon aus dem Dokument ist (`document.contains(el)` false).
+//
+// Wer sich in onClose abmeldet, verpasst damit ausgerechnet die Loeschung - die
+// einzige Mutation, nach der ein veralteter lokaler Stand dem Nutzer etwas
+// anbietet, das der Server nicht mehr kennt. Sieben Aufrufer taten das, bis auf
+// den Laden-Manager im Einkauf. Ein Leck droht durch das Weglassen nicht: das
+// Element entsteht je Oeffnen neu und wird mit dem Overlay verworfen.
+test('kein Nutzer des Category-Managers meldet sich vom Aenderungs-Ereignis ab', () => {
+  const nutzer = walkJsFiles('../public/').filter((file) => (
+    file !== '../public/components/category-manager.js' && read(file).includes('yuvomi-category-manager')
+  ));
+
+  // Faellt die Erkennung aus, soll der Test das sagen und nicht still bestehen.
+  assert.ok(nutzer.length >= 5, `nur ${nutzer.length} Nutzer des Category-Managers gefunden`);
+
+  for (const file of nutzer) {
+    const src = withoutBlockComments(read(file)).replace(/^\s*\/\/.*$/gm, '');
+    const label = file.slice('../public/'.length);
+    // Erst der Gegen-Nachweis, dass ueberhaupt noch jemand zuhoert: ein Aufrufer,
+    // der An- UND Abmeldung streicht, kaeme sonst gruen durch.
+    assert.match(src, /addEventListener\(\s*'category-manager-changed'/,
+      `${label}: bindet den Category-Manager ein, hoert aber nicht auf seine Aenderungen`);
+    assert.doesNotMatch(src, /removeEventListener\(\s*'category-manager-changed'/,
+      `${label}: meldet sich vom Aenderungs-Ereignis ab und verpasst damit das Loeschen - `
+      + 'die Auffrischung gehoert in den Ereignis-Handler, siehe `_notifyChanged` in der Komponente');
+  }
+});
+
+// Zwei Folgen davon, dass die Auffrischung jetzt WAEHREND des offenen Managers
+// laeuft statt nach dem Schliessen. Beide traf der Review zu #1066, beide sind
+// je Seite verschieden zu loesen - darum zwei benannte Sonden statt einer Regel.
+
+// Loeschbar ist genau die UNBENUTZTE Kategorie, also gerade die, nach der jemand
+// gefiltert haben kann. Bleibt `activeCategory` danach auf ihrem Key stehen,
+// findet die Chipleiste keinen Chip zum Hervorheben - auch „Alle" nicht - und
+// die Liste filtert weiter jeden Kontakt weg: eine leere Seite ohne sichtbaren
+// Grund.
+test('der Kontakte-Filter loest sich von einer Kategorie, die geloescht wurde', () => {
+  const fn = read('../public/pages/contacts.js').match(/function openContactCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'openContactCategoryManager nicht gefunden');
+  assert.match(fn, /state\.activeCategory[\s\S]*?state\.categories\.some\([\s\S]*?state\.activeCategory\s*=\s*null/,
+    'der Handler muss den aktiven Filter loesen, wenn seine Kategorie nicht mehr in der frischen Liste steht');
+});
+
+// Loeschbar ist die UNBENUTZTE Kategorie - dieselbe Falle wie bei den Kontakten,
+// nur haelt Aufgaben ihre Auswahl als Liste von Keys, die in die Server-Abfrage
+// wandert. Bleibt ein geloeschter Key darin, fragt die Seite dauerhaft nach
+// einer Kategorie, die es nicht mehr gibt.
+test('der Aufgaben-Filter loest sich von einer Kategorie, die geloescht wurde', () => {
+  const fn = read('../public/pages/tasks.js').match(/function openTaskCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'openTaskCategoryManager nicht gefunden');
+  assert.match(fn, /state\.filters\.category\.filter\([\s\S]*?state\.filters\.category = /,
+    'der Handler muss geloeschte Keys aus state.filters.category werfen');
+  // Die Leiste UNBEDINGT, das Nachladen nur bei geaenderter Abfrage: ein hinter
+  // dem Manager offenes Panel boete sonst die geloeschte Kategorie weiter an.
+  assert.match(fn, /renderFilters\(container\);\n\s*if \(filterBereinigt\) \{/,
+    'renderFilters gehoert VOR die Bedingung - das offene Panel veraltet sonst');
+  assert.match(fn, /if \(filterBereinigt\) \{[\s\S]*?loadTasks\(container\)/,
+    'nur die geaenderte Abfrage rechtfertigt ein Nachladen');
+});
+
+// Zwei Fallen des Einkaufs-Handlers, beide erst dadurch erreichbar, dass er
+// jetzt NACH dem Schliessen des Modals laeuft.
+test('der Einkaufs-Handler schreibt nicht in einen abgehaengten Container', () => {
+  const fn = read('../public/pages/shopping.js').match(/async function openCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'openCategoryManager nicht gefunden');
+  // Der Deep-Link `?manage=categories` navigiert in onClose sofort weg, und der
+  // Router baut die Seite neu auf - beim Loeschen laeuft dieser Handler danach.
+  assert.match(fn, /if \(!container\.isConnected\) return;/,
+    'der Handler muss aufgeben, wenn der Router die Seite schon ausgetauscht hat');
+  // `_notifyChanged()` dispatcht synchron und sieht die Promise dieses Listeners
+  // nie: ein Fehler beim Nachladen waere eine unbeobachtete Rejection.
+  assert.match(fn, /loadItems\(listId\)[\s\S]*?catch[\s\S]*?state\.itemsError = err/,
+    'ein Fehler beim Nachladen der Artikel gehoert in state.itemsError, nicht in eine stille Rejection');
+});
+
+// Ein Rundlauf kann von einem Listenwechsel ueberholt werden, und die Antworten
+// kommen in beliebiger Reihenfolge. Die Wache gehoert in `loadItems` selbst -
+// alle Aufrufer laden die GERADE aktive Liste, also deckt eine Stelle sie alle
+// ab (auch `switchList` und den Laden-Manager, die aelter sind als #1066).
+test('shopping: eine ueberholte Artikel-Antwort fasst den Stand nicht mehr an', () => {
+  const src = read('../public/pages/shopping.js');
+  const fn  = src.match(/async function loadItems\(listId\)[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'loadItems nicht gefunden');
+  // Vor JEDER Zuweisung an den geteilten Stand, nicht irgendwo in der Funktion.
+  const wache = fn.indexOf('if (state.activeListId !== listId) return;');
+  assert.notEqual(wache, -1, 'loadItems braucht die Wache gegen eine ueberholte Antwort');
+  assert.ok(wache < fn.indexOf('state.items'),
+    'die Wache muss VOR dem Schreiben stehen - danach ist der Stand schon zerstoert');
+
+  // Und der Handler des Kategorie-Managers darf den Fehlerfall nicht der
+  // falschen Liste anhaengen.
+  const mgr = src.match(/async function openCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.equal((mgr.match(/state\.activeListId !== listId/g) ?? []).length, 2,
+    'Erfolg UND Fehler muessen pruefen, ob die Liste noch dieselbe ist');
+});
+
+// Der Manager quittiert nur seine EIGENE Mutation: `_notifyChanged()` kommt erst
+// nach deren Erfolg. Was im Handler eines Aufrufers ankommt, ist deshalb immer
+// ein Fehler der AUFFRISCHUNG - und der erklaert als einziger, warum die Seite
+// den alten Stand behaelt, obwohl der Server schon umgeschrieben hat.
+//
+// Als allgemeine Regel und nicht je Seite: die erste Fassung nannte nur
+// inventory, und genau daneben blieben pantry, tasks und contacts mit demselben
+// leeren catch stehen (Review-Runde 6). Ein `catch {` ohne Bindung wirft das
+// Fehlerobjekt weg und kann per Konstruktion nichts melden; `catch (err)` mit
+// Toast besteht, ebenso ein Handler ganz ohne catch, dessen Lader selbst melden
+// (so macht es budget).
+test('kein Nutzer des Category-Managers verschluckt den Fehler seiner Auffrischung', () => {
+  const nutzer = walkJsFiles('../public/').filter((file) => (
+    file !== '../public/components/category-manager.js' && read(file).includes('yuvomi-category-manager')
+  ));
+  assert.ok(nutzer.length >= 5, `nur ${nutzer.length} Nutzer des Category-Managers gefunden`);
+
+  let geprueft = 0;
+  for (const file of nutzer) {
+    const src = read(file);
+    const label = file.slice('../public/'.length);
+    // Jede Stelle, nicht die erste: inventory mountet zwei Manager.
+    const re = /addEventListener\(\s*'category-manager-changed'/g;
+    let treffer;
+    while ((treffer = re.exec(src)) !== null) {
+      // Die umschliessende Funktion: rueckwaerts bis zur naechsten Deklaration
+      // auf Spaltenposition 0, vorwaerts bis zu ihrer schliessenden Klammer.
+      const kopf = src.lastIndexOf('\nfunction ', treffer.index);
+      const akopf = src.lastIndexOf('\nasync function ', treffer.index);
+      const von = Math.max(kopf, akopf);
+      assert.notEqual(von, -1, `${label}: umschliessende Funktion nicht gefunden`);
+      const bis = src.indexOf('\n}', treffer.index);
+      const fn = src.slice(von, bis);
+      geprueft += 1;
+      assert.doesNotMatch(fn, /catch\s*\{/,
+        `${label}: ein bindungsloses \`catch {\` wirft das Fehlerobjekt weg und kann den `
+        + 'Fehler der Auffrischung nicht melden - `catch (err)` mit Toast oder Fehlerzustand');
+    }
+  }
+  // Faellt die Erkennung der Funktionen aus, soll der Test das sagen.
+  assert.ok(geprueft >= 7, `nur ${geprueft} Handler gefunden`);
+});
+
+// Die frueher hier stehende Sonde `der Budget-Manager haelt den Fokus auf dem
+// Knopf, den er austauscht` ist mit ihrem Gegenstand entfallen: der
+// seitenlokale `hadFocus`-Griff in `budget.js` wurde durch
+// `refocusAfterRender()` aus der geteilten Modal-Schicht ersetzt. Die Sache
+// selbst haelt jetzt der Ratchet weiter unten - und zwar fuer ALLE Seiten,
+// nicht nur fuer das Budget.
+
+
 // Die fuenf Dialoge aus dem urspruenglichen Befund bleiben namentlich verankert:
 // die Regel oben wuerde auch gruen, wenn jemand `danger: true` entfernte, statt
 // die Folgen zu nennen. Bei einem geloeschten Menschen oder einem
@@ -15725,4 +15958,588 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
   // Wetter-Auto-Refresh, Wetter-Knopf).
   assert.ok((render.match(/if \(signal\.aborted\) return;/g) ?? []).length >= 7,
     'die Pruefung steht hinter jedem await des Hauptflusses und in jedem Pfad, der selbst zeichnet');
+});
+
+/**
+ * Wie diese Datei das Schliessen des Dialogs NENNT.
+ *
+ * Vier Seiten importieren `closeModal as closeSharedModal` - ein Guard, der auf
+ * den Originalnamen prueft, sieht ihren gesamten Schliess-und-Rendern-Weg nicht
+ * (Review zu #1070). Der Alias steht im Import und ist von dort ablesbar.
+ */
+/**
+ * Fassaden, die den Dialog schliessen, ohne aus `modal.js` zu kommen.
+ *
+ * `closeDetailView()` in `components/detail-view.js` delegiert an `closeModal()`
+ * (dort am Ende von `closeDetailView`), und `task-detail.js` importiert es -
+ * fuer den Guard sah dieser Weg nach gar keinem Schliessen aus (Review zu
+ * #1070).
+ *
+ * NAMENTLICH und nicht per Heuristik: "jede exportierte Funktion, die
+ * `closeModal(` ruft" liefert gemessen 11 Namen, davon 9 falsche - darunter
+ * `openModal` und `openDetailView`, weil ein Oeffner das vorige Modal schliesst.
+ * Ein Guard, der Oeffnen fuer Schliessen haelt, urteilt ueber die falsche
+ * Stelle. Die Liste haelt der Ratchet weiter unten vollstaendig.
+ */
+const SCHLIESS_FASSADEN = ['closeDetailView'];
+
+function schliessNamen(lines) {
+  const namen = new Set(['closeModal', ...SCHLIESS_FASSADEN]);
+  const quelle = lines.join('\n');
+  const block = quelle.match(/import\s*\{([\s\S]*?)\}\s*from\s*'\/components\/modal\.js'/);
+  if (block) {
+    for (const m of block[1].matchAll(/closeModal\s+as\s+([A-Za-z_]\w*)/g)) namen.add(m[1]);
+  }
+  return namen;
+}
+
+/** Schliesst diese Zeile den Dialog - unter welchem Namen auch immer? */
+function istSchliessen(zeile, namen) {
+  for (const n of namen) if (new RegExp(`\\b${n}\\s*\\(`).test(zeile)) return true;
+  return false;
+}
+
+/**
+ * Die modul-lokalen Funktionen, die die Seite neu aufbauen.
+ *
+ * Ein Guard, der nur `render…()` und `update…List()` als Neuaufbau zaehlt,
+ * uebersieht den WRAPPER: `saveSubscription()` schliesst den Dialog und
+ * `await reload()`, und `reload()` laedt und ruft dann `renderFilters()` und
+ * `renderContent()`. Der Name verraet nichts davon (Review zu #1070).
+ *
+ * Gesammelt wird eine Ebene tief: Funktionen, die selbst eine render-Funktion
+ * aufrufen. Ein reiner HTML-Baustein faellt heraus - er gibt ein Template
+ * zurueck (`return \``) und schreibt nirgends ins Dokument. Kein transitiver
+ * Abschluss: der zog im Versuch 539 Namen ein, darunter jeden String-Bauer,
+ * und ein Guard, der alles fuer einen Renderer haelt, sagt nichts mehr aus.
+ */
+function rendererIn(lines) {
+  const defs = [];
+  lines.forEach((l, i) => {
+    const m = l.match(/^(?:export )?(?:async )?function ([A-Za-z_]\w*)/);
+    if (m) defs.push({ i, name: m[1] });
+  });
+  const koerper = defs.map((d, k) => ({
+    name: d.name,
+    text: lines.slice(d.i, k + 1 < defs.length ? defs[k + 1].i : lines.length).join('\n'),
+  }));
+  const namen = new Set();
+  // Bis zum Fixpunkt: `reloadMedViews()` ruft `reloadMeds()`, und ERST das
+  // ruft `renderMedsShell()`. Eine Ebene sah nur die mittlere Schicht.
+  for (let runde = 0; runde < 5; runde++) {
+    let gewachsen = false;
+    for (const { name, text } of koerper) {
+      if (namen.has(name)) continue;
+      // Ein reiner HTML-Baustein gibt ein Template zurueck und schreibt
+      // nirgends ins Dokument - ohne diesen Ausschluss zieht der Abschluss
+      // jeden String-Bauer mit (gemessen 539 statt 402 Namen), und ein Guard,
+      // der alles fuer einen Renderer haelt, sagt nichts mehr aus.
+      if (/\breturn\s+`/.test(text)) continue;
+      if (RENDER_DIREKT.test(text)
+        || [...namen].some((r) => new RegExp(`\\b${r}\\s*\\(`).test(text))) {
+        namen.add(name);
+        gewachsen = true;
+      }
+    }
+    if (!gewachsen) break;
+  }
+  return namen;
+}
+
+/**
+ * Ein abgewarteter Rueckruf baut per Definition Unbekanntes um.
+ *
+ * `await onChanged()` in tasks.js hat als Vorgabe `loadTasks(container)` und
+ * ersetzt damit die ganze Liste; `await onDone()` im Quick-Links-Manager ist
+ * dasselbe Muster. Wer nur nach Namen sucht, die er kennt, sieht davon nichts
+ * (Review zu #1070).
+ */
+const AWAIT_RUECKRUF = /\bawait\s+(\w+\.)*(on[A-Z]\w*|opts\.\w+)\s*\??\.?\(/;
+
+/** Rendert diese Zeile - direkt, ueber einen Wrapper oder ueber einen Rueckruf? */
+function istNeuaufbau(zeile, wrapper) {
+  if (RENDER_DIREKT.test(zeile)) return true;
+  if (AWAIT_RUECKRUF.test(zeile)) return true;
+  for (const w of wrapper) if (new RegExp(`\\b${w}\\s*\\(`).test(zeile)) return true;
+  return false;
+}
+
+const RENDER_DIREKT = /\b(render[A-Z]\w*|update[A-Z]\w*List)\s*\(/;
+
+/**
+ * Die Zeilen vom Anker bis zum Ende seines Blocks.
+ *
+ * Ein festes Fenster von n Zeilen reicht nicht: der Gast-Anlegen-Pfad in
+ * `split-expenses.js` schliesst den Dialog, holt dann zwei Abfragen per
+ * `Promise.all`, setzt State und rendert erst neun Zeilen spaeter. Mit einem
+ * Sechs-Zeilen-Fenster sah der Guard das Rendern nie und hielt den Handler
+ * fuer irrelevant - ein geloeschter `refocusAfterRender()` waere gruen
+ * durchgelaufen (Review zu #1070).
+ *
+ * Gelesen wird bis zur ersten Zeile, die WENIGER eingerueckt ist als der Anker:
+ * das ist das Ende des Blocks, in dem er steht. `} catch (err) {` bricht damit
+ * ab, und das ist richtig - der Fehlerzweig rendert nichts.
+ */
+function blockAb(lines, i, grenze = 40) {
+  const tiefe = lines[i].match(/^\s*/)[0].length;
+  const out = [];
+  for (let j = i + 1; j < lines.length && out.length < grenze; j++) {
+    if (lines[j].trim() === '') { out.push(lines[j]); continue; }
+    if (lines[j].match(/^\s*/)[0].length < tiefe) break;
+    out.push(lines[j]);
+  }
+  return out;
+}
+
+/* WER NACH DEM SCHLIESSEN RENDERT, MUSS DEN FOKUS NACHZIEHEN.
+ *
+ * `closeModal()` gibt den Fokus an den Ausloeser zurueck. Rendert der Handler
+ * danach den Bereich neu, in dem der Ausloeser liegt, ist dieser Fokus sofort
+ * wieder weg - gemessen faellt er auf `document.body`, und Tastatur- wie
+ * Screenreader-Bedienung landen am Seitenanfang.
+ *
+ * Die geteilte Schicht faengt das selbst, solange die Seite SYNCHRON rendert:
+ * `_refocusIfDropped` fasst einen Frame spaeter nach. Liegt dazwischen ein
+ * `await`, ist dieser Frame vorbei, und nur die Seite weiss, wann sie fertig
+ * ist - sie muss `refocusAfterRender()` rufen.
+ *
+ * DAS IST EIN RATCHET: der Scanner findet das Muster, nicht eine Liste von
+ * Dateien. Eine neue Stelle, die kuenftig nach einem `await` rendert, faellt
+ * hier auf, ohne dass jemand diesen Test anfasst. Der Aufruf ist immer sicher -
+ * `_tryRefocus` prueft selbst, ob ueberhaupt etwas kaputtging -, es gibt also
+ * keinen Grund, ihn wegzulassen.
+ *
+ * ZWEI GEGENPROBEN, und die erste hat den Guard selbst repariert: einen der elf
+ * Aufrufe AUSKOMMENTIERT - der Guard blieb gruen, weil sein Regex den toten
+ * Aufruf im Kommentartext weiterfand. Seitdem laeuft die Quelle erst durch
+ * `withoutCommentsKeepingLines`. Danach faellt er in beiden Faellen: bei einem
+ * auskommentierten und bei einem geloeschten Aufruf, gemessen je 1 von 364.
+ */
+test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () => {
+  const dirs = ['../public/pages', '../public/components', '../public/settings/pages'];
+  const fehlend = [];
+  for (const dir of dirs) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      // Neutralisieren, sonst zaehlt ein auskommentierter Aufruf als vorhanden.
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const wrapper = rendererIn(lines);
+      const schliesst = schliessNamen(lines);
+      lines.forEach((zeile, i) => {
+        if (!istSchliessen(zeile, schliesst)) return;
+        // EIN VERZOEGERTES SCHLIESSEN IST HIER KEINES. `setTimeout(() =>
+        // closeModal(...), 700)` in tasks.js laeuft erst, wenn der Block
+        // laengst durch ist - der Merker, auf den `refocusAfterRender()`
+        // zurueckgreift, entsteht aber erst IN `_doClose`. Ein Aufruf im Block
+        // koennte dort also nichts bewirken, und ihn zu verlangen hiesse, toten
+        // Code zu fordern (Review zu #1070).
+        if (/\bsetTimeout\s*\(/.test(zeile)) return;
+        // NUR DIE EIGENE EBENE. Alles Tiefere steht in einem Callback, der auf
+        // diesem Weg gar nicht laeuft - der Undo-Zweig eines Toasts etwa. Wer
+        // ihn mitzaehlt, haelt `deletePlan()` in budget-plans.js fuer gedeckt,
+        // weil im Undo-Callback ein Aufruf steht, waehrend der Hauptpfad ohne
+        // blieb (Review zu #1070).
+        const ankerTiefe = zeile.match(/^\s*/)[0].length;
+        const fenster = blockAb(lines, i)
+          .filter((x) => x.trim() === '' || x.match(/^\s*/)[0].length <= ankerTiefe);
+        let letzte = -1;
+        fenster.forEach((x, k) => { if (istNeuaufbau(x, wrapper)) letzte = k; });
+        if (letzte === -1) return;
+        // Ohne `await` davor rendert die Seite synchron - das deckt der Frame ab.
+        if (!fenster.slice(0, letzte + 1).some((x) => /\bawait\b/.test(x))) return;
+        // Der Aufruf muss auf der EBENE des Neuaufbaus liegen. Ein
+        // `refocusAfterRender()` tief in einem Undo-Callback deckt den Weg
+        // darueber nicht ab - genau so sah `deletePlan()` in budget-plans.js
+        // gedeckt aus, waehrend der Hauptpfad ohne Aufruf blieb (Review zu #1070).
+        if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) return;
+        fehlend.push(`${datei}:${i + 1} (${fenster[letzte].trim().slice(0, 48)})`);
+      });
+    }
+  }
+  assert.deepEqual(fehlend, [],
+    'Diese Stellen rendern nach einem await erneut, ohne den Fokus nachzuziehen - '
+    + 'der Focus-Restore aus closeModal() wird dort weggerendert und landet auf document.body. '
+    + `Nach dem Rendern refocusAfterRender() rufen:\n  ${fehlend.join('\n  ')}`);
+});
+
+/**
+ * Steht `zeile` in einem Funktionsausdruck INNERHALB der Funktion ab `start`?
+ *
+ * Gesucht wird rueckwaerts nach einer Zeile, die einen Rueckruf oeffnet
+ * (`=> {`, `async () => {`, ein `function` mitten im Rumpf) und flacher liegt
+ * als die fragliche Zeile - dann liegt diese in seinem Koerper. Ein `try {` auf
+ * Funktionsebene zaehlt dabei nicht als Rueckruf, sonst waere jeder
+ * `try`-Block eine Verschachtelung.
+ */
+function inVerschachtelterFunktion(lines, start, zeile) {
+  const tiefe = lines[zeile].match(/^\s*/)[0].length;
+  for (let j = zeile - 1; j > start; j--) {
+    const l = lines[j];
+    if (l.trim() === '') continue;
+    const t = l.match(/^\s*/)[0].length;
+    if (t >= tiefe) continue;
+    // Eine flachere Zeile: oeffnet sie einen Rueckruf?
+    if (/=>\s*\{\s*$|\bfunction\s*\w*\s*\([^)]*\)\s*\{\s*$/.test(l)) return true;
+    // Eine flachere Zeile, die keinen Rueckruf oeffnet (`try {`, `if (…) {`):
+    // weitersuchen, aber ab jetzt auf ihrer Ebene.
+  }
+  return false;
+}
+
+/* DIE ZWEITE BAUART: ASYNCHRON RENDERN, WAEHREND DER DIALOG NOCH OFFEN IST.
+ *
+ * Der Guard darueber deckt den Handler ab, der nach `closeModal()` rendert.
+ * Dieser hier deckt den Fall, den der Codex-Review zu #1069 gefunden hat und den
+ * beide Guards davor durchliessen, weil in diesem Handler gar kein
+ * `closeModal()` vorkommt:
+ *
+ *   const onChanged = async () => { await loadBudgetMeta(); renderBody(); };
+ *
+ * Schliesst der Nutzer den Dialog, waehrend die Abfrage noch laeuft, ist der
+ * Ausloeser beim Schliessen NOCH VERBUNDEN. Der Restore trifft ihn also
+ * korrekt - und das `renderBody()` danach haengt ihn ab. Im Browser gemessen
+ * (Chrome 152) landet der Fokus dann auf BODY. Das automatische Nachfassen
+ * kommt einen Frame nach dem Schliessen und ist zu diesem Zeitpunkt laengst
+ * vorbei; nur die Seite weiss, wann ihre Abfrage zurueck ist.
+ *
+ * Steht zwischen dem `await` und dem Rendern ein `closeModal()`, ist das der
+ * synchrone Fall aus dem Guard darueber - der Frame deckt ihn, und ein Aufruf
+ * hier waere toter Code. Deshalb sind genau diese Stellen ausgenommen.
+ *
+ * GEGENPROBE: den Aufruf in `openCategoryManager` in `budget.js` entfernen -
+ * genau die Stelle, die der Review nannte. Der Guard faellt dann mit ihr in der
+ * Liste.
+ */
+test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nach', () => {
+  const fehlend = [];
+  for (const dir of ['../public/pages', '../public/components', '../public/settings/pages']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const wrapper = rendererIn(lines);
+      const starts = [];
+      lines.forEach((l, i) => { if (/^(?:export )?(?:async )?function [A-Za-z_]/.test(l)) starts.push(i); });
+      starts.forEach((s, k) => {
+        const e = k + 1 < starts.length ? starts[k + 1] : lines.length;
+        // Nur Funktionen, die selbst einen Dialog oeffnen.
+        if (!lines.slice(s, e).some((l) => /open(Shared)?Modal\s*\(\s*\{/.test(l))) return;
+        for (let j = s; j < e; j++) {
+          if (!/\bawait\s+(load|refresh)[A-Z]\w*\s*\(/.test(lines[j])) continue;
+          // VERSCHACHTELUNG ENTSCHEIDET, NICHT DIE REIHENFOLGE.
+          //
+          // Eine fruehere Fassung verlangte, dass das `openModal({` TEXTLICH vor
+          // dem `await` steht. Das stellte zwar den Fehlalarm an
+          // `openEditMemberModal` in admin-family.js ab - dort bereitet das
+          // `await` den Dialog wirklich nur vor -, schloss aber die haeufigste
+          // Bauart mit aus: den Rueckruf zuerst deklarieren, dann uebergeben.
+          //
+          //   const onChanged = async () => { await loadX(); renderY(); };
+          //   openSharedModal({ … onChanged … });
+          //
+          // Fuenf Stellen haben diese Form (budget, inventory 2x, pantry,
+          // shopping), und der Guard sah keine davon: das Loeschen ihres
+          // `refocusAfterRender()` liess beide Suiten gruen. Ein Guard, der
+          // Schutz behauptet und keinen gibt, ist schlimmer als keiner.
+          //
+          // Der Unterschied liegt in der Verschachtelung: ein `await` INNERHALB
+          // eines verschachtelten Funktionsausdrucks ist eine Auffrischung, eines
+          // auf der Ebene der oeffnenden Funktion ist Vorbereitung.
+          if (!inVerschachtelterFunktion(lines, s, j)) continue;
+          const fenster = blockAb(lines, j);
+          if (!fenster.some((x) => istNeuaufbau(x, wrapper))) continue;
+          // closeModal dazwischen: der synchrone Fall, den der Frame abdeckt.
+          if (fenster.some((x) => istSchliessen(x, schliessNamen(lines)))) continue;
+          if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) continue;
+          fehlend.push(`${datei}:${j + 1} (${lines[j].trim().slice(0, 44)})`);
+        }
+      });
+    }
+  }
+  assert.deepEqual(fehlend, [],
+    'Diese Handler rendern asynchron, waehrend ihr Dialog noch offen sein kann. Schliesst der '
+    + 'Nutzer waehrenddessen, trifft der Focus-Restore den noch verbundenen Ausloeser und das '
+    + 'Rendern danach haengt ihn ab - der Fokus faellt auf document.body. '
+    + `Nach dem Rendern refocusAfterRender() rufen:\n  ${fehlend.join('\n  ')}`);
+});
+
+
+/* DER AUFRUF MUSS DER LETZTE NEUAUFBAU SEIN, NICHT IRGENDEINER.
+ *
+ * `refocusAfterRender()` setzt den Fokus sofort. Folgt danach im selben Block
+ * noch ein `await`, das die Seite erneut umbaut - ein `await opts.onSaved?.()`,
+ * dessen Callback den Bereich ersetzt -, ist der Fokus gleich wieder weg. Genau
+ * so stand er zweimal in `health.js` (Review zu #1070): hinter
+ * `reloadAfterSave()`, aber VOR dem Callback, der `overview.root` austauscht.
+ *
+ * Die Regel ist nicht "hoechstens ein await danach", sondern "kein await, das
+ * neu aufbaut" - ein `await api.post(...)` danach ist harmlos.
+ *
+ * GEGENPROBE: den Aufruf in `saveVitals` wieder vor `await opts.onSaved?.()`
+ * schieben, dann faellt diese Sonde mit dieser Zeile.
+ */
+test('refocusAfterRender steht nach dem LETZTEN Neuaufbau im Block', () => {
+  const zuFrueh = [];
+  for (const dir of ['../public/pages', '../public/components', '../public/settings/pages']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const wrapper = rendererIn(lines);
+      lines.forEach((zeile, i) => {
+        if (!/^\s*refocusAfterRender\(\);\s*$/.test(zeile)) return;
+        // Was im selben Block noch folgt: ein await, das neu aufbaut?
+        const tiefe = zeile.match(/^\s*/)[0].length;
+        for (let j = i + 1; j < lines.length; j++) {
+          if (lines[j].trim() === '') continue;
+          if (lines[j].match(/^\s*/)[0].length < tiefe) break;
+          // Tiefer eingerueckt heisst: in einem Callback, der hier nicht laeuft.
+          // Ein `await load()` im Undo-Zweig eines Toasts ist kein Neuaufbau
+          // dieses Weges (Fehlalarm an budget-plans.js gemessen).
+          if (lines[j].match(/^\s*/)[0].length > tiefe) continue;
+          if (!/\bawait\b/.test(lines[j])) continue;
+          // Ein Callback baut per Definition Unbekanntes um; sonst zaehlt nur
+          // ein erkannter Neuaufbau.
+          if (/\bawait\s+\w*(opts|options)\.\w+\?\.\(/.test(lines[j]) || istNeuaufbau(lines[j], wrapper)) {
+            zuFrueh.push(`${datei}:${i + 1} (danach: ${lines[j].trim().slice(0, 40)})`);
+            break;
+          }
+        }
+      });
+    }
+  }
+  assert.deepEqual(zuFrueh, [],
+    'Diese Aufrufe stehen VOR einem await, das die Seite noch einmal umbaut - der Fokus, den sie '
+    + 'setzen, ist danach wieder weg. Den Aufruf ans Ende des Blocks ziehen:\n  '
+    + zuFrueh.join('\n  '));
+});
+
+
+/* DIE FASSADEN-LISTE MUSS VOLLSTAENDIG BLEIBEN.
+ *
+ * `SCHLIESS_FASSADEN` steht namentlich da, weil die Heuristik zu breit war -
+ * und eine handgefuehrte Liste altert. Dieser Ratchet faengt den Zuwachs: jede
+ * EXPORTIERTE Funktion, deren Name mit `close` beginnt und die `closeModal(`
+ * ruft, ist eine solche Fassade und gehoert in die Liste.
+ *
+ * `closeModal` selbst ist die Quelle, nicht die Fassade.
+ */
+test('jede exportierte close-Fassade steht in SCHLIESS_FASSADEN', () => {
+  const fehlend = [];
+  for (const dir of ['../public/components', '../public/utils']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const grenzen = [];
+      lines.forEach((l, i) => { if (/^(?:export )?(?:async )?function [A-Za-z_]/.test(l)) grenzen.push(i); });
+      lines.forEach((l, i) => {
+        const m = l.match(/^export (?:async )?function (close[A-Za-z_]\w*)/);
+        if (!m || m[1] === 'closeModal') return;
+        const ende = grenzen.find((x) => x > i) ?? lines.length;
+        if (!/\bcloseModal\s*\(/.test(lines.slice(i, ende).join('\n'))) return;
+        if (SCHLIESS_FASSADEN.includes(m[1])) return;
+        fehlend.push(`${datei}: ${m[1]}`);
+      });
+    }
+  }
+  assert.deepEqual(fehlend, [],
+    'Diese exportierten Funktionen schliessen den Dialog, stehen aber nicht in SCHLIESS_FASSADEN - '
+    + 'die Focus-Guards sehen ihren Schliess-und-Rendern-Weg deshalb nicht:\n  ' + fehlend.join('\n  '));
+});
+
+
+/* KEIN AUFRUF INS LEERE.
+ *
+ * `refocusAfterRender()` wirkt nur, wenn vorher ein Dialog GESCHLOSSEN wurde:
+ * es greift auf den Merker zurueck, den `_doClose()` setzt, und bricht ab,
+ * solange noch ein Overlay offen ist. Zwei Formen von totem Aufruf sind daran
+ * schon entstanden, beide durch automatisches Einfuegen (Review zu #1070):
+ *
+ *   1. VOR dem Schliessen: `refocusAfterRender(); closeModal(...)` ist ein
+ *      garantierter No-op - der Merker ist noch leer, das Overlay noch offen.
+ *   2. In einer Funktion, die mit Dialogen gar nichts zu tun hat: ein
+ *      fehlerhafter Grenz-Regex hatte den Seiten-`render()` von housekeeping.js
+ *      in den Block eines Modal-Oeffners gefaltet, und der Aufruf landete dort.
+ *
+ * Ein Handler, der WAEHREND des offenen Dialogs rendert, faellt hier bewusst
+ * nicht auf: er steht in einer Funktion, die einen Dialog oeffnet, und greift
+ * genau dann, wenn der Nutzer waehrenddessen schliesst.
+ */
+test('kein refocusAfterRender ohne ein Schliessen, auf das es sich beziehen kann', () => {
+  const tot = [];
+  for (const dir of ['../public/pages', '../public/components', '../public/settings/pages']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const schliesst = schliessNamen(lines);
+      const grenzen = [];
+      lines.forEach((l, i) => { if (/^(?:export )?(?:async )?function [A-Za-z_]/.test(l)) grenzen.push(i); });
+      lines.forEach((zeile, i) => {
+        if (!/^\s*refocusAfterRender\(\);\s*$/.test(zeile)) return;
+        const start = [...grenzen].reverse().find((g) => g <= i) ?? 0;
+        const ende = grenzen.find((g) => g > i) ?? lines.length;
+        const funktion = lines.slice(start, ende);
+
+        // (1) Steht im selben Block NACH dem Aufruf ein Schliessen?
+        const tiefe = zeile.match(/^\s*/)[0].length;
+        for (let j = i + 1; j < ende; j++) {
+          if (lines[j].trim() === '') continue;
+          if (lines[j].match(/^\s*/)[0].length < tiefe) break;
+          if (lines[j].match(/^\s*/)[0].length > tiefe) continue;
+          if (istSchliessen(lines[j], schliesst)) {
+            tot.push(`${datei}:${i + 1} - steht VOR dem Schliessen in Zeile ${j + 1}`);
+            return;
+          }
+        }
+        // (1b) Liegt zwischen dem Schliessen davor und dem Aufruf ueberhaupt
+        // ein Neuaufbau? Ohne einen ist nichts nachzuziehen: `_doClose` hat den
+        // Fokus gerade selbst gesetzt, und zwar auf den frisch gerenderten
+        // Knopf, wenn die Seite VOR dem Schliessen gerendert hat. Genau so
+        // standen zwei Aufrufe in birthdays.js (Review zu #1070).
+        let schliessZeile = -1;
+        for (let j = i - 1; j >= start; j--) {
+          if (!istSchliessen(lines[j], schliesst)) continue;
+          // Ein VERZOEGERTES Schliessen traegt keinen Aufruf: `setTimeout(() =>
+          // closeModal(...), 700)` laeuft erst, wenn der Block durch ist, und
+          // der Merker entsteht erst in `_doClose`. So stand ein toter Aufruf
+          // in tasks.js (Review zu #1070).
+          if (/\bsetTimeout\s*\(/.test(lines[j])) {
+            tot.push(`${datei}:${i + 1} - das Schliessen in Zeile ${j + 1} ist verzoegert, der Merker existiert hier noch nicht`);
+            return;
+          }
+          schliessZeile = j;
+          break;
+        }
+        if (schliessZeile !== -1) {
+          const dazwischen = lines.slice(schliessZeile + 1, i);
+          if (!dazwischen.some((x) => istNeuaufbau(x, rendererIn(lines)))) {
+            tot.push(`${datei}:${i + 1} - zwischen dem Schliessen und dem Aufruf wird nichts neu gebaut`);
+            return;
+          }
+        }
+        // (2) Hat die Funktion ueberhaupt mit Dialogen zu tun?
+        const beteiligt = funktion.some((x) => istSchliessen(x, schliesst) || /open(Shared)?Modal\s*\(/.test(x));
+        if (!beteiligt) tot.push(`${datei}:${i + 1} - die Funktion oeffnet und schliesst keinen Dialog`);
+      });
+    }
+  }
+  assert.deepEqual(tot, [],
+    'Diese Aufrufe koennen nichts bewirken - refocusAfterRender() braucht ein vorangegangenes '
+    + `Schliessen, sonst ist der Merker leer und das Overlay noch offen:\n  ${tot.join('\n  ')}`);
+});
+
+
+/* FUNKTIONSGRENZEN MUESSEN `export` MITLESEN.
+ *
+ * 36 Dateien unter `public/pages` und `public/components` haben top-level
+ * `export function`/`export async function`. Ein Grenz-Regex ohne dieses
+ * Praefix sieht sie nicht - und faltet damit alles bis zur naechsten
+ * nicht-exportierten Deklaration in den vorigen Block. Genau so geriet der
+ * Seiten-`render()` von housekeeping.js in den Block eines Modal-Oeffners, und
+ * ein Werkzeug setzte dort einen Aufruf ins Leere (Review zu #1070).
+ *
+ * Geprueft wird an einer kuenstlichen Quelle, nicht am Repo: so faellt die
+ * Sonde auch dann, wenn gerade keine echte Datei den Fehler zeigt.
+ */
+test('rendererIn erkennt exportierte Funktionen als Grenze', () => {
+  // Die erste Funktion rendert NICHT; die exportierte danach schon. Wird das
+  // `export` als Grenze uebersehen, faellt deren Rumpf in den Block davor - und
+  // die harmlose Funktion gilt faelschlich als Renderer.
+  const quelle = [
+    'function harmlos() {',
+    '  const x = 1;',
+    '}',
+    'export async function render(container) {',
+    '  renderListe();',
+    '}',
+  ];
+  const namen = rendererIn(quelle);
+  assert.ok(namen.has('render'), '`export async function render` muss als eigene Funktion erkannt werden');
+  assert.ok(!namen.has('harmlos'),
+    'ohne das export-Praefix in der Grenze faellt der Rumpf von `render` in den Block davor, '
+    + 'und `harmlos` gilt als Renderer, obwohl sie nichts rendert');
+});
+
+
+/* DER KOMMENTAR-SCHNITT DARF KEIN REGEX-LITERAL ZERSCHNEIDEN.
+ *
+ * `/^https?:\/\//i` enthaelt ein `//` - der escapte Schraegstrich und der
+ * schliessende bilden eines -, und ein Schnitt dort verschluckt den Rest der
+ * Zeile. Steht darauf ein `refocusAfterRender()` oder ein Rendern, wird es fuer
+ * jeden Scanner unsichtbar. Im Repo kommt das Muster mehrfach vor
+ * (documents.js, shopping.js, personal-feeds.js).
+ */
+test('withoutCommentsKeepingLines laesst Regex-Literale und URLs heil', () => {
+  const mitRegex = String.raw`if (/^https?:\/\//i.test(u)) refocusAfterRender();`;
+  assert.equal(withoutCommentsKeepingLines(mitRegex), mitRegex,
+    'ein Regex-Literal mit Schraegstrichen darf die Zeile nicht abschneiden - sonst wird alles '
+    + 'dahinter fuer die Ratchets unsichtbar');
+
+  const mitUrl = "const u = 'http://x'; renderAll();";
+  assert.equal(withoutCommentsKeepingLines(mitUrl), mitUrl, 'eine URL ist kein Kommentar');
+
+  assert.equal(withoutCommentsKeepingLines('renderAll(); // weg').trim(), 'renderAll();',
+    'ein echter Zeilenkommentar muss weiter fallen');
+});
+
+/* EIN IMPORT OHNE AUFRUF IST TOTER CODE.
+ *
+ * Beim Entfernen der toten Aufrufe blieb in birthdays.js der Import stehen
+ * (Review zu #1070). Er schadet nicht, aber er behauptet eine Beteiligung, die
+ * es nicht gibt - und beim naechsten Lesen sucht jemand den Aufruf.
+ */
+test('wer refocusAfterRender importiert, ruft es auch', () => {
+  const tot = [];
+  for (const dir of ['../public/pages', '../public/components', '../public/settings/pages']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const src = withoutCommentsKeepingLines(read(`${dir}/${datei}`));
+      const importiert = /import\s*\{[^}]*\brefocusAfterRender\b[^}]*\}\s*from\s*'\/components\/modal\.js'/.test(src);
+      if (!importiert) continue;
+      if (/refocusAfterRender\s*\(/.test(src)) continue;
+      tot.push(datei);
+    }
+  }
+  assert.deepEqual(tot, [],
+    `Diese Dateien importieren refocusAfterRender, ohne es zu rufen:\n  ${tot.join('\n  ')}`);
+});
+
+
+/* VERSCHACHTELUNG, NICHT REIHENFOLGE - direkt geprueft.
+ *
+ * Die Unterscheidung traegt den Ratchet fuer die haeufigste Bauart, und sie ist
+ * an echten Dateien nur zu sehen, solange dort jemand die Form benutzt. Deshalb
+ * hier an einer kuenstlichen Quelle: ein `await` im Rueckruf zaehlt, eines auf
+ * der Ebene der oeffnenden Funktion nicht.
+ */
+test('inVerschachtelterFunktion trennt Rueckruf von Dialogvorbereitung', () => {
+  const imRueckruf = [
+    'function openManager() {',
+    '  const onChanged = async () => {',
+    '    await loadMeta();',
+    '  };',
+    '  openSharedModal({ onChanged });',
+    '}',
+  ];
+  assert.equal(inVerschachtelterFunktion(imRueckruf, 0, 2), true,
+    'ein `await` im Rueckruf ist eine Auffrischung - genau die Bauart, die der Ratchet halten muss');
+
+  const vorbereitung = [
+    'async function openEditor(member) {',
+    '  const ids = await loadIds(member.id);',
+    '  openModal({ content: ids });',
+    '}',
+  ];
+  assert.equal(inVerschachtelterFunktion(vorbereitung, 0, 1), false,
+    'ein `await` auf der Ebene der oeffnenden Funktion bestueckt den Dialog und baut nichts neu auf');
+
+  // Ein `try {` ist kein Rueckruf - sonst waere jeder try-Block eine Verschachtelung.
+  const imTry = [
+    'async function speichern() {',
+    '  try {',
+    '    await loadMeta();',
+    '  } catch (err) {}',
+    '  openModal({});',
+    '}',
+  ];
+  assert.equal(inVerschachtelterFunktion(imTry, 0, 2), false,
+    'ein try-Block oeffnet keinen Rueckruf');
 });

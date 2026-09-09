@@ -26,6 +26,9 @@ import { pushOverlay, dropOverlay, isOverlayOpen } from '/utils/overlay-history.
 
 let activeOverlay = null;
 let previouslyFocused = null;
+// Das Fokusziel des letzten Schliessens - `refocusAfterRender()` greift darauf
+// zurueck, wenn die Seite erst nach einem `await` fertig gerendert hat.
+let _lastRestore = null;
 let focusTrapHandler = null;
 let _initialFormSnapshot = null;
 let _initialFormTimeout = null;
@@ -149,6 +152,12 @@ async function _closeFromBackNavigation({ force = false } = {}) {
 
 // Overlay-Dimming: theme-color abdunkeln im Standalone-Modus
 const OVERLAY_THEME_COLOR = '#1A1A1A';
+
+// Die Seitenwurzel - letzter Halt fuer den Fokus, wenn der Ausloeser weg ist.
+// `renderAppShell()` in router.js vergibt die id und setzt `tabIndex = -1`; sie
+// ist ausserdem das Ziel des Skip-Links, also per Design die Stelle „hier
+// beginnt der Seiteninhalt".
+const PAGE_ROOT_ID = 'main-content';
 
 const FOCUSABLE = [
   'a[href]',
@@ -529,6 +538,340 @@ function _discardSuspendedModal({ overlay, restoreFocus }) {
 // _doClose - gemeinsame Cleanup-Logik
 // --------------------------------------------------------
 
+/**
+ * WOHIN DER FOKUS BEIM SCHLIESSEN GEHT - der gemerkte Ausloeser kann weg sein.
+ *
+ * Ein Handler, der den Bereich neu rendert, aus dem das Modal kam, tauscht den
+ * Knopf aus, der es geoeffnet hat. `.focus()` auf dem abgehaengten Knoten ist
+ * ein No-op - ohne Fehler, ohne Spur: der Fokus faellt auf `document.body`, und
+ * wer mit Tastatur oder Screenreader bedient, verliert seine Position.
+ *
+ * DAS PASSIERT AN ZWEI STELLEN, und sie brauchen verschiedene Antworten:
+ *
+ *   A) Der Handler rendert, WAEHREND das Modal offen ist. Beim Schliessen ist
+ *      der gemerkte Knoten schon tot - der Wiederfinder unten greift.
+ *      Gemessen: 1 Stelle (der Kategorie-Manager im Budget).
+ *   B) Der Handler rendert, NACHDEM geschlossen wurde - `closeModal()` und in
+ *      der Zeile darauf `renderGrid()`. Der Restore war korrekt und wird eine
+ *      Zeile spaeter weggerendert. Gemessen: 30 Stellen, davon 19 synchron.
+ *      Dagegen hilft nur das Nachfassen in `_refocusIfDropped`.
+ *
+ * Der Wiederfinder haengt nicht an der id: die typischen Ausloeser sind
+ * Listenzeilen und Rasterzellen, und die tragen `data-id` oder `data-action`,
+ * keine id. Von den sieben Nutzern des Kategorie-Managers geben nur drei ihrem
+ * Ausloeser eine id - bei den 83 Modal-Oeffnungen im Projekt ist das die
+ * Ausnahme, nicht die Regel.
+ *
+ * Bleibt nichts wiederzufinden, ist die Seitenwurzel der Halt - kein guter
+ * Platz, aber ein Platz IN der Seite, von dem aus Tab weiterlaeuft.
+ * `document.body` ist dagegen kein Fokusziel, sondern das Fehlen eines Fokus.
+ *
+ * EIN VERSTECKTER POPOVER-EINTRAG IST KEIN FALL DAVON, obwohl er danach
+ * aussieht: `utils/popover-menu.js` blendet sein Menue nur aus, ein Eintrag
+ * meldet also weiter `isConnected === true`. Gemessen (Chrome 152, Maus wie
+ * Tastatur) gibt `hidePopover()` den Fokus aber schon in der Capture-Phase des
+ * Klicks an den TRIGGER zurueck - also bevor der Seiten-Handler das Modal
+ * oeffnet. Der gemerkte Ausloeser ist damit nie der Menueintrag, sondern der
+ * Trigger, und der ist sichtbar und fokussierbar. Eine Sichtbarkeitspruefung
+ * hier waere ein Layout-Read auf jedem Schliessen ohne einen Fall, der ihn
+ * braucht.
+ *
+ * `rememberFocus` und `focusRestoreTarget` sind fuer die Sonden in
+ * `test/test-modal-utils.js` exportiert: die Entscheidung laesst sich so ohne
+ * den vollen Oeffnen-Schliessen-Pfad messen, der ein echtes DOM braeuchte.
+ */
+export function rememberFocus(el) {
+  if (!el || !el.tagName || typeof el.focus !== 'function') return null;
+  // `document.body` IST KEIN FOKUSZIEL, sondern das Fehlen eines - und es kommt
+  // durch jede Typpruefung, weil es `focus()` von HTMLElement erbt (gemessen:
+  // `typeof document.body.focus === 'function'`). Als Merker waere es toedlich:
+  // `isConnected` ist immer wahr und der Fokus liegt bereits darauf, also braeche
+  // jedes spaetere Nachfassen an seiner ersten Wache ab - das Gegenteil dessen,
+  // wofuer diese Schicht da ist.
+  //
+  // Der Fall ist Alltag, nicht Ausnahme: oeffnet ein Dialog aus einer Zeile, die
+  // selbst nicht fokussierbar ist (ein `<div>`, ein `<tr>`), steht `activeElement`
+  // auf `body` (Review zu #1070).
+  if (el === document.body || el.tagName === 'BODY') return null;
+  return {
+    el,
+    id: el.id || null,
+    tag: el.tagName,
+    // Als Attribut lesen: bei SVG ist `className` ein Objekt, kein String.
+    cls: el.getAttribute?.('class') ?? null,
+    data: el.dataset ? { ...el.dataset } : {},
+    // DIE ZEILE, IN DER DER KNOPF STECKT (Review zu #1070). Bei Listenzeilen
+    // traegt nicht der Knopf die Identitaet, sondern sein Vorfahre:
+    // `<div class="list-row" data-id="42"><button data-action="open-detail">`
+    // in inventory, dasselbe in pantry. Ohne diesen Anker sehen alle Zeilen
+    // gleich aus - gleicher Tag, gleiche Klasse, gleiches `data-action` - und
+    // der Fokus landete nach dem Speichern zuverlaessig auf der ERSTEN Zeile.
+    rowId: el.closest?.('[data-id]')?.dataset?.id ?? null,
+  };
+}
+
+/**
+ * Denselben Knopf im frisch gebauten Baum wiederfinden.
+ *
+ * Ueber die id, wo es eine gibt. Sonst ueber die data-Attribute: eine
+ * Listenzeile heisst `.note-card[data-id="42"]`, eine Kalenderzelle
+ * `[data-action="add-meal"][data-date][data-type]` - die id fehlt dort, die
+ * Identitaet steht in den data-Werten. Verglichen wird in JS statt per
+ * Selektor-String, weil ein Attributwert Anfuehrungszeichen enthalten darf und
+ * ein gebauter Selektor daran zerbraeche.
+ *
+ * Ohne data-Attribute wird NICHT gesucht: Tag und Klasse allein treffen
+ * irgendeinen Knopf derselben Sorte, und ein falsches Fokusziel ist schlimmer
+ * als keines.
+ */
+function _findAgain(memo) {
+  if (memo.id) {
+    const byId = document.getElementById(memo.id);
+    if (byId) return byId;
+  }
+  const alle = Object.keys(memo.data);
+  if (!alle.length && memo.rowId === null) return null;
+  // ZWEI ANLAEUFE, weil nicht jedes data-Feld Identitaet traegt. Der
+  // Umbenennen-Knopf einer Teilaufgabe fuehrt `data-action` und `data-id` -
+  // aber auch `data-title`, und genau das aendert sich beim Umbenennen. Ein
+  // Vergleich, der Gleichheit ALLER Felder verlangt, findet danach nichts mehr
+  // (Review zu #1070).
+  //
+  // Erst also der genaue Treffer, dann der auf den identitaetstragenden Feldern.
+  // Die Reihenfolge ist wichtig: wo alle Felder passen, ist es sicher dasselbe
+  // Element; die zweite Runde ist der Rueckfall, nicht die Regel. Und weil
+  // beide Runden auf Eindeutigkeit bestehen, wird dabei nichts geraten.
+  // IDENTITAET HEISST NICHT IMMER `id`. Das Repo fuehrt ein Dutzend eigener
+  // Schluesselfelder - `data-meal-id`, `data-entry-id`, `data-expense-id` und
+  // weitere -, die als `dataset.mealId` ankommen. Ein Filter, der nur `id`
+  // kennt, haelt eine Mahlzeitenkarte fuer identitaetslos und laesst den
+  // Rueckfall auf die Wurzel laufen, obwohl der Knopf eindeutig bestimmt waere
+  // (Review zu #1070).
+  const istIdentitaet = (k) => k === 'action' || k === 'id' || /Id$/.test(k);
+  const identitaet = alle.filter(istIdentitaet);
+  const engerAlsAlle = identitaet.length && identitaet.length < alle.length;
+  // DIE KLASSE IST DARSTELLUNG, KEINE IDENTITAET - im dritten Anlauf faellt sie
+  // weg. Eine Mahlzeitenkarte traegt `meal-card__open--with-thumb`, sobald das
+  // Rezept ein Bild hat; wer beim Bearbeiten eines hinzufuegt, aendert damit die
+  // Klasse des Knopfes, ueber den er gekommen ist (Review zu #1070). Erst der
+  // genaue Treffer, dann der ohne veraenderliche Nutzlast, dann der ohne
+  // Darstellung - jeder besteht auf Eindeutigkeit, es wird also nichts geraten.
+  const runden = [
+    { keys: alle, mitKlasse: true },
+    ...(engerAlsAlle ? [{ keys: identitaet, mitKlasse: true }] : []),
+    // Der klassenlose Anlauf nur bei STARKER Identitaet: eine Aktion UND ein
+    // Schluesselfeld. Ein Schluessel allein reicht nicht - dieselbe Nummer steht
+    // in einer anderen Liste fuer etwas anderes, und ohne die Klasse waeren die
+    // beiden nicht mehr zu unterscheiden.
+    ...(identitaet.includes('action') && identitaet.some((k) => k !== 'action')
+      ? [{ keys: identitaet, mitKlasse: false }]
+      : []),
+  ];
+  for (const { keys, mitKlasse } of runden) {
+    const treffer = _kandidaten(memo, keys, mitKlasse);
+    if (treffer.length === 1) return treffer[0];
+  }
+  return null;
+}
+
+/** Die Elemente, die in Tag, den gegebenen data-Feldern, der Zeile und optional der Klasse passen. */
+function _kandidaten(memo, keys, mitKlasse) {
+  const treffer = [];
+  for (const kandidat of document.getElementsByTagName(memo.tag)) {
+    if (mitKlasse && kandidat.getAttribute('class') !== memo.cls) continue;
+    if (!keys.every((k) => kandidat.dataset[k] === memo.data[k])) continue;
+    if ((kandidat.closest?.('[data-id]')?.dataset?.id ?? null) !== memo.rowId) continue;
+    treffer.push(kandidat);
+    // Zwei reichen als Beweis, dass es nicht eindeutig ist.
+    if (treffer.length > 1) break;
+  }
+  // MEHRDEUTIG HEISST NEIN. Bleiben mehrere Kandidaten, ist keiner davon
+  // nachweislich der gesuchte, und ein falsches Fokusziel ist schlimmer als
+  // keines: es setzt den Nutzer an eine Stelle, die er nicht gewaehlt hat.
+  // Dann lieber die Seitenwurzel.
+  return treffer;
+}
+
+/**
+ * Ein Fokusziel, das den Fokus auch ANNIMMT.
+ *
+ * Betrifft genau ein Element: die Seitenwurzel. Alles andere, was diese Weiche
+ * zurueckgibt, ist ein Knopf oder eine Zeile und damit von Natur aus
+ * fokussierbar.
+ *
+ * `renderAppShell()` in router.js setzt `tabIndex = -1` - aber nur fuer die
+ * Routen mit App-Shell. Die fuenf Auth-Seiten (login, setup, join,
+ * forgot-password, reset-password) rendern ihr eigenes
+ * `<main id="main-content">` ohne das Attribut, und dort ist `.focus()` ein
+ * No-op: gemessen faellt der Fokus auf `document.body` - genau der stille
+ * Ausfall, den diese Weiche verhindern soll, nur eine Route weiter.
+ *
+ * Erreichbar ist das ueber ein Sitzungsende bei offenem Dialog:
+ * `closeAllOverlays()` schliesst mit `force`, und auf Mobil haengt `_doClose`
+ * an `animationend` beziehungsweise einem 400-ms-Timer - es kann also laufen,
+ * nachdem `/login` schon gerendert hat.
+ *
+ * `hasAttribute` und nicht `el.tabIndex`: das Property liest auch ohne Attribut
+ * `-1` und kann die beiden Faelle gar nicht unterscheiden (gemessen).
+ */
+function _focusable(el) {
+  if (el && el.id === PAGE_ROOT_ID && !el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  return el;
+}
+
+export function focusRestoreTarget(memo) {
+  if (!memo) return null;
+  if (memo.el?.isConnected) return memo.el;
+  // Durch `_focusable` MUESSEN beide Wege: war der Ausloeser selbst die
+  // Seitenwurzel, liefert das Wiederfinden sie direkt zurueck, und ein
+  // Rueckgabewert daran vorbei haette wieder kein tabindex (Review zu #1069).
+  return _focusable(_findAgain(memo) ?? document.getElementById(PAGE_ROOT_ID));
+}
+
+/**
+ * NACHFASSEN, WENN DIE SEITE DAS FOKUSZIEL GLEICH DANACH WEGRENDERT.
+ *
+ * 30 Stellen im Projekt rufen `closeModal()` und rendern in der Zeile darauf
+ * neu. Der Restore oben ist dann korrekt und trotzdem wertlos: er sitzt auf
+ * einem Knoten, den der naechste `replaceChildren()` entfernt. Gemessen landet
+ * der Fokus danach auf `document.body`.
+ *
+ * BEWUSST NACHTRAEGLICH UND NICHT VERZOEGERT. Den Restore generell einen Frame
+ * spaeter zu setzen haette den Normalfall aller 83 Modal-Oeffnungen angefasst,
+ * fuer einen Fehler, der nur einen Teil davon trifft. So bleibt der haeufige
+ * Weg Zeichen fuer Zeichen der alte, und nur der kaputte bekommt eine zweite
+ * Runde.
+ *
+ * Drei Bedingungen, und jede einzelne verhindert einen Schaden:
+ *   - das Ziel ist wirklich verschwunden (sonst gab es nichts zu reparieren),
+ *   - der Fokus liegt auf `body` (hat die Seite selbst etwas fokussiert, ist
+ *     ihre Wahl die bessere - wir wuerden sie ueberschreiben),
+ *   - es ist kein Modal offen (sonst risse das Nachfassen den Fokus aus einem
+ *     Dialog, der in derselben Geste aufgegangen ist).
+ *
+ * Der asynchrone Fall bleibt offen: rendert die Seite erst nach einem `await`
+ * (11 der 30 Stellen), ist dieser Frame laengst vorbei. Dort muss die Seite
+ * selbst nachziehen; ein laengeres Warten waere geraten und nicht gemessen.
+ */
+/**
+ * Fokussieren UND nachsehen, ob es gewirkt hat.
+ *
+ * Der ganze Vorgang hier dreht sich darum, dass `.focus()` still fehlschlaegt.
+ * Genau das kann auch ein Ersatz: der neu gebaute Knopf ist vielleicht
+ * `disabled` (in rewards wird der Einloesen-Knopf es, sobald die Punkte nicht
+ * mehr reichen) oder ausgeblendet. Dann ist er der eindeutige Treffer, nimmt
+ * den Fokus aber nicht an - und ohne diese Rueckmeldung wuesste niemand davon.
+ *
+ * Nur die Seitenwurzel bekommt `preventScroll`: sie IST der Scrollport
+ * (#main-content == .app-content), ein Fokus mit Scroll risse die
+ * wiederhergestellte Position nach oben.
+ */
+function _fokussiere(el) {
+  if (!el || typeof el.focus !== 'function') return false;
+  el.focus(el.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
+  return document.activeElement === el;
+}
+
+/**
+ * Ein Ziel setzen und, wenn es nicht angenommen wird, auf die Wurzel ausweichen.
+ */
+function _fokussiereMitRueckfall(el) {
+  if (_fokussiere(el)) return el;
+  const wurzel = _focusable(document.getElementById(PAGE_ROOT_ID));
+  if (wurzel && wurzel !== el && _fokussiere(wurzel)) return wurzel;
+  return null;
+}
+
+function _tryRefocus(memo, ziel) {
+  // WAR DAS ZIEL UNSER EIGENER RUECKFALL, darf ein spaeterer Lauf es ersetzen.
+  // Ein Loader, der den Ausloeser sofort gegen ein Skelett tauscht und ihn erst
+  // nach der Abfrage neu baut, laesst den Frame-Lauf auf der Wurzel landen; ohne
+  // diese Ausnahme haetten `isConnected` und `activeElement` danach jeden
+  // weiteren Versuch abgewiesen, und der Fokus bliebe an der Seitenwurzel
+  // haengen, obwohl der Knopf laengst wieder da ist (Review zu #1070).
+  const istRueckfall = ziel.id === PAGE_ROOT_ID;
+  // NICHT `isConnected` FRAGEN, SONDERN OB DAS ZIEL DEN FOKUS NOCH HAELT. Ein
+  // Knoten kann im Dokument haengen und trotzdem unbedienbar sein: der
+  // Loesch-Weg der Aufgaben setzt die Zeile auf `display: none`, statt sie zu
+  // entfernen (`deleteTaskWithUndo` in components/task-detail.js), und der Fokus
+  // faellt dabei auf `body`, waehrend der Knoten verbunden bleibt. Dieselbe
+  // Familie wie ein `disabled` gewordener Ersatz - beide melden Anwesenheit und
+  // nehmen keinen Fokus (Review zu #1070).
+  if (ziel.isConnected && document.activeElement === ziel && !istRueckfall) return;
+  if (activeOverlay) return;
+  // Hat die Seite selbst etwas fokussiert, gilt ihre Wahl. Der Fokus auf dem
+  // Ziel selbst zaehlt hier als "noch niemand hat gewaehlt": beim Rueckfall darf
+  // ein besseres Ziel ihn abloesen.
+  const frei = document.activeElement === document.body || document.activeElement === ziel;
+  if (!frei) return;
+  const ersatz = focusRestoreTarget(memo);
+  if (!ersatz) return;
+  // AUCH WENN DER ERSATZ DASSELBE ELEMENT IST. Bis hierher kommt nur, wer den
+  // Fokus NICHT haelt - ein erneuter Versuch bewegt also nichts, was jemand
+  // gewaehlt haette. Genau das war die Luecke: eine versteckte Zeile bleibt
+  // verbunden, `focusRestoreTarget` gibt sie darum unveraendert zurueck, und
+  // ein `ersatz === ziel`-Abbruch haette den Rueckfall auf die Wurzel nie
+  // erreicht (Review zu #1070). `_fokussiereMitRueckfall` prueft die Wirkung
+  // und weicht aus, wenn der Fokus nicht ankommt.
+  const gesetzt = _fokussiereMitRueckfall(ersatz);
+  // DAS ERGEBNIS ZURUECKSCHREIBEN. Sonst zeigt der Merker weiter auf das alte,
+  // inzwischen abgehaengte Element, waehrend der Fokus laengst auf der Wurzel
+  // sitzt - und der naechste Lauf urteilt ueber ein Ziel, das es nicht mehr
+  // gibt. Genau so verlor der spaetere `refocusAfterRender()` den frisch
+  // wieder aufgebauten Knopf (Review zu #1070).
+  if (gesetzt && _lastRestore) _lastRestore.ziel = gesetzt;
+}
+
+function _refocusIfDropped(memo, ziel) {
+  if (typeof requestAnimationFrame !== 'function') return;
+  requestAnimationFrame(() => _tryRefocus(memo, ziel));
+}
+
+/**
+ * DERSELBE GRIFF FUER DIE SEITE, DIE ERST NACH EINEM `await` RENDERT.
+ *
+ * `closeModal(); await loadX(); renderY();` - da ist der Frame aus
+ * `_refocusIfDropped` laengst vorbei, und die Schicht kann nicht wissen, wann
+ * das Laden fertig ist. Nur die Seite weiss das, also ruft sie hier an.
+ * Gemessen betrifft das 11 der 30 Stellen (split-expenses 4, budget 3,
+ * documents 2, housekeeping 1, tasks 1).
+ *
+ * DER AUFRUF IST IMMER SICHER. Es sind dieselben drei Wachen wie beim
+ * automatischen Nachfassen: ist nichts kaputtgegangen, hat die Seite selbst
+ * etwas fokussiert oder steht schon wieder ein Dialog offen, tut er nichts.
+ * Man kann ihn also hinter jedes Rendern nach einem Schliessen setzen, ohne je
+ * Stelle beweisen zu muessen, dass sie bricht - und ohne dass ein zweiter
+ * Fokussprung entsteht, wo alles heil blieb.
+ *
+ * Kein `await` noetig: der Fokus wird gesetzt, sobald der Aufruf laeuft.
+ */
+export function refocusAfterRender() {
+  if (!_lastRestore) return;
+  // DER MERKER GILT FUER SEINEN GANZEN SCHLIESSVORGANG, nicht fuer einen Aufruf.
+  //
+  // Ein Vorgang kann mehrfach neu aufbauen: das Loeschen eines Budget-Plans
+  // rendert einmal sofort und ein zweites Mal, wenn jemand den Toast-Rueckgaengig
+  // drueckt. Beide Male ist derselbe Knopf gemeint. Ein Merker, der beim ersten
+  // Gebrauch verfaellt, macht den zweiten Weg wirkungslos (Review zu #1070).
+  //
+  // Verworfen wird er stattdessen gezielt - beim naechsten Oeffnen und ueber
+  // `forgetRestore()`, das jeder aufruft, der etwas AN DIESER SCHICHT VORBEI
+  // schliesst. Sonst wirkte er dort weiter, wo sie gar nicht beteiligt war.
+  _tryRefocus(_lastRestore.memo, _lastRestore.ziel);
+}
+
+/**
+ * Den Merker verwerfen, weil etwas an dieser Schicht vorbei geschlossen wurde.
+ *
+ * `closeDetailView()` kehrt im Popover-Zweig frueh zurueck, ohne `closeModal()`
+ * anzufassen. Ohne diesen Ruf bliebe der Merker des vorigen, unbeteiligten
+ * Dialogs stehen, und ein spaeteres Nachfassen setzte den Fokus in dessen
+ * Zusammenhang - ein falsches Ziel ist schlimmer als keines.
+ */
+export function forgetRestore() {
+  _lastRestore = null;
+}
+
 function _doClose(overlayEl) {
   const target = overlayEl ?? activeOverlay;
   if (!target) return;
@@ -548,9 +891,17 @@ function _doClose(overlayEl) {
     document.body.style.overflow = '';
 
     // Focus-Restore
-    if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
-      previouslyFocused.focus();
-      previouslyFocused = null;
+    const merkzettel = previouslyFocused;
+    previouslyFocused = null;
+    const restoreTarget = focusRestoreTarget(merkzettel);
+    // Das TATSAECHLICH fokussierte Element merken, nicht das gewuenschte: nimmt
+    // der Ersatz den Fokus nicht an, steht danach die Wurzel dort, und die
+    // spaeteren Laeufe muessen von ihr ausgehen.
+    const gesetzt = _fokussiereMitRueckfall(restoreTarget);
+    if (gesetzt) {
+      // Rendert die Seite gleich danach, ist dieser Fokus schon wieder weg.
+      _lastRestore = { memo: merkzettel, ziel: gesetzt };
+      _refocusIfDropped(merkzettel, gesetzt);
     }
 
     // Standalone: Statusbar-Farbe zur aktuellen Route wiederherstellen
@@ -658,7 +1009,9 @@ export function openModal({
   }
 
   // Focus-Restore vorbereiten
-  previouslyFocused = document.activeElement;
+  previouslyFocused = rememberFocus(document.activeElement);
+  // Der Merker des vorigen Schliessens ist mit diesem Dialog erledigt.
+  _lastRestore = null;
 
   // Scroll-Lock
   document.body.style.overflow = 'hidden';

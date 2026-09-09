@@ -88,11 +88,19 @@
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--module-accent) transparent;
   -webkit-overflow-scrolling: touch;
 }
 
-.notes-filters::-webkit-scrollbar { display: none; }
+.notes-filters::-webkit-scrollbar { height: 10px; }
+.notes-filters::-webkit-scrollbar-track { background: transparent; }
+.notes-filters::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--module-accent) var(--tint-hint), transparent);
+  border: 3px solid transparent;
+  border-radius: var(--radius-full);
+  background-clip: padding-box;
+}
 
 .notes-filters[hidden] {
   display: none;
@@ -106,15 +114,8 @@
   gap: var(--space-2);
 }
 
-.notes-filter-group--categories {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.notes-filter-group--categories::-webkit-scrollbar { display: none; }
+/* Both groups keep their width; the outer row owns scrolling. An independently
+ * shrinking category scroller becomes zero-width beside a long creator group. */
 
 .notes-filter-group + .notes-filter-group {
   padding-inline-start: var(--space-2);
@@ -311,10 +312,13 @@
   max-width: 100%;
   padding: var(--space-0h) var(--space-2);
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--color-text-primary) var(--tint-state), transparent);
+  background: var(--color-fill-well);
   color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  line-height: var(--line-height-tight);
+}
+
+.note-category-badge__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .note-category-badge svg {

@@ -596,7 +596,15 @@
         "toPantryNothing": "Nothing was added to the pantry. Open \"To the pantry\" again and check the amounts.",
         "reorderHandle": "Reorder: {{name}}",
         "reorderHandleHint": "Drag or use the arrow keys to reorder",
-        "reorderPosition": "Position {{index}} of {{total}}"
+        "reorderPosition": "Position {{index}} of {{total}}",
+        "priceLabel": "Price",
+        "storeLabel": "Shop",
+        "storePlaceholder": "Choose or type",
+        "manageStores": "Manage shops",
+        "storesHint": "The shops you buy at. A price without a shop answers only half the question.",
+        "storeDeleteConfirm": "Delete shop “{{name}}”?",
+        "storeDeleteConfirmDetail": "Items from this shop stay, and so do their prices - only the shop assignment is empty afterwards. There is no replacement shop.",
+        "addStore": "New shop"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} meals planned.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Nobody responsible",
         "responsibleFilterEmptyTitle": "No entry for this person",
         "responsibleFilterEmptyDescription": "Nobody is responsible for an entry in this month under this selection.",
-        "handoverToSplit": "Move to Split Expenses"
+        "handoverToSplit": "Move to Split Expenses",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plan: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Show cycle tab",
@@ -2867,7 +2876,12 @@
         "sourceNative": "Native",
         "sourceAll": "All",
         "sourceFilterLabel": "Filter by source",
-        "plannedThisWeek": "Planned this week"
+        "plannedThisWeek": "Planned this week",
+        "imageLabel": "Image",
+        "imageChoose": "Choose image",
+        "imageRemove": "Remove image",
+        "imageHint": "One image per recipe. It shows in the meal planner and on the overview tile.",
+        "imageTooLarge": "The image is still too large after resizing."
     },
     "search": {
         "emptyHint": "Type at least 2 characters to search tasks, events, notes, contacts, shopping and health.",

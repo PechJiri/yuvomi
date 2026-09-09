@@ -25,18 +25,67 @@ globalThis.customElements = {
 const { api } = await import('/api.js');
 await import('../public/components/category-manager.js');
 
-function managerWithCategory(onChanged, options = {}) {
+function managerWithCategory(options = {}) {
   const manager = new CategoryManager();
   manager._renderShell = () => {};
   manager._load = () => {};
-  manager.configure({ basePath: '/notes/categories', onChanged, ...options });
+  manager.configure({ basePath: '/notes/categories', ...options });
   manager._cats = [{ id: 7, name: 'Old', scope: 'personal' }];
   manager._renderGroup = () => {};
   return manager;
 }
 
+test('the caller deleteConfirmKey reaches the confirmation dialog', async () => {
+  let question;
+  globalThis.__confirmOverModal = (...args) => { [question] = args; return false; };
+  try {
+    const manager = managerWithCategory({ deleteConfirmKey: 'shopping.deleteShopConfirm' });
+    await manager._delete('7');
+    assert.match(question, /^shopping\.deleteShopConfirm/);
+    assert.equal(manager._cats.length, 1);
+  } finally {
+    delete globalThis.__confirmOverModal;
+  }
+});
+
+test('scope help supports focus, hover, touch and Escape before modal dismissal', () => {
+  const attrs = new Map([['aria-expanded', 'false']]);
+  const button = new EventTarget();
+  button.setAttribute = (name, value) => attrs.set(name, value);
+  button.getAttribute = (name) => attrs.get(name);
+  const manager = managerWithCategory();
+  manager._groupsEl = new EventTarget();
+  manager._groupsEl.querySelector = () => button;
+  const previousDocument = globalThis.document;
+  globalThis.document = { activeElement: button };
+  try {
+    manager._wireScopeHelp();
+    button.dispatchEvent(new Event('focus'));
+    assert.equal(attrs.get('aria-expanded'), 'true');
+    let stopped = false;
+    const escape = new Event('keydown');
+    escape.key = 'Escape';
+    escape.stopPropagation = () => { stopped = true; };
+    manager._groupsEl.dispatchEvent(escape);
+    assert.ok(stopped, 'Escape must not dismiss the containing modal');
+    assert.equal(attrs.get('aria-expanded'), 'false');
+    button.dispatchEvent(new Event('click'));
+    assert.equal(attrs.get('aria-expanded'), 'true');
+    button.dispatchEvent(new Event('blur'));
+    assert.equal(attrs.get('aria-expanded'), 'false');
+    globalThis.document.activeElement = null;
+    button.dispatchEvent(new Event('mouseenter'));
+    assert.equal(attrs.get('aria-expanded'), 'true');
+    button.dispatchEvent(new Event('mouseleave'));
+    assert.equal(attrs.get('aria-expanded'), 'false');
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+});
+
 test('configured row icon resolver controls the rendered category glyph', () => {
-  const manager = managerWithCategory(() => {}, {
+  const manager = managerWithCategory({
     rowIconResolver: (category) => category.scope === 'personal' ? 'user-round' : 'house',
   });
 
@@ -47,7 +96,7 @@ test('configured row icon resolver controls the rendered category glyph', () => 
 });
 
 test('configured scope label key labels the unified scope selector', () => {
-  const manager = managerWithCategory(() => {}, {
+  const manager = managerWithCategory({
     unifiedAdd: true,
     groups: [
       { key: 'personal', labelKey: 'personal.label' },
@@ -60,7 +109,7 @@ test('configured scope label key labels the unified scope selector', () => {
 });
 
 test('configured group field renders categories returned with a scope', () => {
-  const manager = managerWithCategory(() => {}, {
+  const manager = managerWithCategory({
     groupField: 'scope',
     groups: [
       { key: 'personal', labelKey: 'personal.label' },
@@ -84,7 +133,7 @@ test('configured group field submits a household category with the API scope con
     posted = { path, body };
     return { data: { id: 8, ...body } };
   };
-  const manager = managerWithCategory(() => {}, {
+  const manager = managerWithCategory({
     groupField: 'scope',
     groups: [
       { key: 'personal', labelKey: 'personal.label' },
@@ -112,7 +161,7 @@ test('configured group field submits a household category with the API scope con
   assert.equal(manager._cats.at(-1).scope, 'household');
 });
 
-test('successful delayed delete refreshes the page after the modal listener is gone', async () => {
+test('das verzoegerte DELETE meldet sich beim Zuhoerer, der sich nicht abgemeldet hat', async () => {
   let finishDelete;
   let signalDeleteStarted;
   const deleteStarted = new Promise((resolve) => { signalDeleteStarted = resolve; });
@@ -121,52 +170,46 @@ test('successful delayed delete refreshes the page after the modal listener is g
     return new Promise((resolve) => { finishDelete = resolve; });
   };
 
-  const callbackDetails = [];
-  let eventCount = 0;
-  const manager = managerWithCategory((detail) => { callbackDetails.push(detail); });
-  const listener = () => { eventCount += 1; };
-  manager.addEventListener('category-manager-changed', listener);
+  const details = [];
+  const manager = managerWithCategory();
+  manager.addEventListener('category-manager-changed', (e) => { details.push(e.detail); });
 
-  // test-browser-loader.mjs already resolves confirmOverModal() to true. Wait
-  // for the request itself instead of assuming the dynamic import and confirm
-  // have both completed after one event-loop turn.
+  // test-browser-loader.mjs loest confirmOverModal() bereits zu true auf. Auf die
+  // Anfrage selbst warten, statt anzunehmen, dass dynamischer Import und Bestaetigung
+  // nach einer Runde der Ereignisschleife beide durch sind.
   const deletion = manager._delete('7');
   await deleteStarted;
 
-  // openNoteCategoryManager used to do this synchronously from modal onClose.
-  manager.removeEventListener('category-manager-changed', listener);
+  // Der Loeschdialog hat das Modal an dieser Stelle laengst geschlossen. Der
+  // Zuhoerer haengt am Element, nicht am Dokument, und meldet sich nicht ab -
+  // genau das haelt der Wachhund in test-frontend-audit.js ueber alle Aufrufer fest.
   finishDelete({ data: null });
   await deletion;
 
-  assert.deepEqual(callbackDetails.map(({ action, key }) => ({ action, key })), [{ action: 'delete', key: '7' }]);
-  assert.equal(eventCount, 0);
+  assert.deepEqual(details.map(({ action, key }) => ({ action, key })), [{ action: 'delete', key: '7' }]);
   assert.deepEqual(manager._cats, []);
 });
 
-test('failed delete keeps the category and does not report a successful change', async () => {
+test('ein fehlgeschlagenes DELETE behaelt die Kategorie und meldet keine Aenderung', async () => {
   api.delete = async () => { throw new Error('offline'); };
-  let callbackCount = 0;
   let eventCount = 0;
-  const manager = managerWithCategory(() => { callbackCount += 1; });
+  const manager = managerWithCategory();
   manager.addEventListener('category-manager-changed', () => { eventCount += 1; });
 
   await manager._delete('7');
 
-  assert.equal(callbackCount, 0);
   assert.equal(eventCount, 0);
   assert.equal(manager._cats.length, 1);
 });
 
-test('a failing page refresh does not suppress the successful legacy event', () => {
-  let eventCount = 0;
-  const originalError = console.error;
-  console.error = () => {};
-  try {
-    const manager = managerWithCategory(() => { throw new Error('render failed'); });
-    manager.addEventListener('category-manager-changed', () => { eventCount += 1; });
-    assert.doesNotThrow(() => manager._notifyChanged());
-    assert.equal(eventCount, 1);
-  } finally {
-    console.error = originalError;
-  }
+test('ohne Argument traegt das Ereignis ein leeres detail, kein undefined', () => {
+  // `refresh(e.detail)` in notes.js liest `change.action` - kaeme hier `undefined`
+  // heraus, wuerde jede Mutation ausser dem Loeschen am Zugriff scheitern.
+  let seen = 'nicht gefeuert';
+  const manager = managerWithCategory();
+  manager.addEventListener('category-manager-changed', (e) => { seen = e.detail; });
+
+  manager._notifyChanged();
+
+  assert.deepEqual(seen, {});
 });

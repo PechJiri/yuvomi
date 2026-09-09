@@ -10,6 +10,7 @@ import * as db from '../db.js';
 import { str, num, collectErrors, MAX_TITLE, MAX_TEXT, MAX_SHORT } from '../middleware/validate.js';
 import { normalizeRecipeMealTypes } from '../../public/utils/recipe-meal-types.js';
 import { getAdapter } from '../services/recipe-providers/index.js';
+import { dataUrlContentMatches } from '../utils/file-signature.js';
 
 const log = createLogger('Recipes');
 const router = express.Router();
@@ -26,7 +27,17 @@ function normalizeMime(value) { return String(value || '').split(';')[0].trim().
 // Unterschied, den Frontend und Zugriffsschutz brauchen, um ein Rezept korrekt
 // zu behandeln, und er erweitert sich automatisch um jeden neuen Provider.
 function withSource(recipe) {
-  return { ...recipe, source: recipe.provider_account_id ? recipe.provider_type : 'native' };
+  // DAS BILD SELBST GEHT NIE MIT (#1059, Schritt 2). `SELECT r.*` zieht die
+  // Spalte mit, und eine Data-URL von bis zu 5 MB je Zeile machte aus der
+  // Rezeptliste ein Vielfaches ihrer selbst - fuer eine Vorschau von 32 Pixeln,
+  // die ohnehin ueber `GET /recipes/:id/image` kommt. Uebrig bleibt das Flag,
+  // das die Oberflaeche wirklich braucht: gibt es eins?
+  const { image_data, ...rest } = recipe;
+  return {
+    ...rest,
+    has_own_image: !!image_data,
+    source: recipe.provider_account_id ? recipe.provider_type : 'native',
+  };
 }
 
 function loadRecipeWithIngredients(id) {
@@ -89,6 +100,31 @@ router.get('/', (_req, res) => {
   }
 });
 
+/* EIN EIGENES BILD JE REZEPT (#1059, Schritt 2).
+ *
+ * Dieselbe Regel wie beim Gegenstandsfoto (routes/inventory/items.js) und beim
+ * Geburtstagsbild: eine Bild-Data-URL, dieselbe Groessengrenze, und der Inhalt
+ * muss zu seinem deklarierten Typ passen (#937) - der Praefix kommt aus dem
+ * Browser des Absenders und ist fuer sich genommen keine Auskunft.
+ *
+ * `undefined` heisst "nicht mitgeschickt" und laesst das gespeicherte Bild
+ * stehen; `null` oder der leere String loeschen es. Ohne diese Unterscheidung
+ * raeumte jedes Teil-Update das Bild ab - derselbe Fehler, den `meal_types`
+ * weiter unten schon einmal hatte.
+ */
+const MAX_RECIPE_IMAGE_LENGTH = 6_990_507; // ~5 MB Rohbild in base64, wie inventory/birthdays
+const RECIPE_IMAGE_RE = /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+function validateRecipeImage(val) {
+  if (val === undefined) return { value: undefined, error: null };
+  if (val === null || val === '') return { value: null, error: null };
+  const s = String(val).trim();
+  if (s.length > MAX_RECIPE_IMAGE_LENGTH) return { value: null, error: 'Image is too large.' };
+  if (!RECIPE_IMAGE_RE.test(s)) return { value: null, error: 'Image must be a valid image data URL.' };
+  if (!dataUrlContentMatches(s)) return { value: null, error: 'Image content does not match its image type.' };
+  return { value: s, error: null };
+}
+
 router.post('/', (req, res) => {
   try {
     const { ingredients = [] } = req.body;
@@ -98,14 +134,16 @@ router.post('/', (req, res) => {
     const vRecipeUrl = str(req.body.recipe_url, 'Rezept-URL', { max: MAX_TEXT, required: false });
     const mealTypes = normalizeRecipeMealTypes(req.body.meal_types);
 
-    const errors = collectErrors([vTitle, vNotes, vRecipeUrl]);
+    const vImage = validateRecipeImage(req.body.image_data);
+    const errors = collectErrors([vTitle, vNotes, vRecipeUrl, vImage]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     const recipeId = db.transaction(() => {
       const result = db.get().prepare(`
-        INSERT INTO recipes (title, notes, recipe_url, meal_types, created_by)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(vTitle.value, vNotes.value, vRecipeUrl.value, mealTypes.join(','), req.authUserId || req.session.userId);
+        INSERT INTO recipes (title, notes, recipe_url, meal_types, image_data, created_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(vTitle.value, vNotes.value, vRecipeUrl.value, mealTypes.join(','),
+        vImage.value ?? null, req.authUserId || req.session.userId);
 
       const rid = Number(result.lastInsertRowid);
       const insertIng = db.get().prepare(`
@@ -157,15 +195,22 @@ router.put('/:id', (req, res) => {
     const mealTypes = normalizeRecipeMealTypes(
       req.body.meal_types === undefined ? existing.meal_types : req.body.meal_types
     );
-    const errors = collectErrors([vTitle, vNotes, vRecipeUrl]);
+    const vImage = validateRecipeImage(req.body.image_data);
+    const errors = collectErrors([vTitle, vNotes, vRecipeUrl, vImage]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     db.transaction(() => {
+      // COALESCE fuer das Bild: ein nicht mitgeschicktes Feld (undefined -> NULL
+      // als Bindung) laesst das gespeicherte stehen. Geloescht wird nur mit
+      // ausdruecklichem null/'' - dann traegt vImage.value ebenfalls null, und
+      // die Fallunterscheidung unten setzt es.
       db.get().prepare(`
         UPDATE recipes
-        SET title = ?, notes = ?, recipe_url = ?, meal_types = ?
+        SET title = ?, notes = ?, recipe_url = ?, meal_types = ?,
+            image_data = CASE WHEN ? = 1 THEN ? ELSE image_data END
         WHERE id = ?
-      `).run(vTitle.value, vNotes.value, vRecipeUrl.value, mealTypes.join(','), id);
+      `).run(vTitle.value, vNotes.value, vRecipeUrl.value, mealTypes.join(','),
+        vImage.value === undefined ? 0 : 1, vImage.value ?? null, id);
 
       db.get().prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(id);
 
@@ -186,6 +231,44 @@ router.put('/:id', (req, res) => {
     res.json({ data: updated });
   } catch (err) {
     log.error('PUT /:id error:', err);
+    res.status(500).json({ error: 'Internal error', code: 500 });
+  }
+});
+
+/**
+ * GET /api/v1/recipes/:id/image
+ * Liefert das selbst hochgeladene Rezeptbild als Datei (#1059, Schritt 2).
+ *
+ * ALS ROUTE UND NICHT IN DER LISTE. Die Spalte traegt eine Data-URL von bis zu
+ * 5 MB; sie an jeder Mahlzeit einer Wochenansicht mitzuschicken waere ein
+ * Vielfaches der ganzen uebrigen Antwort, fuer eine Vorschau von 32 Pixeln.
+ * Die Listen tragen deshalb nur ein Flag, und das Bild holt sich der Browser
+ * hier - genau wie beim Provider-Thumbnail nebenan, das aus demselben Grund
+ * ein Proxy ist.
+ */
+router.get('/:id/image', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'Invalid recipe ID.', code: 400 });
+
+    const row = db.get().prepare('SELECT image_data FROM recipes WHERE id = ?').get(id);
+    if (!row?.image_data) return res.status(404).json({ error: 'No image available.', code: 404 });
+
+    const match = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(row.image_data);
+    if (!match) return res.status(415).json({ error: 'Stored image is not readable.', code: 415 });
+
+    const buffer = Buffer.from(match[2], 'base64');
+    res.setHeader('Content-Type', match[1]);
+    res.setHeader('Content-Length', String(buffer.length));
+    // Dieselben Kopfzeilen wie der Provider-Proxy: der Browser soll den Typ
+    // nicht raten, und ein Bild aus der eigenen Datenbank gehoert niemandem
+    // sonst in den Cache.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'");
+    res.end(buffer);
+  } catch (err) {
+    log.error('GET /:id/image error:', err);
     res.status(500).json({ error: 'Internal error', code: 500 });
   }
 });

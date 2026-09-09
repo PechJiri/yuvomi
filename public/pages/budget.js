@@ -6,7 +6,7 @@
  */
 
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError, refocusAfterRender } from '/components/modal.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
 import { stagger, vibrate, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireTablist } from '/utils/tablist.js';
@@ -1461,6 +1461,7 @@ function openAccountModal(account = null) {
           closeModal({ force: true });
           await loadAccounts();
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(nextArchived ? t('budget.accountArchivedToast') : t('budget.accountRestoredToast'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
@@ -1480,6 +1481,7 @@ function openAccountModal(account = null) {
           await api.delete(`/budget/accounts/${account.id}`);
           await loadMonth(state.month);
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(t('budget.accountDeletedToast'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
@@ -1527,6 +1529,7 @@ function openAccountModal(account = null) {
           closeModal({ force: true });
           await loadAccounts();
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(isEdit ? t('budget.accountSavedToast') : t('budget.accountAddedToast'), 'success');
         } catch (err) {
           saveBtn.disabled = false;
@@ -1823,7 +1826,21 @@ function openLoanReport(loan) {
       [t('budget.loanRemainingPrincipal'), formatLoanAmount(loan.remaining_principal, loan)],
       [t('budget.loanStillToPay'), formatLoanAmount(loan.remaining_amount, loan)],
       [t('budget.loanPaidAmount'), formatLoanAmount(loan.paid_amount, loan)],
-      [t('budget.loanRemainingInstallments'), String(loan.remaining_installments)],
+      /* ZWEI ZAHLEN, NICHT EINE (#964). Links steht, was der Kontostand hergibt -
+       * wer sondertilgt, sieht sie sinken. In Klammern die Planzahl, damit der
+       * Vertragsblick nicht still verschwindet: die Bank schickt weiter dieselbe
+       * Rate, und die uebrigen Kennzahlen daneben (Monatsrate, Gesamtzins)
+       * beschreiben ausdruecklich den Vertrag. Wo die Prognose nicht zu rechnen
+       * ist - Rate deckt den Zins nicht, Laufzeit ueber der Grenze - bleibt es
+       * bei der Planzahl allein. */
+      [t('budget.loanRemainingInstallments'),
+        (loan.remaining_installments_forecast != null
+          && loan.remaining_installments_forecast !== loan.remaining_installments)
+          ? t('budget.loanRemainingInstallmentsForecast', {
+            forecast: loan.remaining_installments_forecast,
+            plan: loan.remaining_installments,
+          })
+          : String(loan.remaining_installments)],
     ]
     : [
       [t('budget.loanAmountLabel'), formatLoanAmount(loan.total_amount, loan)],
@@ -2021,17 +2038,25 @@ function formatEntryDate(dateStr) {
 // --------------------------------------------------------
 
 function openCategoryManager() {
-  let manager = null;
+  // Die Auffrischung haengt am Ereignis, nicht am Schliessen: beim Loeschen
+  // raeumt `confirmOverModal` das Modal darunter ab, bevor `api.delete` laeuft
+  // (siehe `_notifyChanged` in components/category-manager.js).
   const onChanged = async () => {
     await loadBudgetMeta();
+    // `renderBody()` baut `#budget-body` neu auf - und darin liegt der Knopf,
+    // der diesen Manager geoeffnet hat. Das Nachziehen macht die geteilte
+    // Schicht: `refocusAfterRender()` findet ihn ueber seine id wieder. Der
+    // frueher hier stehende `hadFocus`-Griff ist damit weg - eine Regel an
+    // einer Stelle statt einer Kopie je Seite.
     renderBody();
+    refocusAfterRender();
   };
   openSharedModal({
     title: t('budget.manageCategories'),
     content: '<yuvomi-category-manager></yuvomi-category-manager>',
     size: 'lg',
     onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-category-manager');
+      const manager = panel.querySelector('yuvomi-category-manager');
       manager.addEventListener('category-manager-changed', onChanged);
       manager.configure({
         basePath: '/budget/categories',
@@ -2049,7 +2074,8 @@ function openCategoryManager() {
         subDeleteDetailKey: 'budget.subcategoryDeleteConfirmDetail',
       });
     },
-    onClose: () => manager?.removeEventListener('category-manager-changed', onChanged),
+    // Bewusst KEIN onClose, das den Listener abmeldet - es liefe vor dem
+    // Loeschen. Das Element entsteht je Oeffnen neu und geht mit dem Overlay.
   });
 }
 
@@ -2454,6 +2480,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
       panel.querySelector('#bm-delete')?.addEventListener('click', async () => {
         closeModal({ force: true });
         await deleteEntry(entry.id);
+        refocusAfterRender();
       });
 
       panel.querySelector('#bm-save').addEventListener('click', async () => {
@@ -2576,6 +2603,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
             }
             await loadMonth(state.month);
             renderBody();
+            refocusAfterRender();
           } else {
             const res = await api.put(`/budget/${entry.id}`, await withReceipts());
             const idx = state.entries.findIndex((e) => e.id === entry.id);
@@ -3295,6 +3323,7 @@ async function openConfirmBookingModal(id) {
           closeModal({ force: true });
           await loadMonth(state.month);
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(t('budget.confirmSaved'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.message || t('common.errorGeneric'), 'danger');

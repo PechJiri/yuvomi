@@ -328,11 +328,10 @@ function dashboardDefaults() {
   };
 }
 
-function sanitizeNoteCategoryOptions(config, userId) {
-  const visible = new Set(listVisibleCategories(db.get(), userId).map((category) => String(category.id)));
+function sanitizeNoteCategoryOptions(config, visibleCategories) {
   return config.map((widget) => {
     if (widget.id !== 'notes' || !Array.isArray(widget.options?.categories)) return widget;
-    const categories = widget.options.categories.filter((id) => visible.has(String(id)));
+    const categories = widget.options.categories.filter((id) => visibleCategories().has(String(id)));
     const options = { ...widget.options };
     if (categories.length) options.categories = categories;
     else delete options.categories;
@@ -347,14 +346,20 @@ function dashboardPersonalViews(userId) {
   const ownWidgets = cfgUserGet('dashboard_widgets', userId);
   const ownGlance = cfgUserGet('dashboard_today_glance', userId);
   const fallback = dashboardDefaults();
+  // Request-local and lazy: no catalog query for absent/empty filters, and one
+  // shared visibility snapshot for the personal view and household defaults.
+  let visible;
+  const visibleCategories = () => (visible ??= new Set(
+    listVisibleCategories(db.get(), userId).map((category) => String(category.id)),
+  ));
   return {
-    dashboard_widgets: sanitizeNoteCategoryOptions(parseWidgetConfig(ownWidgets ?? fallback.widgets), userId),
+    dashboard_widgets: sanitizeNoteCategoryOptions(parseWidgetConfig(ownWidgets ?? fallback.widgets), visibleCategories),
     dashboard_today_glance: (ownGlance ?? fallback.glance) !== '0',
     // Die Vorgabe des Haushalts, damit die Oberflaeche zeigen kann, wohin ein
     // Zuruecksetzen fuehrt. `null` heisst: es gibt keine.
     dashboard_widgets_default: cfgGet('dashboard_widgets_default') === null
       ? null
-      : sanitizeNoteCategoryOptions(parseWidgetConfig(cfgGet('dashboard_widgets_default')), userId),
+      : sanitizeNoteCategoryOptions(parseWidgetConfig(cfgGet('dashboard_widgets_default')), visibleCategories),
     dashboard_today_glance_default: (cfgGet('dashboard_today_glance_default') ?? '1') !== '0',
     // Folge ich der Vorgabe? Nur wer NICHTS Eigenes hinterlegt hat, tut das -
     // und nur fuer den hat "zuruecksetzen" nichts zu tun.

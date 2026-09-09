@@ -596,7 +596,15 @@
         "toPantryNothing": "В запасы ничего не добавлено. Откройте «В запасы» снова и проверьте количество.",
         "reorderHandle": "Изменить порядок: {{name}}",
         "reorderHandleHint": "Перетащите или используйте стрелки для сортировки",
-        "reorderPosition": "Позиция {{index}} из {{total}}"
+        "reorderPosition": "Позиция {{index}} из {{total}}",
+        "priceLabel": "Цена",
+        "storeLabel": "Магазин",
+        "storePlaceholder": "Выберите или введите",
+        "manageStores": "Управление магазинами",
+        "storesHint": "Магазины, где вы покупаете. Цена без магазина отвечает лишь наполовину.",
+        "storeDeleteConfirm": "Удалить магазин «{{name}}»?",
+        "storeDeleteConfirmDetail": "Товары этого магазина останутся вместе с ценой - пустым будет только поле магазина. Замены магазина здесь нет.",
+        "addStore": "Новый магазин"
     },
     "meals": {
         "randomizeSuccess_few": "Запланировано {{count}} приёма пищи.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Никто",
         "responsibleFilterEmptyTitle": "Для этого человека нет записей",
         "responsibleFilterEmptyDescription": "В этом месяце никто не отвечает за запись в этой выборке.",
-        "handoverToSplit": "Перенести в общие расходы"
+        "handoverToSplit": "Перенести в общие расходы",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (план: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Показать вкладку цикла",
@@ -2776,7 +2785,12 @@
         "sourceNative": "Локальный",
         "sourceAll": "Все",
         "sourceFilterLabel": "Фильтр по источнику",
-        "plannedThisWeek": "Запланировано на этой неделе"
+        "plannedThisWeek": "Запланировано на этой неделе",
+        "imageLabel": "Изображение",
+        "imageChoose": "Выбрать изображение",
+        "imageRemove": "Удалить изображение",
+        "imageHint": "Одно изображение на рецепт. Оно появляется в плане питания и на плитке обзора.",
+        "imageTooLarge": "Изображение всё ещё слишком велико после уменьшения."
     },
     "search": {
         "emptyHint": "Введите минимум 2 символа для поиска по задачам, событиям, заметкам, контактам, покупкам и здоровью.",

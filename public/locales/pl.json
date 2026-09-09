@@ -608,7 +608,15 @@
         "toPantryNothing": "Nic nie zostało dodane do spiżarni. Otwórz ponownie „Do spiżarni\" i sprawdź ilości.",
         "reorderHandle": "Zmień kolejność: {{name}}",
         "reorderHandleHint": "Przeciągnij lub użyj strzałek, aby zmienić kolejność",
-        "reorderPosition": "Pozycja {{index}} z {{total}}"
+        "reorderPosition": "Pozycja {{index}} z {{total}}",
+        "priceLabel": "Cena",
+        "storeLabel": "Sklep",
+        "storePlaceholder": "Wybierz lub wpisz",
+        "manageStores": "Zarządzaj sklepami",
+        "storesHint": "Sklepy, w których kupujecie. Cena bez sklepu odpowiada tylko na pół pytania.",
+        "storeDeleteConfirm": "Usunąć sklep „{{name}}”?",
+        "storeDeleteConfirmDetail": "Pozycje z tego sklepu pozostaną wraz z ceną - puste będzie tylko przypisanie sklepu. Nie ma tu sklepu zastępczego.",
+        "addStore": "Nowy sklep"
     },
     "meals": {
         "randomizeSuccess_few": "Zaplanowano {{count}} posiłki.",
@@ -1508,7 +1516,8 @@
         "responsibleNobody": "Nikt",
         "responsibleFilterEmptyTitle": "Brak wpisów dla tej osoby",
         "responsibleFilterEmptyDescription": "W tym miesiącu nikt nie odpowiada za wpis w tym wyborze.",
-        "handoverToSplit": "Przenieś do wydatków wspólnych"
+        "handoverToSplit": "Przenieś do wydatków wspólnych",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (wg planu: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Pokaż kartę cyklu",
@@ -2879,7 +2888,12 @@
         "sourceNative": "Lokalny",
         "sourceAll": "Wszystkie",
         "sourceFilterLabel": "Filtruj według źródła",
-        "plannedThisWeek": "Zaplanowane na ten tydzień"
+        "plannedThisWeek": "Zaplanowane na ten tydzień",
+        "imageLabel": "Obraz",
+        "imageChoose": "Wybierz obraz",
+        "imageRemove": "Usuń obraz",
+        "imageHint": "Jeden obraz na przepis. Pojawia się w planie posiłków i na kafelku przeglądu.",
+        "imageTooLarge": "Obraz jest nadal za duży po zmniejszeniu."
     },
     "onboarding": {
         "step1Title": "Witaj w {{name}}",

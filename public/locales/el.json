@@ -596,7 +596,15 @@
         "toPantryNothing": "Δεν προστέθηκε τίποτα στο κελάρι. Άνοιξε ξανά το «Στο κελάρι» και έλεγξε τις ποσότητες.",
         "reorderHandle": "Αλλαγή σειράς: {{name}}",
         "reorderHandleHint": "Σύρετε ή χρησιμοποιήστε τα βέλη για ταξινόμηση",
-        "reorderPosition": "Θέση {{index}} από {{total}}"
+        "reorderPosition": "Θέση {{index}} από {{total}}",
+        "priceLabel": "Τιμή",
+        "storeLabel": "Κατάστημα",
+        "storePlaceholder": "Επιλέξτε ή πληκτρολογήστε",
+        "manageStores": "Διαχείριση καταστημάτων",
+        "storesHint": "Τα καταστήματα όπου ψωνίζετε. Μια τιμή χωρίς κατάστημα απαντά μόνο μισή ερώτηση.",
+        "storeDeleteConfirm": "Διαγραφή καταστήματος «{{name}}»;",
+        "storeDeleteConfirmDetail": "Τα είδη αυτού του καταστήματος παραμένουν μαζί με την τιμή τους - μόνο η αντιστοίχιση καταστήματος αδειάζει. Δεν υπάρχει εναλλακτικό κατάστημα.",
+        "addStore": "Νέο κατάστημα"
     },
     "meals": {
         "randomizeSuccess_few": "Προγραμματίστηκαν {{count}} γεύματα.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Κανείς",
         "responsibleFilterEmptyTitle": "Καμία εγγραφή για αυτό το άτομο",
         "responsibleFilterEmptyDescription": "Κανείς δεν είναι υπεύθυνος για εγγραφή αυτόν τον μήνα σε αυτή την επιλογή.",
-        "handoverToSplit": "Μεταφορά στα κοινά έξοδα"
+        "handoverToSplit": "Μεταφορά στα κοινά έξοδα",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (σχέδιο: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Εμφάνιση καρτέλας κύκλου",
@@ -2776,7 +2785,12 @@
         "sourceNative": "Τοπική",
         "sourceAll": "Όλες",
         "sourceFilterLabel": "Φιλτράρισμα κατά προέλευση",
-        "plannedThisWeek": "Προγραμματισμένο αυτή την εβδομάδα"
+        "plannedThisWeek": "Προγραμματισμένο αυτή την εβδομάδα",
+        "imageLabel": "Εικόνα",
+        "imageChoose": "Επιλογή εικόνας",
+        "imageRemove": "Αφαίρεση εικόνας",
+        "imageHint": "Μία εικόνα ανά συνταγή. Εμφανίζεται στο πρόγραμμα γευμάτων και στο πλακίδιο επισκόπησης.",
+        "imageTooLarge": "Η εικόνα παραμένει πολύ μεγάλη μετά τη σμίκρυνση."
     },
     "search": {
         "emptyHint": "Πληκτρολόγησε τουλάχιστον 2 χαρακτήρες για αναζήτηση σε εργασίες, ραντεβού, σημειώσεις, επαφές, αγορές και υγεία.",

@@ -7,8 +7,7 @@ import {
   confirmModal,
   openModal,
   validateAll,
-  wireBlurValidation,
-} from '/components/modal.js';
+  wireBlurValidation, refocusAfterRender } from '/components/modal.js';
 import {
   createDisclosure,
   createInlineError,
@@ -589,6 +588,7 @@ function openAccountModal(account, onDone) {
             'success',
           );
           await onDone();
+          refocusAfterRender();
         } catch (err) {
           errorEl.textContent = errorMessage(err);
           errorEl.hidden = false;

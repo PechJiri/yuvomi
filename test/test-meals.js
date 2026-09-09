@@ -10,6 +10,8 @@ import { readFileSync } from 'node:fs';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import { datesForTemplateInRange, mealWeekday } from '../server/services/meal-recurrence.js';
 import { __test as mealsUi } from '../public/pages/meals.js';
+import { toDecimalString } from '../public/utils/money.js';
+import { parseQuantity } from '../server/services/shopping-import.js';
 
 let passed = 0;
 let failed = 0;
@@ -591,6 +593,207 @@ test('Wochenberechnung: Montag der aktuellen Woche', () => {
   assert(getMondayOf('2026-03-23') === '2026-03-23', 'Montag bleibt Montag');
   assert(getMondayOf('2026-03-29') === '2026-03-23', 'Sonntag → gleicher Montag');
   assert(getMondayOf('2026-03-30') === '2026-03-30', 'Nächster Montag');
+});
+
+// --------------------------------------------------------
+// Rezept skalieren: Zutatenmengen (Umschrift nach Region)
+// --------------------------------------------------------
+
+/**
+ * Fuehrt `fn` unter einer anderen Format-Locale aus. Die Locale ist im Browser
+ * eine Haushalts-Einstellung und entscheidet ueber Ziffernsystem, Trenner und
+ * Gruppierung; der Browser-Loader dieser Suite liest sie aus
+ * `globalThis.__formatLocale` (Standard 'de').
+ */
+function withFormatLocale(locale, fn) {
+  const vorher = globalThis.__formatLocale;
+  globalThis.__formatLocale = locale;
+  try { fn(); } finally { globalThis.__formatLocale = vorher; }
+}
+
+/** Kurzform fuer die Erwartung einer skalierten Menge. */
+function scaled(locale, quantity, factor, erwartet) {
+  let ist;
+  withFormatLocale(locale, () => { ist = mealsUi.scaleQuantityText(quantity, factor); });
+  assert(ist === erwartet, `${locale}: "${quantity}" x${factor} -> "${ist}", erwartet "${erwartet}"`);
+}
+
+test('Skalieren: die gewoehnlichen Zutatenmengen rechnen wie bisher', () => {
+  scaled('de', '250 g', 2, '500 g');
+  scaled('de', '1 kg', 2, '2 kg');
+  scaled('de', '3 EL', 0.5, '1,5 EL');
+  scaled('de', '1 Zwiebel', 3, '3 Zwiebel');
+  // Brueche: gemischt und einfach, beide weiter erkannt.
+  scaled('de', '1 1/2 Tassen', 2, '3 Tassen');
+  scaled('de', '1/2 TL', 3, '1,5 TL');
+  // Ohne Zahl gibt es nichts zu rechnen - die Zeile bleibt, wie sie dasteht.
+  scaled('de', 'eine Prise', 2, 'eine Prise');
+  // Faktor 1 fasst nichts an, auch keine Schreibweise.
+  scaled('de', '1.5 kg', 1, '1.5 kg');
+});
+
+test('Skalieren: Trenner und Ziffern der Ausgabe folgen der Region, nicht der Eingabe', () => {
+  // Vorher schaute sich die Funktion den Trenner aus der Eingabe ab (`useComma`).
+  // Eine aus Mealie gespiegelte "1.5" blieb damit in einer deutschen Oberflaeche
+  // eine "1.5" - die Anzeige richtete sich nach der Herkunft der Zutat statt nach
+  // dem Haushalt, der sie liest.
+  scaled('de', '1.5 kg', 3, '4,5 kg');
+  scaled('en-US', '1,5 kg', 3, '1,5 kg');   // in en-US ist das Komma kein Trenner
+  scaled('en-US', '1.5 kg', 3, '4.5 kg');
+  // Und die Eingabe wird in derselben Region gelesen: in de trennt das Komma.
+  scaled('de', '1,5 kg', 2, '3 kg');
+});
+
+test('Skalieren: eine gruppierte Menge wird abgewiesen, nicht geraten', () => {
+  // Der Kern des Fehlers. Unter en-US gruppiert das Komma Tausender: "1,000 g"
+  // heisst tausend Gramm. Die alte Fassung las daraus die Basis 1 und
+  // multiplizierte die - eine Zutat, die um den Faktor 1000 zu klein im Rezept
+  // stand, ohne dass irgendwo etwas erschien.
+  //
+  // Abgewiesen heisst hier UNVERAENDERT, nicht "1 Stueck" wie im Einkauf: die
+  // Menge IST der Text der Zutat, und der Originaltext ist die einzige Antwort,
+  // die nichts erfindet.
+  scaled('en-US', '1,000 g', 2, '1,000 g');
+  scaled('de', '1.000 g', 2, '1.000 g');
+  // Auch in oestlichen Ziffern - die Gruppierungspruefung muss sie sehen. Die
+  // fuehrende Ziffer ist bewusst nicht die 1, sonst waere der abgeschnittene
+  // Anfang vom richtigen Ergebnis nicht zu unterscheiden.
+  scaled('ar-EG', '٢٬٠٠٠ g', 2, '٢٬٠٠٠ g');
+  // Aber NUR im fuehrenden Token: eine Gruppierung im Rest wird gar nicht
+  // gelesen und darf die Zeile nicht ungeskaliert stehen lassen.
+  scaled('de', '2 Dosen à 1.000 ml', 2, '4 Dosen à 1.000 ml');
+  scaled('en-US', '2 cans à 1,000 ml', 2, '4 cans à 1,000 ml');
+  // Gegenprobe zur Regel selbst: in de trennt das Komma, "1,000" IST dort eins.
+  scaled('de', '1,000 g', 2, '2 g');
+  scaled('en-US', '1.000 g', 2, '2 g');
+});
+
+test('Skalieren: oestliche Ziffern kommen ueberhaupt an', () => {
+  // `\d` ist in JavaScript ASCII. Unter fa oder ar-EG traf die alte Regex die
+  // Ziffern der eigenen Oberflaeche nicht - die Zeile blieb ungeskaliert zwischen
+  // skalierten Geschwistern stehen, was ein falsches Rezept ergibt.
+  scaled('fa', '۲۵۰ g', 2, '۵۰۰ g');
+  scaled('ar-EG', '١٫٥ kg', 2, '٣ kg');
+  // Auch ein ANDERES System als das der Region wird gelesen - seit die Umschrift
+  // aus utils/digits.js dahintersteht, dieselbe, die der Server benutzt. Vorher
+  // blieb so eine Zeile liegen; jetzt wird sie gerechnet und in den Ziffern der
+  // eingestellten Region ausgegeben. Das traegt auch den Regionswechsel: eine
+  // unter ar-EG gespeicherte Menge bleibt unter fa lesbar.
+  scaled('fa', '١٫٥ kg', 2, '۳ kg');
+});
+
+test('Skalieren: der Rest der Zeile behaelt seine eigenen Ziffern', () => {
+  // Umgeschrieben wird nur, was auch gerechnet wird. Steht hinter der fuehrenden
+  // Zahl ein zweiter Zahlenteil, kam er vorher aus der umgeschriebenen Fassung
+  // zurueck und verlor dabei seine Ziffern: unter fa wurde „۲ x ۵۰۰ g" zu
+  // „۴ x 500 g", also eine Zeile in zwei Schriften.
+  // Die geschriebene Zahl steht in den Ziffern der Region, genau wie der Rest -
+  // eine Zeile, eine Schrift. Bis v2.65 stand sie in ASCII, weil der Server nichts
+  // anderes lesen konnte; seit er dieselbe Umschrift benutzt, ist der Grund weg.
+  scaled('fa', '۲ x ۵۰۰ g', 2, '۴ x ۵۰۰ g');
+  scaled('fa', '۲ x ۱٫۵ kg', 2, '۴ x ۱٫۵ kg');
+  scaled('fa', '۱ ۱/۲ Tassen', 2, '۳ Tassen');
+  // Umgekehrt darf der Rest auch nichts DAZUgewinnen: die ASCII-Zeile bleibt ASCII.
+  scaled('de', '2 x 500 g', 2, '4 x 500 g');
+  // Der realistischste Fall, und er braucht keine fremde Region: in de ist das
+  // Komma der Dezimaltrenner, die Umschrift ersetzt es also im GANZEN Text. Kam
+  // der Rest von dort, wurde aus einer Gebindegroesse „0,5 l" ein „0.5 l" - und
+  // dieser Text wird in der Zutatenzeile gespeichert.
+  scaled('de', '2 Dosen à 0,5 l', 2, '4 Dosen à 0,5 l');
+  scaled('de', '3 Glaeser à 250 ml', 2, '6 Glaeser à 250 ml');
+  // Umschliessender Leerraum faellt weg, statt die Zahl zu verschieben.
+  scaled('de', '  250 g  ', 2, '500 g');
+  // Astrale Ziffern (40 der 77 Systeme): sie belegen zwei UTF-16-Einheiten, ihr
+  // ASCII-Ergebnis eine. Mit einem `.length`-Offset schnitt `restOf` mitten in
+  // ein Zeichen - gemessen kam „4\uDD52 x 500 g" heraus, eine halbe
+  // Ersatzzeichen-Paarung, und dieser kaputte Text ging in die Zutatenzeile.
+  scaled('de', '𞥒 x 500 g', 2, '4 x 500 g');
+  scaled('de', '𞥒 kg', 2, '4 kg');
+  scaled('de', '𑜲𑜵𑜰 g', 2, '500 g');
+  // Kein halbes Ersatzzeichen im Ergebnis - die Zeile wird gespeichert.
+  const unpaired = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  for (const probe of ['𞥒 x 500 g', '𞥒 kg', '𑜲𑜵𑜰 g', '۲ x ۵۰۰ g']) {
+    withFormatLocale('de', () => {
+      const ergebnis = mealsUi.scaleQuantityText(probe, 2);
+      assert(!unpaired.test(ergebnis), `"${probe}" ergab kaputtes "${ergebnis}"`);
+    });
+  }
+});
+
+test('Skalieren: die Umschrift ist positionstreu - darauf baut der Rest der Zeile', () => {
+  // scaleQuantityText schneidet den Rest per Offset aus dem ORIGINAL. Das geht
+  // nur, solange toDecimalString ein Zeichen gegen genau ein Zeichen tauscht.
+  // Faellt die Zusicherung, verrutscht hier still der Schnitt - deshalb steht sie
+  // als eigener Test da und nicht nur als Kommentar in money.js.
+  const proben = ['۲ x ۵۰۰ g', '٢٬٠٠٠ g', '1,5 kg', 'eine Prise', '🍎 2 kg', '1.000', '1 1/2 Tassen'];
+  for (const locale of ['de', 'en-US', 'fa', 'ar-EG']) {
+    withFormatLocale(locale, () => {
+      for (const probe of proben) {
+        const um = toDecimalString(probe);
+        // Leer heisst abgewiesen (gruppiert) - dann gibt es keinen Offset zu halten.
+        assert(um === '' || um.length === probe.trim().length,
+          `${locale}: "${probe}" (${probe.trim().length}) -> "${um}" (${um.length})`);
+      }
+    });
+  }
+});
+
+test('Skalieren: die geschriebene Zahl bleibt serverlesbar', () => {
+  // `parseQuantity` in server/services/shopping-import.js liest die gespeicherte
+  // Zutatenmenge beim Uebertrag in die Einkaufsliste. Kommt sie dort nicht an,
+  // faellt die Zutat aus der Summierung - aus einer Anzeigefrage wuerde ein
+  // Funktionsverlust.
+  // Gegen den ECHTEN parseQuantity, nicht gegen einen Nachbau seiner Regex: der
+  // Nachbau, der hier stand, haette die Umstellung auf regionseigene Ziffern fuer
+  // unlesbar erklaert, obwohl der Server sie laengst liest. Ein Test, der eine
+  // fremde Regel KOPIERT, misst die Kopie.
+  for (const locale of ['de', 'en-US', 'fa', 'ar-EG', 'fr']) {
+    let ergebnis;
+    withFormatLocale(locale, () => { ergebnis = mealsUi.scaleQuantityText('1000 g', 2); });
+    assert(parseQuantity(ergebnis)?.amount === 2000,
+      `${locale}: "${ergebnis}" ist fuer den Server unlesbar`);
+  }
+  // Der TRENNER folgt trotzdem der Region - nur die Ziffern sind Datenformat.
+  scaled('de', '1,5 kg', 3, '4,5 kg');
+  scaled('fr', '1,5 kg', 3, '4,5 kg');
+  scaled('en-US', '1.5 kg', 3, '4.5 kg');
+});
+
+test('Skalieren: die Multiplikator-Schreibweise bleibt lesbar', () => {
+  // Die Abschneide-Pruefung war erst „irgendein Zeichen zwischen zwei Ziffern".
+  // Das traf auch „2x500 g" - ein `x` ist aber kein Trenner, nach ihm ist die 2
+  // vollstaendig gelesen. Die Zeile blieb dadurch ungeskaliert stehen, also genau
+  // der Fehler, gegen den diese Funktion angetreten ist.
+  scaled('de', '2x500 g', 2, '4x500 g');
+  scaled('de', '3x Dose', 2, '6x Dose');
+  scaled('de', '2 x 500 g', 2, '4 x 500 g');
+  // Auch das typografische Kreuz und der Stern - keins davon trennt eine Zahl.
+  scaled('de', '2×500 ml', 2, '4×500 ml');
+  scaled('de', '2 × 500 ml', 2, '4 × 500 ml');
+});
+
+test('Skalieren: eine mitten im Trenner abgeschnittene Zahl bleibt stehen', () => {
+  // Unter fa ist das ASCII-Komma weder Dezimal- noch Gruppierungszeichen. Ohne
+  // diese Pruefung laese die Regex nur die "1" und schriebe "۲,5 kg" - eine
+  // halbierte Zutat in einer Schreibweise, die es in keiner Region gibt.
+  scaled('fa', '1,5 kg', 2, '1,5 kg');
+  scaled('ar-EG', '1,5 kg', 2, '1,5 kg');
+  // Auch der Schweizer Gruppierungsapostroph, den keine der beiden Regionen kennt.
+  scaled('de', "1'000 g", 2, "1'000 g");
+  // Und in den BRUCH-Zweigen, nicht nur bei der Dezimalzahl: bricht ein Nenner im
+  // Trenner ab, wurde aus „1/2,5 cup" die Rechnung 1/2 mal Faktor plus dem Rest
+  // „,5 cup" - also „1,5 cup", eine plausible und falsche Menge. Der Fehler traf
+  // JEDE Region, nicht nur die mit eigenen Ziffern.
+  scaled('de', '1/2,5 cup', 2, '1/2,5 cup');
+  scaled('de', '1 1/2,5 Tassen', 2, '1 1/2,5 Tassen');
+  scaled('en-US', '1/2.5 cup', 2, '1/2.5 cup');
+  scaled('ar-EG', '١/٢٫٥ cup', 2, '١/٢٫٥ cup');
+  scaled('ar-EG', '١ ١/٢٫٥ cup', 2, '١ ١/٢٫٥ cup');
+  // Gegenprobe: der gewoehnliche Bruch rechnet unveraendert weiter.
+  scaled('de', '1/2 cup', 2, '1 cup');
+  scaled('ar-EG', '١ ١/٢ cup', 2, '٣ cup');
+  // Ein Leerzeichen trennt dagegen zwei Angaben und schneidet nichts ab.
+  scaled('de', '2 x 500 g', 2, '4 x 500 g');
 });
 
 // --------------------------------------------------------

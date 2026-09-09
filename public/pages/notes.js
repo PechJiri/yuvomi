@@ -6,8 +6,8 @@
 
 import { api } from '/api.js';
 import { openModal as openSharedModal, closeModal, btnError, advancedSection, reportFieldError } from '/components/modal.js';
-import '/components/category-manager.js';
-import { stagger, vibrate, scheduleUndoableDelete } from '/utils/ux.js';
+import { wireCategoryScopeHelp } from '/components/category-manager.js';
+import { stagger, vibrate, scheduleUndoableDelete, wireScrollFade } from '/utils/ux.js';
 import { t } from '/i18n.js';
 import { esc, renderMarkdownLight } from '/utils/html.js';
 import { splitKeepingLineEndings } from '/utils/markdown-checklist.js';
@@ -159,7 +159,8 @@ async function handleCheckConflict() {
 // Entry Point
 // --------------------------------------------------------
 
-export async function render(container, { user }) {
+export async function render(container, { user, signal }) {
+  if (signal?.aborted) return;
   _container = container;
   state.user = user;
 
@@ -197,6 +198,7 @@ export async function render(container, { user }) {
 
   try {
     const [notesRes, categoriesRes] = await Promise.all([api.get('/notes'), api.get('/notes/categories')]);
+    if (signal?.aborted || _container !== container) return;
     state.notes = notesRes.data;
     state.categories = categoriesRes.data || [];
     state.filterCategoryIds = pruneMissingNoteCategoryIds(state.filterCategoryIds, state.categories);
@@ -234,6 +236,9 @@ export async function render(container, { user }) {
   });
 
   renderNotesAndFilters();
+
+  const filterFade = wireScrollFade(container.querySelector('#notes-filters'));
+  signal?.addEventListener('abort', () => filterFade.destroy(), { once: true });
 
   const addHandler = () => openNoteModal({ mode: 'create' });
   // #notes-add-btn ist per .toolbar-new-btn global ausgeblendet (FAB übernimmt),
@@ -284,6 +289,10 @@ function renderFilters() {
   ));
 
   row.hidden = creators.length < 2 && filterCategories.length === 0;
+  const focused = row.contains(document.activeElement) ? document.activeElement : null;
+  const focusKey = ['creator', 'categoryId', 'clearCategories'].find((key) => focused && Object.hasOwn(focused.dataset, key));
+  const focusValue = focusKey ? focused.dataset[focusKey] : null;
+  const scrollLeft = row.scrollLeft;
   row.replaceChildren();
   if (row.hidden) return;
 
@@ -354,6 +363,10 @@ function renderFilters() {
     renderNotesAndFilters();
   });
   window.lucide?.createIcons({ el: row });
+  if (focusKey) {
+    [...row.querySelectorAll('button')].find((chip) => chip.dataset[focusKey] === focusValue)?.focus({ preventScroll: true });
+  }
+  row.scrollLeft = scrollLeft;
 }
 
 function visibleNotes() {
@@ -496,8 +509,8 @@ function categoryScopeLabel(category) {
 }
 
 function renderCategoryBadge(category) {
-  return `<span class="note-category-badge note-category-badge--${category.scope}">
-    <i data-lucide="${category.scope === 'personal' ? 'user' : 'home'}" aria-hidden="true"></i>${esc(category.name)}
+  return `<span class="note-category-badge note-category-badge--${category.scope} u-badge">
+    <i data-lucide="${category.scope === 'personal' ? 'user' : 'home'}" aria-hidden="true"></i><span class="note-category-badge__name">${esc(category.name)}</span>
     <span class="sr-only"> (${esc(categoryScopeLabel(category))})</span>
   </span>`;
 }
@@ -546,9 +559,9 @@ function renderCategoryScopeControl() {
       <option value="personal">${t('noteCategories.personal')}</option>
       <option value="household">${t('noteCategories.household')}</option>
     </select>
-    <button type="button" class="category-scope-help" aria-label="${esc(t('noteCategories.scopeHelp'))}">
+    <button type="button" class="category-scope-help" aria-expanded="false" aria-label="${esc(t('noteCategories.scopeHelp'))}">
       <i data-lucide="info" aria-hidden="true"></i>
-      <span class="category-scope-help__tooltip" id="note-category-scope-help" role="tooltip">${esc(t('noteCategories.scopeHelp'))}</span>
+      <span class="category-scope-help__tooltip u-meta" id="note-category-scope-help" role="tooltip">${esc(t('noteCategories.scopeHelp'))}</span>
     </button>
   </div>`;
 }
@@ -669,6 +682,7 @@ function openNoteModal({ mode, note = null }) {
     // die Leseansicht derselben Notiz haengt an derselben Breite.
     size: 'lg',
     onSave(panel) {
+      wireCategoryScopeHelp(panel);
       // Reader/Editor-Umschalter (#507): beide Panes bleiben im DOM, damit
       // Dirty-Check und Feld-Verdrahtung intakt bleiben und der Toggle nichts
       // verwirft. Die Leseansicht wird bei jedem Wechsel aus den Live-Feldern
@@ -1061,10 +1075,11 @@ function openNoteCategoryManager() {
       state.notes = notesRes.data;
       state.filterCategoryIds = pruneMissingNoteCategoryIds(state.filterCategoryIds, state.categories);
       renderNotesAndFilters();
-    } catch {
+    } catch (err) {
       // Die Mutation selbst war erfolgreich; dank des optimistischen Updates
       // bleiben gelöschte Badges weg. Der Nutzer muss aber wissen, dass die
       // anschließende Server-Reconciliation nicht gelungen ist.
+      console.error('[Notes] Kategorien-Auffrischung fehlgeschlagen:', err);
       window.yuvomi?.showToast(t('notes.loadError'), 'danger');
     }
   };
@@ -1078,6 +1093,12 @@ function openNoteCategoryManager() {
     size: 'lg',
     onSave: (panel) => {
       const manager = panel.querySelector('yuvomi-category-manager');
+      // Der Loeschdialog schliesst den Manager VOR dem anschliessenden DELETE,
+      // das Element haengt dann nicht mehr im Dokument. Der Listener am Element
+      // selbst ueberlebt das - solange sich niemand abmeldet, und genau darauf
+      // besteht der Wachhund in test-frontend-audit.js. Aufgeraeumt wird nichts:
+      // das Element entsteht je Oeffnen neu und geht mit dem Overlay.
+      manager.addEventListener('category-manager-changed', (e) => refresh(e.detail));
       manager.configure({
         basePath: '/notes/categories',
         groups,
@@ -1090,10 +1111,6 @@ function openNoteCategoryManager() {
         rowIconResolver: (item) => item.scope === 'personal' ? 'user' : 'home',
         addScopeLabelKey: 'noteCategories.scopeLabel',
         addScopeHelpKey: 'noteCategories.scopeHelp',
-        // Der Löschdialog schließt den Manager vor dem anschließenden DELETE.
-        // Ein direkter Callback bleibt dabei erreichbar und aktualisiert die
-        // Karten, den Detail-State und die Filter auch nach dem DOM-Cleanup.
-        onChanged: refresh,
       });
     },
   });

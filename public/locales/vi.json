@@ -596,7 +596,15 @@
         "toPantryNothing": "Không có gì được thêm vào kho. Mở lại \"Vào kho\" và kiểm tra số lượng.",
         "reorderHandle": "Sắp xếp lại: {{name}}",
         "reorderHandleHint": "Kéo hoặc dùng phím mũi tên để sắp xếp",
-        "reorderPosition": "Vị trí {{index}} trên {{total}}"
+        "reorderPosition": "Vị trí {{index}} trên {{total}}",
+        "priceLabel": "Giá",
+        "storeLabel": "Cửa hàng",
+        "storePlaceholder": "Chọn hoặc nhập",
+        "manageStores": "Quản lý cửa hàng",
+        "storesHint": "Những cửa hàng bạn mua sắm. Giá mà không có cửa hàng chỉ trả lời một nửa.",
+        "storeDeleteConfirm": "Xóa cửa hàng “{{name}}”?",
+        "storeDeleteConfirmDetail": "Các món của cửa hàng này vẫn còn, giá cũng vậy - chỉ phần gán cửa hàng trở nên trống. Ở đây không có cửa hàng thay thế.",
+        "addStore": "Cửa hàng mới"
     },
     "meals": {
         "randomizeSuccess_few": "Đã lên kế hoạch {{count}} bữa ăn.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Không ai",
         "responsibleFilterEmptyTitle": "Không có mục nào cho người này",
         "responsibleFilterEmptyDescription": "Tháng này không ai phụ trách mục nào trong lựa chọn này.",
-        "handoverToSplit": "Chuyển sang chi tiêu chung"
+        "handoverToSplit": "Chuyển sang chi tiêu chung",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (kế hoạch: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Hiện tab chu kỳ",
@@ -2867,7 +2876,12 @@
         "sourceNative": "Gốc",
         "sourceAll": "Tất cả",
         "sourceFilterLabel": "Lọc theo nguồn",
-        "plannedThisWeek": "Đã lên kế hoạch tuần này"
+        "plannedThisWeek": "Đã lên kế hoạch tuần này",
+        "imageLabel": "Hình ảnh",
+        "imageChoose": "Chọn hình ảnh",
+        "imageRemove": "Xóa hình ảnh",
+        "imageHint": "Một hình cho mỗi công thức. Hình hiện trong kế hoạch bữa ăn và trên ô tổng quan.",
+        "imageTooLarge": "Hình vẫn quá lớn sau khi thu nhỏ."
     },
     "search": {
         "emptyHint": "Nhập ít nhất 2 ký tự để tìm trong công việc, sự kiện, ghi chú, danh bạ, mua sắm và sức khỏe.",

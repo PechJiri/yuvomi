@@ -596,7 +596,15 @@
         "toPantryNothing": "До запасів нічого не додано. Відкрий «До запасів» знову і перевір кількість.",
         "reorderHandle": "Змінити порядок: {{name}}",
         "reorderHandleHint": "Перетягніть або скористайтеся стрілками для сортування",
-        "reorderPosition": "Позиція {{index}} з {{total}}"
+        "reorderPosition": "Позиція {{index}} з {{total}}",
+        "priceLabel": "Ціна",
+        "storeLabel": "Магазин",
+        "storePlaceholder": "Оберіть або введіть",
+        "manageStores": "Керування магазинами",
+        "storesHint": "Магазини, де ви купуєте. Ціна без магазину відповідає лише наполовину.",
+        "storeDeleteConfirm": "Видалити магазин «{{name}}»?",
+        "storeDeleteConfirmDetail": "Товари цього магазину залишаться разом із ціною - порожнім стане лише поле магазину. Заміни магазину тут немає.",
+        "addStore": "Новий магазин"
     },
     "meals": {
         "randomizeSuccess_few": "Заплановано {{count}} прийоми їжі.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Ніхто",
         "responsibleFilterEmptyTitle": "Для цієї особи немає записів",
         "responsibleFilterEmptyDescription": "Цього місяця ніхто не відповідає за запис у цій вибірці.",
-        "handoverToSplit": "Перенести до спільних витрат"
+        "handoverToSplit": "Перенести до спільних витрат",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (план: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Показати вкладку циклу",
@@ -2811,7 +2820,12 @@
         "sourceNative": "Локальний",
         "sourceAll": "Усі",
         "sourceFilterLabel": "Фільтр за джерелом",
-        "plannedThisWeek": "Заплановано на цей тиждень"
+        "plannedThisWeek": "Заплановано на цей тиждень",
+        "imageLabel": "Зображення",
+        "imageChoose": "Вибрати зображення",
+        "imageRemove": "Видалити зображення",
+        "imageHint": "Одне зображення на рецепт. Воно з'являється в плані харчування та на плитці огляду.",
+        "imageTooLarge": "Зображення все ще завелике після зменшення."
     },
     "search": {
         "emptyHint": "Введіть щонайменше 2 символи для пошуку в завданнях, подіях, нотатках, контактах, покупках і здоров'ї.",

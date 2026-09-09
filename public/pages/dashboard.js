@@ -49,6 +49,7 @@ import { openQuickLinksManager } from '/components/quick-links-manager.js';
 import { attachOverlay } from '/utils/overlay-history.js';
 import { mealTypeList, primeMealTypeNames } from '/utils/meal-types.js';
 import { recipeThumbHtml, wireRecipeThumbs } from '/utils/recipe-thumb.js';
+import { wireNoteCategoryOverflow } from '/utils/note-category-overflow.js';
 
 // Hält den AbortController des aktuellen FAB-Listeners - wird bei jedem render() erneuert.
 let _fabController = null;
@@ -1238,9 +1239,10 @@ function renderTodayMeals(meals, visibleMealTypes = MEAL_ORDER) {
           // gleich aussehendes Platzhalter-Symbol daneben waere Unruhe ohne
           // Aussage. Die Hoehe der Kachel haengt nicht daran - das Bild sitzt
           // in der Titelzeile und ist so hoch wie sie.
-          ? `${meal.recipe_has_image ? recipeThumbHtml({
+          ? `${(meal.recipe_has_own_image || meal.recipe_has_image) ? recipeThumbHtml({
               recipeId: meal.recipe_id,
-              hasImage: true,
+              hasImage: meal.recipe_has_image,
+              hasOwnImage: meal.recipe_has_own_image,
               className: 'meal-slot__thumb',
             }) : ''}<span class="meal-slot__title-text">${esc(meal.title)}</span>`
           : '—'}</div>
@@ -1294,12 +1296,15 @@ function renderPinnedNotes(allNotes, size) {
   // Traegergrund: drei graubeige Kaesten, die wie deaktiviert aussahen. Ohne die
   // Deklaration greift der Fallback im Stylesheet (der Notizen-Ton).
   const items = notes.map((n) => `
-    <div class="note-item" data-route="/notes" role="button" tabindex="0"
+    <div class="note-item" data-route="/notes"
          ${n.color ? `style="--note-color:${esc(n.color)};"` : ''}>
+      <div class="note-item__body" role="link" tabindex="0">
       ${n.title ? `<div class="note-item__title">${esc(n.title)}</div>` : ''}
       <div class="note-item__content">${renderMarkdownLight(excerpt(n.content))}</div>
+      </div>
       ${(n.categories || []).length ? `<div class="note-item__categories">
-        ${n.categories.map((category) => `<span>${esc(noteCategoryName(category))}<span class="sr-only"> (${esc(noteCategoryScope(category))})</span></span>`).join('')}
+        ${n.categories.map((category) => `<span class="note-item__category u-badge">${esc(noteCategoryName(category))}<span class="sr-only"> (${esc(noteCategoryScope(category))})</span></span>`).join('')}
+        <button type="button" class="note-item__categories-more u-badge" aria-label="${esc(t('noteCategories.categories'))}" hidden></button>
       </div>` : ''}
     </div>
   `).join('');
@@ -4581,12 +4586,15 @@ export async function render(container, { user, signal: routeSignal = null } = {
     });
   }
 
+  let disposeNoteCategories = () => {};
+  signal.addEventListener('abort', () => disposeNoteCategories(), { once: true });
   function rebuildDashboard(cfg) {
     // Der eine Engpass fuer jeden verspaeteten Neuaufbau (#977): eine Antwort,
     // die nach dem Verlassen der Seite oder nach dem naechsten render()
     // eintrifft, darf die Flaeche nicht mehr anfassen - sonst ueberschreibt der
     // aeltere Stand den neueren.
     if (signal.aborted) return;
+    disposeNoteCategories();
     const shell = container.querySelector('#dashboard-shell');
     if (!shell) return;
     if (wallMode) {
@@ -4631,6 +4639,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     // Vorschaubilder der Mahlzeitenkachel: Ruecksturz auf den Platzhalter per
     // Listener, weil ein `onerror` im Markup gegen die CSP liefe (#1059).
     wireRecipeThumbs(shell);
+    disposeNoteCategories = wireNoteCategoryOverflow(shell, (count) => getNumberFormat().format(count));
     wireWeatherRefresh(container, (updatedWeather) => {
       weather = updatedWeather;
       rebuildDashboard(cfg);

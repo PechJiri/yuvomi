@@ -4,6 +4,18 @@ process.env.DB_PATH = ':memory:';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
+import { dashboardPaths } from '../server/openapi/paths/dashboard.js';
+
+test('OpenAPI documents the repeatable AND note-category filter', () => {
+  const parameter = dashboardPaths()['/api/v1/dashboard'].get.parameters.find((item) => item.name === 'notes_category');
+  assert.ok(parameter);
+  assert.equal(parameter.in, 'query');
+  assert.equal(parameter.schema.type, 'array');
+  assert.equal(parameter.schema.items.type, 'integer');
+  assert.equal(parameter.schema.items.minimum, 1);
+  assert.equal(parameter.schema.maxItems, 50);
+  assert.match(parameter.description, /AND/);
+});
 
 const dbmod = await import('../server/db.js');
 const { default: dashboardRouter } = await import('../server/routes/dashboard.js');

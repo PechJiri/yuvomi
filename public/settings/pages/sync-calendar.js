@@ -1,6 +1,6 @@
 import { api } from '/api.js';
 import { formatDate, formatTime, t } from '/i18n.js';
-import { closeModal, confirmModal, openModal } from '/components/modal.js';
+import { closeModal, confirmModal, openModal, refocusAfterRender } from '/components/modal.js';
 import {
   createDisclosure,
   createInlineError,
@@ -502,6 +502,7 @@ function bindCalDAVAddButton(container, user) {
             closeModal({ force: true });
             showToast(t('settings.caldavAccountAdded'), 'success');
             await loadCalDAVAccounts(container, user);
+            refocusAfterRender();
           } catch (err) {
             errorEl.textContent = err.message || t('common.errorGeneric');
             errorEl.hidden = false;

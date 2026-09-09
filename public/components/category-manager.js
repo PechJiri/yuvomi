@@ -6,11 +6,15 @@
  *
  * Verhalten:
  *   - configure({ basePath, groups, groupField, supportsSubcategories, labelResolver, titleKey, hintKey,
- *                 deleteDetailKey, subDeleteDetailKey, onChanged })
+ *                 deleteConfirmKey, deleteDetailKey, subDeleteDetailKey })
  *   - Lädt via api.get(basePath); mutiert über post/put/patch/delete relativ zu basePath
  *   - Dispatcht nach jeder Mutation `category-manager-changed`
  *   - Zeigt Server-Guard-Fehler (in-use/last) als Toast
  *   - Räumt Listener in disconnectedCallback() auf
+ *
+ * VERTRAG FUER AUFRUFER: die Auffrischung gehoert in den Ereignis-Handler, nicht
+ * in ein onClose des Modals, und niemand meldet sich beim Schliessen ab. Grund
+ * steht bei `_notifyChanged()`.
  */
 import { api } from '/api.js';
 import { t } from '/i18n.js';
@@ -37,6 +41,36 @@ const COLOR_LABEL_KEYS = [
   'category.colorGrey',
 ];
 
+/** Shared by the manager and the Notes editor; listeners belong to their root. */
+export function wireCategoryScopeHelp(root) {
+  const button = root.querySelector('.category-scope-help');
+  if (!button) return () => {};
+  const controller = new AbortController();
+  const { signal } = controller;
+  let pinned = false;
+  const setOpen = (open) => button.setAttribute('aria-expanded', String(open));
+  setOpen(false);
+  button.addEventListener('mouseenter', () => setOpen(true), { signal });
+  button.addEventListener('focus', () => setOpen(true), { signal });
+  button.addEventListener('mouseleave', () => {
+    if (!pinned && document.activeElement !== button) setOpen(false);
+  }, { signal });
+  button.addEventListener('blur', () => { pinned = false; setOpen(false); }, { signal });
+  button.addEventListener('click', () => { pinned = !pinned; setOpen(pinned); }, { signal });
+  button.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+  }, { signal });
+  // Hover does not move focus: Escape can originate in a different form field.
+  root.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && button.getAttribute('aria-expanded') === 'true') {
+      event.stopPropagation();
+      pinned = false;
+      setOpen(false);
+    }
+  }, { signal, capture: true });
+  return () => controller.abort();
+}
+
 class CategoryManagerElement extends HTMLElement {
   constructor() {
     super();
@@ -60,6 +94,10 @@ class CategoryManagerElement extends HTMLElement {
     // Vorrat laesst sie unzugeordnet zurueck. Ein geteilter Folgentext waere
     // fuer zwei der fuenf Aufrufer schlicht falsch - dieselbe Falle wie beim
     // Platzhalter oben, nur folgenreicher.
+    // Auch die FRAGE gehoert dem Aufrufer, nicht nur die Folgenbeschreibung:
+    // wer Laeden verwaltet, liest sonst "Kategorie „Rewe" loeschen?" in einem
+    // Dialog, der "Laeden verwalten" heisst.
+    this._deleteConfirmKey = 'category.deleteConfirm';
     this._deleteDetailKey = 'category.deleteConfirmDetail';
     this._subDeleteDetailKey = 'category.deleteSubConfirmDetail';
     // OPT-IN: nur wer eine Palette mitgibt, bekommt die Farbwahl. Fuenf der
@@ -72,7 +110,6 @@ class CategoryManagerElement extends HTMLElement {
     this._rowIconResolver = null;
     this._addScopeLabelKey = 'noteCategories.scopeLabel';
     this._addScopeHelpKey = '';
-    this._onChanged = null;
     this._cats = [];
     this._sortables = [];
     this._onClick = this._onClick.bind(this);
@@ -93,7 +130,7 @@ class CategoryManagerElement extends HTMLElement {
     this._rowIconResolver = typeof opts.rowIconResolver === 'function' ? opts.rowIconResolver : null;
     if (opts.addScopeLabelKey) this._addScopeLabelKey = opts.addScopeLabelKey;
     if (opts.addScopeHelpKey) this._addScopeHelpKey = opts.addScopeHelpKey;
-    this._onChanged = typeof opts.onChanged === 'function' ? opts.onChanged : null;
+    if (opts.deleteConfirmKey) this._deleteConfirmKey = opts.deleteConfirmKey;
     if (opts.deleteDetailKey) this._deleteDetailKey = opts.deleteDetailKey;
     if (opts.subDeleteDetailKey) this._subDeleteDetailKey = opts.subDeleteDetailKey;
     this._renderShell();
@@ -101,6 +138,7 @@ class CategoryManagerElement extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._disposeScopeHelp?.();
     this._root?.removeEventListener('click', this._onClick);
     this._root?.removeEventListener('submit', this._onSubmit);
     this._destroySortables();
@@ -182,9 +220,9 @@ class CategoryManagerElement extends HTMLElement {
     if (!this._unifiedAdd) return '';
     const hasScopeChoice = this._groups.length > 1;
     const help = hasScopeChoice && this._addScopeHelpKey
-      ? `<button type="button" class="category-scope-help" aria-label="${esc(t(this._addScopeHelpKey))}">
+      ? `<button type="button" class="category-scope-help" aria-expanded="false" aria-label="${esc(t(this._addScopeHelpKey))}">
           <i data-lucide="info" aria-hidden="true"></i>
-          <span class="category-scope-help__tooltip" id="cat-manager-scope-help" role="tooltip">${esc(t(this._addScopeHelpKey))}</span>
+          <span class="category-scope-help__tooltip u-meta" id="cat-manager-scope-help" role="tooltip">${esc(t(this._addScopeHelpKey))}</span>
         </button>`
       : '';
     return `<form class="cat-add-form cat-add-form--unified" data-group="${esc(this._groups[0]?.key ?? '')}"
@@ -229,8 +267,14 @@ class CategoryManagerElement extends HTMLElement {
       this._groupsEl.appendChild(tmp.firstElementChild);
     });
     this._groupsEl.insertAdjacentHTML('beforeend', this._unifiedAddFormHtml());
+    this._wireScopeHelp();
     if (window.lucide) window.lucide.createIcons({ el: this._groupsEl });
     this._wireSortableIn(this._groupsEl);
+  }
+
+  _wireScopeHelp() {
+    this._disposeScopeHelp?.();
+    this._disposeScopeHelp = wireCategoryScopeHelp(this.closest?.('.modal-panel') || this._groupsEl);
   }
 
   // Teil-Render einer einzelnen Gruppe: baut nur deren Sektion (cat-list +
@@ -526,19 +570,25 @@ class CategoryManagerElement extends HTMLElement {
       </ul>`;
   }
 
+  /**
+   * BEIM LOESCHEN KOMMT DIESES EREIGNIS, WENN DAS ELEMENT SCHON AUS DEM DOKUMENT
+   * IST (gemessen 08.09.2026 im laufenden Browser: `document.contains(el)` ist
+   * dann false).
+   *
+   * `_delete()` fragt ueber `confirmOverModal`, und das schliesst nach einem Ja
+   * das Modal darunter gleich mit ab (`closeModal({ force: true })`), BEVOR es
+   * zurueckkehrt - `api.delete` laeuft also erst danach. Fuer die Aufrufer folgen
+   * daraus zwei Dinge, und beide gelten fuer JEDEN von ihnen:
+   *
+   *   - Kein `removeEventListener` in onClose. Wer beim Schliessen abmeldet,
+   *     verpasst genau die Loeschung - und behaelt einen lokalen Stand, der eine
+   *     Kategorie anbietet, die der Server nicht mehr kennt. Ein Leck entsteht
+   *     dadurch nicht: das Element entsteht je Oeffnen neu und wird mit dem
+   *     Overlay verworfen, der Listener geht mit ihm.
+   *   - Kein `changed`-Merker, der in onClose ausgewertet wird. Er stuende beim
+   *     Loeschen auf false. Die Auffrischung gehoert in den Handler selbst.
+   */
   _notifyChanged(detail = {}) {
-    // Der Callback gehört dem Aufrufer, nicht dem DOM-Lebenszyklus des Modals.
-    // DELETE-Bestätigungen schließen den Manager noch vor der Mutation; ein
-    // Event-Listener am entfernten Element wäre dann bereits abgeräumt.
-    try {
-      const pending = this._onChanged?.(detail);
-      pending?.catch?.((err) => console.error('[CategoryManager] onChanged:', err));
-    } catch (err) {
-      // Die Server-Mutation war erfolgreich. Ein Fehler im Seiten-Refresh darf
-      // sie nicht nachträglich als fehlgeschlagen toasten oder das Legacy-Event
-      // für die übrigen Aufrufer unterdrücken.
-      console.error('[CategoryManager] onChanged:', err);
-    }
     this.dispatchEvent(new CustomEvent('category-manager-changed', { bubbles: true, detail }));
   }
 
@@ -781,7 +831,7 @@ class CategoryManagerElement extends HTMLElement {
     if (!cat) return;
     const { confirmOverModal } = await import('/components/modal.js');
     const confirmed = await confirmOverModal(
-      t('category.deleteConfirm', { name: this._labelResolver(cat) }),
+      t(this._deleteConfirmKey, { name: this._labelResolver(cat) }),
       { danger: true, confirmLabel: t('common.delete'), detail: t(this._deleteDetailKey) }
     );
     if (!confirmed) return;

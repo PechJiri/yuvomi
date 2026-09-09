@@ -9,7 +9,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeLoanSchedule, remainingPrincipalAfter, remainingPrincipalFromPayments, MAX_LOAN_MONTHS } from '../server/services/loan-amortization.js';
+import { computeLoanSchedule, remainingPrincipalAfter, remainingPrincipalFromPayments, remainingInstallmentsForBalance, MAX_LOAN_MONTHS } from '../server/services/loan-amortization.js';
 
 const near = (a, b, eps = 0.02) => Math.abs(a - b) <= eps;
 
@@ -280,4 +280,57 @@ test('remainingPrincipalFromPayments: eine Lücke ist eine Null-Zahlung, ihr Zin
   const late = remainingPrincipalFromPayments(params, [{ installment_number: 3, amount: m }]);
   const early = remainingPrincipalFromPayments(params, [{ installment_number: 1, amount: m }]);
   assert.ok(late > early, `späte Erstbuchung ${late} > frühe ${early}`);
+});
+
+// --------------------------------------------------------
+// Restlaufzeit am Kontostand (#964)
+// --------------------------------------------------------
+
+test('bei voller Restschuld ist die Prognose exakt die Planlaufzeit', () => {
+  // DIE AEQUIVALENZ IST DER PRUEFSTEIN. Wer nichts extra zahlt, muss dieselbe
+  // Zahl sehen wie vorher - eine Prognose, die schon ohne Sondertilgung von der
+  // Planzahl abweicht, waere kein Fortschritt, sondern ein zweiter Wert, dem
+  // niemand glauben kann.
+  const plan = computeLoanSchedule({ principal: 100000, fixedRate: 3, initialRepaymentRate: 2, interestMode: 'fixed' });
+  const prognose = remainingInstallmentsForBalance({
+    balance: 100000, monthlyPayment: plan.monthlyPayment, fixedRate: 3, interestMode: 'fixed',
+  });
+  assert.equal(prognose, plan.totalMonths);
+});
+
+test('eine Sondertilgung verkuerzt die Laufzeit', () => {
+  const plan = computeLoanSchedule({ principal: 100000, fixedRate: 3, initialRepaymentRate: 2, interestMode: 'fixed' });
+  const halb = remainingInstallmentsForBalance({
+    balance: 50000, monthlyPayment: plan.monthlyPayment, fixedRate: 3, interestMode: 'fixed',
+  });
+  assert.ok(halb < plan.totalMonths, `${halb} muss unter ${plan.totalMonths} liegen`);
+  // Und zwar deutlich: die halbe Restschuld bei gleicher Rate ist nicht die
+  // halbe Laufzeit, aber auch nicht fast dieselbe.
+  assert.ok(halb < plan.totalMonths * 0.75, `${halb} ist kaum kuerzer als ${plan.totalMonths}`);
+});
+
+test('getilgt heisst null Raten, nicht amortisierend heisst keine Antwort', () => {
+  assert.equal(remainingInstallmentsForBalance({
+    balance: 0, monthlyPayment: 400, fixedRate: 3, interestMode: 'fixed',
+  }), 0);
+  // Eine Rate unter dem Monatszins tilgt nie - dafuer gibt es keine Laufzeit,
+  // und eine erfundene waere schlimmer als keine.
+  assert.equal(remainingInstallmentsForBalance({
+    balance: 100000, monthlyPayment: 10, fixedRate: 3, interestMode: 'fixed',
+  }), null);
+});
+
+test('nach der Zinsbindung rechnet die Prognose mit dem Anschlusssatz', () => {
+  // `paidInstallments` sagt, wo im Vertrag wir stehen: ohne die Angabe finge die
+  // Bindung von vorn an, und ein Darlehen kurz vor ihrem Ablauf bekaeme den
+  // guenstigen Satz noch einmal geschenkt.
+  const params = {
+    balance: 80000, monthlyPayment: 500, fixedRate: 2, interestMode: 'fixed_then_variable',
+    fixedPeriodMonths: 120, followupRate: 6,
+  };
+  const amAnfang = remainingInstallmentsForBalance({ ...params, paidInstallments: 0 });
+  const kurzVorAblauf = remainingInstallmentsForBalance({ ...params, paidInstallments: 119 });
+  assert.ok(amAnfang !== null && kurzVorAblauf !== null, 'beide muessen rechenbar sein');
+  assert.ok(kurzVorAblauf > amAnfang,
+    `kurz vor Ablauf (${kurzVorAblauf}) muss laenger dauern als am Anfang (${amAnfang}) - der teurere Satz greift sofort`);
 });

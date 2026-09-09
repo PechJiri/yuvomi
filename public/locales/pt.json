@@ -596,7 +596,15 @@
         "toPantryNothing": "Nada foi adicionado à despensa. Abre «Para a despensa» outra vez e verifica as quantidades.",
         "reorderHandle": "Reordenar: {{name}}",
         "reorderHandleHint": "Arraste ou use as teclas de seta para reordenar",
-        "reorderPosition": "Posição {{index}} de {{total}}"
+        "reorderPosition": "Posição {{index}} de {{total}}",
+        "priceLabel": "Preço",
+        "storeLabel": "Loja",
+        "storePlaceholder": "Escolha ou escreva",
+        "manageStores": "Gerir lojas",
+        "storesHint": "As lojas onde compram. Um preço sem loja responde só a metade.",
+        "storeDeleteConfirm": "Eliminar a loja “{{name}}”?",
+        "storeDeleteConfirmDetail": "Os itens desta loja permanecem, e o preço também - apenas a atribuição de loja fica vazia. Aqui não há loja substituta.",
+        "addStore": "Nova loja"
     },
     "meals": {
         "randomizeSuccess_few": "{{count}} refeições planeadas.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Ninguém",
         "responsibleFilterEmptyTitle": "Nenhum lançamento para esta pessoa",
         "responsibleFilterEmptyDescription": "Ninguém é responsável por um lançamento neste mês com esta seleção.",
-        "handoverToSplit": "Passar para despesas partilhadas"
+        "handoverToSplit": "Passar para despesas partilhadas",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plano: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Mostrar a aba de ciclo",
@@ -2776,7 +2785,12 @@
         "sourceNative": "Nativa",
         "sourceAll": "Todas",
         "sourceFilterLabel": "Filtrar por origem",
-        "plannedThisWeek": "Planejado para esta semana"
+        "plannedThisWeek": "Planejado para esta semana",
+        "imageLabel": "Imagem",
+        "imageChoose": "Escolher imagem",
+        "imageRemove": "Remover imagem",
+        "imageHint": "Uma imagem por receita. Aparece no plano de refeições e no mosaico de visão geral.",
+        "imageTooLarge": "A imagem continua demasiado grande depois de reduzida."
     },
     "search": {
         "emptyHint": "Digita pelo menos 2 caracteres para pesquisar tarefas, eventos, notas, contactos, compras e saúde.",

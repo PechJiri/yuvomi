@@ -10,8 +10,37 @@ import {
 import { categoryNameKey } from '../server/services/note-categories.js';
 import { schemas as openApiSchemas } from '../server/openapi/schemas.js';
 import { notesPaths as buildNotePaths } from '../server/openapi/paths/notes.js';
+import { visibleCategoryCount, scrollCategoryTooltip } from '../public/utils/note-category-overflow.js';
+import { eachRule } from './css-rules.js';
 
-const picker = await import('../public/utils/note-category-picker.js').catch(() => ({}));
+test('category overflow fits the largest prefix and reserves the actual +N width', () => {
+  assert.equal(visibleCategoryCount([40, 50, 60], 158, 4, () => 44), 3);
+  assert.equal(visibleCategoryCount([40, 50, 60], 150, 4, () => 44), 2);
+  assert.equal(visibleCategoryCount([40, 50, 60], 100, 4, () => 44), 1);
+  assert.equal(visibleCategoryCount([240, 30], 100, 4, () => 44), 0);
+  assert.equal(visibleCategoryCount([], 100, 4, () => 44), 0);
+  assert.equal(visibleCategoryCount(Array(12).fill(20), 98, 4, (n) => n >= 10 ? 50 : 40), 2);
+});
+
+test('keyboard scrolling reaches every hidden category without moving focus', () => {
+  let top = 0;
+  const tooltip = {
+    clientHeight: 300, scrollHeight: 900,
+    get scrollTop() { return top; },
+    set scrollTop(value) { top = Math.max(0, Math.min(value, 600)); },
+  };
+  for (const [key, expected] of [
+    ['ArrowDown', 40], ['ArrowUp', 0], ['PageDown', 300],
+    ['End', 600], ['PageUp', 300], ['Home', 0],
+  ]) {
+    assert.equal(scrollCategoryTooltip(tooltip, key), true);
+    assert.equal(top, expected, key);
+  }
+  assert.equal(scrollCategoryTooltip(tooltip, 'Tab'), false);
+  assert.equal(scrollCategoryTooltip(tooltip, 'Escape'), false);
+});
+
+const picker = await import('../public/utils/note-category-picker.js');
 
 function fakePickerOption(id) {
   const attrs = new Map([['aria-selected', 'false']]);
@@ -207,7 +236,20 @@ test('notes UI keeps the approved category filter and editor contracts', () => {
     'initial load, save, reload, delete and undo must all refresh occupied category chips');
   assert.match(source.match(/async function reloadNotes\(\)[\s\S]*?\n\}/)?.[0] || '', /renderNotesAndFilters\(\)/);
   assert.match(css, /\.notes-filters[\s\S]*overflow-x:\s*auto/);
-  assert.match(css, /notes-filter-group--categories[\s\S]*overflow-x:\s*auto/);
+  const rules = [...eachRule(css)];
+  const filters = rules.find((rule) => rule.selector === '.notes-filters' && !rule.at.length)?.body || '';
+  const groups = rules.find((rule) => rule.selector === '.notes-filter-group' && !rule.at.length)?.body || '';
+  assert.match(filters, /scrollbar-width:\s*thin/);
+  assert.match(filters, /scrollbar-color:\s*var\(--module-accent\)/);
+  assert.match(groups, /flex:\s*0 0 auto/);
+  assert.match(source, /wireScrollFade\(container\.querySelector\('#notes-filters'\)\)/);
+  assert.match(source, /filterFade\.destroy\(\)/);
+  assert.match(source, /chip\.dataset\[focusKey\] === focusValue\)\?\.focus\(\{ preventScroll: true \}\)/);
+  const badgeName = rules.find((rule) => rule.selector === '.note-category-badge__name')?.body || '';
+  assert.match(badgeName, /min-width:\s*0/);
+  assert.match(badgeName, /overflow-wrap:\s*anywhere/);
+  assert.ok(!rules.some((rule) => rule.selector === '.notes-filter-group--categories' && /(?:overflow-x:\s*auto|flex:\s*1)/.test(rule.body)),
+    'one outer scroller keeps categories reachable even when creator chips exceed the viewport');
   assert.match(layoutCss, /html\[data-module-readonly\][^\{]*\.notes-manage-categories[^{]*\{\s*display:\s*none\s*!important/,
     'read-only Notes must not offer a category manager whose mutations will be rejected');
 });

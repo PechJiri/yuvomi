@@ -33,6 +33,9 @@ const SERVER_DIR = path.join(ROOT, 'server');
  * aus `public/` importieren darf. Reine Funktionen, front- und backend-identisch.
  */
 const SHARED_ISOMORPHIC = new Set([
+  // Notes category identity must match in the API and duplicate-name picker.
+  // This pure Unicode normalization has no browser or server dependencies.
+  'public/utils/note-category-name.js',
   // #469: Was aus einem Adressfeld eine Adresse macht - oder eine Absage. Das
   // Ergebnis landet als `href` einer Kachel auf der Startseite; die Route
   // prueft es, weil eine Client-Pruefung keine Grenze ist, und das Formular
@@ -43,6 +46,13 @@ const SHARED_ISOMORPHIC = new Set([
   'public/utils/recipe-meal-types.js',
   'public/utils/contact-name.js',
   'public/utils/pantry-units.js',
+  // #1074: Ziffern fremder Systeme nach ASCII. Client und Server lesen dieselben
+  // Mengentexte („۲۵۰ g") - der Client, um eine Zutat zu skalieren, der Server,
+  // um sie beim Uebertrag in die Einkaufsliste zusammenzuzaehlen. Zwei Fassungen
+  // wuerden hier nicht bei einem Randfall auseinanderlaufen, sondern bei jedem
+  // Haushalt, der seine eigenen Ziffern schreibt: die eine Seite rechnete, die
+  // andere nicht. Rein aus Intl abgeleitet, ohne DOM und ohne Node.
+  'public/utils/digits.js',
   // #620: Das Format der Sync-Ziel-Kennung. Der Server validiert genau das,
   // was Event-Modal und Einstellungen bauen - zwei Definitionen desselben
   // Formats würden sich unbemerkt auseinanderentwickeln.

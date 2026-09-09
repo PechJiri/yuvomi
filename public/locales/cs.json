@@ -596,7 +596,15 @@
         "toPantryNothing": "Do zásob se nic nepřidalo. Otevři „Do zásob\" znovu a zkontroluj množství.",
         "reorderHandle": "Změnit pořadí: {{name}}",
         "reorderHandleHint": "Přetáhněte nebo použijte šipky k seřazení",
-        "reorderPosition": "Pozice {{index}} z {{total}}"
+        "reorderPosition": "Pozice {{index}} z {{total}}",
+        "priceLabel": "Cena",
+        "storeLabel": "Obchod",
+        "storePlaceholder": "Vyberte nebo napište",
+        "manageStores": "Spravovat obchody",
+        "storesHint": "Obchody, kde nakupujete. Cena bez obchodu odpoví jen napůl.",
+        "storeDeleteConfirm": "Smazat obchod „{{name}}“?",
+        "storeDeleteConfirmDetail": "Položky tohoto obchodu zůstanou zachovány i s cenou - prázdné bude jen přiřazení obchodu. Náhradní obchod se nedoplňuje.",
+        "addStore": "Nový obchod"
     },
     "meals": {
         "randomizeSuccess_few": "Naplánována {{count}} jídla.",
@@ -1496,7 +1504,8 @@
         "responsibleNobody": "Nikdo",
         "responsibleFilterEmptyTitle": "Pro tuto osobu není žádný záznam",
         "responsibleFilterEmptyDescription": "V tomto měsíci nikdo neodpovídá za záznam v tomto výběru.",
-        "handoverToSplit": "Převést do sdílených výdajů"
+        "handoverToSplit": "Převést do sdílených výdajů",
+        "loanRemainingInstallmentsForecast": "{{forecast}} (plán: {{plan}})"
     },
     "settings": {
         "healthCycleEnableLabel": "Zobrazit kartu cyklu",
@@ -3491,7 +3500,12 @@
         "sourceNative": "Vlastní",
         "sourceAll": "Vše",
         "sourceFilterLabel": "Filtrovat podle zdroje",
-        "plannedThisWeek": "Naplánováno na tento týden"
+        "plannedThisWeek": "Naplánováno na tento týden",
+        "imageLabel": "Obrázek",
+        "imageChoose": "Vybrat obrázek",
+        "imageRemove": "Odebrat obrázek",
+        "imageHint": "Jeden obrázek na recept. Zobrazí se v jídelním plánu a na dlaždici přehledu.",
+        "imageTooLarge": "Obrázek je i po zmenšení příliš velký."
     },
     "wmo": {
         "0": "Jasno",
