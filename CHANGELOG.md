@@ -179,7 +179,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The layer now checks whether the remembered element is still connected, and falls back in two
   steps: it looks for a live element under the same id, which finds the button that was rebuilt in
   the same spot, and otherwise puts focus on the page root - the same target the skip link uses. Not
-  a good place, but a place inside the page, which `document.body` is not.
+  a good place, but a place inside the page, which `document.body` is not. The root is made
+  focusable first: the app shell gives it `tabindex="-1"`, but the five auth pages render their own
+  `<main id="main-content">` without one, and focusing an element that cannot take focus is the very
+  no-op this entry is about.
 
   The same break has a second, more common shape: a handler that re-renders **after** the dialog
   closed - `closeModal()` and `renderGrid()` on the next line. There the restore was correct and got

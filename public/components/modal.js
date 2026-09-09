@@ -620,10 +620,34 @@ function _findAgain(memo) {
   return null;
 }
 
+/**
+ * Die Seitenwurzel, und zwar eine, die den Fokus auch ANNIMMT.
+ *
+ * `renderAppShell()` in router.js setzt `tabIndex = -1` - aber nur fuer die
+ * Routen mit App-Shell. Die fuenf Auth-Seiten (login, setup, join,
+ * forgot-password, reset-password) rendern ihr eigenes
+ * `<main id="main-content">` ohne das Attribut, und dort ist `.focus()` ein
+ * No-op: gemessen faellt der Fokus auf `document.body` - genau der stille
+ * Ausfall, den diese Weiche verhindern soll, nur eine Route weiter.
+ *
+ * Erreichbar ist das ueber ein Sitzungsende bei offenem Dialog:
+ * `closeAllOverlays()` schliesst mit `force`, und auf Mobil haengt `_doClose`
+ * an `animationend` beziehungsweise einem 400-ms-Timer - es kann also laufen,
+ * nachdem `/login` schon gerendert hat.
+ *
+ * `hasAttribute` und nicht `el.tabIndex`: das Property liest auch ohne Attribut
+ * `-1` und kann die beiden Faelle gar nicht unterscheiden (gemessen).
+ */
+function _pageRoot() {
+  const root = document.getElementById(PAGE_ROOT_ID);
+  if (root && !root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
+  return root;
+}
+
 export function focusRestoreTarget(memo) {
   if (!memo) return null;
   if (memo.el?.isConnected) return memo.el;
-  return _findAgain(memo) ?? document.getElementById(PAGE_ROOT_ID);
+  return _findAgain(memo) ?? _pageRoot();
 }
 
 /**
@@ -685,8 +709,7 @@ function _refocusIfDropped(memo, ziel) {
  */
 export function refocusAfterRender() {
   if (!_lastRestore) return;
-  _tryRefocus(_lastRestore.memo, _lastRestore.ziel);
-}
+  _tryRefocus(_lastRestore.memo, _lastRestore.ziel);}
 
 function _doClose(overlayEl) {
   const target = overlayEl ?? activeOverlay;
