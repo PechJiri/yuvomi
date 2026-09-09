@@ -2342,10 +2342,30 @@ async function openCategoryManager(container, { fromDeepLink = false } = {}) {
   // `state.items` nicht an, und `groupItemsByCategory` liest den Namen von dort;
   // die Zeilen landeten sonst unter der alten Ueberschrift am Listenende.
   const onCategoriesChanged = async () => {
-    await Promise.all([
-      loadCategories(),
-      state.activeListId ? loadItems(state.activeListId) : Promise.resolve(),
-    ]);
+    // Die Seite kann unter diesem Handler weggezogen sein. Kommt der Manager
+    // aus dem Deep-Link `?manage=categories`, navigiert onClose sofort auf
+    // /shopping - und weil diese Seite kein `update()` anbietet, baut der Router
+    // sie ganz neu auf (`content.replaceChildren(...)` plus frisches
+    // `render()`). Beim Loeschen laeuft dieser Handler erst DANACH: `container`
+    // waere ein abgehaengter Knoten, und der neue Aufbau hat ohnehin schon
+    // frisch geladen. Dieselbe Regel wie bei der Sammelaktions-Pille (#1039).
+    if (!container.isConnected) return;
+    await loadCategories();
+    if (state.activeListId) {
+      try {
+        await loadItems(state.activeListId);
+        state.itemsError = null;
+      } catch (err) {
+        // Ohne dieses catch bliebe eine unbeobachtete Rejection zurueck:
+        // `_notifyChanged()` dispatcht synchron und sieht die Promise dieses
+        // Listeners nie. Der Server hat die Artikel dann schon umgeschrieben,
+        // und die Liste zeigte stillschweigend den alten Stand weiter - hier
+        // stattdessen die Fehlerkarte mit Wiederholung, wie bei `switchList`.
+        console.error('[Shopping] loadItems Fehler:', err);
+        state.items      = [];
+        state.itemsError = err;
+      }
+    }
     if (state.activeList) {
       renderListContent(container);
       wireListContentEvents(container);

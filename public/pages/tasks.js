@@ -1520,6 +1520,18 @@ function openTaskCategoryManager(container) {
     try {
       const res = await api.get('/tasks/categories');
       state.categories = res.data ?? [];
+      // Loeschbar ist die UNBENUTZTE Kategorie, also gerade die, nach der jemand
+      // gefiltert haben kann. Bliebe ihr Key in `state.filters.category`, fragte
+      // die Seite den Server weiter nach einer Kategorie, die es nicht mehr
+      // gibt: dauerhaft leere Liste, dazu ein Chip, der sie weiter benennt.
+      const bekannt = new Set(state.categories.map((c) => c.key));
+      const behalten = state.filters.category.filter((key) => bekannt.has(key));
+      if (behalten.length !== state.filters.category.length) {
+        state.filters.category = behalten;
+        renderFilters(container);
+        await loadTasks(container); // laedt mit der bereinigten Abfrage und rendert
+        return;
+      }
       renderTaskList(container);
     } catch { /* Fehler wurde bereits vom Manager als Toast angezeigt */ }
   };

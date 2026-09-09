@@ -10182,6 +10182,34 @@ test('der Kontakte-Filter loest sich von einer Kategorie, die geloescht wurde', 
     'der Handler muss den aktiven Filter loesen, wenn seine Kategorie nicht mehr in der frischen Liste steht');
 });
 
+// Loeschbar ist die UNBENUTZTE Kategorie - dieselbe Falle wie bei den Kontakten,
+// nur haelt Aufgaben ihre Auswahl als Liste von Keys, die in die Server-Abfrage
+// wandert. Bleibt ein geloeschter Key darin, fragt die Seite dauerhaft nach
+// einer Kategorie, die es nicht mehr gibt.
+test('der Aufgaben-Filter loest sich von einer Kategorie, die geloescht wurde', () => {
+  const fn = read('../public/pages/tasks.js').match(/function openTaskCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'openTaskCategoryManager nicht gefunden');
+  assert.match(fn, /state\.filters\.category\.filter\([\s\S]*?state\.filters\.category = /,
+    'der Handler muss geloeschte Keys aus state.filters.category werfen');
+  assert.match(fn, /renderFilters\(container\)[\s\S]*?loadTasks\(container\)/,
+    'nach dem Bereinigen muessen Filterleiste und Liste neu geladen werden');
+});
+
+// Zwei Fallen des Einkaufs-Handlers, beide erst dadurch erreichbar, dass er
+// jetzt NACH dem Schliessen des Modals laeuft.
+test('der Einkaufs-Handler schreibt nicht in einen abgehaengten Container', () => {
+  const fn = read('../public/pages/shopping.js').match(/async function openCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'openCategoryManager nicht gefunden');
+  // Der Deep-Link `?manage=categories` navigiert in onClose sofort weg, und der
+  // Router baut die Seite neu auf - beim Loeschen laeuft dieser Handler danach.
+  assert.match(fn, /if \(!container\.isConnected\) return;/,
+    'der Handler muss aufgeben, wenn der Router die Seite schon ausgetauscht hat');
+  // `_notifyChanged()` dispatcht synchron und sieht die Promise dieses Listeners
+  // nie: ein Fehler beim Nachladen waere eine unbeobachtete Rejection.
+  assert.match(fn, /loadItems\(state\.activeListId\)[\s\S]*?catch[\s\S]*?state\.itemsError = err/,
+    'ein Fehler beim Nachladen der Artikel gehoert in state.itemsError, nicht in eine stille Rejection');
+});
+
 // Der Knopf, der den Manager oeffnet, liegt in `#budget-body` - genau dem
 // Bereich, den `renderBody()` austauscht. Nach dem Loeschen hat
 // `confirmOverModal` den Fokus schon dorthin zurueckgegeben, bevor der Handler
