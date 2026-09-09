@@ -145,6 +145,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   written into an item that no longer belonged to anything. The row and the item are now looked up
   again when the answer arrives.
 
+- **A saved filter no longer offers a category, tag or person that has been deleted.** The Tasks
+  filter bar keeps the last three filter sets as one-click chips. Nothing checked whether what they
+  name still exists, so deleting a category, renaming or merging a tag, or removing a household
+  member left a chip that put the dead value straight back into the query on click. The list then
+  filtered on something the server has never heard of and stayed empty - and reloading did not help,
+  because the value lives in the browser's local storage.
+
+  The chips are now filtered when they are read rather than cleaned up when they are written: a
+  single place decides it, and it stays right even when the change happened in another tab or on
+  another device. A set that has nothing left to offer disappears from the bar. Nothing is rewritten
+  in storage, so a category that comes back brings its chip back with it, and a load error - where
+  the app has no reliable list to compare against - leaves every chip alone rather than sweeping
+  them away.
+
 - **Deleting a category now updates the page behind the dialog**. Every module that offers
   "manage categories" kept showing the category you had just deleted: the filter chips in Contacts,
   the grouping in Shopping, the storage locations in Pantry, the places and categories in Inventory,

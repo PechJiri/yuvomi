@@ -2728,10 +2728,64 @@ async function toggleValueFilter(key, value, container) {
   await loadTasks(container);
 }
 
-function getRecentFilters() {
+/**
+ * Die gemerkten Sets, wie sie im Speicher STEHEN - ohne Veraltungsfilter.
+ *
+ * Getrennt von `getRecentFilters()`, weil `saveRecentFilter()` sonst die
+ * gefilterte Fassung zurueckschriebe: das waere Bereinigen beim Schreiben durch
+ * die Hintertuer, und ein einmal unvollstaendiger Referenzbestand (Ladefehler,
+ * noch nicht geladene Tags) haette die Chips fuer immer entfernt.
+ */
+function storedRecentFilters() {
   try {
     return JSON.parse(localStorage.getItem(RECENT_FILTERS_KEY) ?? '[]').map(normalizeFilterSet);
   } catch { return []; }
+}
+
+/**
+ * Die gemerkten Sets, wie sie ANGEBOTEN werden duerfen.
+ *
+ * Was ein Set nennt, kann verschwinden, nachdem es gespeichert wurde: eine
+ * geloeschte Kategorie, ein umbenannter oder zusammengefuehrter Tag, ein
+ * entferntes Haushaltsmitglied. Bliebe der Wert im Chip, brachte ein Klick ihn
+ * in `state.filters` zurueck, die Liste filterte auf etwas, das es nicht mehr
+ * gibt - dauerhaft leer, und ein Neuladen aenderte nichts, weil der Wert im
+ * localStorage steht.
+ *
+ * Lesend statt beim Schreiben (#984, read-side transformation): so gilt die
+ * Regel an EINER Stelle und stimmt nach jeder Auffrischung von selbst, auch
+ * wenn die Aenderung in einem anderen Tab oder auf einem anderen Geraet
+ * passiert ist. Der Speicher bleibt unangetastet - eine wieder angelegte
+ * Kategorie bringt ihr Chip mit.
+ *
+ * Status und Prioritaet stehen bewusst nicht drin: das sind feste Konstanten
+ * dieser Datei, sie koennen nicht veralten.
+ */
+function getRecentFilters() {
+  const sets = storedRecentFilters();
+  // Nach einem Ladefehler stehen `users`, `categories` und `allTags` auf `[]`
+  // (siehe den catch-Zweig in render()). „Leer" hiesse dann „gibt es nicht",
+  // und ein Serverfehler naehme dem Nutzer seine gemerkten Filter weg - genau
+  // die Verwechslung aus dem Leer-Zweig, die der Ladefehler-Zustand behebt.
+  if (state.loadError) return sets;
+
+  const knownCategories = new Set(state.categories.map((c) => c.key));
+  const knownTags       = new Set(state.allTags.map((entry) => entry.tag.toLowerCase()));
+  const knownUsers      = new Set(state.users.map((u) => String(u.id)));
+
+  return sets
+    .map((f) => ({
+      ...f,
+      assigned_to: f.assigned_to.filter((id) => knownUsers.has(String(id))),
+      category:    f.category.filter((key) => knownCategories.has(key)),
+      // Tag-Vergleich kleingeschrieben, wie ueberall sonst in dieser Datei
+      // (`hasTagFilter`): der Server behaelt die Schreibweise des Anlegens.
+      tags:        f.tags.filter((tag) => knownTags.has(String(tag).toLowerCase())),
+    }))
+    // Ein Set, von dem nichts uebrig bleibt, ist kein Chip mehr. Es bliebe
+    // sonst als leere Pille stehen und setzte beim Klick alle Filter zurueck.
+    .filter((f) => f.status.length || f.priority.length || f.assigned_to.length
+      || f.category.length || f.tags.length);
 }
 
 function saveRecentFilter(filters) {
@@ -2743,7 +2797,7 @@ function saveRecentFilter(filters) {
   const axis = (values) => [...values].map((v) => String(v).toLowerCase()).sort().join(',');
   const keyOf = (f) => [f.status, f.priority, f.assigned_to, f.category, f.tags].map(axis).join('|');
   const key = keyOf(set);
-  const recent = getRecentFilters().filter((f) => keyOf(f) !== key);
+  const recent = storedRecentFilters().filter((f) => keyOf(f) !== key);
   recent.unshift(set);
   try { localStorage.setItem(RECENT_FILTERS_KEY, JSON.stringify(recent.slice(0, RECENT_FILTERS_MAX))); } catch {}
 }
@@ -3666,4 +3720,9 @@ export async function render(container, { user }) {
 }
 
 // Testfläche: nur reine Funktionen, deren Vertrag außerhalb dieser Datei zählt.
-export const __test = { groupBy, groupKey, formatDueDate, normalizeFilterSet, taskQuery, state };
+export const __test = {
+  groupBy, groupKey, formatDueDate, normalizeFilterSet, taskQuery, state,
+  // Gemerkte Filter: der Vertrag ist, dass Lesen und Schreiben AUSEINANDER
+  // gehen - sonst schriebe das Bereinigen sich fest (siehe getRecentFilters).
+  getRecentFilters, storedRecentFilters, saveRecentFilter,
+};
