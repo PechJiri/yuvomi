@@ -728,3 +728,22 @@ test('der zweite Anlauf raet nicht - Mehrdeutigkeit bleibt Mehrdeutigkeit', () =
       'ohne unterscheidende id bleiben zwei Kandidaten - dann die Wurzel statt der falschen');
   });
 });
+
+/* REVIEW ZU #1070: der Merker darf nicht ueber sein Schliessen hinaus wirken.
+ *
+ * `closeDetailView()` kehrt im Popover-Zweig frueh zurueck, ohne `closeModal()`
+ * anzufassen - der Merker bleibt dann der des VORIGEN Dialogs. Ein
+ * `refocusAfterRender()` danach haette den Fokus auf ein Element aus einem
+ * unbeteiligten Zusammenhang setzen koennen. Ein falsches Ziel ist schlimmer
+ * als keines.
+ */
+test('refocusAfterRender verbraucht seinen Merker', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const fn = src.match(/export function refocusAfterRender\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'refocusAfterRender nicht gefunden');
+  assert.match(fn, /_lastRestore = null;/,
+    'der Merker gehoert zu genau einem Schliessen - bleibt er stehen, wirkt er spaeter dort weiter, '
+    + 'wo diese Schicht gar nichts geschlossen hat');
+  assert.match(fn, /_tryRefocus\(merker\.memo, merker\.ziel\)/,
+    'gearbeitet wird auf der entnommenen Kopie, nicht auf dem globalen Merker');
+});

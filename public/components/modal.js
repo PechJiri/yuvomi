@@ -808,7 +808,19 @@ function _refocusIfDropped(memo, ziel) {
  */
 export function refocusAfterRender() {
   if (!_lastRestore) return;
-  _tryRefocus(_lastRestore.memo, _lastRestore.ziel);}
+  // DER MERKER GEHOERT ZU GENAU EINEM SCHLIESSEN und wird dabei verbraucht.
+  //
+  // Sonst wirkt er weiter, wo gar nichts von dieser Schicht geschlossen wurde:
+  // `closeDetailView()` in components/detail-view.js kehrt im Popover-Zweig
+  // frueh zurueck, ohne `closeModal()` anzufassen. Ein `refocusAfterRender()`
+  // danach fand den Merker des VORIGEN, unbeteiligten Dialogs vor und konnte
+  // den Fokus auf ein Element aus dessen Zusammenhang setzen - ein falsches
+  // Ziel ist schlimmer als keines, und genau davor soll diese Schicht schuetzen
+  // (Review zu #1070).
+  const merker = _lastRestore;
+  _lastRestore = null;
+  _tryRefocus(merker.memo, merker.ziel);
+}
 
 function _doClose(overlayEl) {
   const target = overlayEl ?? activeOverlay;
