@@ -417,3 +417,162 @@ test('der Laden-Manager meldet sich beim Schliessen NICHT vom Aenderungs-Ereigni
   assert.match(fn[0], /const onChanged = async \(\) => \{[\s\S]*?loadStores\(\)/,
     'die Auffrischung gehoert in den Ereignis-Handler');
 });
+
+// --------------------------------------------------------
+// Mengenangabe -> Vorrats-Uebertrag (#1003, Nachzug zur Preis-Umschrift)
+// --------------------------------------------------------
+
+/**
+ * Fuehrt `fn` unter einer anderen Format-Locale aus. Die Locale ist im Browser
+ * eine Haushalts-Einstellung; der Loader dieser Suite liest sie aus
+ * `globalThis.__formatLocale` (Standard 'de'), damit hier genau die Faelle
+ * messbar sind, an denen die alte Umschrift still falsch lag.
+ */
+function withFormatLocale(locale, fn) {
+  const vorher = globalThis.__formatLocale;
+  globalThis.__formatLocale = locale;
+  try { fn(); } finally { globalThis.__formatLocale = vorher; }
+}
+
+test('parseShoppingQuantity: die Schreibweisen aus dem Seed bleiben, wie sie waren', () => {
+  // Gegen echte Werte aus scripts/seed-demo.js gemessen, nicht gegen erfundene:
+  // die Freitext-Menge ist meistens gar keine reine Zahl, und ein Test nur auf
+  // "250 g" haette die Rueckfaelle darunter nicht bemerkt.
+  const p = __test.parseShoppingQuantity;
+  assert.deepEqual(p('250 g'), { quantity: 250, unit: 'g' });
+  assert.deepEqual(p('1 kg'), { quantity: 1, unit: 'kg' });
+  assert.deepEqual(p('2 l'), { quantity: 2, unit: 'l' });
+  assert.deepEqual(p('12'), { quantity: 12, unit: 'pcs' });
+  // '1 Laib' faengt mit 'l' an: die Einheit braucht die Wortgrenze, sonst waere
+  // ein Laib Brot ein Liter.
+  assert.deepEqual(p('1 Laib'), { quantity: 1, unit: 'pcs' });
+  assert.deepEqual(p('1 Kopf'), { quantity: 1, unit: 'pcs' });
+  assert.deepEqual(p('6 × 1 l'), { quantity: 6, unit: 'pcs' });
+  assert.deepEqual(p('4er-Pack'), { quantity: 4, unit: 'pcs' });
+  assert.deepEqual(p(''), { quantity: 1, unit: 'pcs' });
+  assert.deepEqual(p(null), { quantity: 1, unit: 'pcs' });
+});
+
+test('parseShoppingQuantity: der Dezimaltrenner kommt aus der Region, nicht aus dem Quelltext', () => {
+  // In de trennt das Komma. Das konnte die alte Fassung auch - sie hatte den
+  // Trenner nur fest verdrahtet und lag damit ueberall sonst falsch.
+  withFormatLocale('de', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1,5 kg'), { quantity: 1.5, unit: 'kg' });
+  });
+  // In en-US und de-CH trennt der Punkt.
+  withFormatLocale('en-US', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1.5 kg'), { quantity: 1.5, unit: 'kg' });
+  });
+  withFormatLocale('de-CH', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('0.5 l'), { quantity: 0.5, unit: 'l' });
+  });
+});
+
+test('parseShoppingQuantity: eine gruppierte Menge wird abgewiesen, nicht geraten', () => {
+  // Der Kern des Fehlers: das Gruppierungszeichen ist regionsabhaengig, und
+  // beide Deutungen sind vertretbar. "1,000 g" heisst in en-US tausend Gramm,
+  // als Dezimalzahl aber ein Gramm - die falsche liegt um den Faktor 1000
+  // daneben, und die alte Fassung nahm sie stillschweigend (Menge 1, Einheit g).
+  //
+  // Abgewiesen wird auf den Standard, nicht auf "1 g": ein Wert mit Einheit
+  // sieht nach einer verstandenen Angabe aus. "1 Stueck" sagt sichtbar, dass
+  // nichts erkannt wurde, und der Uebernahme-Dialog zeigt beides in einem Feld,
+  // das sich korrigieren laesst.
+  withFormatLocale('en-US', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1,000 g'), { quantity: 1, unit: 'pcs' });
+  });
+  withFormatLocale('de', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1.000 g'), { quantity: 1, unit: 'pcs' });
+  });
+  // Zwei Stellen hinter dem Trenner sind nicht mehrdeutig und bleiben Dezimalangabe.
+  withFormatLocale('en-US', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1.25 kg'), { quantity: 1.25, unit: 'kg' });
+  });
+});
+
+test('parseShoppingQuantity: oestliche Ziffern kommen ueberhaupt an', () => {
+  // `\d` ist in JavaScript ASCII. Unter fa oder ar-EG zeigt die Oberflaeche
+  // ihre eigenen Ziffern, und wer sie eintippt, traf die alte Regex nicht -
+  // die Menge fiel wortlos auf 1 Stueck zurueck, egal was dastand.
+  withFormatLocale('fa', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('۲۵۰ g'), { quantity: 250, unit: 'g' });
+    assert.deepEqual(__test.parseShoppingQuantity('۱٫۵ kg'), { quantity: 1.5, unit: 'kg' });
+    // Das Einheitenwort bleibt bewusst unuebersetzt (siehe Kopf der Funktion):
+    // erkannt wird die ZAHL, das Wort landet bei 'Stueck'.
+    assert.deepEqual(__test.parseShoppingQuantity('۲۵۰ گرم'), { quantity: 250, unit: 'pcs' });
+  });
+  withFormatLocale('ar-EG', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('٢٥٠ g'), { quantity: 250, unit: 'g' });
+    // Auch hier gilt die Gruppierung der Region (٬), nicht die von en-US. Die
+    // fuehrende Ziffer ist bewusst NICHT die 1: mit „١٬٠٠٠ g" war dieser Test
+    // gruen, obwohl die Umschrift die Gruppierung gar nicht erkannte - der
+    // abgeschnittene Anfang „1" traf zufaellig denselben Wert wie der Standard.
+    // Ein Guard, dessen Erwartung auf zwei Wegen erreichbar ist, misst nichts.
+    assert.deepEqual(__test.parseShoppingQuantity('٢٬٠٠٠ g'), { quantity: 1, unit: 'pcs' });
+  });
+});
+
+test('parseShoppingQuantity: eine mitten im Trenner abgeschnittene Menge wird abgewiesen', () => {
+  // Die Gruppierungspruefung greift am MUSTER: drei Ziffern hinter dem Trenner.
+  // „٢٬٥٠" hat zwei, ist also keine erkannte Gruppierung - und ein Zeichen, das
+  // die Region ueberhaupt nicht als Trenner kennt, steht sowieso einfach da.
+  // Diese Regex liest nur den ANFANG und naehme daraus wortlos die 2.
+  withFormatLocale('ar-EG', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('٢٬٥٠ g'), { quantity: 1, unit: 'pcs' });
+  });
+  // Unter fa trennt das ASCII-Komma nichts.
+  withFormatLocale('fa', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1,5 kg'), { quantity: 1, unit: 'pcs' });
+  });
+  // Der Schweizer Gruppierungsapostroph, den weder de noch en-US kennt.
+  withFormatLocale('de', () => {
+    assert.deepEqual(__test.parseShoppingQuantity("1'000 g"), { quantity: 1, unit: 'pcs' });
+  });
+  // Ein Leerzeichen trennt dagegen zwei Angaben und schneidet nichts ab.
+  withFormatLocale('de', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('6 × 1 l'), { quantity: 6, unit: 'pcs' });
+  });
+  // Und ein `x` ist kein Trenner: nach ihm ist die Zahl vollstaendig gelesen. Die
+  // Pruefung war erst „irgendein Zeichen zwischen zwei Ziffern" und traf damit
+  // die Multiplikator-Schreibweise mit, die der Kommentar an der Regex
+  // ausdruecklich lesbar halten will.
+  withFormatLocale('de', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('2x500 g'), { quantity: 2, unit: 'pcs' });
+    assert.deepEqual(__test.parseShoppingQuantity('3x'), { quantity: 3, unit: 'pcs' });
+    assert.deepEqual(__test.parseShoppingQuantity('4er-Pack'), { quantity: 4, unit: 'pcs' });
+    // Die kompakte Form auch mit dem typografischen Kreuz.
+    assert.deepEqual(__test.parseShoppingQuantity('2×500 ml'), { quantity: 2, unit: 'pcs' });
+  });
+});
+
+test('parseShoppingQuantity: eine Gruppierung im REST laesst die fuehrende Menge stehen', () => {
+  // „6 × 1.000 ml" ist eine ganz gewoehnliche Einkaufszeile: sechs Flaschen zu
+  // je einem Liter. Gelesen wird nur die 6, die 1.000 wird gar nicht angefasst -
+  // sie darf die Zeile deshalb auch nicht abweisen. Vorher fiel sie auf 1 Stueck.
+  withFormatLocale('de', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('6 × 1.000 ml'), { quantity: 6, unit: 'pcs' });
+  });
+  withFormatLocale('en-US', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('6 × 1,000 ml'), { quantity: 6, unit: 'pcs' });
+  });
+  withFormatLocale('ar-EG', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('٦ × ١٬٠٠٠ ml'), { quantity: 6, unit: 'pcs' });
+  });
+  // Im fuehrenden Token wird weiter abgewiesen - die Eingrenzung ist kein Freibrief.
+  withFormatLocale('de', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1.000 g'), { quantity: 1, unit: 'pcs' });
+  });
+});
+
+test('parseShoppingQuantity: der Trenner der Region bleibt der Trenner, auch nach der Gruppierungspruefung', () => {
+  // Gegenprobe zur REIHENFOLGE in toDecimalString. Wuerde die Gruppierung erst
+  // nach dem Ersetzen des Dezimaltrenners geprueft, waere „1,000" in de schon ein
+  // „1.000" - und der Punkt IST dort das Gruppierungszeichen. Eine gueltige
+  // Menge von einem Gramm floege dann als vermeintlich gruppiert raus.
+  withFormatLocale('de', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1,000 g'), { quantity: 1, unit: 'g' });
+  });
+  withFormatLocale('en-US', () => {
+    assert.deepEqual(__test.parseShoppingQuantity('1.000 g'), { quantity: 1, unit: 'g' });
+  });
+});
