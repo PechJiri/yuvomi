@@ -1061,7 +1061,7 @@ let state = {
   users:           [],
   categories:      [],
   allTags:         [],       // [{ tag, count }] für Filterleiste und Vorschläge (#586)
-  /** Sind `users`/`categories`/`allTags` gerade NICHT nachweislich frisch?
+  /** Welche Referenzlisten sind gerade NICHT nachweislich frisch?
    *
    *  Zwei Wege dorthin, und beide enden gleich. Erstens der Offline-Cache:
    *  `/tasks` steht in `API_CACHE_WHITELIST` (sw.js), also auch
@@ -1072,8 +1072,16 @@ let state = {
    *  und eine Filterentscheidung darauf ist keine. Siehe `getRecentFilters`.
    *
    *  Deshalb heisst das Feld nicht `metaFromCache`: der Cache ist nur der
-   *  haeufigere der beiden Wege. */
-  metaStale:       false,
+   *  haeufigere der beiden Wege.
+   *
+   *  UND JE LISTE, nicht als ein Flag fuer drei. Die drei Endpunkte sind
+   *  getrennte Cache-Eintraege und werden getrennt aufgefrischt: `refreshTags`
+   *  holt nur `/tasks/tags`, der Kategorie-Manager nur `/tasks/categories`,
+   *  und allein `/tasks/meta/options` bringt alle drei. Als EIN gemeinsames
+   *  Flag erklaerte eine netzfrische Tag-Auffrischung die noch gecachten
+   *  Kategorien und Mitglieder fuer autoritativ - und das Beschneiden warf
+   *  dann ein Chip weg, das es noch gibt. */
+  metaStale:       { users: false, categories: false, tags: false },
   defaultPoints:   0,        // Haushalt-Standard für neue Aufgaben (#578), 0 = aus
   currentUserId:   null,
   isAdmin:         false,    // darf fremde Kommentare entfernen (#734)
@@ -1174,11 +1182,13 @@ async function refreshTags() {
   try {
     const { data, fromCache } = await api.getWithSource('/tasks/tags');
     state.allTags = data.data ?? [];
-    state.metaStale = fromCache === true;
+    // NUR die Tags: ueber Kategorien und Mitglieder sagt dieser Rundlauf
+    // nichts, ihr Zustand bleibt, wie er war.
+    state.metaStale.tags = fromCache === true;
   } catch {
     // Alte Liste behalten - aber sie ist ab jetzt nicht mehr nachweislich
     // frisch, und `getRecentFilters` darf nicht mehr dagegen beschneiden.
-    state.metaStale = true;
+    state.metaStale.tags = true;
   }
 }
 
@@ -1538,7 +1548,7 @@ function openTaskCategoryManager(container) {
     try {
       const { data, fromCache } = await api.getWithSource('/tasks/categories');
       state.categories = data.data ?? [];
-      state.metaStale = fromCache === true;
+      state.metaStale.categories = fromCache === true;
       // Loeschbar ist die UNBENUTZTE Kategorie, also gerade die, nach der jemand
       // gefiltert haben kann. Bliebe ihr Key in `state.filters.category`, fragte
       // die Seite den Server weiter nach einer Kategorie, die es nicht mehr
@@ -2793,20 +2803,23 @@ function getRecentFilters() {
   // versteckten ein gueltiges Chip; danach geloeschte staenden noch drin und
   // boeten weiter einen toten an. Offline gilt dasselbe wie beim Ladefehler -
   // nichts wegnehmen, was jemand gespeichert hat.
-  if (state.loadError || state.metaStale) return sets;
+  if (state.loadError) return sets;
 
-  const knownCategories = new Set(state.categories.map((c) => c.key));
-  const knownTags       = new Set(state.allTags.map((entry) => entry.tag.toLowerCase()));
-  const knownUsers      = new Set(state.users.map((u) => String(u.id)));
+  // JE ACHSE: eine Liste, die gerade nicht nachweislich frisch ist, beschneidet
+  // nicht - die beiden anderen schon. `null` heisst hier „kein Urteil".
+  const stale = state.metaStale;
+  const knownCategories = stale.categories ? null : new Set(state.categories.map((c) => c.key));
+  const knownTags       = stale.tags       ? null : new Set(state.allTags.map((entry) => entry.tag.toLowerCase()));
+  const knownUsers      = stale.users      ? null : new Set(state.users.map((u) => String(u.id)));
 
   const beschnitten = sets
     .map((f) => ({
       ...f,
-      assigned_to: f.assigned_to.filter((id) => knownUsers.has(String(id))),
-      category:    f.category.filter((key) => knownCategories.has(key)),
+      assigned_to: knownUsers ? f.assigned_to.filter((id) => knownUsers.has(String(id))) : f.assigned_to,
+      category:    knownCategories ? f.category.filter((key) => knownCategories.has(key)) : f.category,
       // Tag-Vergleich kleingeschrieben, wie ueberall sonst in dieser Datei
       // (`hasTagFilter`): der Server behaelt die Schreibweise des Anlegens.
-      tags:        f.tags.filter((tag) => knownTags.has(String(tag).toLowerCase())),
+      tags:        knownTags ? f.tags.filter((tag) => knownTags.has(String(tag).toLowerCase())) : f.tags,
     }))
     // Ein Set, von dem nichts uebrig bleibt, ist kein Chip mehr. Es bliebe
     // sonst als leere Pille stehen und setzte beim Klick alle Filter zurueck.
@@ -3472,7 +3485,8 @@ export async function openTaskById(taskId, { user = null, container = null, onCh
   if (!state.users.length || !state.categories.length) {
     try {
       const { data: meta = {}, fromCache } = await api.getWithSource('/tasks/meta/options');
-      state.metaStale = fromCache === true;
+      const alleStale = fromCache === true;
+      state.metaStale = { users: alleStale, categories: alleStale, tags: alleStale };
       state.users         = meta.users      ?? state.users;
       state.categories    = meta.categories ?? state.categories;
       state.allTags       = meta.tags       ?? state.allTags;
@@ -3711,7 +3725,9 @@ export async function render(container, { user }) {
     state.loadError = null;
     // `metaData` traegt jetzt `{ data, fromCache }` - der Rumpf steht in `.data`.
     const meta = metaData.data ?? {};
-    state.metaStale = metaData.fromCache === true;
+    // `/tasks/meta/options` bringt als einziger Pfad alle drei.
+    const alleStale = metaData.fromCache === true;
+    state.metaStale = { users: alleStale, categories: alleStale, tags: alleStale };
     state.tasks = tasksData.data ?? [];
     state.users = meta.users ?? [];
     state.categories = meta.categories ?? [];
@@ -3732,7 +3748,7 @@ export async function render(container, { user }) {
     state.users = [];
     state.categories = [];
     state.allTags = [];
-    state.metaStale = false;
+    state.metaStale = { users: false, categories: false, tags: false };
     state.defaultPoints = 0;
     state.subtasksExpandedByDefault = false;
     state.defaultSyncTarget = '';

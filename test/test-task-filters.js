@@ -48,7 +48,7 @@ function withKnown({ categories = [], tags = [], users = [], loadError = null, f
   tasks.state.allTags = tags.map((tag) => ({ tag, count: 1 }));
   tasks.state.users = users.map((id) => ({ id, display_name: `U${id}` }));
   tasks.state.loadError = loadError;
-  tasks.state.metaStale = fromCache;
+  tasks.state.metaStale = { users: fromCache, categories: fromCache, tags: fromCache };
 }
 
 const put = (...sets) => store.set(KEY, JSON.stringify(sets.map((s) => ({ ...emptySet, ...s }))));
@@ -164,7 +164,7 @@ test('gegen Referenzlisten aus dem Offline-Cache wird NICHT gefiltert', () => {
   assert.deepEqual(set.assigned_to, ['9']);
 
   // Sobald die Listen netzfrisch sind, greift die Bereinigung wieder.
-  tasks.state.metaStale = false;
+  tasks.state.metaStale = { users: false, categories: false, tags: false };
   assert.equal(tasks.getRecentFilters().length, 0, 'netzfrisch wird wieder beschnitten');
 });
 
@@ -177,18 +177,40 @@ test('refreshTags haelt fest, ob die neue Tag-Liste nachweislich frisch ist', as
 
   globalThis.__apiStub = { getWithSource: async () => ({ data: { data: [{ tag: 'garten', count: 1 }] }, fromCache: false }) };
   await tasks.refreshTags();
-  assert.equal(tasks.state.metaStale, false, 'netzfrisch');
+  assert.equal(tasks.state.metaStale.tags, false, 'netzfrisch');
 
   globalThis.__apiStub = { getWithSource: async () => ({ data: { data: [] }, fromCache: true }) };
   await tasks.refreshTags();
-  assert.equal(tasks.state.metaStale, true, 'aus dem Cache');
+  assert.equal(tasks.state.metaStale.tags, true, 'aus dem Cache');
 
   globalThis.__apiStub = { getWithSource: async () => { throw new Error('offline'); } };
-  tasks.state.metaStale = false;
+  tasks.state.metaStale = { users: false, categories: false, tags: false };
   const vorher = tasks.state.allTags;
   await tasks.refreshTags();
-  assert.equal(tasks.state.metaStale, true, 'ein Fehlschlag laesst die alte Liste stehen');
+  assert.equal(tasks.state.metaStale.tags, true, 'ein Fehlschlag laesst die alte Liste stehen');
   assert.equal(tasks.state.allTags, vorher, 'und die alte Liste bleibt wirklich stehen');
 
+  // UND NUR DIE TAGS. Ueber Kategorien und Mitglieder sagt dieser Rundlauf
+  // nichts - als EIN gemeinsames Flag erklaerte er sie faelschlich fuer frisch,
+  // und das Beschneiden warf ein Chip weg, das es noch gibt.
+  tasks.state.metaStale = { users: true, categories: true, tags: true };
+  globalThis.__apiStub = { getWithSource: async () => ({ data: { data: [] }, fromCache: false }) };
+  await tasks.refreshTags();
+  assert.deepEqual(tasks.state.metaStale, { users: true, categories: true, tags: false },
+    'eine frische Tag-Auffrischung sagt nichts ueber die anderen beiden Listen');
+
   delete globalThis.__apiStub;
+});
+
+test('eine stale Achse beschneidet nicht, die frischen schon', () => {
+  // Der Kern der Aufteilung: gecachte Kategorien duerfen kein Kategorie-Chip
+  // wegnehmen, waehrend frische Tags ihres sehr wohl beschneiden.
+  withKnown({ categories: ['haushalt'], tags: ['garten'], users: [3] });
+  tasks.state.metaStale = { users: false, categories: true, tags: false };
+  put({ category: ['weg'], tags: ['weg'], assigned_to: ['9'] });
+
+  const [set] = tasks.getRecentFilters();
+  assert.deepEqual(set.category, ['weg'], 'die stale Kategorienliste faellt kein Urteil');
+  assert.deepEqual(set.tags, [], 'die frische Tag-Liste beschneidet');
+  assert.deepEqual(set.assigned_to, [], 'die frische Mitgliederliste ebenso');
 });
