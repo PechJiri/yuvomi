@@ -459,7 +459,7 @@ function renderNoteCard(note) {
       </button>
       ${note.title ? `<div class="note-card__title">${esc(note.title)}</div>` : ''}
       <div class="note-card__content">${renderMarkdownLight(note.content, CHECKLIST_OPTS())}</div>
-      ${(note.categories || []).length ? `<div class="note-card__categories" aria-label="${t('noteCategories.categories')}">
+      ${(note.categories || []).length ? `<div class="note-card__categories" role="group" aria-label="${t('noteCategories.categories')}">
         ${note.categories.map(renderCategoryBadge).join('')}
       </div>` : ''}
       <div class="note-card__footer">
@@ -519,7 +519,7 @@ function renderNoteReadHtml(content, { live = false, categories = [] } = {}) {
   const body = (content || '').trim()
     ? renderMarkdownLight(content, live ? CHECKLIST_OPTS() : {})
     : `<p class="note-read__empty">${t('notes.readEmpty')}</p>`;
-  return `${categories.length ? `<div class="note-read__categories" aria-label="${t('noteCategories.categories')}">
+  return `${categories.length ? `<div class="note-read__categories" role="group" aria-label="${t('noteCategories.categories')}">
     ${categories.map(renderCategoryBadge).join('')}
   </div>` : ''}<div class="note-read__body">${body}</div>`;
 }
@@ -742,6 +742,7 @@ function openNoteModal({ mode, note = null }) {
               .map((input) => state.categories.find((category) => Number(category.id) === Number(input.value)))
               .filter(Boolean),
           }));
+          window.lucide?.createIcons({ el: readPane });
           animatePane(readPane);
         } else {
           animatePane(editPane);
@@ -1105,7 +1106,9 @@ function openNoteCategoryManager() {
         groupField: 'scope',
         labelResolver: (item) => item.name,
         titleKey: 'category.manageTitle',
-        hintKey: 'category.manageHint',
+        hintKey: state.canManageHousehold
+          ? 'category.manageHint'
+          : 'noteCategories.personalManagementHint',
         deleteDetailKey: 'noteCategories.deleteDetail',
         unifiedAdd: true,
         rowIconResolver: (item) => item.scope === 'personal' ? 'user' : 'home',

@@ -43,8 +43,6 @@ test('Notizen aktualisieren sich nach Manager-Mutationen über das Aenderungs-Er
   // Ereignis. Das `detail` traegt dabei, was der Refresh fuer sein optimistisches
   // Entfernen braucht - `_notifyChanged({ action: 'delete', key })` beim Loeschen,
   // sonst `{}`, worauf `refresh` auf den vollen Nachladen faellt.
-  assert(/dispatchEvent\(new CustomEvent\('category-manager-changed', \{ bubbles: true, detail \}\)\)/.test(comp),
-    'der Manager muss sein Ereignis mit dem detail dispatchen');
   const managerFn = notesPage.match(/function openNoteCategoryManager\(\)[\s\S]*?\n\}/)?.[0] || '';
   assert(/addEventListener\('category-manager-changed', \(e\) => refresh\(e\.detail\)\)/.test(managerFn),
     'Notizen muessen ihren Refresh an das Ereignis haengen und das detail durchreichen');
@@ -68,10 +66,6 @@ test('Zeigt lokalisierte Server-Guard-Fehler (reason → t()) mit Fallback', () 
   assert(/'category_in_use'/.test(comp) && /'category_last'/.test(comp) && /'category_exists'/.test(comp), 'Kategorie-reason-Codes müssen gemappt werden');
   assert(/t\('category\.errorInUse'/.test(comp), 'auf lokalisierte category.error*-Keys mappen');
   assert(/err\?\.message/.test(comp), 'Fallback auf die Server-Meldung bei unbekanntem reason');
-});
-test('Behält einen abgewiesenen Umbenennungswert für den nächsten Versuch', () => {
-  assert(/let promptValue = current/.test(comp), 'der eingegebene Name muss nach 409 erhalten bleiben');
-  assert(/err\?\.status !== 409/.test(comp), 'nur ein Namenskonflikt öffnet den Rename-Dialog erneut');
 });
 test('Unterstützt Subkategorien unter basePath/:key/subcategories', () => {
   assert(/subcategories/.test(comp), 'Subkategorie-Pfad muss vorkommen');

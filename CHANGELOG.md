@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Notes gain category management, a category picker and an AND filter.** Manage personal and
-  household categories on the Notes board and select several categories to show notes that belong
-  to every selection. The dashboard Notes widget supports the same filter. Category badges stay
-  on one line; a +N control reveals the remaining categories on hover, focus or tap.
+- **Notes gain category management, a category picker and an AND filter.** Manage personal
+  categories — and household categories when permitted — on the Notes board, then select several
+  categories to show notes that belong to every selection. Household categories remain assignable
+  for members who cannot manage them. The dashboard Notes widget supports the same filter. Category
+  badges stay on one line; a +N control reveals and correctly announces the remaining categories on
+  hover, focus or tap, and category icons remain intact after switching between reading and editing.
 
 - **A shopping item can carry a price and the shop it was bought at** (#1003, first cut). Both sit
   in the item dialog, where the item is already open - the checkbox stays the fastest gesture in the

@@ -61,6 +61,17 @@ test('Englisch: Singular und Plural je nach count', async () => {
   assert.equal(t('settings.calendarImport.success', { count: 4 }), '4 events imported.');
 });
 
+test('Notiz-Kategorieueberlauf benennt eine und mehrere weitere Kategorien', async () => {
+  await setLocale('en');
+  assert.equal(t('noteCategories.moreAction', { count: 1 }), '1 more category');
+  assert.equal(t('noteCategories.moreAction', { count: 2 }), '2 more categories');
+
+  await setLocale('cs');
+  assert.equal(t('noteCategories.moreAction', { count: 1 }), '1 další kategorie');
+  assert.equal(t('noteCategories.moreAction', { count: 3 }), '3 další kategorie');
+  assert.equal(t('noteCategories.moreAction', { count: 5 }), '5 dalších kategorií');
+});
+
 test('Sprachen ohne Zahlflexion liefern für jede Anzahl denselben Satz', async () => {
   await setLocale('ja');
   const one = t('settings.enabledReminderListCount', { count: 1 });

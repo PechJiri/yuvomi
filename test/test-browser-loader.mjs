@@ -114,7 +114,7 @@ const STUBS = {
     export const focusFirstField = () => null;
     export const updateHeaderAction = () => null;
     export const validateAll = () => true;
-    export const promptModal = async () => null;
+    export const promptModal = async (...args) => globalThis.__promptModal?.(...args) ?? null;
     export const btnLoading = () => {};
     export const btnSuccess = () => {};
     export const btnError = () => {};

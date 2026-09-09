@@ -964,7 +964,11 @@
         "removeAction": "Quitar la categoría {{name}}",
         "createAction": "Crear y asignar «{{name}}»",
         "scopeLabel": "Tipo de categoría",
-        "scopeHelp": "Solo tú puedes ver y gestionar las categorías personales. Todos los miembros del hogar pueden usar las categorías del hogar; los permisos controlan quién puede gestionarlas."
+        "scopeHelp": "Solo tú puedes ver y gestionar las categorías personales. Todos los miembros del hogar pueden usar las categorías del hogar; los permisos controlan quién puede gestionarlas.",
+        "moreAction": "{{count}} categorías más",
+        "moreAction_one": "{{count}} categoría más",
+        "moreAction_few": "{{count}} categorías más",
+        "personalManagementHint": "Aquí puedes gestionar tus categorías personales. Las categorías del hogar siguen disponibles en el editor de notas, pero no tienes permiso para gestionarlas."
     },
     "notes": {
         "title": "Notas",

@@ -281,6 +281,75 @@ after(async () => {
   await harness?.close();
 });
 
+test('Sonde 21 - Notiz-Kategorien behalten Fokus, Gruppenrolle und Reader-Icons', async () => {
+  const page = await openPage(harness, { device: 'desktop', locale: 'en' });
+  try {
+    const fixture = await page.evaluate(async () => {
+      const { api } = await import('/api.js');
+      const first = (await api.post('/notes/categories', {
+        name: 'Focus regression one',
+        scope: 'personal',
+      })).data;
+      const second = (await api.post('/notes/categories', {
+        name: 'Focus regression two',
+        scope: 'personal',
+      })).data;
+      const note = (await api.post('/notes', {
+        title: 'Category browser regression',
+        content: 'Reader icons survive repeated pane replacement.',
+        category_ids: [first.id, second.id],
+      })).data;
+      return { firstId: first.id, noteId: note.id };
+    });
+
+    await gotoRoute(page, '/notes');
+    await page.waitForSelector(`[data-category-id="${fixture.firstId}"]`);
+    await page.$eval(`[data-category-id="${fixture.firstId}"]`, (chip) => {
+      chip.focus();
+      chip.click();
+    });
+    await page.waitForFunction(
+      (id) => document.activeElement?.dataset.categoryId === String(id),
+      {},
+      fixture.firstId,
+    );
+    const focusState = await page.evaluate(() => ({
+      focusedCategory: document.activeElement?.dataset.categoryId ?? null,
+      categoryPressed: document.activeElement?.getAttribute('aria-pressed') ?? null,
+    }));
+
+    await page.click(`.note-card[data-id="${fixture.noteId}"] .note-card__open`);
+    await page.waitForSelector('.note-modal[data-view="read"]');
+    const readTurns = [];
+    for (let turn = 0; turn < 2; turn += 1) {
+      await page.click('.note-mode-switch [data-view="edit"]');
+      await page.click('.note-mode-switch [data-view="read"]');
+      readTurns.push(await page.evaluate(() => ({
+        icons: document.querySelectorAll('.note-read__categories svg').length,
+        placeholders: document.querySelectorAll('.note-read__categories i[data-lucide]').length,
+      })));
+    }
+
+    const actual = await page.evaluate(({ noteId }) => ({
+      cardRole: document.querySelector(`.note-card[data-id="${noteId}"] .note-card__categories`)?.getAttribute('role'),
+      readRole: document.querySelector('.note-read__categories')?.getAttribute('role'),
+    }), fixture);
+
+    assert.deepEqual({ ...focusState, ...actual, readTurns }, {
+      focusedCategory: String(fixture.firstId),
+      categoryPressed: 'true',
+      cardRole: 'group',
+      readRole: 'group',
+      readTurns: [
+        { icons: 2, placeholders: 0 },
+        { icons: 2, placeholders: 0 },
+      ],
+    });
+  } finally {
+    await page.close();
+  }
+});
+
 test('PR2 #975 - das zusammengesetzte Kalenderformular und seine Seriennamen bleiben wahr', async () => {
   const page = await openPage(harness, { device: 'desktop', locale: 'de' });
   const title = 'PR2 Serienprobe 975';

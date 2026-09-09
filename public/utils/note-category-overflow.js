@@ -26,7 +26,7 @@ export function scrollCategoryTooltip(tooltip, key) {
 }
 
 /** Owns measurement, tooltip and listeners for one dashboard build. */
-export function wireNoteCategoryOverflow(root, formatCount = String) {
+export function wireNoteCategoryOverflow(root, formatCount = String, formatMoreAction = String) {
   const controller = new AbortController();
   const { signal } = controller;
   const tooltips = [];
@@ -39,7 +39,6 @@ export function wireNoteCategoryOverflow(root, formatCount = String) {
   for (const row of root.querySelectorAll('.note-item__categories')) {
     const badges = [...row.querySelectorAll('.note-item__category')];
     const button = row.querySelector('.note-item__categories-more');
-    const moreLabel = button.getAttribute('aria-label');
     const tooltip = document.createElement('div');
     tooltip.className = 'note-category-overflow-tooltip u-meta';
     tooltip.id = `note-category-overflow-${++tooltipSequence}`;
@@ -85,8 +84,9 @@ export function wireNoteCategoryOverflow(root, formatCount = String) {
       });
       badges.forEach((badge, index) => { badge.hidden = index >= count; });
       button.hidden = count === badges.length;
-      button.textContent = `+${formatCount(badges.length - count)}`;
-      button.setAttribute('aria-label', `${moreLabel} (${formatCount(badges.length - count)})`);
+      const hiddenCount = badges.length - count;
+      button.textContent = `+${formatCount(hiddenCount)}`;
+      button.setAttribute('aria-label', formatMoreAction(hiddenCount));
       tooltip.replaceChildren();
       const list = document.createElement('ul');
       for (const badge of badges.slice(count)) {

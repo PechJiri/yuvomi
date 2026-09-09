@@ -161,6 +161,104 @@ test('configured group field submits a household category with the API scope con
   assert.equal(manager._cats.at(-1).scope, 'household');
 });
 
+test('a 409 reopens rename with the rejected value', async () => {
+  const previousPut = api.put;
+  const defaults = [];
+  const answers = ['Rejected', null];
+  let attempts = 0;
+  globalThis.__promptModal = (_label, defaultValue) => {
+    defaults.push(defaultValue);
+    return answers.shift();
+  };
+  api.put = async () => {
+    attempts += 1;
+    throw Object.assign(new Error('exists'), { status: 409 });
+  };
+  try {
+    const manager = managerWithCategory();
+    await manager._rename('7');
+
+    assert.deepEqual(defaults, ['Old', 'Rejected']);
+    assert.equal(attempts, 1);
+    assert.equal(manager._cats[0].name, 'Old');
+  } finally {
+    api.put = previousPut;
+    delete globalThis.__promptModal;
+  }
+});
+
+test('a non-409 rename error stops without reopening', async () => {
+  const previousPut = api.put;
+  const defaults = [];
+  globalThis.__promptModal = (_label, defaultValue) => {
+    defaults.push(defaultValue);
+    return 'Offline name';
+  };
+  api.put = async () => {
+    throw Object.assign(new Error('offline'), { status: 0 });
+  };
+  try {
+    const manager = managerWithCategory();
+    await manager._rename('7');
+
+    assert.deepEqual(defaults, ['Old']);
+    assert.equal(manager._cats[0].name, 'Old');
+  } finally {
+    api.put = previousPut;
+    delete globalThis.__promptModal;
+  }
+});
+
+test('a successful retry persists the accepted rename', async () => {
+  const previousPut = api.put;
+  const defaults = [];
+  const answers = ['Taken', 'Accepted'];
+  let attempts = 0;
+  globalThis.__promptModal = (_label, defaultValue) => {
+    defaults.push(defaultValue);
+    return answers.shift();
+  };
+  api.put = async (_path, body) => {
+    attempts += 1;
+    if (attempts === 1) throw Object.assign(new Error('exists'), { status: 409 });
+    return { data: { id: 7, name: body.name, scope: 'personal' } };
+  };
+  try {
+    const manager = managerWithCategory();
+    let changes = 0;
+    manager.addEventListener('category-manager-changed', () => { changes += 1; });
+    await manager._rename('7');
+
+    assert.deepEqual(defaults, ['Old', 'Taken']);
+    assert.equal(attempts, 2);
+    assert.equal(manager._cats[0].name, 'Accepted');
+    assert.equal(changes, 1);
+  } finally {
+    api.put = previousPut;
+    delete globalThis.__promptModal;
+  }
+});
+
+test('cancelling rename sends no request and keeps the category', async () => {
+  const previousPut = api.put;
+  let attempts = 0;
+  globalThis.__promptModal = () => null;
+  api.put = async () => {
+    attempts += 1;
+    return { data: { id: 7, name: 'Unexpected', scope: 'personal' } };
+  };
+  try {
+    const manager = managerWithCategory();
+    await manager._rename('7');
+
+    assert.equal(attempts, 0);
+    assert.equal(manager._cats[0].name, 'Old');
+  } finally {
+    api.put = previousPut;
+    delete globalThis.__promptModal;
+  }
+});
+
 test('das verzoegerte DELETE meldet sich beim Zuhoerer, der sich nicht abgemeldet hat', async () => {
   let finishDelete;
   let signalDeleteStarted;

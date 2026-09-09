@@ -1302,7 +1302,7 @@ function renderPinnedNotes(allNotes, size) {
       ${n.title ? `<div class="note-item__title">${esc(n.title)}</div>` : ''}
       <div class="note-item__content">${renderMarkdownLight(excerpt(n.content))}</div>
       </div>
-      ${(n.categories || []).length ? `<div class="note-item__categories">
+      ${(n.categories || []).length ? `<div class="note-item__categories" role="group" aria-label="${esc(t('noteCategories.categories'))}">
         ${n.categories.map((category) => `<span class="note-item__category u-badge">${esc(noteCategoryName(category))}<span class="sr-only"> (${esc(noteCategoryScope(category))})</span></span>`).join('')}
         <button type="button" class="note-item__categories-more u-badge" aria-label="${esc(t('noteCategories.categories'))}" hidden></button>
       </div>` : ''}
@@ -4639,7 +4639,11 @@ export async function render(container, { user, signal: routeSignal = null } = {
     // Vorschaubilder der Mahlzeitenkachel: Ruecksturz auf den Platzhalter per
     // Listener, weil ein `onerror` im Markup gegen die CSP liefe (#1059).
     wireRecipeThumbs(shell);
-    disposeNoteCategories = wireNoteCategoryOverflow(shell, (count) => getNumberFormat().format(count));
+    disposeNoteCategories = wireNoteCategoryOverflow(
+      shell,
+      (count) => getNumberFormat().format(count),
+      (count) => t('noteCategories.moreAction', { count }),
+    );
     wireWeatherRefresh(container, (updatedWeather) => {
       weather = updatedWeather;
       rebuildDashboard(cfg);
