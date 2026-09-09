@@ -1131,3 +1131,31 @@ test('offline zurueck zu Liste A zeigt A, nicht die liegengebliebenen Artikel vo
     'die gecachte A-Antwort gehoert angewandt, solange der Bestand einer anderen Liste gehoert');
   delete globalThis.__apiStub;
 });
+
+test('nach einem Fehlschlag derselben Liste wird die gecachte Antwort angenommen', async () => {
+  // Folge des Zugehoerigkeits-Fixes: `state.items = []` im Fehlerzweig liess
+  // `_itemsListId` stehen, und die Cache-Wache lehnte danach die einzige
+  // brauchbare Antwort ab - die Liste stand als echt leer da, ohne Meldung
+  // (Codex-Befund P2 zu PR #1072, zehnte Runde).
+  resetShoppingState();
+  __test.state.lists = [{ id: 1, name: 'A', item_total: 1, item_checked: 0 }];
+
+  const antworten = [
+    async () => ({ data: { data: [milk(0)] }, fromCache: false }),   // erst netzfrisch
+    async () => { throw Object.assign(new Error('500'), { data: { error: 'kaputt' } }); },
+    async () => ({ data: { data: [milk(0)] }, fromCache: true }),    // Wiederholung: aus dem Cache
+  ];
+  globalThis.__apiStub = { getWithSource: () => antworten.shift()() };
+
+  await __test.loadItems(1);
+  assert.equal(__test.state.items.length, 1);
+
+  // Derselbe Ablauf wie in `switchList`: Fehler, Bestand verwerfen.
+  await __test.loadItems(1).catch(() => { __test.clearItems(); });
+  assert.equal(__test.state.items.length, 0);
+
+  await __test.loadItems(1);
+  assert.equal(__test.state.items.length, 1,
+    'ist der Bestand verworfen, ist die gecachte Antwort das Beste, was es gibt');
+  delete globalThis.__apiStub;
+});

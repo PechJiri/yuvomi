@@ -344,6 +344,20 @@ const _appliedLoad = new Map();
  */
 let _itemsListId = null;
 
+/**
+ * Den Bestand verwerfen - und mit ihm die Zugehoerigkeit.
+ *
+ * Die beiden gehoeren zusammen, und getrennt gesetzt laufen sie auseinander:
+ * nach `state.items = []` im Fehlerzweig behauptete `_itemsListId` weiter, der
+ * (leere) Bestand gehoere zu dieser Liste, und die Wache in `loadItems` lehnte
+ * die einzige brauchbare Antwort - die gecachte - als Rueckschritt ab. Der
+ * Aufrufer loeschte den Fehler, und die Liste stand als echt leer da.
+ */
+function clearItems() {
+  state.items = [];
+  _itemsListId = null;
+}
+
 /** Was die Zeile ZEIGT: die Absicht, sonst der Serverstand. */
 function checkedOf(item) {
   const intent = intents.get(item?.id);
@@ -2322,7 +2336,7 @@ async function switchList(listId, container) {
     state.itemsError = null;
   } catch (err) {
     console.error('[Shopping] loadItems Fehler:', err);
-    state.items = [];
+    clearItems();
     state.activeList = state.lists.find((l) => l.id === listId) ?? null;
     state.itemsError = err;
   }
@@ -2490,7 +2504,7 @@ function wireListContentEvents(container) {
       if (state.activeListId) {
         await switchList(state.activeListId, container);
       } else {
-        state.items = [];
+        clearItems();
         state.activeList = null;
         renderTabs(container);
         renderListContent(container);
@@ -2730,7 +2744,7 @@ export async function render(container, { user }) {
         await loadItems(state.activeListId);
       } catch (err) {
         console.error('[Shopping] loadItems Fehler:', err);
-        state.items = [];
+        clearItems();
         state.activeList = state.lists.find((l) => l.id === state.activeListId) ?? null;
         state.itemsError = err;
       }
@@ -2854,5 +2868,6 @@ export const __test = {
   // Die Ladeordnung ueberlebt sonst von Test zu Test: `_loadSeq` waechst
   // global, und eine Wasserstandsmarke aus einem frueheren Fall verwirft die
   // Auffrischung des naechsten. Aufraeumen gehoert an den ANFANG jedes Falls.
+  clearItems,
   resetLoadOrderForTest: () => { _appliedLoad.clear(); settledAt.clear(); _itemsListId = null; },
 };
