@@ -376,6 +376,22 @@
         }
       ],
       "result": "Review posted. Summary:\n\n**PR #1066** - `fix(ui): keep the category manager listening past the delete that closes its modal`\n\n- One high-confidence bug found and posted as an inline comment."
+    },
+    "saubere-review": {
+      "lauf": "https://github.com/ulsklyc/yuvomi/actions/runs/34316389826 (PR #1066, 9m22s)",
+      "num_turns": 7,
+      "subtype": "success",
+      "is_error": false,
+      "permission_denials": [],
+      "result": "Review complete for ulsklyc/yuvomi#1066.\n\n**Findings:** No issues found. Checked for bugs and CLAUDE.md compliance (no CLAUDE.md files exist in this repo)."
+    },
+    "stumm-unbekannt": {
+      "lauf": "konstruiert - der Fall, den Codex an #1073 benannt hat",
+      "num_turns": 5,
+      "subtype": "success",
+      "is_error": false,
+      "permission_denials": [],
+      "result": "Done."
     }
   }
 }

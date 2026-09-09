@@ -52,6 +52,26 @@ const SCHON_KOMMENTIERT = /already\s+(?:left\s+a\s+comment|commented|posted|revi
 const WARTET_AUF_AGENTEN = /wait(?:ing|s)?\s+for\b[^.]{0,80}\bagents?\b|notified\s+automatically/i;
 
 /**
+ * Der Lauf sagt SELBST, dass er geliefert hat.
+ *
+ * Ohne dieses Muster stand hier eine Zuordnung aus ABWESENHEIT: "keines der
+ * bekannten Fehlermuster passt, also wird die Review schon gesprochen haben".
+ * Das traegt nicht. Ein Lauf, der still mit `result: "Done."` endet, faellt in
+ * keines der Muster - und eine ungebundene claude-Aeusserung von woanders
+ * (Mention-Pfad, Nachzuegler eines abgebrochenen Vorgaengers) haette ihn dann
+ * gruen gefaerbt. Die Zusammenfassung traegt keine SHA, also muss die Bindung
+ * aus dem einzigen Artefakt kommen, das nur DIESER Lauf schreiben kann: seinem
+ * eigenen result-Objekt.
+ *
+ * Drei echte Wortlaute abgeschlossener Laeufe an #1066, alle drei gemessen:
+ *   "Review complete for ulsklyc/yuvomi#1066."   (sauber, nur Zusammenfassung)
+ *   "The review is posted. Summary: ..."          (mit Inline-Befund)
+ *   "Review posted. Summary: ..."                 (mit Inline-Befund)
+ */
+const REVIEW_GELIEFERT =
+  /\breview\b[^.]{0,40}\b(?:complete|completed|posted|finished)\b|\b(?:posted|completed|finished)\b[^.]{0,30}\breview\b/i;
+
+/**
  * Zaehlt, was claude SEIT dem Beginn dieses Laufs gesagt hat.
  *
  * Der Vergleich ist lexikografisch und darf das sein: die GitHub-API liefert
@@ -177,10 +197,10 @@ export function beurteile({ seit, ergebnis, aeusserungen = [], kopf = '', kaputt
 
   // Eine Zusammenfassung ohne Commit-Bindung ("## Code review / No issues
   // found") ist der einzige Beleg, den ein sauberer PR hinterlaesst. Sie zaehlt
-  // erst hier: nachdem feststeht, dass dieser Lauf nicht im Tor abgebrochen ist,
-  // nicht auf Agenten gewartet hat und an keiner Sperre haengt. Fuer sich
-  // genommen koennte sie von jemand anderem stammen.
-  if (zahl.frei > 0) {
+  // nur zusammen mit einer BEJAHENDEN Aussage dieses Laufs, geliefert zu haben.
+  // Fuer sich genommen koennte sie von jemand anderem stammen, und "kein
+  // bekanntes Fehlermuster" ist keine Zuordnung, sondern nur Unwissen.
+  if (zahl.frei > 0 && REVIEW_GELIEFERT.test(text)) {
     return {
       ausgang: 'geprueft',
       grund: 'ungebunden',
@@ -191,6 +211,7 @@ export function beurteile({ seit, ergebnis, aeusserungen = [], kopf = '', kaputt
         `${seit}. Ihr result-Objekt zeigt keinen Abbruch und keine Sperre.`
     };
   }
+  if (zahl.frei > 0) return stumm('nicht-zuzuordnen', neu, seit, ergebnis);
   return stumm('unbekannt', neu, seit, ergebnis);
 }
 
@@ -234,6 +255,14 @@ const DIAGNOSE = {
     'trifft die Benachrichtigung ueber einen fertigen Agenten auf keinen Turn mehr. ' +
     'Reruns helfen nicht, die Ursache ist strukturell - im Prompt muss ' +
     '`run_in_background: false` stehen und auch dort ankommen.',
+  'nicht-zuzuordnen':
+    'Nach dem Laufbeginn stehen claude-Aeusserungen OHNE Commit-Bindung am PR, aber ' +
+    'das result-Objekt dieses Laufs sagt nirgends, dass er geliefert hat. Sie sind ' +
+    'ihm damit nicht zuzuordnen: als derselbe Bot antwortet auch der Mention-Pfad ' +
+    '(.github/workflows/claude.yml), und ein per cancel-in-progress abgebrochener ' +
+    'Vorgaenger kann noch posten. Lies den result-Text im Job-Log - sagt er, die ' +
+    'Review sei fertig, gehoert sein Wortlaut in REVIEW_GELIEFERT; sagt er etwas ' +
+    'anderes, hat dieser Lauf wirklich nichts geliefert.',
   unbekannt:
     'Die Review ist durchgelaufen und hat zu diesem Stand nichts hinterlassen, ohne eines ' +
     'der bekannten Muster zu zeigen. Zuerst den result-Text im Job-Log lesen: er sagt ' +

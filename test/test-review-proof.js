@@ -317,25 +317,70 @@ test('der echte #1029-Wortlaut bleibt die Ausnahme', () => {
   );
 });
 
-test('eine Zusammenfassung ohne SHA zaehlt nur ohne Abbruch im Protokoll', () => {
+test('eine Zusammenfassung ohne SHA braucht die Zusage DIESES Laufs', () => {
   // Sie ist der einzige Beleg, den das Plugin bei einem sauberen PR
-  // hinterlaesst ("## Code review / No issues found") und traegt keine SHA.
-  // Sie darf zaehlen - aber erst, nachdem feststeht, dass dieser Lauf nicht im
-  // Tor abgebrochen und an keiner Sperre gescheitert ist.
-  const sauber = {
-    num_turns: 18,
-    subtype: 'success',
-    is_error: false,
-    permission_denials: [],
-    result: 'Review posted. No issues found.'
-  };
+  // hinterlaesst ("## Code review / No issues found") und traegt keine SHA. Der
+  // echte Wortlaut des Laufs, der sie gepostet hat, steht im Fixture.
   const nur_frei = [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }];
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: fixture.ergebnisse['saubere-review'],
+    aeusserungen: nur_frei
+  });
+  assert.equal(urteil.ausgang, 'geprueft');
+  assert.equal(urteil.grund, 'ungebunden');
+});
+
+test('ZUORDNUNG AUS ABWESENHEIT TRAEGT NICHT: "Done." bleibt rot', () => {
+  // Der Befund aus der zweiten Codex-Runde zu #1073. Vorher genuegte es, dass
+  // KEINES der bekannten Fehlermuster passte - dann galt jede ungebundene
+  // Aeusserung als Antwort dieses Laufs. Ein Lauf, der still mit "Done." endet,
+  // faellt in kein Muster, und eine fremde Zusammenfassung (Mention-Pfad oder
+  // Nachzuegler eines abgebrochenen Vorgaengers) haette ihn gruen gefaerbt.
+  const fremd = [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }];
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: fixture.ergebnisse['stumm-unbekannt'],
+    aeusserungen: fremd
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'nicht-zuzuordnen');
+  assert.match(urteil.meldung, /nicht zuzuordnen/);
+});
+
+test('ohne jede Aeusserung bleibt der stille Lauf schlicht unbekannt', () => {
+  // Die beiden Gruende sind verschieden und sollen es bleiben: "es steht etwas
+  // da, das ich dir nicht zuschreiben kann" ist eine andere Lage als "es steht
+  // nichts da".
   assert.equal(
-    beurteile({ seit: seit(ABBRUCH_LAUF), kopf: kopf(ABBRUCH_LAUF), ergebnis: sauber, aeusserungen: nur_frei }).grund,
-    'ungebunden'
+    beurteile({
+      seit: seit(ABBRUCH_LAUF),
+      kopf: kopf(ABBRUCH_LAUF),
+      ergebnis: fixture.ergebnisse['stumm-unbekannt'],
+      aeusserungen: []
+    }).grund,
+    'unbekannt'
   );
-  assert.equal(
-    beurteile({ seit: seit(ABBRUCH_LAUF), kopf: kopf(ABBRUCH_LAUF), ergebnis: ABBRUCH, aeusserungen: nur_frei }).grund,
-    'schon-kommentiert'
-  );
+});
+
+test('die drei gemessenen Wortlaute eines fertigen Laufs zaehlen alle', () => {
+  // Alle drei stammen aus echten Laeufen an #1066. Faellt einer heraus, wird ein
+  // sauberer PR grundlos rot - deshalb stehen sie hier namentlich.
+  const nur_frei = [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }];
+  const wortlaute = [
+    'Review complete for ulsklyc/yuvomi#1066.',
+    'The review is posted. Summary: ...',
+    'Review posted. Summary: ...'
+  ];
+  for (const result of wortlaute) {
+    const urteil = beurteile({
+      seit: seit(ABBRUCH_LAUF),
+      kopf: kopf(ABBRUCH_LAUF),
+      ergebnis: { num_turns: 9, subtype: 'success', is_error: false, permission_denials: [], result },
+      aeusserungen: nur_frei
+    });
+    assert.equal(urteil.ausgang, 'geprueft', `nicht erkannt: ${result}`);
+  }
 });
