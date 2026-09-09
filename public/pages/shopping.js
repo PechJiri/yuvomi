@@ -2018,6 +2018,16 @@ async function loadStores() {
 
 async function loadItems(listId) {
   const data       = await api.get(`/shopping/${listId}/items`);
+  // Ein Rundlauf kann von einem Listenwechsel ueberholt werden. Alle sechs
+  // Aufrufer laden die GERADE aktive Liste - `switchList` setzt
+  // `state.activeListId` sogar vor dem Warten -, die Antworten kommen aber in
+  // beliebiger Reihenfolge zurueck. Wer nicht mehr die aktive Liste ist, darf
+  // den globalen Stand nicht mehr anfassen: sonst stuenden die Artikel der
+  // alten Liste unter dem neuen Reiter, und die naechste Bearbeitung traefe
+  // die falschen. Das Fenster ist seit #1066 breiter geworden, weil die
+  // Auffrischung des Kategorie-Managers laeuft, waehrend die Seite wieder
+  // bedienbar ist.
+  if (state.activeListId !== listId) return;
   state.items      = data.data ?? [];
   state.activeList = data.list ?? null;
   // Kategorien aus API-Antwort übernehmen wenn vorhanden (immer aktuell)
@@ -2351,9 +2361,14 @@ async function openCategoryManager(container, { fromDeepLink = false } = {}) {
     // frisch geladen. Dieselbe Regel wie bei der Sammelaktions-Pille (#1039).
     if (!container.isConnected) return;
     await loadCategories();
-    if (state.activeListId) {
+    const listId = state.activeListId;
+    if (listId) {
       try {
-        await loadItems(state.activeListId);
+        await loadItems(listId);
+        // Hat der Nutzer waehrenddessen die Liste gewechselt, gehoert das
+        // Rendern `switchList` - `loadItems` hat den Stand oben schon
+        // unangetastet gelassen.
+        if (state.activeListId !== listId) return;
         state.itemsError = null;
       } catch (err) {
         // Ohne dieses catch bliebe eine unbeobachtete Rejection zurueck:
@@ -2362,6 +2377,9 @@ async function openCategoryManager(container, { fromDeepLink = false } = {}) {
         // und die Liste zeigte stillschweigend den alten Stand weiter - hier
         // stattdessen die Fehlerkarte mit Wiederholung, wie bei `switchList`.
         console.error('[Shopping] loadItems Fehler:', err);
+        // Auch der Fehlerfall gehoert der Liste, fuer die geladen wurde: sonst
+        // leerte ein Fehler der alten Liste die Artikel der neuen.
+        if (state.activeListId !== listId) return;
         state.items      = [];
         state.itemsError = err;
       }

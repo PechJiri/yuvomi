@@ -75,7 +75,15 @@ async function openLocationManager() {
       await loadItems();
       renderList();
       updateAttentionBadge();
-    } catch { /* Fehler meldet der Manager selbst */ }
+    } catch (err) {
+      // NICHT „meldet der Manager selbst": der meldet nur seine eigene
+      // Mutation, und die ist hier schon durch - `_notifyChanged()` kommt erst
+      // nach ihrem Erfolg. Was hier ankommt, ist ein Fehler DIESER
+      // Auffrischung, und ohne Meldung zeigte die Seite den alten Stand
+      // weiter, obwohl der Server die Gegenstaende bereits umgehaengt hat.
+      console.error('[Inventory] Auffrischen nach Ort-Aenderung fehlgeschlagen:', err);
+      window.yuvomi?.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
+    }
   };
 
   openSharedModal({
@@ -118,7 +126,12 @@ async function openCategoryManager() {
       await loadItems();
       renderList();
       updateAttentionBadge();
-    } catch { /* Fehler meldet der Manager selbst */ }
+    } catch (err) {
+      // Wie beim Ort-Manager: hier landet nur ein Fehler der Auffrischung,
+      // nie einer der Mutation - die hat der Manager schon quittiert.
+      console.error('[Inventory] Auffrischen nach Kategorie-Aenderung fehlgeschlagen:', err);
+      window.yuvomi?.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
+    }
   };
 
   openSharedModal({

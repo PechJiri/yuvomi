@@ -10206,8 +10206,44 @@ test('der Einkaufs-Handler schreibt nicht in einen abgehaengten Container', () =
     'der Handler muss aufgeben, wenn der Router die Seite schon ausgetauscht hat');
   // `_notifyChanged()` dispatcht synchron und sieht die Promise dieses Listeners
   // nie: ein Fehler beim Nachladen waere eine unbeobachtete Rejection.
-  assert.match(fn, /loadItems\(state\.activeListId\)[\s\S]*?catch[\s\S]*?state\.itemsError = err/,
+  assert.match(fn, /loadItems\(listId\)[\s\S]*?catch[\s\S]*?state\.itemsError = err/,
     'ein Fehler beim Nachladen der Artikel gehoert in state.itemsError, nicht in eine stille Rejection');
+});
+
+// Ein Rundlauf kann von einem Listenwechsel ueberholt werden, und die Antworten
+// kommen in beliebiger Reihenfolge. Die Wache gehoert in `loadItems` selbst -
+// alle Aufrufer laden die GERADE aktive Liste, also deckt eine Stelle sie alle
+// ab (auch `switchList` und den Laden-Manager, die aelter sind als #1066).
+test('shopping: eine ueberholte Artikel-Antwort fasst den Stand nicht mehr an', () => {
+  const src = read('../public/pages/shopping.js');
+  const fn  = src.match(/async function loadItems\(listId\)[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'loadItems nicht gefunden');
+  // Vor JEDER Zuweisung an den geteilten Stand, nicht irgendwo in der Funktion.
+  const wache = fn.indexOf('if (state.activeListId !== listId) return;');
+  assert.notEqual(wache, -1, 'loadItems braucht die Wache gegen eine ueberholte Antwort');
+  assert.ok(wache < fn.indexOf('state.items'),
+    'die Wache muss VOR dem Schreiben stehen - danach ist der Stand schon zerstoert');
+
+  // Und der Handler des Kategorie-Managers darf den Fehlerfall nicht der
+  // falschen Liste anhaengen.
+  const mgr = src.match(/async function openCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.equal((mgr.match(/state\.activeListId !== listId/g) ?? []).length, 2,
+    'Erfolg UND Fehler muessen pruefen, ob die Liste noch dieselbe ist');
+});
+
+// Der Manager quittiert nur seine eigene Mutation - `_notifyChanged()` kommt
+// erst nach deren Erfolg. Was im Handler ankommt, ist ein Fehler der
+// AUFFRISCHUNG, und den verschluckte ein leeres catch.
+test('inventory: ein Fehler beim Auffrischen wird gemeldet, nicht verschluckt', () => {
+  const src = read('../public/pages/inventory.js');
+  for (const name of ['openLocationManager', 'openCategoryManager']) {
+    const fn = src.match(new RegExp(`async function ${name}[\\s\\S]*?\\n\\}`))?.[0] ?? '';
+    assert.ok(fn, `${name} nicht gefunden`);
+    assert.doesNotMatch(fn, /catch \{ \/\* Fehler meldet der Manager selbst \*\/ \}/,
+      `${name}: das leere catch verschluckt den Fehler der Auffrischung`);
+    assert.match(fn, /catch \(err\)[\s\S]*?showToast\(/,
+      `${name}: ein Fehler der Auffrischung muss den Nutzer erreichen`);
+  }
 });
 
 // Der Knopf, der den Manager oeffnet, liegt in `#budget-body` - genau dem

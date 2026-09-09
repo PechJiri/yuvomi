@@ -131,7 +131,10 @@ test('Der Kategorie-Manager frischt im Ereignis auf, nicht beim Schliessen', () 
   // `loadCategories()` fasst `state.items` nicht an, und `groupItemsByCategory`
   // liest den Namen von dort - ohne Nachladen stehen die Zeilen unter der alten
   // Ueberschrift am Listenende.
-  assert(/const onCategoriesChanged = async \(\) => \{[\s\S]*?loadItems\(state\.activeListId\)[\s\S]*?renderListContent\(container\)/.test(fn),
+  // `listId` statt `state.activeListId`: der Nutzer kann waehrend des Rundlaufs
+  // die Liste wechseln, und dann gehoert weder das Schreiben noch das Rendern
+  // mehr diesem Handler.
+  assert(/const onCategoriesChanged = async \(\) => \{[\s\S]*?const listId = state\.activeListId;[\s\S]*?loadItems\(listId\)[\s\S]*?renderListContent\(container\)/.test(fn),
     'der Handler muss auch die Artikel nachladen - der Server weist sie beim Loeschen um');
 });
 
