@@ -5,7 +5,7 @@
  */
 
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, advancedSection } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, advancedSection, refocusAfterRender } from '/components/modal.js';
 import { openDetailView } from '/components/detail-view.js';
 import { stagger, vibrate, wireScrollFade, scheduleUndoableDelete } from '/utils/ux.js';
 import { t, formatDate } from '/i18n.js';
@@ -1139,6 +1139,7 @@ function buildContactForm({ mode, contact = null }) {
       panel.querySelector('#cm-delete')?.addEventListener('click', async () => {
         closeModal({ force: true });
         await deleteContact(contact.id);
+        refocusAfterRender();
       });
 
       // Bei Kontakten ohne gespeicherte Struktur ist die Aufteilung nur geraten

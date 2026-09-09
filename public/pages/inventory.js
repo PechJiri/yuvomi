@@ -17,6 +17,7 @@ import {
   wireBlurValidation,
   reportFieldError,
   confirmModal,
+  refocusAfterRender,
 } from '/components/modal.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { emptyStateEl } from '/utils/empty-state.js';
@@ -75,6 +76,7 @@ async function openLocationManager() {
       await loadItems();
       renderList();
       updateAttentionBadge();
+      refocusAfterRender();
     } catch (err) {
       // NICHT „meldet der Manager selbst": der meldet nur seine eigene
       // Mutation, und die ist hier schon durch - `_notifyChanged()` kommt erst
@@ -126,6 +128,7 @@ async function openCategoryManager() {
       await loadItems();
       renderList();
       updateAttentionBadge();
+      refocusAfterRender();
     } catch (err) {
       // Wie beim Ort-Manager: hier landet nur ein Fehler der Auffrischung,
       // nie einer der Mutation - die hat der Manager schon quittiert.
@@ -1452,6 +1455,7 @@ function buildItemForm({ mode, item = null }) {
     panel.querySelector('#inv-delete')?.addEventListener('click', async () => {
       await closeSharedModal({ force: true });
       await removeItem(item);
+      refocusAfterRender();
     });
     // `.modal-panel__footer` scoped, NICHT der ganze panel: sonst matcht dies
     // zuerst den Header-X (`.modal-panel__close`, gleiches data-action), der

@@ -5,7 +5,7 @@
  */
 
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, selectModal, advancedSection, promptModal, confirmModal } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, selectModal, advancedSection, promptModal, confirmModal, refocusAfterRender } from '/components/modal.js';
 import { t, formatDate, getLocale } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { stagger, wireScrollFade, scheduleUndoableDelete } from '/utils/ux.js';
@@ -2339,6 +2339,7 @@ async function saveDocument(event, doc, panel) {
     closeModal({ force: true });
     await loadDocuments();
     renderAll();
+    refocusAfterRender();
   } catch (err) {
     error.textContent = friendlyError(err);
     error.hidden = false;
@@ -2672,6 +2673,7 @@ async function linkDmsDocument(item, accountId) {
     closeModal({ force: true });
     await loadDocuments();
     renderAll();
+    refocusAfterRender();
     return true;
   } catch (err) {
     window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');

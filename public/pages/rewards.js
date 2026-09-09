@@ -10,7 +10,7 @@ import { api } from '/api.js';
 import { t, formatDate, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
-import { openModal, closeModal, confirmModal, confirmOverModal } from '/components/modal.js';
+import { openModal, closeModal, confirmModal, confirmOverModal, refocusAfterRender } from '/components/modal.js';
 import { createPageFab, setPageFabAction } from '/utils/fab.js';
 import { wireTablist } from '/utils/tablist.js';
 import { wireScrollFade } from '/utils/ux.js';
@@ -650,6 +650,7 @@ async function openRedeemModal(memberId, presetItemId = null) {
           await closeModal({ force: true });
           toast(isAdmin() ? t('rewards.toastRedeemed') : t('rewards.toastRequested'));
           await refreshActiveTab();
+          refocusAfterRender();
         } catch (err) {
           errEl.textContent = err?.message || t('rewards.redeemError');
           errEl.hidden = false;
@@ -735,6 +736,7 @@ function openBonusModal() {
           await closeModal({ force: true });
           toast(t('rewards.toastBonus'));
           await refreshActiveTab();
+          refocusAfterRender();
         } catch (err) {
           errEl.textContent = err?.message || t('common.error'); errEl.hidden = false; submit.disabled = false;
         }
@@ -811,6 +813,7 @@ function openRewardModal(item) {
           await closeModal({ force: true });
           toast(t('rewards.toastSaved'));
           await refreshActiveTab();
+          refocusAfterRender();
         } catch (err) {
           errEl.textContent = err?.message || t('common.error'); errEl.hidden = false; submit.disabled = false;
         }
@@ -865,6 +868,7 @@ async function openParticipantsModal() {
       panel.querySelector('#rw-participants-done').addEventListener('click', async () => {
         await closeModal({ force: true });
         await refreshActiveTab();
+        refocusAfterRender();
       });
     },
   });
