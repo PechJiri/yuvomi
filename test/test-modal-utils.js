@@ -775,3 +775,37 @@ test('closeDetailView verwirft den Merker, wenn es am Modal vorbei schliesst', (
     'der Popover-Zweig kehrt ohne closeModal() zurueck - ohne Verwerfen bliebe der Merker '
     + 'des vorigen Dialogs stehen');
 });
+
+/* REVIEW ZU #1070: die Klasse ist Darstellung, keine Identitaet.
+ *
+ * Eine Mahlzeitenkarte traegt `meal-card__open--with-thumb`, sobald ihr Rezept
+ * ein Bild hat. Wer beim Bearbeiten eines hinzufuegt, aendert damit die Klasse
+ * des Knopfes, ueber den er gekommen ist - ein exakter Klassenvergleich findet
+ * ihn danach nicht wieder. Derselbe Fehlertyp wie beim veraenderlichen
+ * data-Feld, nur eine Ebene weiter.
+ */
+test('eine geaenderte Modifier-Klasse verhindert das Wiederfinden nicht', () => {
+  const alt = makeNode('button', { cls: 'meal-card__open', data: { action: 'edit-meal', id: '9' }, connected: false });
+  const neu = makeNode('button', { cls: 'meal-card__open meal-card__open--with-thumb', data: { action: 'edit-meal', id: '9' } });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [neu] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), neu,
+      'die Identitaet steht in action und id - eine Darstellungsklasse darf den Knopf nicht verstecken');
+  });
+});
+
+/* Auch der dritte Anlauf raet nicht: zwei Karten mit derselben action, aber
+ * verschiedenen ids bleiben unterscheidbar; ohne unterscheidende id bleibt es
+ * bei der Wurzel. */
+test('der Anlauf ohne Klasse besteht weiter auf Eindeutigkeit', () => {
+  // Keiner der beiden traegt die Klasse des Ausloesers - erst der dritte Anlauf
+  // sieht sie, und dort sind sie nicht zu unterscheiden.
+  const alt = makeNode('button', { cls: 'meal-card__open', data: { action: 'edit-meal', id: '9' }, connected: false });
+  const a = makeNode('button', { cls: 'meal-card__open--with-thumb', data: { action: 'edit-meal', id: '9' } });
+  const b = makeNode('button', { cls: 'meal-card__open--compact', data: { action: 'edit-meal', id: '9' } });
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [a, b] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
+      'ohne unterscheidende id bleiben zwei Kandidaten - dann die Wurzel statt der falschen');
+  });
+});

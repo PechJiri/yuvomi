@@ -642,21 +642,34 @@ function _findAgain(memo) {
   // Element; die zweite Runde ist der Rueckfall, nicht die Regel. Und weil
   // beide Runden auf Eindeutigkeit bestehen, wird dabei nichts geraten.
   const identitaet = alle.filter((k) => k === 'id' || k === 'action');
-  const runden = identitaet.length && identitaet.length < alle.length
-    ? [alle, identitaet]
-    : [alle];
-  for (const keys of runden) {
-    const treffer = _kandidaten(memo, keys);
+  const engerAlsAlle = identitaet.length && identitaet.length < alle.length;
+  // DIE KLASSE IST DARSTELLUNG, KEINE IDENTITAET - im dritten Anlauf faellt sie
+  // weg. Eine Mahlzeitenkarte traegt `meal-card__open--with-thumb`, sobald das
+  // Rezept ein Bild hat; wer beim Bearbeiten eines hinzufuegt, aendert damit die
+  // Klasse des Knopfes, ueber den er gekommen ist (Review zu #1070). Erst der
+  // genaue Treffer, dann der ohne veraenderliche Nutzlast, dann der ohne
+  // Darstellung - jeder besteht auf Eindeutigkeit, es wird also nichts geraten.
+  const runden = [
+    { keys: alle, mitKlasse: true },
+    ...(engerAlsAlle ? [{ keys: identitaet, mitKlasse: true }] : []),
+    // Der klassenlose Anlauf nur bei STARKER Identitaet - `action` UND `id`.
+    // Eine `data-id` allein reicht nicht: dieselbe Nummer steht in einer
+    // anderen Liste fuer etwas anderes, und ohne die Klasse waeren die beiden
+    // nicht mehr zu unterscheiden.
+    ...(identitaet.length === 2 ? [{ keys: identitaet, mitKlasse: false }] : []),
+  ];
+  for (const { keys, mitKlasse } of runden) {
+    const treffer = _kandidaten(memo, keys, mitKlasse);
     if (treffer.length === 1) return treffer[0];
   }
   return null;
 }
 
-/** Die Elemente, die in Tag, Klasse, den gegebenen data-Feldern und der Zeile passen. */
-function _kandidaten(memo, keys) {
+/** Die Elemente, die in Tag, den gegebenen data-Feldern, der Zeile und optional der Klasse passen. */
+function _kandidaten(memo, keys, mitKlasse) {
   const treffer = [];
   for (const kandidat of document.getElementsByTagName(memo.tag)) {
-    if (kandidat.getAttribute('class') !== memo.cls) continue;
+    if (mitKlasse && kandidat.getAttribute('class') !== memo.cls) continue;
     if (!keys.every((k) => kandidat.dataset[k] === memo.data[k])) continue;
     if ((kandidat.closest?.('[data-id]')?.dataset?.id ?? null) !== memo.rowId) continue;
     treffer.push(kandidat);
