@@ -122,6 +122,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Deleting a category now updates the page behind the dialog**. Every module that offers
+  "manage categories" kept showing the category you had just deleted: the filter chips in Contacts,
+  the grouping in Shopping, the storage locations in Pantry, the places and categories in Inventory,
+  plus Tasks and Budget. The server had deleted it, the screen had not noticed, and picking the
+  stale entry afterwards ran into an error from a category that no longer existed. A reload fixed
+  it, which is how it stayed hidden.
+
+  The cause was a matter of order. Confirming the deletion closes the dialog first and sends the
+  request second, so the "something changed" signal arrived after each page had already stopped
+  listening. Refreshing now happens when the change actually lands rather than when the dialog
+  closes.
+
+  Shopping had a second version of the same staleness, and *renaming* triggered that one: it stores
+  a category by its name rather than by an internal key, so both renaming and deleting rewrite the
+  items themselves. The list only reloaded its categories, leaving the affected entries under their
+  old heading at the bottom of the list. It now reloads the items with them.
+
 - **Scaling a recipe now reads and writes ingredient quantities in the region that is actually
   set.** Applying a recipe to a meal and changing the servings factor rescales every ingredient, and
   that step parsed the number itself with the comma hard-wired as a decimal point. Under a region
