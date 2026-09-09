@@ -26,6 +26,7 @@
 
 import { getNumberFormat } from '/i18n.js';
 import { REGION_CODES } from '/settings/region-presets.js';
+import { asciiDigit, asciiSeparator } from '/utils/digits.js';
 
 /** Erlaubte Rollen. Wird vom Guard in test-budget-ui.js gegen die Aufrufe geprüft. */
 export const MONEY_ROLES = ['flow', 'total', 'balance', 'plain'];
@@ -207,12 +208,19 @@ export function amountMin(currency, currentValue) {
  * ml" auf die Menge 1 zurueck, obwohl die 6 eindeutig ist und die 1.000
  * unveraendert im Rest der Zeile stehen bleibt.
  *
- * ZUGESICHERT: die Umschrift ist positionstreu - ein Zeichen hinein, dasselbe
- * eine Zeichen hinaus, `toDecimalString(x).length === x.trim().length`. Wer nur
- * die fuehrende Zahl eines Freitextes umrechnet, darf den Rest deshalb per
- * Offset aus dem ORIGINAL schneiden, statt die umgeschriebene Fassung
- * anzuhaengen: pages/meals.js skaliert so „۲ x ۵۰۰ g" zu „۴ x ۵۰۰ g" und nicht
- * zu „۴ x 500 g". Ein Verhaltenstest in test-meals.js haelt die Zusicherung.
+ * ZUGESICHERT: die Umschrift ist positionstreu IN CODEPOINTS - ein Codepoint
+ * hinein, ein Codepoint hinaus. Wer nur die fuehrende Zahl eines Freitextes
+ * umrechnet, darf den Rest deshalb per Codepoint-Offset aus dem ORIGINAL
+ * schneiden (`[...text]` zaehlen, nicht `.length`): pages/meals.js skaliert so
+ * „۲ x ۵۰۰ g" zu „۴ x ۵۰۰ g" und nicht zu „۴ x 500 g".
+ *
+ * In UTF-16 gilt sie NICHT, seit die Umschrift auf fremde Ziffernsysteme
+ * zurueckfaellt: 40 der 77 Systeme liegen ausserhalb der BMP, ihre Ziffern
+ * belegen zwei Einheiten, das ASCII-Ergebnis eine. Ein `.length`-Offset schnitt
+ * damit mitten in ein Zeichen - gemessen wurde aus „𞥒 x 500 g" ein
+ * „4\uDD52 x 500 g" mit halber Ersatzzeichen-Paarung, geschrieben in die
+ * gespeicherte Zutatenzeile. Verhaltenstests in test-money-utils.js und
+ * test-meals.js halten beide Enden.
  */
 /**
  * Zeichen, die IRGENDEINE waehlbare Region als Dezimal- oder Gruppierungstrenner
@@ -290,8 +298,25 @@ export function toDecimalString(value, { freeText = false } = {}) {
     .formatToParts(1234).find((part) => part.type === 'group')?.value;
 
   // Schritt 1: nur die ZIFFERN nach ASCII, die Trenner bleiben, wie sie sind.
+  //
+  // Die Ziffern der eingestellten Region haben den Vortritt; erst danach greift
+  // die regionslose Zuordnung aus utils/digits.js. Das ist kein Luxus, sondern
+  // die Kehrseite davon, dass gespeicherte Mengen seit v2.66 in den Ziffern ihrer
+  // Region stehen: wer die Region spaeter wechselt, haette sonst Werte in der
+  // Datenbank, die seine eigene Oberflaeche nicht mehr lesen kann - eine Zutat
+  // „۴٫۵ kg" bliebe unter de beim Skalieren einfach liegen. Der Server liest sie
+  // laengst, mit derselben Datei.
   let normalized = '';
-  for (const char of raw) normalized += digits.has(char) ? digits.get(char) : char;
+  //
+  // `asciiDigit` erst, wenn das Zeichen ueberhaupt eine Ziffer IST: die Zuordnung
+  // dahinter wird beim ersten Zugriff aus 77 Zahlensystemen gebaut (gemessen
+  // 19,5 ms), und ohne diese Schranke stiesse schon der erste Buchstabe eines
+  // Freitextes den Aufbau an. So zahlt ihn nur, wer wirklich fremde Ziffern
+  // eintippt - in de oder en-US also niemand.
+  for (const char of raw) {
+    normalized += digits.get(char)
+      ?? (/\p{Nd}/u.test(char) ? asciiDigit(char) ?? char : char);
+  }
 
   // Schritt 2: Gruppierungsmuster - der Trenner, gefolgt von genau drei Ziffern,
   // auf die keine weitere folgt. "1.000" in de-DE trifft zu, "12.50" nicht.
@@ -322,8 +347,15 @@ export function toDecimalString(value, { freeText = false } = {}) {
   // Tausender, aus "1,000" würde dann "1.000" und daraus die Zahl 1 - ein
   // Anteil, der um den Faktor tausend danebenliegt, ohne dass irgendwo ein
   // Fehler erscheint.
+  //
+  // Fremde TRENNER erst hier, nicht in Schritt 1: sonst waere ein U+066C schon ein
+  // Komma, bevor die Pruefung oben nach dem Gruppierungszeichen der Region sucht -
+  // gemessen fiel ar-EG „٢٬٠٠٠" damit durch, obwohl es eindeutig gruppiert ist.
+  // Die ZIFFERN muessen dagegen vorher fallen, damit `\d{3}` sie zaehlen kann.
   let out = '';
-  for (const char of normalized) out += char === decimalSep ? '.' : char;
+  for (const char of normalized) {
+    out += char === decimalSep ? '.' : (asciiSeparator(char) ?? char);
+  }
   return out;
 }
 
@@ -342,32 +374,26 @@ export function toDecimalString(value, { freeText = false } = {}) {
 /**
  * Eine Zahl als TEXT, der gespeichert und spaeter wieder gelesen wird.
  *
- * Die Zusicherung, genau: **die Ziffern sind IMMER ASCII, und der Trenner folgt
- * der Region, solange sie einen serverlesbaren fuehrt.** Das ist `.` und `,` -
- * mehr kennt `parseQuantity` in server/services/shopping-import.js nicht. de, fr,
- * cs, pl bekommen ihr Komma, en-US und de-CH ihren Punkt. Wo eine Region einen
- * DRITTEN Trenner fuehrt (fa, ar-EG und ar-SA schreiben `٫`), gewinnt die
- * Lesbarkeit und es wird der Punkt: `toStoredNumber(0.5)` ist dort „0.5", nicht
- * „0٫5". Das ist keine Unachtsamkeit, sondern die einzige Wahl, solange der
- * Server nur zwei Zeichen kennt - und `numberingSystem: 'latn'` trifft sie von
- * selbst, weil es Ziffern und Symbole gemeinsam umstellt.
+ * Die Zusicherung, genau: **Ziffern UND Trenner folgen der eingestellten
+ * Region.** Unter fa ist `toStoredNumber(0.5)` also „۰٫۵", nicht „0.5".
  *
- * Warum die Ziffern nicht der Region folgen duerfen: pages/meals.js schreibt die
- * skalierte Zutatenmenge zurueck in die Zutatenzeile, und beim Uebertrag in die
- * Einkaufsliste liest der Server sie wieder ein. Eine Menge in nativen Ziffern
- * („۲۰۰۰ g") kaeme dort nicht an und liesse sich nicht mehr mit anderen
- * zusammenzaehlen - aus einer Anzeigefrage waere ein Funktionsverlust geworden.
+ * Bis v2.65 stand hier ein `numberingSystem: 'latn'` und mit ihm die Ausnahme
+ * fuer fa, ar-EG und ar-SA: der Server las Mengen mit einer ASCII-Regex, und eine
+ * Menge in nativen Ziffern kam dort nicht an - die Zutat fiel beim Uebertrag in
+ * die Einkaufsliste aus der Summierung, aus einer Anzeigefrage wurde ein
+ * Funktionsverlust. Seit `parseQuantity` dieselbe Umschrift benutzt
+ * (utils/digits.js, geteilt), ist der Grund entfallen, und eine skalierte
+ * Zutatenzeile mischt nicht laenger zwei Schriften.
+ *
+ * Gelesen wird der Wert von zwei Stellen: hier ueber `toDecimalString` und auf
+ * dem Server. Beide kommen auch mit einem Wert zurecht, der unter einer ANDEREN
+ * Region geschrieben wurde - sonst haette diese Umstellung Altdaten erzeugt, die
+ * die eigene Oberflaeche nach einem Regionswechsel nicht mehr liest.
  *
  * Ohne Gruppierung, damit `toDecimalString` den Wert wieder einliest.
- *
- * Der saubere Endzustand waere eine Ziffern- und Trenner-Umschrift auf dem
- * Server; dann duerfte hier auch `٫` stehen. Solange es sie nicht gibt, ist die
- * Schreibweise hier der Vertrag zwischen beiden Seiten.
  */
 export function toStoredNumber(value, { maximumFractionDigits = 2 } = {}) {
-  return getNumberFormat({
-    useGrouping: false, maximumFractionDigits, numberingSystem: 'latn',
-  }).format(value);
+  return getNumberFormat({ useGrouping: false, maximumFractionDigits }).format(value);
 }
 
 export function centsToAmountInput(cents, currency) {
