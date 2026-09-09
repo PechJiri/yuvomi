@@ -2251,6 +2251,82 @@ test('browser loader supports personal settings API and auth imports', () => {
   assert.match(source, /promptPwaInstall/);
 });
 
+test('wer an der Frische haengt UND offline gecacht wird, liest ueber getWithSource', () => {
+  // DIE KOPPLUNG, DIE SONST STILL IST. Eine Seite, deren Entscheidung von der
+  // FRISCHE einer Antwort abhaengt, darf eine aus dem Offline-Cache nicht wie
+  // eine frische behandeln: `networkFirstApi` gibt sie mit Status 200 zurueck,
+  // sie kann beliebig alt sein, und eine Mutation leert diesen Cache nicht (nur
+  // Logout tut das). Der Merker faellt dann, oder es wird gegen veraltete
+  // Referenzlisten gefiltert.
+  //
+  // DIE BETROFFENEN SEITEN WERDEN ABGELEITET, NICHT GEPFLEGT. Die erste Fassung
+  // fuehrte eine Liste von drei Dateinamen - und liess damit genau die Sorte
+  // Geschwister durch, fuer die sie gedacht war: `pantry.js` fehlte eine Runde
+  // lang, `tasks.js` eine weitere. Erkannt wird die Abhaengigkeit stattdessen an
+  // zwei Strukturmerkmalen, die eine Seite nicht zufaellig traegt:
+  //   - eine `pending…`-Map: ausstehende Schreibvorgaenge, die ein Laden raeumt
+  //   - ein `…Stale`-Feld: „diese Referenzlisten sind nicht nachweislich frisch"
+  // Woran eine Seite erkannt wird, die an der Frische einer Antwort haengt.
+  // Die Liste darf wachsen; dass sie nicht VERALTET, sichert die Selbstprobe
+  // ganz unten.
+  const MARKER = [
+    /const intents\s*=\s*new Map\(/,        // Absichten neben dem Serverstand
+    /const pending[A-Z]\w*\s*=\s*new Map\(/, // aeltere Schreibweise desselben
+    /const settledAt\s*=\s*new Map\(/,       // Bestaetigungszeit je Eintrag
+    /^\s*\w*[sS]tale:\s/m,                   // Referenzlisten mit Frische-Flag
+  ];
+
+  const sw = read('../public/sw.js');
+  const whitelist = sw.match(/const API_CACHE_WHITELIST\s*=\s*\[([^\]]*)\]/)?.[1];
+  assert.ok(whitelist, 'API_CACHE_WHITELIST in sw.js nicht gefunden - der Guard liest ins Leere');
+  const cached = [...whitelist.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+
+  const seiten = readdirSync(new URL('../public/pages/', import.meta.url))
+    .filter((f) => f.endsWith('.js'));
+
+  const verletzt = [];
+  const ungeprueft = [];
+  let geprueft = 0;
+  for (const datei of seiten) {
+    const src = read(`../public/pages/${datei}`);
+    const haengtAnFrische = MARKER.some((re) => re.test(src));
+    if (!haengtAnFrische) { ungeprueft.push({ datei, src }); continue; }
+    // Der Modulpfad einer Seite traegt ihren Dateinamen - und der Guard glaubt
+    // das nicht, sondern verlangt, dass die Seite ihn auch wirklich liest.
+    const pfad = `/${datei.replace(/\.js$/, '')}`;
+    if (!cached.includes(pfad)) continue;
+    if (!new RegExp(`api\\.get(WithSource)?\\([\`'"]${pfad}`).test(src)) continue;
+    geprueft += 1;
+    if (!/getWithSource\(/.test(src)) verletzt.push(`${datei} (Pfad ${pfad})`);
+  }
+
+  // REICHWEITE VOR DEM URTEIL: faende der Guard gar keine Seite, waere er
+  // gruen, ohne je etwas geprueft zu haben - dieselbe Falle wie beim
+  // Browser-Ketten-Guard weiter oben.
+  assert.ok(geprueft > 0,
+    'keine einzige Seite geprueft - Merkmale oder Whitelist-Format haben sich geaendert');
+
+  // UND DIE MERKMALE PRUEFEN SICH SELBST. Eine Seite, die `getWithSource`
+  // benutzt, haengt nachweislich an der Frische - wird sie von keinem Merkmal
+  // erkannt, ist die Merkmalsliste veraltet und der Guard blind.
+  //
+  // Genau das ist am 09.09. passiert: die Merker-Karten hiessen `pendingChecks`
+  // und `pendingQuantity`, der Umbau nannte sie `intents`, und damit sah der
+  // Guard nur noch `tasks.js`. Die Reichweiten-Zusicherung darueber blieb
+  // gruen, weil EINE Seite ja noch erkannt wurde - ein Rueckbau von
+  // `shopping.js` auf `api.get()` waere unbemerkt durchgegangen.
+  const blind = ungeprueft
+    .filter(({ src }) => /getWithSource\(/.test(src))
+    .map(({ datei }) => datei);
+  assert.deepEqual(blind, [],
+    `benutzt getWithSource(), wird aber von keinem Merkmal erkannt: ${blind.join(', ')} - `
+    + 'die Merkmalsliste MARKER ist veraltet, und der Guard prueft diese Seite nicht mehr');
+  assert.deepEqual(verletzt, [],
+    `haengt an der Frische und steht in API_CACHE_WHITELIST, liest aber nicht ueber `
+    + `api.getWithSource(): ${verletzt.join(', ')} - eine gecachte Antwort raeumt dort `
+    + 'den Merker fuer ausstehende Bearbeitungen oder wird als frische Referenz gelesen');
+});
+
 test('legacy settings page remains available during the leaf migration', () => {
   assert.equal(existsSync(new URL('../public/pages/settings.js', import.meta.url)), true);
 });

@@ -190,6 +190,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   thousand, and the server cannot know which was meant. Plain ASCII quantities keep reading exactly
   as they always have; changing that is a decision of its own.
 
+- **An edit made while the list is refreshing is no longer thrown away.** Checking an item off the
+  shopping list, or stepping a pantry quantity up or down, marks the row immediately and sends the
+  change to the server behind it. Both pages stay usable while a refresh is in flight - after
+  managing categories or storage locations, after switching lists, after importing a meal plan. A
+  refresh that had read the server *before* the edit arrived back *after* it, carrying the older
+  value, and overwrote what had just been changed. The row jumped back, the counter beside the list
+  tab disagreed with it, and the next tap sent the wrong value on - unchecking something the server
+  considered unchecked already.
+
+  The item was never actually lost - the server had it - which is what made this hard to see: a
+  reload showed the right thing, so the wrong row only lasted until the next visit to the page.
+
+  Pending edits now survive a refresh. Each one is remembered until a refresh comes back that
+  demonstrably started after the server confirmed it, and only the affected rows are re-applied on
+  top of the fresh data. Everything else in the response lands untouched, so the refresh still
+  delivers what it ran for. Discarding the whole response instead would have taken the renamed
+  categories with it - the very thing the refresh exists to bring. A refresh that is overtaken by a
+  later one now steps aside rather than writing an older picture over a newer one.
+
+  A refresh answered from the offline cache no longer counts as proof. `/shopping` is in the service
+  worker's read-only offline whitelist, so on a dropped connection the last cached response comes
+  back with its original success status and is otherwise indistinguishable from a fresh one - while
+  being arbitrarily old, since writing does not clear that cache. Taking it at face value put the
+  pre-edit value straight back on the row, which is exactly the situation this is for: standing in
+  the shop on a bad connection. The read now carries whether it came from the cache.
+
+  If the change to the server does fail, the row goes back to what the server last said rather than
+  to what it showed before the tap. Those are the same value in the ordinary case and differ exactly
+  when someone else in the household changed the same row in the meantime - and then the value from
+  before the tap is a number the server has never held.
+
+  In the pantry the pending step also lost track of its own row: a refresh replaces the stored items
+  with new objects, and the delayed request still held the old one, so the server's answer was
+  written into an item that no longer belonged to anything. The row and the item are now looked up
+  again when the answer arrives.
+
+- **A saved filter no longer offers a category, tag or person that has been deleted.** The Tasks
+  filter bar keeps the last three filter sets as one-click chips. Nothing checked whether what they
+  name still exists, so deleting a category, renaming or merging a tag, or removing a household
+  member left a chip that put the dead value straight back into the query on click. The list then
+  filtered on something the server has never heard of and stayed empty - and reloading did not help,
+  because the value lives in the browser's local storage.
+
+  The chips are now filtered when they are read rather than cleaned up when they are written: a
+  single place decides it, and it stays right even when the change happened in another tab or on
+  another device. A set that has nothing left to offer disappears from the bar. Nothing is rewritten
+  in storage, so a category that comes back brings its chip back with it, and a load error - where
+  the app has no reliable list to compare against - leaves every chip alone rather than sweeping
+  them away. Offline counts as such a case: the list of categories, tags and members can itself come
+  from the offline cache and be arbitrarily old, which would hide a chip that is still valid just as
+  readily as it would keep a dead one.
 
 - **Deleting a category now updates the page behind the dialog**. Every module that offers
   "manage categories" kept showing the category you had just deleted: the filter chips in Contacts,

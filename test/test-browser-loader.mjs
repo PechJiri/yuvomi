@@ -11,12 +11,34 @@ const STUBS = {
     export function clearApiCache() {}
   `,
   '/api.js': `
+    // Tests, die eine REIHENFOLGE pruefen (die Antwort kommt NACH der
+    // Bearbeitung), brauchen die Kontrolle ueber den Zeitpunkt der Aufloesung.
+    // Sie setzen globalThis.__apiStub = { get, patch, ... }; ohne das bleibt es
+    // bei der stummen Antwort wie bisher - dasselbe Muster wie __formatLocale
+    // weiter unten. Jede Methode steht ausgeschrieben da und nicht als Fabrik:
+    // test:frontend-audit liest diesen Stub als TEXT und prueft die Schreibweise
+    // "patch: async" samt der auth-Namen. Und KEINE Backticks in diesem
+    // Kommentar - der Stub IST ein Template-Literal, ein Backtick darin beendet
+    // ihn mitten im Text.
+    const viaStub = (name, args, fallback) => (
+      typeof globalThis.__apiStub?.[name] === 'function'
+        ? globalThis.__apiStub[name](...args)
+        : fallback
+    );
     export const api = {
-      get: async () => ({ data: null }),
-      post: async () => ({ data: null }),
-      put: async () => ({ data: null }),
-      patch: async () => ({ data: null }),
-      delete: async () => ({ data: null }),
+      get: async (...a) => viaStub('get', a, { data: null }),
+      // Liefert im Echtbetrieb { data, fromCache } - siehe api.js. Der Stub
+      // faellt auf 'get' zurueck, damit Suiten, die die Cache-Herkunft gar
+      // nicht pruefen, nichts davon wissen muessen.
+      getWithSource: async (...a) => (
+        typeof globalThis.__apiStub?.getWithSource === 'function'
+          ? globalThis.__apiStub.getWithSource(...a)
+          : { data: await viaStub('get', a, { data: null }), fromCache: false }
+      ),
+      post: async (...a) => viaStub('post', a, { data: null }),
+      put: async (...a) => viaStub('put', a, { data: null }),
+      patch: async (...a) => viaStub('patch', a, { data: null }),
+      delete: async (...a) => viaStub('delete', a, { data: null }),
     };
     export const auth = {
       me: async () => ({ user: null }),
