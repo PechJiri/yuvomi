@@ -28,7 +28,7 @@ process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 process.env.DB_PATH = ':memory:';
 // Die Uhr steht still, statt vom Rechner geerbt zu werden. Nötig, weil diese
 // Datei zwei Uhren nebeneinander liest: die Routen den Haushaltstag
-// (`todayKey(database)`), die Orakel in Zeile 118-119 den Serverstichtag über
+// (`todayKey(database)`), die Orakel in Zeile 126-127 den Serverstichtag über
 // den Default-Parameter der Service-Helfer (`todayKey(null)`). Laufen beide auf
 // derselben Zone, kann zwischen ihnen nichts driften.
 //
