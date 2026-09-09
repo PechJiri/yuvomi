@@ -123,3 +123,23 @@ test('nach einem Ladefehler wird NICHT gefiltert', () => {
   assert.deepEqual(set.tags, ['urlaub']);
   assert.deepEqual(set.assigned_to, ['9']);
 });
+
+test('zwei Sets, die nach dem Beschneiden gleich aussehen, geben EIN Chip', () => {
+  // Codex-Befund P2 zu PR #1072: `{Offen + Garten}` und `{Offen}` fallen
+  // zusammen, sobald „Garten" geloescht ist. Zwei sicht- und verhaltensgleiche
+  // Pillen nebeneinander sind keine Auswahl, sondern ein Fehler - und
+  // `saveRecentFilter` kann die doppelte nicht verdraengen, weil es die
+  // UNGEFILTERTEN Schluessel vergleicht und die sich noch unterscheiden.
+  withKnown({ categories: ['haushalt'] });
+  put({ status: ['open'], category: ['garten'] }, { status: ['open'] });
+
+  const sets = tasks.getRecentFilters();
+  assert.equal(sets.length, 1, 'die Dublette gehoert weg');
+  assert.deepEqual(sets[0].status, ['open']);
+
+  // Der Speicher bleibt trotzdem unangetastet: kommt „Garten" zurueck, sind es
+  // wieder zwei verschiedene Sets.
+  assert.equal(raw().length, 2, 'entdoppelt wird die ANSICHT, nicht der Speicher');
+  tasks.state.categories.push({ key: 'garten', name: 'Garten', sort_order: 1 });
+  assert.equal(tasks.getRecentFilters().length, 2);
+});
