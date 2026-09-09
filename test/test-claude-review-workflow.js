@@ -182,6 +182,29 @@ test('show_full_output ist tragend, nicht bequem', () => {
   assert.match(workflow, /^\s*show_full_output:\s*true\s*$/m);
 });
 
+test('die Basis ist eine SHA und wird VOR dem Lauf abgelesen', () => {
+  // Zwei Fehler in einem: der Vergleich lief erst nach den 6-17 Minuten der
+  // Review, und er verglich gegen den BEWEGLICHEN Branchnamen. Wird waehrend
+  // eines Laufs eine Aenderung an dieser Datei gemergt, hat die Action noch
+  // gegen die ALTE Fassung validiert und gearbeitet - der spaetere Vergleich
+  // saehe die neue, meldete eine Abweichung, setzte self=true und liesse den
+  // Nachweis aus, obwohl der Lauf sehr wohl haette liefern muessen.
+  //
+  // Beides ist zu: verglichen wird gegen die unveraenderliche Basis-SHA des
+  // Ereignisses, und der Schritt steht vor dem Lauf.
+  const schritte = [...workflow.matchAll(/^      - name: (.+)$/gm)].map((m) => m[1]);
+  assert.ok(
+    schritte.indexOf('Prueft die Review-Datei sich selbst?') <
+      schritte.indexOf('Run Claude Code Review'),
+    'der Selbst-Uebersprung wird erst nach dem Lauf geprueft'
+  );
+  for (const zeile of workflow.split('\n')) {
+    if (/^\s*BASIS:\s/.test(zeile)) {
+      assert.match(zeile, /base\.sha/, `BASIS traegt einen beweglichen Namen: ${zeile.trim()}`);
+    }
+  }
+});
+
 test('Entwurf und Bot-PR sind vom Nachweis ausgenommen', () => {
   // Bei beiden bricht das Plugin zugesichert ab. Sie stehen im Workflow und
   // nicht im Urteil, weil der Workflow sie sicher weiss, waehrend das Urteil

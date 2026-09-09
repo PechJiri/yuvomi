@@ -87,6 +87,107 @@ jobs:
           # abgeschafft und nicht in neuer Form wieder eingebaut.
           echo "seit=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # DER EIGENTLICHE FEHLER WAR NICHT DIE SPERRE, SONDERN DIE STILLE.
+      #
+      # Die Action endet mit Erfolg, wenn sie ohne Ausnahme durchläuft - ob die
+      # Review dabei etwas gesagt hat, prüft niemand. So stand fünf PRs lang ein
+      # grüner Haken für eine Prüfung, die nie stattgefunden hat, und ein grüner
+      # Haken, der nichts misst, ist schlimmer als gar keiner: er lädt dazu ein,
+      # sich auf ihn zu verlassen.
+      #
+      # Geprüft wird der WIRKUNG nach, nicht dem Ablauf: hat claude etwas
+      # hinterlassen - Zusammenfassung, Review oder Inline-Anmerkung?
+      #
+      # ABER ZU WELCHEM STAND. Genau daran ist dieser Schritt bis zum 09.09.2026
+      # blind gewesen: er zaehlte ueber die ganze Lebensdauer des PR und war
+      # gruen, sobald irgendein claude-Kommentar existierte. Der Satz, der hier
+      # stand - "der Lauf auf synchronize bleibt gruen, wenn schon ein Kommentar
+      # von einem frueheren Lauf steht" - beschrieb die Luecke als Absicht. Sie
+      # war keine: das Plugin brach ab, WEIL schon ein Kommentar stand, und
+      # dieser selbe Kommentar faerbte den Abbruch dann gruen. Beide Seiten der
+      # Zange hingen am selben Nagel.
+      #
+      # Jetzt zaehlt er nur, was NACH dem Beginn DIESES Laufs gesagt wurde, und
+      # das Urteil faellt `.github/scripts/review-verdict.mjs` - ausserhalb des
+      # Workflows, weil eine Urteilslogik, die nur hier lebt, nicht gegengeprobt
+      # werden kann. `npm run test:review-proof` faehrt sie gegen die echten
+      # Nutzdaten aus #1066 und #1029.
+      #
+      # AUSGENOMMEN: ein PR, der DIESE Datei aendert. Die Action prueft, ob der
+      # Workflow im PR zeichengleich mit dem auf dem Default-Branch ist, und
+      # ueberspringt sich sonst selbst - sonst koennte ein PR sich per
+      # `claude_args` beliebige Werkzeuge freischalten und die Review gegen sich
+      # selbst laufen lassen. Sie tut das mit `outcome=success`, also mit
+      # demselben stillen Gruen, das dieser Schritt aufdeckt.
+      #
+      # Die Ausnahme hat ein Verfallsdatum: sie greift nur, solange die Fassung
+      # im Branch von der auf dem Default-Branch abweicht. Sobald der PR gemergt
+      # oder der Branch rebast ist, prueft die Review wieder scharf. Ohne sie
+      # waere jede kuenftige Workflow-Aenderung automatisch rot, und eine
+      # Ausnahme, die man wegklickt, ist bald keine mehr.
+      #
+      # ZWEI FAELLE, EIN KRITERIUM. Nicht nur ein PR, der diese Datei aendert,
+      # weicht ab - auch ein Branch, der sie gar nicht anfasst, aber aelter ist
+      # als die letzte Aenderung daran. Nach jedem Zug an dieser Datei ist das
+      # schlagartig jeder offene Branch. Der Schritt prueft deshalb dasselbe wie
+      # die Action, naemlich Zeichengleichheit, und sagt in der Notiz, welcher
+      # der beiden Faelle vorliegt.
+      - name: Prueft die Review-Datei sich selbst?
+        id: self-edit
+        if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASIS: ${{ github.event.pull_request.base.sha }}
+          BASIS_NAME: ${{ github.event.repository.default_branch }}
+          DATEI: .github/workflows/claude-code-review.yml
+        run: |
+          set -euo pipefail
+          # GEPRUEFT WIRD ZEICHENGLEICHHEIT, NICHT "der PR fasst die Datei an".
+          # Hier stand vorher eine `gh api .../files | grep`-Probe, und die kannte
+          # nur den einen Fall. Die Action selbst vergleicht aber den Inhalt gegen
+          # den Default-Branch - und ein Branch, der diese Datei gar nicht anfasst,
+          # aber VERALTET ist, faellt genauso hinein. Nach jeder Aenderung an dieser
+          # Datei ist das schlagartig JEDER offene Branch: die Action uebersprang
+          # sich, der Nachweis fand kein result-Objekt und waere rot geworden,
+          # obwohl niemand etwas falsch gemacht hat. Blob-SHAs vergleichen ist
+          # genau das Kriterium der Action, in einer Zeile.
+          # DIESE AUSNAHME SCHLIESST ZU. Ein Ersatzwert bei Fehlschlag waere
+          # bequem und genau falsch herum: zwei ungleiche Platzhalter haetten
+          # `self=true` gesetzt, den Nachweis ausgesetzt und den Job gruen
+          # gelassen - wegen eines 403 oder 5xx in einer DIAGNOSE-Abfrage. Wer
+          # nicht beweisen kann, dass er ausgenommen ist, ist nicht ausgenommen.
+          kopf=""; basis=""
+          kopf=$(gh api "repos/$REPO/contents/$DATEI?ref=$HEAD_SHA" --jq '.sha') || kopf=""
+          basis=$(gh api "repos/$REPO/contents/$DATEI?ref=$BASIS" --jq '.sha') || basis=""
+          if [ -z "$kopf" ] || [ -z "$basis" ]; then
+            echo "self=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Die Fassung des Review-Workflows liess sich nicht auf" \
+                 "beiden Seiten lesen (Kopf: '${kopf:-Fehler}', Basis: '${basis:-Fehler}')." \
+                 "Die Selbst-Uebersprung-Ausnahme gilt deshalb NICHT - sie braucht" \
+                 "zwei gelesene, wirklich verschiedene Fassungen. Der Nachweis laeuft."
+          elif [ "$kopf" = "$basis" ]; then
+            echo "self=false" >> "$GITHUB_OUTPUT"
+            echo "Der Review-Workflow ist zeichengleich mit der Basis $BASIS ($kopf)."
+          else
+            echo "self=true" >> "$GITHUB_OUTPUT"
+            if gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' \
+               | grep -qx "$DATEI"; then
+              echo "::notice::Dieser PR aendert den Review-Workflow selbst." \
+                   "Die Action ueberspringt sich dann aus Sicherheitsgruenden" \
+                   "(Workflow-Validierung), also kann hier keine Review entstehen." \
+                   "Der Nachweis ist ausgesetzt und greift ab dem naechsten PR wieder."
+            else
+              echo "::notice::Dieser Branch traegt eine andere Fassung des" \
+                   "Review-Workflows als die Basis dieses PR, ohne sie selbst zu" \
+                   "aendern - er ist also veraltet. Die Action ueberspringt sich" \
+                   "deshalb, und der Nachweis ist ausgesetzt. Auf $BASIS_NAME rebasen," \
+                   "dann prueft sie wieder scharf."
+            fi
+          fi
+
       - name: Run Claude Code Review
         if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
         id: claude-review
@@ -233,106 +334,6 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
-      # DER EIGENTLICHE FEHLER WAR NICHT DIE SPERRE, SONDERN DIE STILLE.
-      #
-      # Die Action endet mit Erfolg, wenn sie ohne Ausnahme durchläuft - ob die
-      # Review dabei etwas gesagt hat, prüft niemand. So stand fünf PRs lang ein
-      # grüner Haken für eine Prüfung, die nie stattgefunden hat, und ein grüner
-      # Haken, der nichts misst, ist schlimmer als gar keiner: er lädt dazu ein,
-      # sich auf ihn zu verlassen.
-      #
-      # Geprüft wird der WIRKUNG nach, nicht dem Ablauf: hat claude etwas
-      # hinterlassen - Zusammenfassung, Review oder Inline-Anmerkung?
-      #
-      # ABER ZU WELCHEM STAND. Genau daran ist dieser Schritt bis zum 09.09.2026
-      # blind gewesen: er zaehlte ueber die ganze Lebensdauer des PR und war
-      # gruen, sobald irgendein claude-Kommentar existierte. Der Satz, der hier
-      # stand - "der Lauf auf synchronize bleibt gruen, wenn schon ein Kommentar
-      # von einem frueheren Lauf steht" - beschrieb die Luecke als Absicht. Sie
-      # war keine: das Plugin brach ab, WEIL schon ein Kommentar stand, und
-      # dieser selbe Kommentar faerbte den Abbruch dann gruen. Beide Seiten der
-      # Zange hingen am selben Nagel.
-      #
-      # Jetzt zaehlt er nur, was NACH dem Beginn DIESES Laufs gesagt wurde, und
-      # das Urteil faellt `.github/scripts/review-verdict.mjs` - ausserhalb des
-      # Workflows, weil eine Urteilslogik, die nur hier lebt, nicht gegengeprobt
-      # werden kann. `npm run test:review-proof` faehrt sie gegen die echten
-      # Nutzdaten aus #1066 und #1029.
-      #
-      # AUSGENOMMEN: ein PR, der DIESE Datei aendert. Die Action prueft, ob der
-      # Workflow im PR zeichengleich mit dem auf dem Default-Branch ist, und
-      # ueberspringt sich sonst selbst - sonst koennte ein PR sich per
-      # `claude_args` beliebige Werkzeuge freischalten und die Review gegen sich
-      # selbst laufen lassen. Sie tut das mit `outcome=success`, also mit
-      # demselben stillen Gruen, das dieser Schritt aufdeckt.
-      #
-      # Die Ausnahme hat ein Verfallsdatum: sie greift nur, solange die Fassung
-      # im Branch von der auf dem Default-Branch abweicht. Sobald der PR gemergt
-      # oder der Branch rebast ist, prueft die Review wieder scharf. Ohne sie
-      # waere jede kuenftige Workflow-Aenderung automatisch rot, und eine
-      # Ausnahme, die man wegklickt, ist bald keine mehr.
-      #
-      # ZWEI FAELLE, EIN KRITERIUM. Nicht nur ein PR, der diese Datei aendert,
-      # weicht ab - auch ein Branch, der sie gar nicht anfasst, aber aelter ist
-      # als die letzte Aenderung daran. Nach jedem Zug an dieser Datei ist das
-      # schlagartig jeder offene Branch. Der Schritt prueft deshalb dasselbe wie
-      # die Action, naemlich Zeichengleichheit, und sagt in der Notiz, welcher
-      # der beiden Faelle vorliegt.
-      - name: Prueft die Review-Datei sich selbst?
-        id: self-edit
-        if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASIS: ${{ github.event.repository.default_branch }}
-          DATEI: .github/workflows/claude-code-review.yml
-        run: |
-          set -euo pipefail
-          # GEPRUEFT WIRD ZEICHENGLEICHHEIT, NICHT "der PR fasst die Datei an".
-          # Hier stand vorher eine `gh api .../files | grep`-Probe, und die kannte
-          # nur den einen Fall. Die Action selbst vergleicht aber den Inhalt gegen
-          # den Default-Branch - und ein Branch, der diese Datei gar nicht anfasst,
-          # aber VERALTET ist, faellt genauso hinein. Nach jeder Aenderung an dieser
-          # Datei ist das schlagartig JEDER offene Branch: die Action uebersprang
-          # sich, der Nachweis fand kein result-Objekt und waere rot geworden,
-          # obwohl niemand etwas falsch gemacht hat. Blob-SHAs vergleichen ist
-          # genau das Kriterium der Action, in einer Zeile.
-          # DIESE AUSNAHME SCHLIESST ZU. Ein Ersatzwert bei Fehlschlag waere
-          # bequem und genau falsch herum: zwei ungleiche Platzhalter haetten
-          # `self=true` gesetzt, den Nachweis ausgesetzt und den Job gruen
-          # gelassen - wegen eines 403 oder 5xx in einer DIAGNOSE-Abfrage. Wer
-          # nicht beweisen kann, dass er ausgenommen ist, ist nicht ausgenommen.
-          kopf=""; basis=""
-          kopf=$(gh api "repos/$REPO/contents/$DATEI?ref=$HEAD_SHA" --jq '.sha') || kopf=""
-          basis=$(gh api "repos/$REPO/contents/$DATEI?ref=$BASIS" --jq '.sha') || basis=""
-          if [ -z "$kopf" ] || [ -z "$basis" ]; then
-            echo "self=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Die Fassung des Review-Workflows liess sich nicht auf" \
-                 "beiden Seiten lesen (Kopf: '${kopf:-Fehler}', $BASIS: '${basis:-Fehler}')." \
-                 "Die Selbst-Uebersprung-Ausnahme gilt deshalb NICHT - sie braucht" \
-                 "zwei gelesene, wirklich verschiedene Fassungen. Der Nachweis laeuft."
-          elif [ "$kopf" = "$basis" ]; then
-            echo "self=false" >> "$GITHUB_OUTPUT"
-            echo "Der Review-Workflow ist zeichengleich mit $BASIS ($kopf)."
-          else
-            echo "self=true" >> "$GITHUB_OUTPUT"
-            if gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' \
-               | grep -qx "$DATEI"; then
-              echo "::notice::Dieser PR aendert den Review-Workflow selbst." \
-                   "Die Action ueberspringt sich dann aus Sicherheitsgruenden" \
-                   "(Workflow-Validierung), also kann hier keine Review entstehen." \
-                   "Der Nachweis ist ausgesetzt und greift ab dem naechsten PR wieder."
-            else
-              echo "::notice::Dieser Branch traegt eine andere Fassung des" \
-                   "Review-Workflows als $BASIS, ohne sie selbst zu aendern - er ist" \
-                   "also veraltet. Die Action ueberspringt sich deshalb, und der" \
-                   "Nachweis ist ausgesetzt. Auf $BASIS rebasen, dann prueft sie" \
-                   "wieder scharf."
-            fi
-          fi
-
       - name: Die Review muss gesprochen haben
         # Entwurf und Bot-PR sind ausgenommen, weil das Plugin bei beiden
         # zugesichert abbricht - das ist "nichts zu pruefen" und kein Schweigen.
@@ -350,7 +351,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           SEIT: ${{ steps.stand.outputs.seit }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASIS: ${{ github.event.repository.default_branch }}
+          BASIS: ${{ github.event.pull_request.base.sha }}
           URTEIL: .github/scripts/review-verdict.mjs
           EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
         run: |
