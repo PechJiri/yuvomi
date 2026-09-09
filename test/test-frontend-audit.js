@@ -15891,8 +15891,24 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
  * den Originalnamen prueft, sieht ihren gesamten Schliess-und-Rendern-Weg nicht
  * (Review zu #1070). Der Alias steht im Import und ist von dort ablesbar.
  */
+/**
+ * Fassaden, die den Dialog schliessen, ohne aus `modal.js` zu kommen.
+ *
+ * `closeDetailView()` in `components/detail-view.js` delegiert an `closeModal()`
+ * (dort am Ende von `closeDetailView`), und `task-detail.js` importiert es -
+ * fuer den Guard sah dieser Weg nach gar keinem Schliessen aus (Review zu
+ * #1070).
+ *
+ * NAMENTLICH und nicht per Heuristik: "jede exportierte Funktion, die
+ * `closeModal(` ruft" liefert gemessen 11 Namen, davon 9 falsche - darunter
+ * `openModal` und `openDetailView`, weil ein Oeffner das vorige Modal schliesst.
+ * Ein Guard, der Oeffnen fuer Schliessen haelt, urteilt ueber die falsche
+ * Stelle. Die Liste haelt der Ratchet weiter unten vollstaendig.
+ */
+const SCHLIESS_FASSADEN = ['closeDetailView'];
+
 function schliessNamen(lines) {
-  const namen = new Set(['closeModal']);
+  const namen = new Set(['closeModal', ...SCHLIESS_FASSADEN]);
   const quelle = lines.join('\n');
   const block = quelle.match(/import\s*\{([\s\S]*?)\}\s*from\s*'\/components\/modal\.js'/);
   if (block) {
@@ -16167,4 +16183,37 @@ test('refocusAfterRender steht nach dem LETZTEN Neuaufbau im Block', () => {
     'Diese Aufrufe stehen VOR einem await, das die Seite noch einmal umbaut - der Fokus, den sie '
     + 'setzen, ist danach wieder weg. Den Aufruf ans Ende des Blocks ziehen:\n  '
     + zuFrueh.join('\n  '));
+});
+
+
+/* DIE FASSADEN-LISTE MUSS VOLLSTAENDIG BLEIBEN.
+ *
+ * `SCHLIESS_FASSADEN` steht namentlich da, weil die Heuristik zu breit war -
+ * und eine handgefuehrte Liste altert. Dieser Ratchet faengt den Zuwachs: jede
+ * EXPORTIERTE Funktion, deren Name mit `close` beginnt und die `closeModal(`
+ * ruft, ist eine solche Fassade und gehoert in die Liste.
+ *
+ * `closeModal` selbst ist die Quelle, nicht die Fassade.
+ */
+test('jede exportierte close-Fassade steht in SCHLIESS_FASSADEN', () => {
+  const fehlend = [];
+  for (const dir of ['../public/components', '../public/utils']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const grenzen = [];
+      lines.forEach((l, i) => { if (/^(?:export )?(?:async )?function [A-Za-z_]/.test(l)) grenzen.push(i); });
+      lines.forEach((l, i) => {
+        const m = l.match(/^export (?:async )?function (close[A-Za-z_]\w*)/);
+        if (!m || m[1] === 'closeModal') return;
+        const ende = grenzen.find((x) => x > i) ?? lines.length;
+        if (!/\bcloseModal\s*\(/.test(lines.slice(i, ende).join('\n'))) return;
+        if (SCHLIESS_FASSADEN.includes(m[1])) return;
+        fehlend.push(`${datei}: ${m[1]}`);
+      });
+    }
+  }
+  assert.deepEqual(fehlend, [],
+    'Diese exportierten Funktionen schliessen den Dialog, stehen aber nicht in SCHLIESS_FASSADEN - '
+    + 'die Focus-Guards sehen ihren Schliess-und-Rendern-Weg deshalb nicht:\n  ' + fehlend.join('\n  '));
 });

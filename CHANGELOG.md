@@ -260,7 +260,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `data-id` on the row and only `data-action` on the button inside it, so every row looks alike from
   the button's side. The lookup now carries the row it sat in, and where more than one candidate
   still matches it returns none and falls back to the page root, because a wrong focus target puts
-  the reader somewhere they did not choose.
+  the reader somewhere they did not choose. Not every `data-` value carries identity, though: a
+  subtask's rename button also holds its title, and that is what just changed - so the lookup makes a
+  second pass on the identifying fields alone, still insisting on a single match.
 
   The scanners look through wrappers as well: a handler that awaits `reload()` rebuilds the page just
   as much as one that calls `renderContent()` directly, and the name says nothing about it. Counting

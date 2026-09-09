@@ -618,8 +618,31 @@ function _findAgain(memo) {
     const byId = document.getElementById(memo.id);
     if (byId) return byId;
   }
-  const keys = Object.keys(memo.data);
-  if (!keys.length && memo.rowId === null) return null;
+  const alle = Object.keys(memo.data);
+  if (!alle.length && memo.rowId === null) return null;
+  // ZWEI ANLAEUFE, weil nicht jedes data-Feld Identitaet traegt. Der
+  // Umbenennen-Knopf einer Teilaufgabe fuehrt `data-action` und `data-id` -
+  // aber auch `data-title`, und genau das aendert sich beim Umbenennen. Ein
+  // Vergleich, der Gleichheit ALLER Felder verlangt, findet danach nichts mehr
+  // (Review zu #1070).
+  //
+  // Erst also der genaue Treffer, dann der auf den identitaetstragenden Feldern.
+  // Die Reihenfolge ist wichtig: wo alle Felder passen, ist es sicher dasselbe
+  // Element; die zweite Runde ist der Rueckfall, nicht die Regel. Und weil
+  // beide Runden auf Eindeutigkeit bestehen, wird dabei nichts geraten.
+  const identitaet = alle.filter((k) => k === 'id' || k === 'action');
+  const runden = identitaet.length && identitaet.length < alle.length
+    ? [alle, identitaet]
+    : [alle];
+  for (const keys of runden) {
+    const treffer = _kandidaten(memo, keys);
+    if (treffer.length === 1) return treffer[0];
+  }
+  return null;
+}
+
+/** Die Elemente, die in Tag, Klasse, den gegebenen data-Feldern und der Zeile passen. */
+function _kandidaten(memo, keys) {
   const treffer = [];
   for (const kandidat of document.getElementsByTagName(memo.tag)) {
     if (kandidat.getAttribute('class') !== memo.cls) continue;
@@ -633,7 +656,7 @@ function _findAgain(memo) {
   // nachweislich der gesuchte, und ein falsches Fokusziel ist schlimmer als
   // keines: es setzt den Nutzer an eine Stelle, die er nicht gewaehlt hat.
   // Dann lieber die Seitenwurzel.
-  return treffer.length === 1 ? treffer[0] : null;
+  return treffer;
 }
 
 /**
