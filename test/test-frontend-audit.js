@@ -2266,6 +2266,16 @@ test('wer an der Frische haengt UND offline gecacht wird, liest ueber getWithSou
   // zwei Strukturmerkmalen, die eine Seite nicht zufaellig traegt:
   //   - eine `pending…`-Map: ausstehende Schreibvorgaenge, die ein Laden raeumt
   //   - ein `…Stale`-Feld: „diese Referenzlisten sind nicht nachweislich frisch"
+  // Woran eine Seite erkannt wird, die an der Frische einer Antwort haengt.
+  // Die Liste darf wachsen; dass sie nicht VERALTET, sichert die Selbstprobe
+  // ganz unten.
+  const MARKER = [
+    /const intents\s*=\s*new Map\(/,        // Absichten neben dem Serverstand
+    /const pending[A-Z]\w*\s*=\s*new Map\(/, // aeltere Schreibweise desselben
+    /const settledAt\s*=\s*new Map\(/,       // Bestaetigungszeit je Eintrag
+    /^\s*\w*[sS]tale:\s/m,                   // Referenzlisten mit Frische-Flag
+  ];
+
   const sw = read('../public/sw.js');
   const whitelist = sw.match(/const API_CACHE_WHITELIST\s*=\s*\[([^\]]*)\]/)?.[1];
   assert.ok(whitelist, 'API_CACHE_WHITELIST in sw.js nicht gefunden - der Guard liest ins Leere');
@@ -2275,12 +2285,12 @@ test('wer an der Frische haengt UND offline gecacht wird, liest ueber getWithSou
     .filter((f) => f.endsWith('.js'));
 
   const verletzt = [];
+  const ungeprueft = [];
   let geprueft = 0;
   for (const datei of seiten) {
     const src = read(`../public/pages/${datei}`);
-    const haengtAnFrische = /const pending[A-Z]\w*\s*=\s*new Map\(/.test(src)
-      || /^\s*\w*[sS]tale:\s/m.test(src);
-    if (!haengtAnFrische) continue;
+    const haengtAnFrische = MARKER.some((re) => re.test(src));
+    if (!haengtAnFrische) { ungeprueft.push({ datei, src }); continue; }
     // Der Modulpfad einer Seite traegt ihren Dateinamen - und der Guard glaubt
     // das nicht, sondern verlangt, dass die Seite ihn auch wirklich liest.
     const pfad = `/${datei.replace(/\.js$/, '')}`;
@@ -2295,6 +2305,22 @@ test('wer an der Frische haengt UND offline gecacht wird, liest ueber getWithSou
   // Browser-Ketten-Guard weiter oben.
   assert.ok(geprueft > 0,
     'keine einzige Seite geprueft - Merkmale oder Whitelist-Format haben sich geaendert');
+
+  // UND DIE MERKMALE PRUEFEN SICH SELBST. Eine Seite, die `getWithSource`
+  // benutzt, haengt nachweislich an der Frische - wird sie von keinem Merkmal
+  // erkannt, ist die Merkmalsliste veraltet und der Guard blind.
+  //
+  // Genau das ist am 09.09. passiert: die Merker-Karten hiessen `pendingChecks`
+  // und `pendingQuantity`, der Umbau nannte sie `intents`, und damit sah der
+  // Guard nur noch `tasks.js`. Die Reichweiten-Zusicherung darueber blieb
+  // gruen, weil EINE Seite ja noch erkannt wurde - ein Rueckbau von
+  // `shopping.js` auf `api.get()` waere unbemerkt durchgegangen.
+  const blind = ungeprueft
+    .filter(({ src }) => /getWithSource\(/.test(src))
+    .map(({ datei }) => datei);
+  assert.deepEqual(blind, [],
+    `benutzt getWithSource(), wird aber von keinem Merkmal erkannt: ${blind.join(', ')} - `
+    + 'die Merkmalsliste MARKER ist veraltet, und der Guard prueft diese Seite nicht mehr');
   assert.deepEqual(verletzt, [],
     `haengt an der Frische und steht in API_CACHE_WHITELIST, liest aber nicht ueber `
     + `api.getWithSource(): ${verletzt.join(', ')} - eine gecachte Antwort raeumt dort `
