@@ -26,6 +26,9 @@ import { pushOverlay, dropOverlay, isOverlayOpen } from '/utils/overlay-history.
 
 let activeOverlay = null;
 let previouslyFocused = null;
+// Das Fokusziel des letzten Schliessens - `refocusAfterRender()` greift darauf
+// zurueck, wenn die Seite erst nach einem `await` fertig gerendert hat.
+let _lastRestore = null;
 let focusTrapHandler = null;
 let _initialFormSnapshot = null;
 let _initialFormTimeout = null;
@@ -550,7 +553,7 @@ function _discardSuspendedModal({ overlay, restoreFocus }) {
  *      Gemessen: 1 Stelle (der Kategorie-Manager im Budget).
  *   B) Der Handler rendert, NACHDEM geschlossen wurde - `closeModal()` und in
  *      der Zeile darauf `renderGrid()`. Der Restore war korrekt und wird eine
- *      Zeile spaeter weggerendert. Gemessen: 29 Stellen, davon 19 synchron.
+ *      Zeile spaeter weggerendert. Gemessen: 30 Stellen, davon 19 synchron.
  *      Dagegen hilft nur das Nachfassen in `_refocusIfDropped`.
  *
  * Der Wiederfinder haengt nicht an der id: die typischen Ausloeser sind
@@ -626,7 +629,7 @@ export function focusRestoreTarget(memo) {
 /**
  * NACHFASSEN, WENN DIE SEITE DAS FOKUSZIEL GLEICH DANACH WEGRENDERT.
  *
- * 29 Stellen im Projekt rufen `closeModal()` und rendern in der Zeile darauf
+ * 30 Stellen im Projekt rufen `closeModal()` und rendern in der Zeile darauf
  * neu. Der Restore oben ist dann korrekt und trotzdem wertlos: er sitzt auf
  * einem Knoten, den der naechste `replaceChildren()` entfernt. Gemessen landet
  * der Fokus danach auf `document.body`.
@@ -645,19 +648,44 @@ export function focusRestoreTarget(memo) {
  *     Dialog, der in derselben Geste aufgegangen ist).
  *
  * Der asynchrone Fall bleibt offen: rendert die Seite erst nach einem `await`
- * (10 der 29 Stellen), ist dieser Frame laengst vorbei. Dort muss die Seite
+ * (11 der 30 Stellen), ist dieser Frame laengst vorbei. Dort muss die Seite
  * selbst nachziehen; ein laengeres Warten waere geraten und nicht gemessen.
  */
+function _tryRefocus(memo, ziel) {
+  if (ziel.isConnected) return;
+  if (document.activeElement !== document.body) return;
+  if (activeOverlay) return;
+  const ersatz = focusRestoreTarget(memo);
+  if (!ersatz || typeof ersatz.focus !== 'function') return;
+  ersatz.focus(ersatz.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
+}
+
 function _refocusIfDropped(memo, ziel) {
   if (typeof requestAnimationFrame !== 'function') return;
-  requestAnimationFrame(() => {
-    if (ziel.isConnected) return;
-    if (document.activeElement !== document.body) return;
-    if (activeOverlay) return;
-    const ersatz = focusRestoreTarget(memo);
-    if (!ersatz || typeof ersatz.focus !== 'function') return;
-    ersatz.focus(ersatz.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
-  });
+  requestAnimationFrame(() => _tryRefocus(memo, ziel));
+}
+
+/**
+ * DERSELBE GRIFF FUER DIE SEITE, DIE ERST NACH EINEM `await` RENDERT.
+ *
+ * `closeModal(); await loadX(); renderY();` - da ist der Frame aus
+ * `_refocusIfDropped` laengst vorbei, und die Schicht kann nicht wissen, wann
+ * das Laden fertig ist. Nur die Seite weiss das, also ruft sie hier an.
+ * Gemessen betrifft das 11 der 30 Stellen (split-expenses 4, budget 3,
+ * documents 2, housekeeping 1, tasks 1).
+ *
+ * DER AUFRUF IST IMMER SICHER. Es sind dieselben drei Wachen wie beim
+ * automatischen Nachfassen: ist nichts kaputtgegangen, hat die Seite selbst
+ * etwas fokussiert oder steht schon wieder ein Dialog offen, tut er nichts.
+ * Man kann ihn also hinter jedes Rendern nach einem Schliessen setzen, ohne je
+ * Stelle beweisen zu muessen, dass sie bricht - und ohne dass ein zweiter
+ * Fokussprung entsteht, wo alles heil blieb.
+ *
+ * Kein `await` noetig: der Fokus wird gesetzt, sobald der Aufruf laeuft.
+ */
+export function refocusAfterRender() {
+  if (!_lastRestore) return;
+  _tryRefocus(_lastRestore.memo, _lastRestore.ziel);
 }
 
 function _doClose(overlayEl) {
@@ -689,6 +717,7 @@ function _doClose(overlayEl) {
       // an der Stelle, an der der Nutzer ohnehin war.
       restoreTarget.focus(restoreTarget.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
       // Rendert die Seite gleich danach, ist dieser Fokus schon wieder weg.
+      _lastRestore = { memo: merkzettel, ziel: restoreTarget };
       _refocusIfDropped(merkzettel, restoreTarget);
     }
 
@@ -798,6 +827,8 @@ export function openModal({
 
   // Focus-Restore vorbereiten
   previouslyFocused = rememberFocus(document.activeElement);
+  // Der Merker des vorigen Schliessens ist mit diesem Dialog erledigt.
+  _lastRestore = null;
 
   // Scroll-Lock
   document.body.style.overflow = 'hidden';

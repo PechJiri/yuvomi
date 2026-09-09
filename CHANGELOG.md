@@ -137,7 +137,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The same break has a second, more common shape: a handler that re-renders **after** the dialog
   closed - `closeModal()` and `renderGrid()` on the next line. There the restore was correct and got
-  re-rendered away a moment later, which no check at close time can see. Measured: 29 such places,
+  re-rendered away a moment later, which no check at close time can see. Measured: 30 such places,
   and the typical trigger there is not a toolbar button but a **list row** - a note card, a meal
   cell - which carries `data-id` or `data-action` rather than an id. The layer now looks the element
   up again by those attributes, and where the target is destroyed right after the restore it takes a
@@ -145,8 +145,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `document.body`, and only if no dialog has opened in the meantime. Where nothing broke, nothing
   moves - the common path is unchanged.
 
-  Ten of those places re-render after an `await`, which is past that frame; they still need the page
-  to pull focus across itself, and are listed as follow-up work rather than silently half-fixed.
+  Eleven of those places re-render after an `await`, which is past that frame. There only the page
+  knows when it is done, so it says so: `refocusAfterRender()` runs the same three checks and does
+  nothing where nothing broke. A scanner in the test suite finds the pattern rather than a list of
+  files, so a new place that re-renders after an `await` is caught without anyone editing the test.
 
   Measured across the seven callers of the category manager, exactly one - the budget page - puts
   its button inside the very section it re-renders while the dialog is open. The others keep theirs

@@ -6,7 +6,7 @@
  */
 
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError, refocusAfterRender } from '/components/modal.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
 import { stagger, vibrate, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireTablist } from '/utils/tablist.js';
@@ -1461,6 +1461,7 @@ function openAccountModal(account = null) {
           closeModal({ force: true });
           await loadAccounts();
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(nextArchived ? t('budget.accountArchivedToast') : t('budget.accountRestoredToast'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
@@ -1527,6 +1528,7 @@ function openAccountModal(account = null) {
           closeModal({ force: true });
           await loadAccounts();
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(isEdit ? t('budget.accountSavedToast') : t('budget.accountAddedToast'), 'success');
         } catch (err) {
           saveBtn.disabled = false;
@@ -3309,6 +3311,7 @@ async function openConfirmBookingModal(id) {
           closeModal({ force: true });
           await loadMonth(state.month);
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(t('budget.confirmSaved'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.message || t('common.errorGeneric'), 'danger');

@@ -535,14 +535,23 @@ test('_doClose fasst nach, und das Nachfassen behaelt seine drei Wachen', () => 
   const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
   const doClose = src.match(/function _doClose\([\s\S]*?\n\}/)?.[0] ?? '';
   assert.match(doClose, /_refocusIfDropped\(merkzettel, restoreTarget\)/,
-    '_doClose muss nachfassen - 29 Stellen rendern erst NACH dem Schliessen neu');
+    '_doClose muss nachfassen - 30 Stellen rendern erst NACH dem Schliessen neu');
 
-  const nachfassen = src.match(/function _refocusIfDropped\([\s\S]*?\n\}/)?.[0] ?? '';
-  assert.ok(nachfassen, '_refocusIfDropped nicht gefunden');
-  assert.match(nachfassen, /if \(ziel\.isConnected\) return;/,
+  // Die Wachen sitzen in `_tryRefocus`, das sich beide Wege teilen: das
+  // automatische Nachfassen und der oeffentliche `refocusAfterRender()`. Eine
+  // zweite Kopie waere die Stelle, an der sie auseinanderlaufen.
+  const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(wachen, '_tryRefocus nicht gefunden');
+  assert.match(wachen, /if \(ziel\.isConnected\) return;/,
     'ohne diese Wache liefe das Nachfassen auch dann, wenn gar nichts kaputtging');
-  assert.match(nachfassen, /document\.activeElement !== document\.body/,
+  assert.match(wachen, /document\.activeElement !== document\.body/,
     'hat die Seite selbst etwas fokussiert, ist ihre Wahl die bessere - das Nachfassen darf sie nicht ueberschreiben');
-  assert.match(nachfassen, /if \(activeOverlay\) return;/,
+  assert.match(wachen, /if \(activeOverlay\) return;/,
     'sonst risse das Nachfassen den Fokus aus einem Modal, das in derselben Geste aufgegangen ist');
+
+  const oeffentlich = src.match(/export function refocusAfterRender\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(oeffentlich, 'refocusAfterRender nicht gefunden');
+  assert.match(oeffentlich, /_tryRefocus\(/,
+    'der oeffentliche Griff muss durch dieselben Wachen wie das automatische Nachfassen - '
+    + 'sonst darf eine Seite den Fokus aus einem offenen Dialog reissen');
 });

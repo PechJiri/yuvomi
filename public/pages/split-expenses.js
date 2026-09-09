@@ -4,7 +4,7 @@
  */
 
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, confirmModal, confirmOverModal, reportFieldError } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, confirmModal, confirmOverModal, reportFieldError, refocusAfterRender } from '/components/modal.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
 import { t, formatDate, getLocale, dateInputPlaceholder, parseDateInput, isDateInputValid } from '/i18n.js';
 import { esc } from '/utils/html.js';
@@ -932,6 +932,7 @@ async function openGroupModal(group = null) {
         await loadGroups();
         await loadGroupData();
         renderAll();
+        refocusAfterRender();
       });
     },
   });
@@ -1075,6 +1076,7 @@ function openExpenseModal(expense = null, prefill = null) {
         await refreshDashboard();
         await loadGroupData();
         renderAll();
+        refocusAfterRender();
       });
     },
   });
@@ -1168,6 +1170,7 @@ function openSettlementModal() {
         await refreshDashboard();
         await loadGroupData();
         renderAll();
+        refocusAfterRender();
       });
     },
   });
@@ -1203,6 +1206,7 @@ async function openMemberModal() {
         await loadGroups();
         await loadGroupData();
         renderAll();
+        refocusAfterRender();
       });
     },
   });

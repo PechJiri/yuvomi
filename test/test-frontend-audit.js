@@ -8,7 +8,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { SETTINGS_DOMAINS, SETTINGS_LEAVES } from '../public/settings/registry.js';
 import { eachRule } from './css-rules.js';
-import { withoutHtmlComments, withoutBlockComments } from './source-text.js';
+import { withoutHtmlComments, withoutBlockComments, withoutCommentsKeepingLines } from './source-text.js';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r/g, '');
 
@@ -15725,4 +15725,57 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
   // Wetter-Auto-Refresh, Wetter-Knopf).
   assert.ok((render.match(/if \(signal\.aborted\) return;/g) ?? []).length >= 7,
     'die Pruefung steht hinter jedem await des Hauptflusses und in jedem Pfad, der selbst zeichnet');
+});
+
+/* WER NACH DEM SCHLIESSEN RENDERT, MUSS DEN FOKUS NACHZIEHEN.
+ *
+ * `closeModal()` gibt den Fokus an den Ausloeser zurueck. Rendert der Handler
+ * danach den Bereich neu, in dem der Ausloeser liegt, ist dieser Fokus sofort
+ * wieder weg - gemessen faellt er auf `document.body`, und Tastatur- wie
+ * Screenreader-Bedienung landen am Seitenanfang.
+ *
+ * Die geteilte Schicht faengt das selbst, solange die Seite SYNCHRON rendert:
+ * `_refocusIfDropped` fasst einen Frame spaeter nach. Liegt dazwischen ein
+ * `await`, ist dieser Frame vorbei, und nur die Seite weiss, wann sie fertig
+ * ist - sie muss `refocusAfterRender()` rufen.
+ *
+ * DAS IST EIN RATCHET: der Scanner findet das Muster, nicht eine Liste von
+ * Dateien. Eine neue Stelle, die kuenftig nach einem `await` rendert, faellt
+ * hier auf, ohne dass jemand diesen Test anfasst. Der Aufruf ist immer sicher -
+ * `_tryRefocus` prueft selbst, ob ueberhaupt etwas kaputtging -, es gibt also
+ * keinen Grund, ihn wegzulassen.
+ *
+ * ZWEI GEGENPROBEN, und die erste hat den Guard selbst repariert: einen der elf
+ * Aufrufe AUSKOMMENTIERT - der Guard blieb gruen, weil sein Regex den toten
+ * Aufruf im Kommentartext weiterfand. Seitdem laeuft die Quelle erst durch
+ * `withoutCommentsKeepingLines`. Danach faellt er in beiden Faellen: bei einem
+ * auskommentierten und bei einem geloeschten Aufruf, gemessen je 1 von 364.
+ */
+test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () => {
+  const dirs = ['../public/pages', '../public/components'];
+  const fehlend = [];
+  for (const dir of dirs) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      // Neutralisieren, sonst zaehlt ein auskommentierter Aufruf als vorhanden.
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      lines.forEach((zeile, i) => {
+        if (!/closeModal\s*\(/.test(zeile)) return;
+        const fenster = lines.slice(i + 1, i + 7);
+        let letzte = -1;
+        fenster.forEach((x, k) => {
+          if (/\b(render[A-Z]\w*|load[A-Z]\w*|update[A-Z]\w*List)\s*\(/.test(x)) letzte = k;
+        });
+        if (letzte === -1) return;
+        // Ohne `await` davor rendert die Seite synchron - das deckt der Frame ab.
+        if (!fenster.slice(0, letzte + 1).some((x) => /\bawait\b/.test(x))) return;
+        if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) return;
+        fehlend.push(`${datei}:${i + 1} (${fenster[letzte].trim().slice(0, 48)})`);
+      });
+    }
+  }
+  assert.deepEqual(fehlend, [],
+    'Diese Stellen rendern nach einem await erneut, ohne den Fokus nachzuziehen - '
+    + 'der Focus-Restore aus closeModal() wird dort weggerendert und landet auf document.body. '
+    + `Nach dem Rendern refocusAfterRender() rufen:\n  ${fehlend.join('\n  ')}`);
 });
