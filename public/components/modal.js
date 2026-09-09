@@ -697,13 +697,53 @@ export function focusRestoreTarget(memo) {
  * (11 der 30 Stellen), ist dieser Frame laengst vorbei. Dort muss die Seite
  * selbst nachziehen; ein laengeres Warten waere geraten und nicht gemessen.
  */
+/**
+ * Fokussieren UND nachsehen, ob es gewirkt hat.
+ *
+ * Der ganze Vorgang hier dreht sich darum, dass `.focus()` still fehlschlaegt.
+ * Genau das kann auch ein Ersatz: der neu gebaute Knopf ist vielleicht
+ * `disabled` (in rewards wird der Einloesen-Knopf es, sobald die Punkte nicht
+ * mehr reichen) oder ausgeblendet. Dann ist er der eindeutige Treffer, nimmt
+ * den Fokus aber nicht an - und ohne diese Rueckmeldung wuesste niemand davon.
+ *
+ * Nur die Seitenwurzel bekommt `preventScroll`: sie IST der Scrollport
+ * (#main-content == .app-content), ein Fokus mit Scroll risse die
+ * wiederhergestellte Position nach oben.
+ */
+function _fokussiere(el) {
+  if (!el || typeof el.focus !== 'function') return false;
+  el.focus(el.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
+  return document.activeElement === el;
+}
+
+/**
+ * Ein Ziel setzen und, wenn es nicht angenommen wird, auf die Wurzel ausweichen.
+ */
+function _fokussiereMitRueckfall(el) {
+  if (_fokussiere(el)) return el;
+  const wurzel = _focusable(document.getElementById(PAGE_ROOT_ID));
+  if (wurzel && wurzel !== el && _fokussiere(wurzel)) return wurzel;
+  return null;
+}
+
 function _tryRefocus(memo, ziel) {
-  if (ziel.isConnected) return;
-  if (document.activeElement !== document.body) return;
+  // WAR DAS ZIEL UNSER EIGENER RUECKFALL, darf ein spaeterer Lauf es ersetzen.
+  // Ein Loader, der den Ausloeser sofort gegen ein Skelett tauscht und ihn erst
+  // nach der Abfrage neu baut, laesst den Frame-Lauf auf der Wurzel landen; ohne
+  // diese Ausnahme haetten `isConnected` und `activeElement` danach jeden
+  // weiteren Versuch abgewiesen, und der Fokus bliebe an der Seitenwurzel
+  // haengen, obwohl der Knopf laengst wieder da ist (Review zu #1070).
+  const istRueckfall = ziel.id === PAGE_ROOT_ID;
+  if (ziel.isConnected && !istRueckfall) return;
   if (activeOverlay) return;
+  // Hat die Seite selbst etwas fokussiert, gilt ihre Wahl. Beim Rueckfall zaehlt
+  // zusaetzlich er selbst als "noch niemand hat gewaehlt".
+  const frei = document.activeElement === document.body
+    || (istRueckfall && document.activeElement === ziel);
+  if (!frei) return;
   const ersatz = focusRestoreTarget(memo);
-  if (!ersatz || typeof ersatz.focus !== 'function') return;
-  ersatz.focus(ersatz.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
+  if (!ersatz || ersatz === ziel) return;
+  _fokussiereMitRueckfall(ersatz);
 }
 
 function _refocusIfDropped(memo, ziel) {
@@ -755,15 +795,14 @@ function _doClose(overlayEl) {
     const merkzettel = previouslyFocused;
     previouslyFocused = null;
     const restoreTarget = focusRestoreTarget(merkzettel);
-    if (restoreTarget && typeof restoreTarget.focus === 'function') {
-      // Nur die Seitenwurzel bekommt `preventScroll`: sie IST der Scrollport
-      // (#main-content == .app-content), ein Fokus mit Scroll risse die
-      // wiederhergestellte Position nach oben. Ein Ersatzknopf steht dagegen
-      // an der Stelle, an der der Nutzer ohnehin war.
-      restoreTarget.focus(restoreTarget.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
+    // Das TATSAECHLICH fokussierte Element merken, nicht das gewuenschte: nimmt
+    // der Ersatz den Fokus nicht an, steht danach die Wurzel dort, und die
+    // spaeteren Laeufe muessen von ihr ausgehen.
+    const gesetzt = _fokussiereMitRueckfall(restoreTarget);
+    if (gesetzt) {
       // Rendert die Seite gleich danach, ist dieser Fokus schon wieder weg.
-      _lastRestore = { memo: merkzettel, ziel: restoreTarget };
-      _refocusIfDropped(merkzettel, restoreTarget);
+      _lastRestore = { memo: merkzettel, ziel: gesetzt };
+      _refocusIfDropped(merkzettel, gesetzt);
     }
 
     // Standalone: Statusbar-Farbe zur aktuellen Route wiederherstellen

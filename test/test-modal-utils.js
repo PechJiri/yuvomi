@@ -542,57 +542,38 @@ test('_doClose fokussiert das Ergebnis des Rueckfalls, nicht den gemerkten Zeige
     + 'genau dieser Aufruf ist auf einem abgehaengten Knoten ein stiller No-op');
 });
 
-test('_doClose fasst nach, und das Nachfassen behaelt seine drei Wachen', () => {
+test('_doClose fasst nach, und das Nachfassen behaelt seine Wachen', () => {
   const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
   const doClose = src.match(/function _doClose\([\s\S]*?\n\}/)?.[0] ?? '';
-  assert.match(doClose, /_refocusIfDropped\(merkzettel, restoreTarget\)/,
-    '_doClose muss nachfassen - 30 Stellen rendern erst NACH dem Schliessen neu');
+  assert.match(doClose, /_refocusIfDropped\(merkzettel, gesetzt\)/,
+    '_doClose muss nachfassen - und zwar auf dem TATSAECHLICH gesetzten Ziel');
+  assert.match(doClose, /_fokussiereMitRueckfall\(restoreTarget\)/,
+    'nimmt der Ersatz den Fokus nicht an, muss _doClose auf die Wurzel ausweichen');
 
   // Die Wachen sitzen in `_tryRefocus`, das sich beide Wege teilen: das
   // automatische Nachfassen und der oeffentliche `refocusAfterRender()`. Eine
   // zweite Kopie waere die Stelle, an der sie auseinanderlaufen.
   const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
   assert.ok(wachen, '_tryRefocus nicht gefunden');
-  assert.match(wachen, /if \(ziel\.isConnected\) return;/,
-    'ohne diese Wache liefe das Nachfassen auch dann, wenn gar nichts kaputtging');
-  assert.match(wachen, /document\.activeElement !== document\.body/,
-    'hat die Seite selbst etwas fokussiert, ist ihre Wahl die bessere - das Nachfassen darf sie nicht ueberschreiben');
+  assert.match(wachen, /ziel\.isConnected && !istRueckfall/,
+    'ein lebendes Ziel beendet den Lauf - ausser es ist unser eigener Rueckfall, den ein '
+    + 'spaeterer Neuaufbau ersetzen darf');
+  assert.match(wachen, /document\.activeElement === document\.body/,
+    'hat die Seite selbst etwas fokussiert, ist ihre Wahl die bessere');
   assert.match(wachen, /if \(activeOverlay\) return;/,
     'sonst risse das Nachfassen den Fokus aus einem Modal, das in derselben Geste aufgegangen ist');
+  assert.match(wachen, /ersatz === ziel/,
+    'findet der zweite Lauf nichts Besseres, darf er den Fokus nicht erneut bewegen');
 
   const oeffentlich = src.match(/export function refocusAfterRender\([\s\S]*?\n\}/)?.[0] ?? '';
-  assert.ok(oeffentlich, 'refocusAfterRender nicht gefunden');
   assert.match(oeffentlich, /_tryRefocus\(/,
-    'der oeffentliche Griff muss durch dieselben Wachen wie das automatische Nachfassen - '
-    + 'sonst darf eine Seite den Fokus aus einem offenen Dialog reissen');});
+    'der oeffentliche Griff muss durch dieselben Wachen wie das automatische Nachfassen');
 
-/* DER REVIEW-BEFUND ZU #1069: die Wurzel ist nicht ueberall fokussierbar.
- *
- * `renderAppShell()` setzt `tabIndex = -1`, laeuft aber nur fuer Routen mit
- * App-Shell. Die fuenf Auth-Seiten (login, setup, join, forgot-password,
- * reset-password) rendern ihr eigenes `<main id="main-content">` ohne das
- * Attribut. Im Browser gemessen (Chrome 152): `.focus()` darauf ist ein No-op,
- * der Fokus faellt auf `document.body` - genau der stille Ausfall, den diese
- * Weiche verhindern soll.
- *
- * `el.tabIndex` taugt nicht zur Pruefung: es liest auch ohne Attribut `-1`,
- * ebenfalls gemessen. Deshalb `hasAttribute`.
- *
- * GEGENPROBE: die Zeile in `_focusable` tot stellen, dann fallen die erste und
- * die dritte Sonde.
- */
-test('eine Seitenwurzel ohne tabindex wird fokussierbar gemacht', () => {
-  const alt = makeNode('button', { id: 'irgendwas', connected: false });
-  const wurzel = makeNode('main', { id: 'main-content' });            // wie auf den Auth-Seiten: kein tabindex
-  withDom({ byId: { 'main-content': wurzel } }, () => {
-    const ziel = focusRestoreTarget(rememberFocus(alt));
-    assert.equal(ziel, wurzel, 'die Wurzel bleibt das Ziel');
-    assert.equal(ziel.hasAttribute('tabindex'), true,
-      'ohne tabindex nimmt <main> keinen Fokus an - `.focus()` waere ein stiller No-op, '
-      + 'und der Fokus fiele auf document.body. Genau der Fehler, den diese Weiche verhindert.');
-    assert.equal(ziel._attrs.tabindex, '-1',
-      'tabindex="-1" macht sie programmatisch fokussierbar, ohne sie in die Tab-Reihenfolge zu haengen');
-  });
+  // Die Wirkungspruefung ist der Kern: `.focus()` meldet nicht, ob es griff.
+  const fok = src.match(/function _fokussiere\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(fok, /return document\.activeElement === el;/,
+    '_fokussiere muss zurueckmelden, OB der Fokus angekommen ist - ein disabled oder '
+    + 'ausgeblendeter Ersatz nimmt ihn nicht an, und genau das ist der stille Ausfall');
 });
 
 test('ein vorhandenes tabindex wird nicht ueberschrieben', () => {
@@ -658,4 +639,39 @@ test('mehrdeutige Treffer werden abgelehnt statt geraten', () => {
     assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
       'zwei gleich aussehende Zeilen: lieber die Wurzel als die falsche');
   });
+});
+
+/* REVIEW ZU #1070, RUNDE 5. Zwei Faelle, in denen `.focus()` wieder still
+ * fehlschlaegt oder ein Fokus an falscher Stelle haengen bleibt.
+ */
+
+/* Ein neu gebauter Knopf kann DEAKTIVIERT sein - in rewards wird der
+ * Einloesen-Knopf es, sobald die Punkte nicht mehr reichen. Er ist dann der
+ * eindeutige Treffer und nimmt den Fokus trotzdem nicht an. Ohne Rueckmeldung
+ * bliebe der Fokus auf `body`, und die Wache `ziel.isConnected` haette jeden
+ * weiteren Versuch abgewiesen. */
+test('_fokussiere meldet, ob der Fokus wirklich angekommen ist', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const fok = src.match(/function _fokussiere\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fok, '_fokussiere nicht gefunden');
+  assert.match(fok, /return document\.activeElement === el;/,
+    '`.focus()` meldet nichts - erst der Vergleich mit activeElement zeigt, ob es griff');
+  const mit = src.match(/function _fokussiereMitRueckfall\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(mit, '_fokussiereMitRueckfall nicht gefunden');
+  assert.match(mit, /PAGE_ROOT_ID/,
+    'griff der Fokus nicht, muss auf die Seitenwurzel ausgewichen werden - sonst bleibt er auf body');
+});
+
+/* Ein Loader, der den Ausloeser sofort gegen ein Skelett tauscht und ihn erst
+ * nach der Abfrage neu baut, laesst den Frame-Lauf auf der Wurzel landen. Ohne
+ * die Ausnahme fuer den eigenen Rueckfall haetten `isConnected` und
+ * `activeElement` danach jeden weiteren Versuch abgewiesen. */
+test('ein Fokus auf der Seitenwurzel darf spaeter vom echten Ziel abgeloest werden', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const wachen = src.match(/function _tryRefocus\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(wachen, /const istRueckfall = ziel\.id === PAGE_ROOT_ID;/,
+    'der eigene Rueckfall muss als solcher erkannt werden');
+  assert.match(wachen, /istRueckfall && document\.activeElement === ziel/,
+    'liegt der Fokus auf unserem eigenen Rueckfall, gilt das als "noch niemand hat gewaehlt" - '
+    + 'sonst bliebe er an der Seitenwurzel haengen, obwohl der Knopf laengst wieder da ist');
 });

@@ -15896,3 +15896,49 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
     + 'Rendern danach haengt ihn ab - der Fokus faellt auf document.body. '
     + `Nach dem Rendern refocusAfterRender() rufen:\n  ${fehlend.join('\n  ')}`);
 });
+
+
+/* DER AUFRUF MUSS DER LETZTE NEUAUFBAU SEIN, NICHT IRGENDEINER.
+ *
+ * `refocusAfterRender()` setzt den Fokus sofort. Folgt danach im selben Block
+ * noch ein `await`, das die Seite erneut umbaut - ein `await opts.onSaved?.()`,
+ * dessen Callback den Bereich ersetzt -, ist der Fokus gleich wieder weg. Genau
+ * so stand er zweimal in `health.js` (Review zu #1070): hinter
+ * `reloadAfterSave()`, aber VOR dem Callback, der `overview.root` austauscht.
+ *
+ * Die Regel ist nicht "hoechstens ein await danach", sondern "kein await, das
+ * neu aufbaut" - ein `await api.post(...)` danach ist harmlos.
+ *
+ * GEGENPROBE: den Aufruf in `saveVitals` wieder vor `await opts.onSaved?.()`
+ * schieben, dann faellt diese Sonde mit dieser Zeile.
+ */
+test('refocusAfterRender steht nach dem LETZTEN Neuaufbau im Block', () => {
+  const zuFrueh = [];
+  for (const dir of ['../public/pages', '../public/components']) {
+    const basis = new URL(`${dir}/`, import.meta.url);
+    for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
+      const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const wrapper = rendererIn(lines);
+      lines.forEach((zeile, i) => {
+        if (!/^\s*refocusAfterRender\(\);\s*$/.test(zeile)) return;
+        // Was im selben Block noch folgt: ein await, das neu aufbaut?
+        const tiefe = zeile.match(/^\s*/)[0].length;
+        for (let j = i + 1; j < lines.length; j++) {
+          if (lines[j].trim() === '') continue;
+          if (lines[j].match(/^\s*/)[0].length < tiefe) break;
+          if (!/\bawait\b/.test(lines[j])) continue;
+          // Ein Callback baut per Definition Unbekanntes um; sonst zaehlt nur
+          // ein erkannter Neuaufbau.
+          if (/\bawait\s+\w*(opts|options)\.\w+\?\.\(/.test(lines[j]) || istNeuaufbau(lines[j], wrapper)) {
+            zuFrueh.push(`${datei}:${i + 1} (danach: ${lines[j].trim().slice(0, 40)})`);
+            break;
+          }
+        }
+      });
+    }
+  }
+  assert.deepEqual(zuFrueh, [],
+    'Diese Aufrufe stehen VOR einem await, das die Seite noch einmal umbaut - der Fokus, den sie '
+    + 'setzen, ist danach wieder weg. Den Aufruf ans Ende des Blocks ziehen:\n  '
+    + zuFrueh.join('\n  '));
+});

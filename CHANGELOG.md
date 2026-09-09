@@ -216,6 +216,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as much as one that calls `renderContent()` directly, and the name says nothing about it. Counting
   only names beginning with `render` left 25 places uncovered across six more modules.
 
+  Focus is now also checked for arrival rather than assumed: a rebuilt button can come back
+  `disabled` - the redeem button in Rewards does, once the points no longer suffice - and focusing it
+  is the same silent no-op the whole entry is about. Where it does not take, the page root does. And
+  where that root was chosen as a stand-in, a later rebuild is allowed to take the focus off it
+  again, so a loader that swaps its opener for a skeleton and rebuilds it after the request does not
+  leave the reader stranded at the top of the page.
+
   Measured across the seven callers of the category manager, exactly one - the budget page - puts
   its button inside the very section it re-renders while the dialog is open. The others keep theirs
   in a toolbar their handler does not touch, and the shopping menu turned out to be a non-case: the
