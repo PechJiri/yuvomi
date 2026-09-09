@@ -206,6 +206,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Measured in the browser, focus ends up on `document.body` again. Eleven handlers of that shape now
   pull focus across their own re-render, with a second scanner holding the line.
 
+  Where the trigger is a list row, the row itself is what identifies it: inventory and pantry put
+  `data-id` on the row and only `data-action` on the button inside it, so every row looks alike from
+  the button's side. The lookup now carries the row it sat in, and where more than one candidate
+  still matches it returns none and falls back to the page root, because a wrong focus target puts
+  the reader somewhere they did not choose.
+
   Measured across the seven callers of the category manager, exactly one - the budget page - puts
   its button inside the very section it re-renders while the dialog is open. The others keep theirs
   in a toolbar their handler does not touch, and the shopping menu turned out to be a non-case: the

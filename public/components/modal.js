@@ -589,6 +589,13 @@ export function rememberFocus(el) {
     // Als Attribut lesen: bei SVG ist `className` ein Objekt, kein String.
     cls: el.getAttribute?.('class') ?? null,
     data: el.dataset ? { ...el.dataset } : {},
+    // DIE ZEILE, IN DER DER KNOPF STECKT (Review zu #1070). Bei Listenzeilen
+    // traegt nicht der Knopf die Identitaet, sondern sein Vorfahre:
+    // `<div class="list-row" data-id="42"><button data-action="open-detail">`
+    // in inventory, dasselbe in pantry. Ohne diesen Anker sehen alle Zeilen
+    // gleich aus - gleicher Tag, gleiche Klasse, gleiches `data-action` - und
+    // der Fokus landete nach dem Speichern zuverlaessig auf der ERSTEN Zeile.
+    rowId: el.closest?.('[data-id]')?.dataset?.id ?? null,
   };
 }
 
@@ -612,16 +619,29 @@ function _findAgain(memo) {
     if (byId) return byId;
   }
   const keys = Object.keys(memo.data);
-  if (!keys.length) return null;
+  if (!keys.length && memo.rowId === null) return null;
+  const treffer = [];
   for (const kandidat of document.getElementsByTagName(memo.tag)) {
     if (kandidat.getAttribute('class') !== memo.cls) continue;
-    if (keys.every((k) => kandidat.dataset[k] === memo.data[k])) return kandidat;
+    if (!keys.every((k) => kandidat.dataset[k] === memo.data[k])) continue;
+    if ((kandidat.closest?.('[data-id]')?.dataset?.id ?? null) !== memo.rowId) continue;
+    treffer.push(kandidat);
+    // Zwei reichen als Beweis, dass es nicht eindeutig ist.
+    if (treffer.length > 1) break;
   }
-  return null;
+  // MEHRDEUTIG HEISST NEIN. Bleiben mehrere Kandidaten, ist keiner davon
+  // nachweislich der gesuchte, und ein falsches Fokusziel ist schlimmer als
+  // keines: es setzt den Nutzer an eine Stelle, die er nicht gewaehlt hat.
+  // Dann lieber die Seitenwurzel.
+  return treffer.length === 1 ? treffer[0] : null;
 }
 
 /**
- * Die Seitenwurzel, und zwar eine, die den Fokus auch ANNIMMT.
+ * Ein Fokusziel, das den Fokus auch ANNIMMT.
+ *
+ * Betrifft genau ein Element: die Seitenwurzel. Alles andere, was diese Weiche
+ * zurueckgibt, ist ein Knopf oder eine Zeile und damit von Natur aus
+ * fokussierbar.
  *
  * `renderAppShell()` in router.js setzt `tabIndex = -1` - aber nur fuer die
  * Routen mit App-Shell. Die fuenf Auth-Seiten (login, setup, join,
@@ -638,16 +658,18 @@ function _findAgain(memo) {
  * `hasAttribute` und nicht `el.tabIndex`: das Property liest auch ohne Attribut
  * `-1` und kann die beiden Faelle gar nicht unterscheiden (gemessen).
  */
-function _pageRoot() {
-  const root = document.getElementById(PAGE_ROOT_ID);
-  if (root && !root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
-  return root;
+function _focusable(el) {
+  if (el && el.id === PAGE_ROOT_ID && !el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  return el;
 }
 
 export function focusRestoreTarget(memo) {
   if (!memo) return null;
   if (memo.el?.isConnected) return memo.el;
-  return _findAgain(memo) ?? _pageRoot();
+  // Durch `_focusable` MUESSEN beide Wege: war der Ausloeser selbst die
+  // Seitenwurzel, liefert das Wiederfinden sie direkt zurueck, und ein
+  // Rueckgabewert daran vorbei haette wieder kein tabindex (Review zu #1069).
+  return _focusable(_findAgain(memo) ?? document.getElementById(PAGE_ROOT_ID));
 }
 
 /**

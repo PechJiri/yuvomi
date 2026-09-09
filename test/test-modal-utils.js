@@ -404,11 +404,14 @@ test('#805: .modal-panel ist auf jeder Breite der Containing Block', () => {
  * nicht ueberall fokussierbar ist: eine Attrappe, die ein tabindex immer zu
  * haben scheint, kann den Fall nie sehen - wie das `<main>` der Auth-Seiten.
  */
-function makeNode(tag, { id = '', cls = null, data = {}, connected = true, attrs = {} } = {}) {
+function makeNode(tag, { id = '', cls = null, data = {}, connected = true, attrs = {}, row = null } = {}) {
   return {
     tagName: tag.toUpperCase(), id, isConnected: connected, dataset: { ...data },
     _attrs: { ...attrs },
     getAttribute: (name) => (name === 'class' ? cls : null),
+    // Der Zeilen-Vorfahre: bei Listenzeilen traegt er die Identitaet, nicht der
+    // Knopf. `row` ist dessen data-id, oder null wenn es keinen gibt.
+    closest: (sel) => (sel === '[data-id]' && row !== null ? { dataset: { id: row } } : null),
     hasAttribute(n) { return n in this._attrs; },
     setAttribute(n, v) { this._attrs[n] = String(v); },    focus() { this._focused = true; },
   };
@@ -575,8 +578,8 @@ test('_doClose fasst nach, und das Nachfassen behaelt seine drei Wachen', () => 
  * `el.tabIndex` taugt nicht zur Pruefung: es liest auch ohne Attribut `-1`,
  * ebenfalls gemessen. Deshalb `hasAttribute`.
  *
- * GEGENPROBE: die Zeile in `_pageRoot` tot stellen, dann faellt die erste der
- * beiden Sonden.
+ * GEGENPROBE: die Zeile in `_focusable` tot stellen, dann fallen die erste und
+ * die dritte Sonde.
  */
 test('eine Seitenwurzel ohne tabindex wird fokussierbar gemacht', () => {
   const alt = makeNode('button', { id: 'irgendwas', connected: false });
@@ -599,4 +602,60 @@ test('ein vorhandenes tabindex wird nicht ueberschrieben', () => {
     focusRestoreTarget(rememberFocus(alt));
     assert.equal(wurzel._attrs.tabindex, '0',
       'eine Seite, die ihrer Wurzel bewusst ein anderes tabindex gibt, behaelt es');
-  });});
+  });
+});
+
+/* ZWEITER REVIEW-BEFUND ZU #1069: der Ausloeser KANN die Seitenwurzel sein.
+ *
+ * Ein Dialog, der geoeffnet wird, waehrend der Fokus auf `#main-content` liegt
+ * (Tastenkuerzel, programmatisches Oeffnen), merkt sich die Wurzel als
+ * Ausloeser. Beim Schliessen findet die id-Suche dann die NEUE Wurzel und gab
+ * sie direkt zurueck - am Fokussierbar-Machen vorbei. Auf einer Auth-Seite ist
+ * das wieder ein `<main>` ohne tabindex und `.focus()` wieder ein No-op.
+ */
+test('auch ein Ersatz, der selbst die Seitenwurzel ist, wird fokussierbar gemacht', () => {
+  const alt = makeNode('main', { id: 'main-content', connected: false });
+  const neueWurzel = makeNode('main', { id: 'main-content' });        // Auth-Seite: kein tabindex
+  withDom({ byId: { 'main-content': neueWurzel } }, () => {
+    const ziel = focusRestoreTarget(rememberFocus(alt));
+    assert.equal(ziel, neueWurzel, 'die neue Wurzel ist das Ziel');
+    assert.equal(ziel.hasAttribute('tabindex'), true,
+      'die id-Suche darf nicht am Fokussierbar-Machen vorbeifuehren - sonst ist `.focus()` '
+      + 'auf der Auth-Seite wieder ein stiller No-op');
+  });
+});
+
+/* REVIEW-BEFUND ZU #1070: bei Listenzeilen traegt der Knopf keine Identitaet.
+ *
+ * `<div class="list-row" data-id="42"><button class="list-row__main"
+ * data-action="open-detail">` - so bauen inventory und pantry ihre Zeilen. Tag,
+ * Klasse und `data-action` sind bei JEDER Zeile gleich; nur der Vorfahre
+ * unterscheidet sie. Ohne den Anker gewann der erste Treffer, und der Fokus
+ * landete nach dem Speichern zuverlaessig auf Zeile eins statt auf der Zeile,
+ * aus der der Dialog kam.
+ */
+test('eine Zeile wird ueber ihren Vorfahren unterschieden, nicht ueber den Knopf allein', () => {
+  const opts = { cls: 'list-row__main', data: { action: 'open-detail' } };
+  const alt   = makeNode('button', { ...opts, row: '42', connected: false });
+  const zeile1 = makeNode('button', { ...opts, row: '7' });
+  const zeile42 = makeNode('button', { ...opts, row: '42' });
+  withDom({ byTag: { BUTTON: [zeile1, zeile42] }, byId: { 'main-content': makeNode('main', { id: 'main-content' }) } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), zeile42,
+      'der Fokus gehoert der Zeile, aus der der Dialog kam - nicht der ersten der Liste');
+  });
+});
+
+/* Bleiben mehrere Kandidaten, ist keiner nachweislich der gesuchte. Dann ist
+ * die Wurzel die ehrlichere Antwort: ein falsches Fokusziel setzt den Nutzer an
+ * eine Stelle, die er nicht gewaehlt hat. */
+test('mehrdeutige Treffer werden abgelehnt statt geraten', () => {
+  const opts = { cls: 'list-row__main', data: { action: 'open-detail' } };
+  const alt = makeNode('button', { ...opts, connected: false });   // kein row-Anker
+  const a = makeNode('button', opts);
+  const b = makeNode('button', opts);
+  const wurzel = makeNode('main', { id: 'main-content' });
+  withDom({ byTag: { BUTTON: [a, b] }, byId: { 'main-content': wurzel } }, () => {
+    assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
+      'zwei gleich aussehende Zeilen: lieber die Wurzel als die falsche');
+  });
+});

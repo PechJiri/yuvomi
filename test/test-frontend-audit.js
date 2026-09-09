@@ -15727,6 +15727,31 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
     'die Pruefung steht hinter jedem await des Hauptflusses und in jedem Pfad, der selbst zeichnet');
 });
 
+/**
+ * Die Zeilen vom Anker bis zum Ende seines Blocks.
+ *
+ * Ein festes Fenster von n Zeilen reicht nicht: der Gast-Anlegen-Pfad in
+ * `split-expenses.js` schliesst den Dialog, holt dann zwei Abfragen per
+ * `Promise.all`, setzt State und rendert erst neun Zeilen spaeter. Mit einem
+ * Sechs-Zeilen-Fenster sah der Guard das Rendern nie und hielt den Handler
+ * fuer irrelevant - ein geloeschter `refocusAfterRender()` waere gruen
+ * durchgelaufen (Review zu #1070).
+ *
+ * Gelesen wird bis zur ersten Zeile, die WENIGER eingerueckt ist als der Anker:
+ * das ist das Ende des Blocks, in dem er steht. `} catch (err) {` bricht damit
+ * ab, und das ist richtig - der Fehlerzweig rendert nichts.
+ */
+function blockAb(lines, i, grenze = 40) {
+  const tiefe = lines[i].match(/^\s*/)[0].length;
+  const out = [];
+  for (let j = i + 1; j < lines.length && out.length < grenze; j++) {
+    if (lines[j].trim() === '') { out.push(lines[j]); continue; }
+    if (lines[j].match(/^\s*/)[0].length < tiefe) break;
+    out.push(lines[j]);
+  }
+  return out;
+}
+
 /* WER NACH DEM SCHLIESSEN RENDERT, MUSS DEN FOKUS NACHZIEHEN.
  *
  * `closeModal()` gibt den Fokus an den Ausloeser zurueck. Rendert der Handler
@@ -15761,7 +15786,7 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
       lines.forEach((zeile, i) => {
         if (!/closeModal\s*\(/.test(zeile)) return;
-        const fenster = lines.slice(i + 1, i + 7);
+        const fenster = blockAb(lines, i);
         let letzte = -1;
         fenster.forEach((x, k) => {
           if (/\b(render[A-Z]\w*|load[A-Z]\w*|update[A-Z]\w*List)\s*\(/.test(x)) letzte = k;
@@ -15818,7 +15843,7 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
         if (!lines.slice(s, e).some((l) => /open(Shared)?Modal\s*\(\s*\{/.test(l))) return;
         for (let j = s; j < e; j++) {
           if (!/\bawait\s+(load|refresh)[A-Z]\w*\s*\(/.test(lines[j])) continue;
-          const fenster = lines.slice(j + 1, j + 4);
+          const fenster = blockAb(lines, j);
           if (!fenster.some((x) => /\b(render[A-Z]\w*|update[A-Z]\w*List)\s*\(/.test(x))) continue;
           // closeModal dazwischen: der synchrone Fall, den der Frame abdeckt.
           if (fenster.some((x) => /closeModal\s*\(/.test(x))) continue;
