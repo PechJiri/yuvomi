@@ -467,6 +467,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Save confirmations preserve entered values on validation or server errors. Outlook checks actual
   writable push targets before accepting linked-series auto-sync, and MCP upcoming results retain
   their unrestricted future horizon while recurrence generation stops at the requested result count.
+  ICS deletion exceptions keep the series' local time across daylight-saving changes even when
+  the stored UTC day differs; each exception needs at most three local-date candidates, not a series scan.
 
 ## [2.65.1] - 2026-09-08
 

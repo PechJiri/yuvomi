@@ -705,9 +705,27 @@ test('buildFeed: TZID-EXDATE nutzt bei negativem Mitternachtsversatz den DST-kor
   const id = d2.prepare(`INSERT INTO calendar_events (title,start_datetime,all_day,external_source,recurrence_rule,tzid,created_by) VALUES ('LosAngelesTZEx','2026-03-08T01:30:00Z',0,'apple','FREQ=DAILY;COUNT=4',?, ?)`).run('America/Los_Angeles', u1).lastInsertRowid;
   d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?, '2026-03-09')`).run(id);
   const ics = buildFeed(d2, u1, NOW, FEED_TZ);
-  assert(ics.includes('EXDATE;TZID=America/Los_Angeles:20260308T183000'), 'EXDATE muss den DST-korrigierten Basis-Instant nutzen: ' + ics);
+  // 08.03. 01:30Z ist am Serienanfang 07.03. 17:30 PST. Nach dem
+  // DST-Wechsel bleibt die Wanduhr bei 17:30, nicht beim alten UTC-Suffix.
+  assert(ics.includes('EXDATE;TZID=America/Los_Angeles:20260308T173000'), 'EXDATE muss den DST-korrigierten Basis-Instant nutzen: ' + ics);
   d2.prepare(`DELETE FROM calendar_events WHERE id = ?`).run(id);
 });
+
+for (const { zone, start, dateKey, expected } of [
+  { zone: 'America/Los_Angeles', start: '2026-10-31T00:30:00Z', dateKey: '2026-11-02', expected: '20261101T173000' },
+  { zone: 'Pacific/Auckland', start: '2026-04-03T22:30:00Z', dateKey: '2026-04-05', expected: '20260406T113000' },
+]) {
+  test(`buildFeed: EXDATE behaelt die Wanduhr ueber das DST-Ende in ${zone}`, () => {
+    const id = d2.prepare(`INSERT INTO calendar_events (title,start_datetime,all_day,external_source,recurrence_rule,tzid,created_by) VALUES ('DSTEndEx',?,0,'apple','FREQ=DAILY;COUNT=4',?,?)`).run(start, zone, u1).lastInsertRowid;
+    try {
+      d2.prepare('INSERT INTO calendar_event_exceptions (event_id,exception_date) VALUES (?,?)').run(id, dateKey);
+      const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+      assert(ics.includes(`EXDATE;TZID=${zone}:${expected}`), 'EXDATE muss die lokale Serienzeit behalten: ' + ics);
+    } finally {
+      d2.prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
+    }
+  });
+}
 
 test('buildFeed: unerreichbare TZID-EXDATE bleibt exportierbar statt den Feed zu beenden', () => {
   const id = d2.prepare(`INSERT INTO calendar_events (title,start_datetime,all_day,external_source,recurrence_rule,tzid,created_by) VALUES ('LegacyTZEx','2025-09-26T05:25:00Z',0,'apple','FREQ=WEEKLY;COUNT=1',?, ?)`).run('Europe/Berlin', u1).lastInsertRowid;
