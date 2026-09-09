@@ -1098,3 +1098,36 @@ test('ein geloeschter Artikel bucht seinen Zaehler nicht doppelt zurueck', async
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
 });
+
+test('offline zurueck zu Liste A zeigt A, nicht die liegengebliebenen Artikel von B', async () => {
+  // A laden, zu B wechseln, offline zurueck zu A. Die gecachte A-Antwort wurde
+  // abgelehnt, weil A einmal netzfrisch geladen war - und `switchList` loescht
+  // danach den Fehler und zeichnet die noch liegenden Artikel von B unter dem
+  // Reiter von A. Ohne Meldung, und jede Aktion traf ab da die falsche Liste
+  // (Codex-Befund P1 zu PR #1072, neunte Runde).
+  resetShoppingState();
+  __test.state.lists = [
+    { id: 1, name: 'A', item_total: 1, item_checked: 0 },
+    { id: 2, name: 'B', item_total: 1, item_checked: 0 },
+  ];
+  const aWare = { ...milk(0), id: 10, name: 'Milch' };
+  const bWare = { ...milk(0), id: 20, name: 'Brot' };
+
+  const antworten = [
+    async () => ({ data: { data: [aWare] }, fromCache: false }),   // A, netzfrisch
+    async () => ({ data: { data: [bWare] }, fromCache: false }),   // B, netzfrisch
+    async () => ({ data: { data: [aWare] }, fromCache: true }),    // A, offline
+  ];
+  globalThis.__apiStub = { getWithSource: () => antworten.shift()() };
+
+  __test.state.activeListId = 1; await __test.loadItems(1);
+  assert.deepEqual(__test.state.items.map((i) => i.id), [10]);
+
+  __test.state.activeListId = 2; await __test.loadItems(2);
+  assert.deepEqual(__test.state.items.map((i) => i.id), [20]);
+
+  __test.state.activeListId = 1; await __test.loadItems(1);
+  assert.deepEqual(__test.state.items.map((i) => i.id), [10],
+    'die gecachte A-Antwort gehoert angewandt, solange der Bestand einer anderen Liste gehoert');
+  delete globalThis.__apiStub;
+});

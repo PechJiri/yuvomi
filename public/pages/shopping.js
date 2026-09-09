@@ -332,6 +332,17 @@ const settledAt = new Map();
  */
 let _loadSeq = 0;
 const _appliedLoad = new Map();
+/**
+ * Zu welcher Liste `state.items` gerade gehoert.
+ *
+ * `_appliedLoad` merkt sich je Liste, ob schon etwas Netzfrisches ankam -
+ * `state.items` haelt aber immer nur EINE Liste. Ohne diese Unterscheidung
+ * lehnte die Cache-Wache unten die gecachte Antwort fuer A ab, weil A irgendwann
+ * einmal geladen war, und `switchList` zeichnete danach die noch liegenden
+ * Artikel von B unter dem Reiter von A - ohne Fehlermeldung, und jede weitere
+ * Aktion traf die falsche Liste.
+ */
+let _itemsListId = null;
 
 /** Was die Zeile ZEIGT: die Absicht, sonst der Serverstand. */
 function checkedOf(item) {
@@ -2264,7 +2275,10 @@ async function loadItems(listId) {
   // Rueckschritt - offline gehoert der zuletzt bekannte Stand auf den Schirm,
   // nicht ein aelterer. Nur wenn noch gar nichts geladen wurde, ist sie das
   // Beste, was es gibt.
-  if (fromCache && _appliedLoad.has(listId)) return;
+  // ... aber nur, wenn `state.items` diese Liste ueberhaupt zeigt. Gehoert der
+  // Bestand einer anderen, ist die gecachte Antwort das Beste, was es gibt -
+  // und allemal besser als die Artikel der falschen Liste.
+  if (fromCache && _appliedLoad.has(listId) && _itemsListId === listId) return;
   if (!fromCache) _appliedLoad.set(listId, startedAt);
 
   // `state.items` traegt NUR den Serverstand - die Absichten liegen daneben und
@@ -2284,6 +2298,7 @@ async function loadItems(listId) {
     }
   }
   state.items = frisch;
+  _itemsListId = listId;
   settleIntents(state.items, listId, { fromCache, startedAt });
   state.activeList = data.list ?? null;
   // Kategorien aus API-Antwort übernehmen wenn vorhanden (immer aktuell)
@@ -2839,5 +2854,5 @@ export const __test = {
   // Die Ladeordnung ueberlebt sonst von Test zu Test: `_loadSeq` waechst
   // global, und eine Wasserstandsmarke aus einem frueheren Fall verwirft die
   // Auffrischung des naechsten. Aufraeumen gehoert an den ANFANG jedes Falls.
-  resetLoadOrderForTest: () => { _appliedLoad.clear(); settledAt.clear(); },
+  resetLoadOrderForTest: () => { _appliedLoad.clear(); settledAt.clear(); _itemsListId = null; },
 };
