@@ -2173,9 +2173,10 @@ test('Shopping uses the shared category manager component (Audit F-15)', () => {
   assert.match(shopping, /basePath: '\/shopping\/categories'/);
   assert.match(shopping, /shopping\.manageCategories/);
   assert.match(shopping, /category-manager-changed/);
-  // onClose muss den Listener wieder abräumen (kein Leak bei Modal-Reuse).
+  // Die Auffrischung steht im Ereignis-Handler, nicht in onClose - warum, sagt
+  // die Schwesterregel weiter unten („kein Nutzer ... meldet sich ab").
   const openMgr = shopping.match(/async function openCategoryManager[\s\S]*?\n\}/)?.[0] ?? '';
-  assert.match(openMgr, /manager\?\.removeEventListener\('category-manager-changed'/);
+  assert.match(openMgr, /const onCategoriesChanged = async \(\) => \{[\s\S]*?loadCategories\(\)/);
 
   // Die frühere Shopping-Sonderkomponente ist entfernt — kein Duplikat mehr.
   assert.equal(existsSync(new URL('../public/components/shopping-category-manager.js', import.meta.url)), false);
@@ -10127,6 +10128,42 @@ test('jeder Nutzer des Category-Managers liefert seinen eigenen Folgentext', () 
   assertKeysExistInEveryLocale([...keys]);
   const zuKnapp = [...keys].filter((key) => laenge(key) < 80);
   assert.deepEqual(zuKnapp, [], 'zu knapp fuer eine Folgenbeschreibung');
+});
+
+// Schwesterregel zur Delegation oben: derselbe Kreis von Aufrufern, dieselbe
+// Bauart des Guards (Bestand suchen, nicht Namen kennen) - nur geht es hier
+// nicht um den Text, sondern um den Zeitpunkt.
+//
+// Gemessen am 08.09.2026 im laufenden Browser: beim Loeschen fragt die
+// Komponente ueber `confirmOverModal`, und das schliesst nach einem Ja das Modal
+// darunter gleich mit ab (`closeModal({ force: true })`), BEVOR es zurueckkehrt.
+// `api.delete` laeuft erst danach, das `category-manager-changed` kommt also,
+// wenn das Element schon aus dem Dokument ist (`document.contains(el)` false).
+//
+// Wer sich in onClose abmeldet, verpasst damit ausgerechnet die Loeschung - die
+// einzige Mutation, nach der ein veralteter lokaler Stand dem Nutzer etwas
+// anbietet, das der Server nicht mehr kennt. Sieben Aufrufer taten das, bis auf
+// den Laden-Manager im Einkauf. Ein Leck droht durch das Weglassen nicht: das
+// Element entsteht je Oeffnen neu und wird mit dem Overlay verworfen.
+test('kein Nutzer des Category-Managers meldet sich vom Aenderungs-Ereignis ab', () => {
+  const nutzer = walkJsFiles('../public/').filter((file) => (
+    file !== '../public/components/category-manager.js' && read(file).includes('yuvomi-category-manager')
+  ));
+
+  // Faellt die Erkennung aus, soll der Test das sagen und nicht still bestehen.
+  assert.ok(nutzer.length >= 5, `nur ${nutzer.length} Nutzer des Category-Managers gefunden`);
+
+  for (const file of nutzer) {
+    const src = withoutBlockComments(read(file)).replace(/^\s*\/\/.*$/gm, '');
+    const label = file.slice('../public/'.length);
+    // Erst der Gegen-Nachweis, dass ueberhaupt noch jemand zuhoert: ein Aufrufer,
+    // der An- UND Abmeldung streicht, kaeme sonst gruen durch.
+    assert.match(src, /addEventListener\(\s*'category-manager-changed'/,
+      `${label}: bindet den Category-Manager ein, hoert aber nicht auf seine Aenderungen`);
+    assert.doesNotMatch(src, /removeEventListener\(\s*'category-manager-changed'/,
+      `${label}: meldet sich vom Aenderungs-Ereignis ab und verpasst damit das Loeschen - `
+      + 'die Auffrischung gehoert in den Ereignis-Handler, siehe `_notifyChanged` in der Komponente');
+  }
 });
 
 // Die fuenf Dialoge aus dem urspruenglichen Befund bleiben namentlich verankert:

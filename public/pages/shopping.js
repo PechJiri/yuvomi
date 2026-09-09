@@ -2325,20 +2325,27 @@ function openStoreManager(container) {
 async function openCategoryManager(container, { fromDeepLink = false } = {}) {
   const { openModal } = await import('/components/modal.js');
 
-  let changed = false;
   // Die geteilte Komponente (Audit F-15) dispatcht ohne Detail — der lokale
   // State wird nach jeder Mutation frisch vom Server geladen.
+  //
+  // Und wie beim Laden-Manager oben haengt die Auffrischung am Ereignis, nicht
+  // am Schliessen: beim Loeschen raeumt `confirmOverModal` das Modal darunter
+  // ab, bevor `api.delete` laeuft. Ein in onClose ausgewerteter `changed`-Merker
+  // stuende genau dann auf false, und die sichtbare Liste behielte ihre
+  // Gruppierung nach einer Kategorie, die es nicht mehr gibt.
   const onCategoriesChanged = async () => {
-    changed = true;
     await loadCategories();
+    if (state.activeList) {
+      renderListContent(container);
+      wireListContentEvents(container);
+    }
   };
 
-  let manager = null;
   openModal({
     title: t('shopping.manageCategories'),
     content: '<yuvomi-category-manager></yuvomi-category-manager>',
     onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-category-manager');
+      const manager = panel.querySelector('yuvomi-category-manager');
       if (!manager) return;
       manager.addEventListener('category-manager-changed', onCategoriesChanged);
       manager.configure({
@@ -2351,15 +2358,10 @@ async function openCategoryManager(container, { fromDeepLink = false } = {}) {
         deleteDetailKey: 'shopping.categoryDeleteConfirmDetail',
       });
     },
+    // onClose traegt nur noch, was wirklich am Schliessen haengt. Kein
+    // Listener-Abmelden: das liefe vor dem Loeschen, und das Element entsteht
+    // je Oeffnen neu und geht mit dem Overlay.
     onClose: () => {
-      // Listener-Cleanup, damit beim Modal-Reuse kein Leak entsteht.
-      manager?.removeEventListener('category-manager-changed', onCategoriesChanged);
-      manager = null;
-      // Bei Mutationen die sichtbare Liste neu aufbauen (Gruppierung/Quick-Add-Select).
-      if (changed && state.activeList) {
-        renderListContent(container);
-        wireListContentEvents(container);
-      }
       // Deep-Link-Query entfernen, wenn der Manager über die URL geöffnet wurde.
       if (fromDeepLink && new URLSearchParams(window.location.search).has('manage')) {
         window.yuvomi?.navigate?.('/shopping');

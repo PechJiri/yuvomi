@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Deleting a category now updates the page behind the dialog**. Every module that offers
+  "manage categories" kept showing the category you had just deleted: the filter chips in Contacts,
+  the grouping in Shopping, the storage locations in Pantry, the places and categories in Inventory,
+  plus Tasks and Budget. The server had deleted it, the screen had not noticed, and picking the
+  stale entry afterwards ran into an error from a category that no longer existed. A reload fixed
+  it, which is how it stayed hidden.
+
+  The cause was a matter of order. Confirming the deletion closes the dialog first and sends the
+  request second, so the "something changed" signal arrived after each page had already stopped
+  listening. Refreshing now happens when the change actually lands rather than when the dialog
+  closes. Adding and renaming were never affected.
+
 - **Paying extra on a loan now shortens the remaining term, not only the balance** (#964). Since
   #954 the remaining principal follows the money you actually paid, but the remaining term beside it
   stayed plan-based and still said 100 installments after you had doubled a payment - the exact
