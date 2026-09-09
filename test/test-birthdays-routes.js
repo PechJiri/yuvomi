@@ -9,6 +9,12 @@
  *        (syncAllBirthdayReminders materialisiert calendar_events), Löschung mit
  *        Artefakt-Aufräumen (calendar_events + reminders), /meta/options.
  *
+ *        EINE Ausnahme vom Route-Fokus steht am Dateiende: der Erinnerungs-
+ *        zeitpunkt aus `syncBirthdayReminder` muss der Haushaltszone folgen, und
+ *        das lässt sich über die Route nicht prüfen - sie reicht `new Date()`
+ *        weiter, der Test braucht aber einen festen Zeitpunkt. Er ruft den
+ *        Service deshalb direkt.
+ *
  *        Systemuhr: die Handler rufen den Service mit Default `from = new Date()`.
  *        Um nicht an die Uhr zu koppeln, werden taktunabhängige Invarianten
  *        geprüft (next_birthday endet auf der Geburts-MM-DD), Sortierung über
@@ -27,8 +33,26 @@ import express from 'express';
 
 const dbmod = await import('../server/db.js');
 const { default: birthdaysRouter } = await import('../server/routes/birthdays.js');
-const { daysUntilBirthday, nextBirthdayAge } = await import('../server/services/birthdays.js');
+const {
+  daysUntilBirthday,
+  deleteBirthdayArtifacts,
+  nextBirthdayAge,
+  syncBirthdayArtifacts,
+} = await import('../server/services/birthdays.js');
 const db = dbmod.get();
+
+// Die Haushaltszone steht still, statt vom Rechner geerbt zu werden. Sie wird auf
+// die Zone der MASCHINE genagelt, nicht auf UTC: die Orakel dieser Suite rechnen
+// über die Default-Parameter der Service-Helfer (`todayKey(null)`), also in der
+// Serverzone, während die Routen `todayKey(database)` lesen. Setzte man den
+// Haushalt auf UTC, drifteten beide zwischen Mitternacht und dem UTC-Offset
+// auseinander und `days_until` wäre dort um eins daneben.
+//
+// Der Eintrag ist trotzdem kein Selbstzweck: er ist der definierte Ausgangswert,
+// zu dem die Zonenprobe am Dateiende zurückkehrt (siehe dort).
+const HOUSEHOLD_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+db.prepare('INSERT OR REPLACE INTO sync_config (key, value) VALUES (?, ?)')
+  .run('household_timezone', HOUSEHOLD_TIMEZONE);
 
 const USER = db.prepare(`INSERT INTO users (username, display_name, password_hash, role) VALUES ('u','U','x','member')`).run().lastInsertRowid;
 
@@ -388,4 +412,73 @@ test('GET /meta/options: liefert Foto-Limit + akzeptierte Bildtypen', async () =
   assert.equal(r.status, 200);
   assert.equal(r.body.data.photoMaxBytes, 6_990_507);
   assert.deepEqual(r.body.data.acceptedImageTypes, ['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+});
+
+// --------------------------------------------------------------------------
+// Erinnerungszeitpunkt: die Zone des Haushalts, nicht die der Maschine
+// --------------------------------------------------------------------------
+/* Diese Probe verschiebt die Haushaltszone BEWUSST - sonst bliebe die Suite
+ * gegen genau die Fehlerklasse blind, die sie sehen müsste.
+ *
+ * `syncBirthdayReminder` liest zwei Dinge aus dem Haushalt, nicht aus der
+ * Maschine (#829): den Stichtag (`todayKey(database, from)`) und die Zone, in
+ * der "mittags" mittags ist (`householdTimeZone(database)`). Gemessen am
+ * 2026-09-09 gegen main: ersetzt man eines der beiden durch seine
+ * `null`-Fassung - also durch die Serverzone -, bleiben SECHZEHN Suiten grün:
+ * die vier naheliegenden (birthdays-routes, birthday-import,
+ * birthday-localization, dashboard), die Erinnerungs-Suiten (reminders,
+ * reminders-routes, reminder-offset, multi-reminders, event-reminder-fanout,
+ * notifications), der Zonen-Guard selbst (household-timezone) und die übrigen
+ * Aufrufer von `syncBirthdayArtifacts` (split-expenses-routes, family-routes,
+ * family-contacts, housekeeping-routes, setup). Alle blind.
+ *
+ * Die Form, die das nicht sein kann: EIN fester Zeitpunkt, zweimal gelesen,
+ * beiderseits der Datumsgrenze. 2026-01-01T11:00Z ist in Honolulu (-10) noch
+ * der 1. Januar, in Kiritimati (+14) schon der 2. - und der Geburtstag liegt
+ * auf dem 1. Januar. Also:
+ *
+ *   Honolulu    Stichtag 2026-01-01 → nächster 2026-01-01 → Mittag = 22:00Z
+ *   Kiritimati  Stichtag 2026-01-02 → nächster 2027-01-01 → Mittag = 22:00Z
+ *
+ * Ein Jahr Abstand aus demselben Zeitpunkt. Beide Erwartungen sind Literale,
+ * und keine Maschinenzone erfüllt sie zugleich: die erste verlangt Offset -10,
+ * die zweite +14, und im Lauf ist die Serverzone konstant. Wer statt des
+ * Haushalts die Maschine liest, fällt deshalb in JEDER Zone durch - eine der
+ * beiden Zeilen trifft ihn immer. Dasselbe gilt für den Zonenleser: 22:00Z
+ * mittags gibt es nur bei -10, und einen Mittag des 2027-01-01 um 2026-12-31
+ * 22:00Z nur bei +14.
+ */
+test('die Erinnerung folgt der Haushaltszone, nicht der des Servers', () => {
+  const rowId = db.prepare('INSERT INTO birthdays (name, birth_date, created_by) VALUES (?, ?, ?)')
+    .run('Zonenprobe', '1990-01-01', USER).lastInsertRowid;
+  const FROM = new Date('2026-01-01T11:00:00Z');
+
+  const remindAtWithHouseholdIn = (zone) => {
+    db.prepare('INSERT OR REPLACE INTO sync_config (key, value) VALUES (?, ?)')
+      .run('household_timezone', zone);
+    const row = db.prepare('SELECT * FROM birthdays WHERE id = ?').get(rowId);
+    const synced = syncBirthdayArtifacts(db, row, FROM);
+    return db.prepare(`
+      SELECT remind_at FROM reminders
+      WHERE entity_type = 'event' AND entity_id = ? AND dismissed = 0
+    `).get(synced.calendar_event_id)?.remind_at;
+  };
+
+  try {
+    assert.equal(
+      remindAtWithHouseholdIn('Pacific/Honolulu'),
+      '2026-01-01T22:00:00.000Z',
+      'in Honolulu ist der Zeitpunkt noch der 1. Januar - erinnert wird heute mittag, dort',
+    );
+    assert.equal(
+      remindAtWithHouseholdIn('Pacific/Kiritimati'),
+      '2026-12-31T22:00:00.000Z',
+      'in Kiritimati ist derselbe Zeitpunkt schon der 2. Januar - der Geburtstag ist vorbei, erinnert wird nächstes Jahr',
+    );
+  } finally {
+    db.prepare('INSERT OR REPLACE INTO sync_config (key, value) VALUES (?, ?)')
+      .run('household_timezone', HOUSEHOLD_TIMEZONE);
+    deleteBirthdayArtifacts(db, db.prepare('SELECT * FROM birthdays WHERE id = ?').get(rowId));
+    db.prepare('DELETE FROM birthdays WHERE id = ?').run(rowId);
+  }
 });
