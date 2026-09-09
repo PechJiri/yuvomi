@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { eachRule } from './css-rules.js';
 
 // /i18n.js wird durch test-browser-loader.mjs gemockt (--loader Flag)
-const { wireBlurValidation, btnSuccess, btnError } = await import('../public/components/modal.js');
+const { wireBlurValidation, btnSuccess, btnError, focusRestoreTarget } = await import('../public/components/modal.js');
 
 // matchMedia und document.createElementNS werden von btnSuccess/btnError benötigt
 global.matchMedia = () => ({ matches: false });
@@ -35,6 +35,9 @@ global.document = {
   createElementNS: (_ns, tag) => _makeSvgEl(tag),
   // _ensureFieldError legt die Fehlermeldung als <p> an.
   createElement: (tag) => ({ tagName: tag.toUpperCase(), className: '', id: '', textContent: '' }),
+  // Der Focus-Restore sucht ueber id nach einem Ersatz; die Sonden unten
+  // bestuecken das je Fall, der Standard findet nichts.
+  getElementById: () => null,
 };
 
 const _origSetTimeout = setTimeout;
@@ -362,4 +365,137 @@ test('#805: .modal-panel ist auf jeder Breite der Containing Block', () => {
     + `Media-Query (gefunden in: ${regeln.map((r) => r.at.join(' ') || 'Basis').join(' | ') || 'keiner Regel'}). `
     + 'Sonst haengen absolut positionierte Nachfahren am .modal-overlay statt am Panel (#805).',
   );
+});
+
+// --------------------------------------------------------
+// Focus-Restore, wenn der Ausloeser waehrenddessen ausgetauscht wurde
+// --------------------------------------------------------
+
+/* WARUM EIN VERHALTENSTEST UND KEIN QUELLTEXT-GUARD: der Fehler steckt nicht in
+ * der Schreibweise, sondern in der FRAGE, welches Element am Ende den Fokus
+ * bekommt. Ein Guard auf „prueft isConnected" bliebe gruen, wenn die Pruefung da
+ * stuende und der Rueckfall trotzdem `document.body` traefe - und genau das war
+ * der Befund: `.focus()` auf einem abgehaengten Knoten ist ein No-op, ohne
+ * Fehler und ohne Spur. Die Sonden unten messen deshalb das ERGEBNIS.
+ *
+ * Gemessen wird `focusRestoreTarget()` und nicht der volle Weg
+ * oeffnen-austauschen-schliessen: der braeuchte ein echtes DOM samt
+ * HTML-Parser fuer `insertAdjacentHTML`, und das Projekt haelt sich bewusst
+ * frei von jsdom. Die Entscheidung, um die es geht, liegt vollstaendig in
+ * dieser Funktion; dass `_doClose` sie auch wirklich benutzt, haelt die letzte
+ * Sonde fest.
+ *
+ * ZWEI GEGENPROBEN, beide durchgefuehrt, beide durch TOT STELLEN statt Loeschen
+ * - ein entferntes Stueck Code haette nur einen ReferenceError geworfen und
+ * nichts ueber die Sache bewiesen:
+ *
+ *   1. Rueckfall tot: in `focusRestoreTarget` ein `return remembered;` vor die
+ *      `isConnected`-Weiche, die Funktion also auf das alte Verhalten
+ *      zurueckgenommen. Gemessen 4 von 26 rot - alle vier Rueckfall-Sonden,
+ *      waehrend der Normalfall gruen blieb (richtig: den deckt das alte
+ *      Verhalten mit ab).
+ *   2. Verdrahtung tot: `_doClose` fokussiert wieder direkt `previouslyFocused`,
+ *      die Funktion bleibt vollstaendig stehen und ungenutzt. Gemessen 1 von 26
+ *      rot - genau die Verdrahtungs-Sonde. Ohne sie waere Fassung 2 gruen
+ *      durchgelaufen, mit einer geprueften Funktion, die niemand aufruft.
+ */
+
+/** Schlanke Element-Attrappe: mehr als id und isConnected liest die Funktion nicht. */
+function makeNode(id, { connected = true } = {}) {
+  return { id, isConnected: connected, focus() { this._focused = true; } };
+}
+
+/** Bestueckt `document.getElementById` fuer die Dauer eines Falls. */
+function withElements(byId, fn) {
+  const vorher = global.document.getElementById;
+  global.document.getElementById = (id) => byId[id] ?? null;
+  try { return fn(); } finally { global.document.getElementById = vorher; }
+}
+
+test('der Fokus geht auf den Ausloeser zurueck, solange er im Dokument haengt', () => {
+  const knopf = makeNode('budget-manage-categories');
+  withElements({}, () => {
+    assert.equal(focusRestoreTarget(knopf), knopf,
+      'ein lebender Ausloeser bleibt das Ziel - der Rueckfall darf den Normalfall nicht umleiten');
+  });
+});
+
+/* DER GEMELDETE FALL. Der Knopf `#budget-manage-categories` liegt in
+ * `#budget-body` - genau dem Bereich, den `renderBody()` austauscht, und der
+ * Kategorie-Manager ruft `renderBody()` nach jeder Mutation. Nach Anlegen,
+ * Umbenennen oder Sortieren zeigt der gemerkte Zeiger auf den abgehaengten
+ * alten Knopf, waehrend der neue an derselben Stelle steht. */
+test('ein ausgetauschter Ausloeser wird ueber seine id wiedergefunden', () => {
+  const alt  = makeNode('budget-manage-categories', { connected: false });
+  const neu  = makeNode('budget-manage-categories');
+  const wurzel = makeNode('main-content');
+  withElements({ 'budget-manage-categories': neu, 'main-content': wurzel }, () => {
+    assert.equal(focusRestoreTarget(alt), neu,
+      'steht unter derselben id ein lebendes Element, gehoert ihm der Fokus - '
+      + 'sonst faellt er auf document.body und die Position in der Seite ist weg');
+  });
+});
+
+/* Ohne id ist nichts wiederzufinden: von den sieben Nutzern des
+ * Kategorie-Managers geben nur drei ihrem Ausloeser eine id - inventory (2x)
+ * und pantry haengen den Handler an `data-action`, shopping an einem
+ * Popover-Trigger. Die Seitenwurzel ist dann kein guter Platz, aber ein Platz
+ * IN der Seite.
+ *
+ * Diese Stufe ist Vorsorge: gemessen ist heute keiner der id-losen Ausloeser
+ * betroffen, sie alle liegen in einer Toolbar, die ihr Handler nicht anfasst.
+ * Sie faengt den naechsten, der dazukommt - der Ausfall waere sonst wieder
+ * still. */
+test('ohne id faellt der Fokus auf die Seitenwurzel, nicht auf document.body', () => {
+  const alt = makeNode('', { connected: false });
+  const wurzel = makeNode('main-content');
+  withElements({ 'main-content': wurzel }, () => {
+    assert.equal(focusRestoreTarget(alt), wurzel,
+      'ein Ausloeser ohne id muss auf #main-content zurueckfallen - '
+      + 'document.body ist kein Fokusziel, sondern das Fehlen eines Fokus');
+  });
+});
+
+test('verschwundener Ausloeser ohne Ersatz landet ebenfalls auf der Seitenwurzel', () => {
+  const alt = makeNode('contacts-manage-cats', { connected: false });
+  const wurzel = makeNode('main-content');
+  // Die id ist da, aber unter ihr steht nichts mehr - der Bereich wurde ohne
+  // diesen Knopf neu aufgebaut.
+  withElements({ 'main-content': wurzel }, () => {
+    assert.equal(focusRestoreTarget(alt), wurzel,
+      'findet die id-Suche nichts, bleibt die Seitenwurzel');
+  });
+});
+
+/* Anmelde- und Setup-Seiten laufen ohne die App-Shell, es gibt dort kein
+ * `#main-content`. Der Rueckfall muss dann `null` liefern statt zu werfen:
+ * `_doClose` fokussiert einfach nichts, also genau das alte Verhalten. */
+test('ohne Seitenwurzel liefert der Rueckfall null statt zu werfen', () => {
+  const alt = makeNode('setup-btn', { connected: false });
+  withElements({}, () => {
+    assert.equal(focusRestoreTarget(alt), null,
+      'ausserhalb der App-Shell (Anmeldung, Setup) gibt es keine Wurzel - dann ohne Ziel schliessen');
+  });
+});
+
+test('ohne gemerkten Ausloeser bleibt es bei null', () => {
+  withElements({ 'main-content': makeNode('main-content') }, () => {
+    assert.equal(focusRestoreTarget(null), null,
+      'wurde nie ein Ausloeser gemerkt, gibt es auch nichts zurueckzugeben');
+  });
+});
+
+/* DIE VERDRAHTUNG. Die Sonden oben pruefen die Entscheidung; diese haelt fest,
+ * dass `_doClose` sie auch stellt. Ohne sie bliebe die Suite gruen, waehrend
+ * der Schliesspfad weiter direkt auf dem gemerkten Zeiger fokussiert - die
+ * Funktion waere dann geprueft und ungenutzt. */
+test('_doClose fokussiert das Ergebnis des Rueckfalls, nicht den gemerkten Zeiger', () => {
+  const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
+  const doClose = src.match(/function _doClose\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(doClose, '_doClose nicht gefunden');
+  assert.match(doClose, /focusRestoreTarget\(previouslyFocused\)/,
+    '_doClose muss das Fokusziel ueber focusRestoreTarget() bestimmen');
+  assert.doesNotMatch(doClose, /previouslyFocused\.focus\(/,
+    '_doClose darf nicht mehr direkt auf dem gemerkten Zeiger fokussieren - '
+    + 'genau dieser Aufruf ist auf einem abgehaengten Knoten ein stiller No-op');
 });
