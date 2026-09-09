@@ -1052,3 +1052,40 @@ test('ein Fehlschlag nach dem Listenwechsel dreht den Zaehler der URSPRUNGSLISTE
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
 });
+
+test('ein geloeschter Artikel bucht seinen Zaehler nicht doppelt zurueck', async () => {
+  // Abhaken, sofort loeschen, dann scheitert der PATCH. Das Loeschen hat den
+  // Zaehler schon korrigiert; ohne Raeumung des Merkers buchte der Fehlschlag
+  // ein zweites Mal und hinterliess `item_checked: -1` (Codex-Befund P2 zu
+  // PR #1072, siebte Runde - Folge der Zaehlerbuchung aus der sechsten).
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.activeListId = 1;
+  __test.state.items = [milk(0)];
+
+  global.window.yuvomi.showToast = () => {};
+  const tor = deferred();
+  globalThis.__apiStub = {
+    getWithSource: async () => ({ data: { data: [] }, fromCache: false }),
+    patch: () => tor.promise,
+    delete: async () => ({ data: null }),
+  };
+
+  const abhaken = __test.toggleShoppingItem(10, 0, makeNullContainer());
+  assert.equal(__test.state.lists[0].item_checked, 1);
+
+  __test.deleteItemUndoable(10, makeNullContainer());
+  assert.equal(__test.state.lists[0].item_total, 0);
+  assert.equal(__test.state.lists[0].item_checked, 0, 'das Loeschen hat schon korrigiert');
+  assert.equal(__test.pendingChecks.size, 0, 'ein geloeschter Artikel hat keinen offenen Vorgang');
+
+  tor.promise.catch(() => {});
+  tor.resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
+  await abhaken;
+
+  assert.equal(__test.state.lists[0].item_checked, 0,
+    'der Fehlschlag darf nicht ein zweites Mal buchen');
+  delete globalThis.__apiStub;
+  delete global.window.yuvomi.showToast;
+});

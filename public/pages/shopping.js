@@ -458,6 +458,26 @@ async function toggleShoppingItem(id, checked, container) {
 function deleteItemUndoable(id, container) {
   const item     = state.items.find((i) => i.id === id);
   const snapshot = item ? { ...item } : null;
+  // Was der Zaehler fuer diesen Artikel GERADE fuehrt: der optimistische Wert.
+  // Festgehalten, bevor der Schnappschuss unten auf den bestaetigten gezogen
+  // wird - abgezogen werden muss, was gebucht IST, nicht was gelten soll.
+  const gebucht  = Boolean(item?.is_checked);
+  // EIN GELOESCHTER ARTIKEL HAT KEINEN AUSSTEHENDEN ABHAK-VORGANG MEHR.
+  //
+  // Der Merker bliebe sonst liegen, und der Fehlschlag seines PATCH buchte den
+  // Zaehler ein zweites Mal zurueck - die Loeschung hat ihn ja schon korrigiert.
+  // Gemessen an einer einelementigen Liste: abhaken, sofort loeschen, PATCH
+  // scheitert, und der Reiter stand auf `item_total: 0, item_checked: -1`.
+  //
+  // Der Schnappschuss traegt dabei den letzten SERVERBESTAETIGTEN Wert, nicht
+  // den optimistischen: der Server hat den gescheiterten PATCH nicht gesehen,
+  // und ein Zurueckholen legte sonst einen Stand in die Liste, den es dort nie
+  // gab. Steht der Vorgang noch aus, ist genau das die Grundlage im Merker.
+  const offen = pendingChecks.get(id);
+  if (offen) {
+    if (snapshot && offen.settledAt == null) snapshot.is_checked = offen.rollback ?? snapshot.is_checked;
+    pendingChecks.delete(id);
+  }
   // DIE LISTE GEHOERT ZUR AKTION, NICHT ZUM ZEITPUNKT DER RUECKNAHME. Das
   // Undo-Fenster ist fuenf Sekunden lang, und ein Listenwechsel darin tauscht
   // `state.items` samt `state.activeListId` aus. Wer danach zurueckholte, legte
@@ -469,7 +489,7 @@ function deleteItemUndoable(id, container) {
   // Optimistisch entfernen
   state.items = state.items.filter((i) => i.id !== id);
   updateItemsList(container);
-  updateListCounter(listId, -1, snapshot?.is_checked ? -1 : 0);
+  updateListCounter(listId, -1, gebucht ? -1 : 0);
   renderTabs(container);
 
   scheduleUndoableDelete({
@@ -2787,4 +2807,5 @@ export const __test = {
   toggleShoppingItem,
   loadItems,
   pendingChecks,
+  deleteItemUndoable,
 };

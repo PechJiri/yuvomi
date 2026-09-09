@@ -48,7 +48,7 @@ function withKnown({ categories = [], tags = [], users = [], loadError = null, f
   tasks.state.allTags = tags.map((tag) => ({ tag, count: 1 }));
   tasks.state.users = users.map((id) => ({ id, display_name: `U${id}` }));
   tasks.state.loadError = loadError;
-  tasks.state.metaFromCache = fromCache;
+  tasks.state.metaStale = fromCache;
 }
 
 const put = (...sets) => store.set(KEY, JSON.stringify(sets.map((s) => ({ ...emptySet, ...s }))));
@@ -164,6 +164,31 @@ test('gegen Referenzlisten aus dem Offline-Cache wird NICHT gefiltert', () => {
   assert.deepEqual(set.assigned_to, ['9']);
 
   // Sobald die Listen netzfrisch sind, greift die Bereinigung wieder.
-  tasks.state.metaFromCache = false;
+  tasks.state.metaStale = false;
   assert.equal(tasks.getRecentFilters().length, 0, 'netzfrisch wird wieder beschnitten');
+});
+
+test('refreshTags haelt fest, ob die neue Tag-Liste nachweislich frisch ist', async () => {
+  // `/tasks/tags` faellt unter das `/tasks`-Praefix der Whitelist, kann also aus
+  // dem Cache kommen; und schlaegt der Aufruf fehl, bleibt die ALTE Liste
+  // stehen. Beide Male ist sie nicht mehr autoritativ, und `getRecentFilters`
+  // darf nicht dagegen beschneiden (Codex-Befund P2 zu PR #1072, siebte Runde).
+  withKnown({ tags: ['garten'] });
+
+  globalThis.__apiStub = { getWithSource: async () => ({ data: { data: [{ tag: 'garten', count: 1 }] }, fromCache: false }) };
+  await tasks.refreshTags();
+  assert.equal(tasks.state.metaStale, false, 'netzfrisch');
+
+  globalThis.__apiStub = { getWithSource: async () => ({ data: { data: [] }, fromCache: true }) };
+  await tasks.refreshTags();
+  assert.equal(tasks.state.metaStale, true, 'aus dem Cache');
+
+  globalThis.__apiStub = { getWithSource: async () => { throw new Error('offline'); } };
+  tasks.state.metaStale = false;
+  const vorher = tasks.state.allTags;
+  await tasks.refreshTags();
+  assert.equal(tasks.state.metaStale, true, 'ein Fehlschlag laesst die alte Liste stehen');
+  assert.equal(tasks.state.allTags, vorher, 'und die alte Liste bleibt wirklich stehen');
+
+  delete globalThis.__apiStub;
 });
