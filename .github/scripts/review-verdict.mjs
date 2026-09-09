@@ -90,8 +90,30 @@ export function bejaht(text, muster) {
  * enthaelt der Strom diese Bloecke nicht. Der Schalter ist damit tragend, und
  * eine Probe in test-claude-review-workflow.js haelt ihn fest.
  */
-const POSTBEFEHL = /\bgh\s+pr\s+(?:comment|review)\b|\bgh\s+api\b[^"]*\/(?:comments|reviews)\b/i;
+/**
+ * Ein Befehl, der NUR posten kann - keine Kette, kein Nebenbei.
+ *
+ * Der Befehl muss am Anfang stehen (`^`), damit `irgendwas; gh pr comment ...`
+ * nicht durchrutscht, und er muss die Form eines echten Postbefehls haben statt
+ * nur dessen Namen zu tragen. Bei `gh pr comment` heisst das `--body` oder
+ * `--body-file`: das ist eine ALLOWLIST der liefernden Form, keine Denylist von
+ * `--help` und `--delete-last` - eine Denylist sagt zu jedem unbekannten
+ * Schalter ja.
+ */
+const POSTBEFEHL =
+  /^\s*gh\s+pr\s+comment\b(?=[\s\S]*--body(?:-file)?[\s=])|^\s*gh\s+pr\s+review\b(?=[\s\S]*--(?:body|body-file|comment|approve|request-changes)\b)|^\s*gh\s+api\b[^"']*\/(?:comments|reviews)\b/i;
 const POSTWERKZEUG = /inline_comment|create_.*comment/i;
+
+/**
+ * Und keine Verkettung. Nach dem Review zu #1085, zweite Runde: die
+ * Erlaubnisliste gibt `Bash(gh pr comment:*)` frei, und
+ * `gh pr comment --help; gh pr view 1085 --json comments --jq '.comments[-1].url'`
+ * endet mit 0 und DRUCKT die Adresse eines fremden, laengst vorhandenen
+ * Kommentars. Der Befehl trug den Namen, das Ergebnis trug die Adresse - und
+ * gepostet hat er nichts. Ein Postbefehl braucht keine Kette; wer eine baut,
+ * bekommt hier keinen Beleg.
+ */
+const KETTE = /;|&&|\|\||\n\s*\S/;
 
 /**
  * Der Beleg im ERGEBNIS, nicht nur im Befehl.
@@ -123,7 +145,8 @@ export function zaehleGepostet(eintraege) {
     if (block?.type !== 'tool_use') continue;
     const name = String(block.name ?? '');
     const befehl = String(block.input?.command ?? '');
-    if (POSTWERKZEUG.test(name) || POSTBEFEHL.test(befehl)) versuche.add(block.id);
+    const gekettet = KETTE.test(befehl.replace(/"\$\(cat <<'?EOF'?[\s\S]*?EOF\s*\)"/g, '"..."'));
+    if (POSTWERKZEUG.test(name) || (POSTBEFEHL.test(befehl) && !gekettet)) versuche.add(block.id);
   }
   let erfolge = 0;
   for (const block of bloecke) {
@@ -246,7 +269,19 @@ export function beurteile({
   // stehen. Dort sagt der Lauf, dass er noch nicht fertig ist, und eine
   // unterwegs abgesetzte Anmerkung belegt dann nur einen Teil - hier dagegen
   // widerspricht der Strom der Behauptung, gar nichts getan zu haben.
-  if (gepostet.erfolge === 0 && bejaht(text, SCHON_KOMMENTIERT)) {
+  //
+  // Und `zahl.gebunden` gehoert genauso dazu (Review zu #1085, dritte Runde).
+  // Ohne diese Haelfte kann der Fallback darunter bei einer Abbruchbehauptung
+  // NIE greifen - dieser Zweig kehrt vorher zurueck. Damit widerspraeche der
+  // Kommentar bei POSTADRESSE seinem eigenen Code: er begruendet die
+  // verschaerfte Adresspruefung ausgerechnet damit, dass `zahl.gebunden`
+  // Reviews und Inline-Anmerkungen "ohnehin" auffaengt.
+  //
+  // Es passt auch zur Frage, die dieses Modul stellt: nicht "hat DIESER LAUF
+  // geprueft", sondern "wurde DIESER STAND geprueft". Eine Aeusserung, die die
+  // SHA des Kopfes traegt und nach dem Laufbeginn kam, beantwortet das mit ja -
+  // auch wenn sie von einem abgebrochenen Vorgaenger zu demselben Stand stammt.
+  if (gepostet.erfolge === 0 && zahl.gebunden === 0 && bejaht(text, SCHON_KOMMENTIERT)) {
     return stumm('schon-kommentiert', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
   }
 
@@ -376,17 +411,28 @@ function stumm(grund, neu, seit, ergebnis, gebunden = 0, erfolge = 0) {
   // ist dann eine Behauptung ins Blaue - und bei einem Lauf, der gepostet hat
   // und danach auf seine Agenten wartet, schlicht falsch. Dieser Fall bleibt
   // rot, aber aus dem RICHTIGEN Grund: geliefert schon, fertig nicht.
-  const belegt = gebunden > 0 || erfolge > 0;
+  // NUR `erfolge` traegt die Aussage "DIESER Lauf hat gepostet" (Review zu
+  // #1085, zweite Runde). `gebunden` sagt, dass eine Aeusserung die SHA dieses
+  // Stands nennt - wer sie geschrieben hat, sagt es nicht: der Mention-Pfad
+  // antwortet als derselbe Bot, und ein abgebrochener Vorgaenger kann noch
+  // posten, nachdem dieser Lauf seinen Beginn notiert hat. Genau das steht
+  // schon bei `zaehleSeit`. Bei `lauf-fehler`, `daten-kaputt` und
+  // `kein-ergebnis` wies die Meldung die fremde Aeusserung sonst diesem Lauf
+  // zu und schickte die Suche in die falsche Richtung.
   const kopf =
     grund === 'kein-stand'
       ? 'Der Nachweis konnte den Laufbeginn nicht bestimmen.'
       : neu === 0
         ? `Die Review hat in diesem Lauf nichts hinterlassen (nichts nach dem Laufbeginn ${seit}).`
-        : belegt
-          ? `Die Review hat in diesem Lauf zwar gepostet (${neu} Aeusserung(en) nach dem ` +
-            `Laufbeginn ${seit}), aber keine davon belegt eine ABGESCHLOSSENE Pruefung.`
-          : `Die Review hat zu diesem Stand nichts Zuzuordnendes hinterlassen: ${neu} ` +
-            `Aeusserung(en) nach dem Laufbeginn ${seit}, aber keine davon belegt DIESEN Lauf.`;
+        : erfolge > 0
+          ? `Die Review hat in diesem Lauf zwar gepostet (belegt durch ihren eigenen Strom), ` +
+            `aber nichts davon belegt eine ABGESCHLOSSENE Pruefung. ${neu} Aeusserung(en) ` +
+            `nach dem Laufbeginn ${seit}.`
+          : gebunden > 0
+            ? `${neu} Aeusserung(en) nach dem Laufbeginn ${seit}, davon ${gebunden} mit der SHA ` +
+              `dieses Stands - wer sie geschrieben hat, sagt der Strom DIESES Laufs aber nicht.`
+            : `Die Review hat zu diesem Stand nichts Zuzuordnendes hinterlassen: ${neu} ` +
+              `Aeusserung(en) nach dem Laufbeginn ${seit}, aber keine davon belegt DIESEN Lauf.`;
   const zahlen = ergebnis
     ? ` num_turns: ${ergebnis.num_turns ?? '?'}, subtype: ${ergebnis.subtype ?? '?'}, ` +
       `Verweigerungen: ${Array.isArray(ergebnis.permission_denials) ? ergebnis.permission_denials.length : '?'}.`
