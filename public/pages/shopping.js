@@ -272,174 +272,188 @@ function resetPillMachine() {
 }
 
 /**
- * Abhak-Vorgaenge, die noch beim Server sind: id -> { value, seq, settledAt }.
+ * DIE ABSICHT, NICHT DER STAND.
  *
- * Die Liste bleibt bedienbar, waehrend eine Auffrischung laeuft (seit #1066
- * auch die des Kategorie-Managers). Ein GET, der VOR dem PATCH abging, traegt
- * den alten Wert; seine Antwort ersetzte die eben abgehakte Zeile mit dem
- * Serverstand von vorher, und der PATCH-Erfolg trug nichts nach - er vibriert
- * nur. Zeile und Zaehler standen danach auseinander, und das naechste Abhaken
- * schickte den falschen Wert.
+ * `state.items` traegt ausschliesslich, was der Server zuletzt gesagt hat. Was
+ * der Nutzer WILL, steht hier: id -> { value, seq, listId, delta }. Die Zeile
+ * zeigt die Ueberlagerung von beidem (`checkedOf`).
  *
- * Eine Folgenummer je Ladeanfrage faengt das NICHT: die ueberholende Antwort
- * ist die neueste Antwort, sie ist nur aelter als die Bearbeitung. Und eine
- * Generation je Mutation haette die ganze Auffrischung verworfen - samt der
- * frischen Kategorienamen, fuer die sie laeuft.
+ * Der Vorlaeufer vermischte die zwei in einem Feld. Dann braucht ein
+ * Fehlschlag eine Ruecksprung-Grundlage, die Grundlage braucht eine
+ * Bestaetigungsnummer, die Bestaetigung eine Ladenummer - sechs Felder, die
+ * sich gegenseitig ueberschreiben, und sieben Review-Runden lang fand jede
+ * neue Wache eine neue Reihenfolge zwischen ihnen. Getrennt gehalten gibt es
+ * keinen Wert mehr, der veralten kann: ein Ruecksprung ist das ENTFERNEN der
+ * Absicht, und was dann steht, ist der Serverstand.
+ *
+ * Vier Regeln, mehr nicht:
+ *   - Antippen setzt die Absicht.
+ *   - Scheitert der Schreibvorgang, faellt sie. Sie war nie wahr.
+ *   - Traegt eine Ladeantwort den gewollten Wert, faellt sie. Sie ist erfuellt.
+ *   - Gelingt der Schreibvorgang und sagt eine SPAETER begonnene Antwort etwas
+ *     anderes, faellt sie auch: der Server hat sie gesehen und seither
+ *     geaendert - jemand anderes im Haushalt. Ohne diese Regel lebte die
+ *     Absicht ewig weiter und niemand koennte die Zeile je zurueckholen.
+ *
+ * Der Schreib-ERFOLG allein raeumt bewusst nichts: die ueberholende Antwort
+ * kommt gerade danach, und wer hier raeumte, liesse sie den Stand
+ * zurueckdrehen. Er vermerkt nur `settledAt`, damit die vierte Regel weiss, ab
+ * wann eine Antwort etwas ueber diese Absicht aussagen KANN.
+ *
+ * Was der Umbau wegnimmt, sind `rollback` und `confirmedAt` - genau die zwei
+ * Felder, die vier Review-Runden lang Befunde erzeugt haben, weil sie einen
+ * WERT festhielten, der veralten konnte. `settledAt` haelt keinen Wert fest,
+ * sondern eine Reihenfolge, und hat nie einen Befund erzeugt. `delta` ist die
+ * Buchungsquittung des Zaehlers: was beim Setzen gebucht wurde, damit das
+ * Zuruecknehmen exakt dasselbe abzieht.
  */
-const pendingChecks = new Map();
+const intents = new Map();
 /** Monotone Folgenummer, damit ein zweites Antippen das erste ueberstimmt. */
 let _checkSeq = 0;
 /**
- * Monotone Nummer je Ladevorgang.
+ * Wann der Server einen Artikel zuletzt BESTAETIGT hat: id -> Ladenummer.
  *
- * Sie beantwortet die einzige Frage, an der ein bestaetigter Merker haengt:
- * hat der Server den Wert schon gehabt, als er DIESE Antwort las? Ein Merker,
- * der beim PATCH-Erfolg verschwindet, hilft nicht - die ueberholende Antwort
- * kommt ja gerade DANACH.
- *
- * Die Wasserstandsmarke darunter steht JE LISTE. Als eine einzige Zahl machte
- * ein erfolgreiches Laden von Liste B eine noch laufende Anfrage fuer Liste A
- * ungueltig: bei A -> B -> A, scheiterndem zweitem A-Lauf und danach
- * eintreffender erster A-Antwort wurde die brauchbare Antwort verworfen, und
- * `switchList` zeichnete die leere Liste als echte Leere.
+ * Sie haengt am Artikel, nicht an der Absicht - denn sie ueberlebt diese. Wer
+ * zweimal antippt, ersetzt die Absicht; die Bestaetigung des ersten Antippens
+ * gilt trotzdem weiter, und eine Ladeantwort, die VOR ihr begann, darf den
+ * Wert dieses Artikels nicht zurueckdrehen. Die uebrigen Artikel und die
+ * Kategorien derselben Antwort landen ganz normal - deshalb je Artikel und
+ * nicht als Wache ueber die ganze Antwort.
  */
-let _loadSeq = 0;
-/**
- * Die Nummer des zuletzt ANGEWANDTEN Ladevorgangs.
- *
- * Zwei Auffrischungen koennen sich ueberholen, und `settledAt` allein deckt das
- * nicht: landet die JUENGERE zuerst, raeumt sie den Merker zu Recht (ihre
- * Antwort kennt den Wert), und die AELTERE schreibt danach den Stand von vor
- * der Bearbeitung - der Ruecksprung, den der Merker verhindern sollte, ist
- * wieder da. Beide Wachen werden gebraucht, jede fuer ihren eigenen Fall.
- */
-const _appliedLoad = new Map();
+const settledAt = new Map();
 
 /**
- * Ausstehende Abhak-Werte ueber einen frisch geladenen Bestand legen.
+ * Die Nummer des zuletzt ANGEWANDTEN Ladevorgangs, je Liste.
  *
- * Nur die Zeilen mit offenem Schreibvorgang; alles andere kommt unveraendert
- * vom Server, denn genau dafuer laeuft die Auffrischung.
+ * Die einzige verbliebene Zeitrechnung, und sie gehoert zum LADEN, nicht zur
+ * Absicht: zwei Auffrischungen koennen sich ueberholen, und eine aeltere
+ * Antwort darf den Stand nicht ueberschreiben, den eine juengere schon gesetzt
+ * hat. Je Liste, weil ein Laden von Liste B ueber Liste A nichts aussagt.
  */
-function applyPendingChecks(items, { fromCache = false, startedAt = 0 } = {}) {
-  if (!pendingChecks.size) return items;
+let _loadSeq = 0;
+const _appliedLoad = new Map();
+
+/** Was die Zeile ZEIGT: die Absicht, sonst der Serverstand. */
+function checkedOf(item) {
+  const intent = intents.get(item?.id);
+  return intent ? intent.value : (item?.is_checked ?? 0);
+}
+
+/**
+ * Erfuellte Absichten fallen lassen: die Antwort traegt, was gewollt war.
+ *
+ * Der Vergleich ist der ganze Trick. Er braucht keine Uhr und keine
+ * Ladenummer - eine Antwort, die den gewollten Wert traegt, BEWEIST, dass der
+ * Server ihn hat, ganz gleich wann sie losgeschickt wurde. Und eine, die ihn
+ * nicht traegt, beweist nichts: sie kann aelter sein als die Bearbeitung, aus
+ * dem Offline-Cache kommen oder von einer fremden Aenderung erzaehlen. In
+ * allen drei Faellen ist Warten richtig.
+ */
+function settleIntents(items, listId, { fromCache = false, startedAt = 0 } = {}) {
+  // Eine Antwort aus dem Offline-Cache beweist nichts: sie kann beliebig alt
+  // sein, und traegt sie den gewollten Wert zufaellig doch (zweimal antippen
+  // fuehrt zum Ausgangswert zurueck), waere die Absicht faelschlich erfuellt.
+  if (fromCache) return;
   for (const item of items) {
-    const pending = pendingChecks.get(item.id);
-    if (!pending) continue;
-    // Der Serverwert, der hier ueberschrieben wird, ist ab jetzt die
-    // Ruecksprung-Grundlage. Hat jemand anderes die Zeile inzwischen
-    // umgestellt, waere der Wert von vor dem Antippen nach einem Fehlschlag
-    // eine Angabe, die der Server nie hatte - und die letzte, die davon
-    // wuesste, ist diese Zeile hier. Nur fuer den noch AUSSTEHENDEN Eintrag:
-    // ein bestaetigter springt nirgends mehr zurueck.
-    //
-    // Und NICHT aus dem Cache: dessen Wert ist beliebig alt, er waere als
-    // „was der Server zuletzt sagte" schlicht falsch. Offline bleibt die
-    // Grundlage deshalb die, die vor dem Netzverlust galt.
-    //
-    // Ebenso wenig aus einer Antwort, die BEGANN, bevor fuer diesen Artikel
-    // zuletzt bestaetigt wurde (`confirmedAt`): sie kennt den bestaetigten
-    // Wert nicht. Ohne diese Bedingung sprang ein zweites Antippen nach einem
-    // gescheiterten Rundlauf am ersten, ERFOLGREICHEN vorbei zurueck.
-    const kenntBestaetigung = pending.confirmedAt == null || pending.confirmedAt < startedAt;
-    if (!fromCache && pending.settledAt == null && kenntBestaetigung) {
-      pending.rollback = item.is_checked;
-    }
-    item.is_checked = pending.value;
+    const intent = intents.get(item.id);
+    if (!intent || intent.listId !== listId) continue;
+    // Erfuellt: die Antwort traegt, was gewollt war.
+    const erfuellt = item.is_checked === intent.value;
+    // Ueberholt: der Server hat diesen Artikel bestaetigt, und DIESE Antwort
+    // begann danach - was sie sagt, ist juenger als die eigene Bearbeitung.
+    const bestaetigt = settledAt.get(item.id);
+    const ueberholt = bestaetigt != null && bestaetigt < startedAt;
+    if (erfuellt || ueberholt) intents.delete(item.id);
   }
-  return items;
 }
 
 async function toggleShoppingItem(id, checked, container) {
   const newVal = checked ? 0 : 1;
+  const listId = state.activeListId;
+  const item   = state.items.find((i) => i.id === id);
 
-  const item = state.items.find((i) => i.id === id);
+  // EINE ABSICHT, DIE HIER ERSETZT WIRD, MUSS ZWEI DINGE HINTERLASSEN.
+  //
+  // Ihre Zaehlerbuchung: die wird zurueckgenommen, denn die neue bucht gleich
+  // ihre eigene. Sonst blieb die des ersten Antippens stehen, wenn dessen
+  // Schreibvorgang spaeter schweigend scheitert (er ist ja ueberstimmt).
+  //
+  // Und ihren bestaetigten Wert: hat der Server sie schon angenommen, ist das
+  // ab jetzt der SERVERSTAND. Ohne diese Zeile ging die Bestaetigung mit der
+  // Absicht verloren, und ein Fehlschlag der neuen sprang an ihr vorbei auf
+  // einen Stand zurueck, den der Server nicht mehr hatte.
+  const vorher = intents.get(id);
+  if (vorher) updateListCounter(vorher.listId, 0, -vorher.delta);
+
+  // Das Delta zaehlt gegen den SERVERSTAND, nicht gegen das Gezeigte: so ist
+  // jede Absicht fuer sich verrechenbar, und ihr Zuruecknehmen trifft genau
+  // ihre eigene Buchung.
+  const delta = (newVal ? 1 : 0) - (item?.is_checked ? 1 : 0);
+
+  const seq = ++_checkSeq;
+  intents.set(id, { value: newVal, seq, listId, delta });
   if (item) {
-    item.is_checked = newVal;
     // Nur die betroffene Zeile aktualisieren — kein Komplett-Re-Render,
     // damit die Scroll-Position der Liste erhalten bleibt (Issue #276).
     updateItemRow(container, item);
     // userChecked NUR beim Abhaken selbst (#1039): das Zurueckholen eines
     // Artikels eroeffnet keinen neuen Feedback-Batch.
     updateCheckedActions(container, { userChecked: newVal === 1 });
-    updateListCounter(state.activeListId, 0, newVal ? 1 : -1);
+    updateListCounter(listId, 0, delta);
     renderTabs(container);
   }
 
-  // Ab hier haelt der Merker den Wert, den der Server bekommen soll - auch
-  // wenn `state.items` im Rundlauf komplett getauscht wird.
-  const seq = ++_checkSeq;
-  // `confirmedAt` wandert MIT: der Eintrag des vorigen Antippens wird hier
-  // ersetzt, und mit ihm ginge sonst die Information verloren, dass fuer diesen
-  // Artikel bereits erfolgreich geschrieben wurde.
-  const vorher = pendingChecks.get(id);
-  // Der Ruecksprung ist der letzte SERVERBESTAETIGTE Wert, nicht der letzte
-  // optimistische - dieselbe Regel wie beim Vorrats-Stepper. Wer zweimal
-  // antippt, bevor der erste Rundlauf durch ist, uebernimmt dessen Grundlage:
-  // sonst stuende nach zwei Fehlschlaegen der Zwischenwert in der Zeile, den
-  // der Server nie hatte (der erste Fehlschlag schweigt wegen der Folgenummer).
-  const zurueck = vorher && vorher.settledAt == null ? vorher.rollback : checked;
-  pendingChecks.set(id, {
-    value: newVal,
-    seq,
-    rollback: zurueck,
-    confirmedAt: vorher?.settledAt ?? vorher?.confirmedAt ?? null,
-    // DIE LISTE GEHOERT ZUR AKTION, nicht zum Zeitpunkt des Aufraeumens -
-    // dieselbe Regel wie beim Undo-Loeschen weiter oben.
-    listId: state.activeListId,
-  });
-
   try {
     await api.patch(`/shopping/items/${id}`, { is_checked: newVal });
-    // NICHT loeschen, nur als bestaetigt vermerken - und mit der Nummer des
-    // zuletzt begonnenen Ladevorgangs. Ein Laden, das VOR dieser Bestaetigung
-    // begann, liest beim Server noch den Stand von vorher; erst ein danach
-    // begonnenes traegt den neuen Wert und raeumt den Merker weg (loadItems).
-    // Nur der EIGENE Eintrag: ein zweites Antippen im Rundlauf hat schon den
-    // naechsten Wert hinterlegt, und der gilt.
-    const entry = pendingChecks.get(id);
-    if (entry?.seq === seq) {
-      entry.settledAt = _loadSeq;
-    } else if (entry) {
-      // UEBERHOLT, ABER ERFOLGREICH. Der Server steht jetzt auf `newVal`, und
-      // das ist ab hier die Ruecksprung-Grundlage des neueren Wunsches. Diesen
-      // Ausgang bloss zu verwerfen liess einen Fehlschlag des neueren auf einen
-      // Stand zurueckspringen, den der Server nicht mehr hat: zweimal antippen,
-      // der erste Rundlauf gelingt, der zweite scheitert - und die Zeile stand
-      // auf dem Wert von vor beiden.
-      entry.rollback    = newVal;
-      entry.confirmedAt = _loadSeq;
+    // BEWUSST OHNE AUFRAEUMEN. Die Absicht faellt erst, wenn eine Ladeantwort
+    // den Wert traegt (`settleIntents`) - der Erfolg allein beweist der Zeile
+    // nichts gegen eine Antwort, die gleich danach mit dem alten Stand kommt.
+    //
+    // Eine Ausnahme: ist diese Absicht schon ueberstimmt, wird ihr Ausgang
+    // sonst gar nicht verbucht. Der Server steht jetzt auf `newVal`, also
+    // gehoert das in den SERVERSTAND - nicht in die Absicht, die einem
+    // spaeteren Antippen gehoert.
+    // Der Server traegt jetzt `newVal` - das ist ab hier der SERVERSTAND, ganz
+    // gleich ob diese Absicht noch die aktuelle ist. Der Zeitstempel daneben
+    // schuetzt ihn vor einer Antwort, die vorher losgeschickt wurde.
+    const current = state.items.find((i) => i.id === id);
+    if (current) {
+      // Verschiebt die Bestaetigung den Serverstand unter einer noch offenen
+      // Absicht weg, war deren Buchung gegen die ALTE Basis gerechnet. Die
+      // Anzeige aendert sich nicht (die Absicht ueberlagert weiter), also darf
+      // der Zaehler jetzt nicht wandern - aber das Delta muss mitziehen,
+      // damit sein Zuruecknehmen spaeter auf dem richtigen Wert landet.
+      const offen = intents.get(id);
+      if (offen) offen.delta -= (newVal ? 1 : 0) - (current.is_checked ? 1 : 0);
+      current.is_checked = newVal;
     }
+    settledAt.set(id, _loadSeq);
     vibrate(10);
   } catch (err) {
-    // Steht schon ein neuerer Wunsch an, gehoert weder der Ruecksprung noch
-    // die Meldung hierher: dessen eigener Ausgang entscheidet, was die Zeile
-    // zeigt, und zwei Rueckspruenge nacheinander landeten beim falschen Wert.
-    const entry = pendingChecks.get(id);
-    if (entry?.seq !== seq) return;
-    pendingChecks.delete(id);
-    // Die Zeile aus dem AKTUELLEN Bestand holen: eine Auffrischung im Rundlauf
-    // hat `state.items` womoeglich ersetzt, und das oben festgehaltene Objekt
-    // haengt dann an keiner Liste mehr - der Ruecksprung liefe ins Leere.
-    // Der Ruecksprung kommt aus dem Merker, nicht aus dem Abschluss: eine
-    // Auffrischung im Fenster hat dort den frischeren Serverwert hinterlegt.
-    const back    = entry.rollback ?? checked;   // siehe `zurueck` oben
-    const current = state.items.find((i) => i.id === id);
-    // DER ZAEHLER GEHOERT ZUR URSPRUNGSLISTE, und zwar auch dann, wenn ihre
-    // Zeile nicht mehr die sichtbare ist. Stand die Buchung frueher im
-    // `if (current)`, blieb nach einem Listenwechsel die optimistische
-    // Erhoehung von Liste A stehen: `loadItems` frischt nur die Artikel auf,
-    // die Zaehler kommen aus `loadLists` - der Reiter log dann unbegrenzt.
-    // Ohne sichtbare Zeile ist `newVal` das, was optimistisch gebucht wurde;
-    // mit ihr ist der gezeigte Stand die genauere Grundlage.
-    const gebucht = current ? current.is_checked : newVal;
-    updateListCounter(entry.listId, 0, (back ? 1 : 0) - (gebucht ? 1 : 0));
-    if (current) {
-      current.is_checked = back;
-      updateItemRow(container, current);
-      updateCheckedActions(container);
+    // ZWEI GRUENDE, WARUM DIE EIGENE ABSICHT NICHT MEHR DA IST, und sie fuehren
+    // auseinander. Ueberstimmt: ein neueres Antippen steht an, dessen Ausgang
+    // entscheidet ueber Zeile, Zaehler UND Meldung - hier ist nichts zu tun.
+    // Erfuellt: eine Antwort trug den Wert schon, weil jemand anderes im
+    // Haushalt dasselbe getan hat. Dann steht die Zeile richtig, aber der
+    // EIGENE Schreibvorgang ist trotzdem gescheitert und gehoert gemeldet.
+    const intent = intents.get(id);
+    if (intent && intent.seq !== seq) return;
+    if (intent) {
+      // DIE ABSICHT FAELLT, mehr passiert nicht. Was die Zeile danach zeigt,
+      // ist der Serverstand - der aktuellste, den wir haben, auch wenn eine
+      // Auffrischung ihn zwischendurch ausgetauscht hat. Es gibt keinen
+      // gemerkten Wert mehr, der dabei veralten koennte.
+      intents.delete(id);
+      // Der Zaehler nimmt GENAU die Buchung zurueck, die das Setzen gemacht
+      // hat - deshalb liegt sie in der Absicht und wird nicht neu berechnet.
+      updateListCounter(intent.listId, 0, -intent.delta);
+      const current = state.items.find((i) => i.id === id);
+      if (current) {
+        updateItemRow(container, current);
+        updateCheckedActions(container);
+      }
+      renderTabs(container);
     }
-    renderTabs(container);
     window.yuvomi.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
   }
 }
@@ -458,26 +472,23 @@ async function toggleShoppingItem(id, checked, container) {
 function deleteItemUndoable(id, container) {
   const item     = state.items.find((i) => i.id === id);
   const snapshot = item ? { ...item } : null;
-  // Was der Zaehler fuer diesen Artikel GERADE fuehrt: der optimistische Wert.
-  // Festgehalten, bevor der Schnappschuss unten auf den bestaetigten gezogen
-  // wird - abgezogen werden muss, was gebucht IST, nicht was gelten soll.
-  const gebucht  = Boolean(item?.is_checked);
-  // EIN GELOESCHTER ARTIKEL HAT KEINEN AUSSTEHENDEN ABHAK-VORGANG MEHR.
+  // Was die Zeile ZEIGT - danach richtet sich, was der Zaehler abzieht. Der
+  // Schnappschuss daneben traegt den Serverstand, weil `state.items` nur den
+  // fuehrt; eine noch laufende Absicht bleibt in ihrer Karte liegen und
+  // ueberlagert den Artikel wieder, wenn das Loeschen zurueckgenommen wird.
   //
-  // Der Merker bliebe sonst liegen, und der Fehlschlag seines PATCH buchte den
-  // Zaehler ein zweites Mal zurueck - die Loeschung hat ihn ja schon korrigiert.
-  // Gemessen an einer einelementigen Liste: abhaken, sofort loeschen, PATCH
-  // scheitert, und der Reiter stand auf `item_total: 0, item_checked: -1`.
-  //
-  // Der Schnappschuss traegt dabei den letzten SERVERBESTAETIGTEN Wert, nicht
-  // den optimistischen: der Server hat den gescheiterten PATCH nicht gesehen,
-  // und ein Zurueckholen legte sonst einen Stand in die Liste, den es dort nie
-  // gab. Steht der Vorgang noch aus, ist genau das die Grundlage im Merker.
-  const offen = pendingChecks.get(id);
-  if (offen) {
-    if (snapshot && offen.settledAt == null) snapshot.is_checked = offen.rollback ?? snapshot.is_checked;
-    pendingChecks.delete(id);
-  }
+  // FRUEHER STAND HIER EIN SONDERFALL: der Merker musste beim Loeschen
+  // aufgeraeumt und der Schnappschuss von einem optimistischen Wert
+  // zurueckgezogen werden, sonst buchte ein spaeterer Fehlschlag ein zweites
+  // Mal (gemessen: `item_total: 0, item_checked: -1`). Mit getrennter Absicht
+  // gibt es nichts zurueckzuziehen und nichts doppelt zu buchen.
+  const gebucht = Boolean(item && checkedOf(item));
+  // DIE BUCHUNG DER OFFENEN ABSICHT IST MIT DIESEM LOESCHEN ABGEGOLTEN: der
+  // Zaehler zieht gleich die ANZEIGE ab, und die enthaelt sie. Bliebe die
+  // Quittung stehen, buchte ein spaeterer Fehlschlag ein zweites Mal ab -
+  // gemessen `item_checked: -1` an einer einelementigen Liste.
+  const offen = intents.get(id);
+  if (offen) offen.delta = 0;
   // DIE LISTE GEHOERT ZUR AKTION, NICHT ZUM ZEITPUNKT DER RUECKNAHME. Das
   // Undo-Fenster ist fuenf Sekunden lang, und ein Listenwechsel darin tauscht
   // `state.items` samt `state.activeListId` aus. Wer danach zurueckholte, legte
@@ -494,7 +505,14 @@ function deleteItemUndoable(id, container) {
 
   scheduleUndoableDelete({
     message: t('shopping.itemDeletedToast', { name: snapshot?.name ?? '' }),
-    commit: ({ keepalive }) => api.delete(`/shopping/items/${id}`, { keepalive }),
+    commit: async ({ keepalive }) => {
+      await api.delete(`/shopping/items/${id}`, { keepalive });
+      // Endgueltig weg: die Absicht kann von keiner Antwort mehr erfuellt oder
+      // ueberholt werden und laege sonst tot in der Karte. Bis hierher bleibt
+      // sie liegen - ein Zuruecknehmen im Undo-Fenster braucht sie, damit die
+      // wiederhergestellte Zeile zeigt, was der Server inzwischen hat.
+      intents.delete(id);
+    },
     restore: (err) => {
       if (snapshot) {
         // Der sichtbare Zustand nur, wenn die Liste noch die gezeigte ist -
@@ -506,7 +524,14 @@ function deleteItemUndoable(id, container) {
           state.items.sort((a, b) => a.id - b.id);
           updateItemsList(container);
         }
-        updateListCounter(listId, 1, snapshot.is_checked ? 1 : 0);
+        // Zurueckgeholt wird die ANZEIGE, also samt der noch offenen Absicht -
+        // und damit ist deren Quittung wieder gueltig. Sie wird berechnet,
+        // nicht aufbewahrt: der Abstand zwischen dem, was sie will, und dem
+        // Serverstand des Schnappschusses.
+        if (offen && intents.get(id) === offen) {
+          offen.delta = (offen.value ? 1 : 0) - (snapshot.is_checked ? 1 : 0);
+        }
+        updateListCounter(listId, 1, checkedOf(snapshot) ? 1 : 0);
         renderTabs(container);
       }
       if (err) window.yuvomi.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
@@ -596,7 +621,7 @@ function renderTabs(container) {
  */
 async function openSendListDialog(container) {
   const listId = state.activeListId;
-  const openCount = state.items.filter((item) => !item.is_checked).length;
+  const openCount = state.items.filter((item) => !checkedOf(item)).length;
   if (!openCount) {
     window.yuvomi.showToast(t('shopping.sendListEmpty'), 'warning');
     return;
@@ -913,9 +938,9 @@ function renderItemTags(tags) {
 }
 
 function renderItem(item) {
-  const isDone = Boolean(item.is_checked);
+  const isDone = Boolean(checkedOf(item));
   return `
-    <div class="swipe-row" data-swipe-id="${item.id}" data-swipe-checked="${item.is_checked}">
+    <div class="swipe-row" data-swipe-id="${item.id}" data-swipe-checked="${checkedOf(item)}">
       <div class="swipe-reveal swipe-reveal--done swipe-reveal--leading" aria-hidden="true">
         <i data-lucide="${isDone ? 'rotate-ccw' : 'check'}" class="icon-xl" aria-hidden="true"></i>
         <span>${isDone ? t('shopping.swipeBack') : t('shopping.swipeCheck')}</span>
@@ -927,7 +952,7 @@ function renderItem(item) {
       <div class="list-row shopping-item ${isDone ? 'shopping-item--checked' : ''}"
            data-item-id="${item.id}">
         <button class="item-check ${isDone ? 'item-check--checked' : ''}"
-                data-action="toggle-item" data-id="${item.id}" data-checked="${item.is_checked}"
+                data-action="toggle-item" data-id="${item.id}" data-checked="${checkedOf(item)}"
                 aria-label="${isDone ? t('shopping.markUndoneLabel', { name: esc(item.name) }) : t('shopping.markDoneLabel', { name: esc(item.name) })}">
           <i data-lucide="check" class="item-check__icon" aria-hidden="true"></i>
         </button>
@@ -1446,16 +1471,16 @@ function wireSwipeGestures(container) {
 function updateItemRow(container, item) {
   const row = container.querySelector(`.swipe-row[data-swipe-id="${item.id}"]`);
   if (!row) return;
-  const isDone = Boolean(item.is_checked);
+  const isDone = Boolean(checkedOf(item));
 
-  row.dataset.swipeChecked = String(item.is_checked);
+  row.dataset.swipeChecked = String(checkedOf(item));
 
   row.querySelector('.shopping-item')?.classList.toggle('shopping-item--checked', isDone);
 
   const checkBtn = row.querySelector('.item-check');
   if (checkBtn) {
     checkBtn.classList.toggle('item-check--checked', isDone);
-    checkBtn.dataset.checked = String(item.is_checked);
+    checkBtn.dataset.checked = String(checkedOf(item));
     checkBtn.setAttribute('aria-label', isDone
       ? t('shopping.markUndoneLabel', { name: item.name })
       : t('shopping.markDoneLabel', { name: item.name }));
@@ -1810,7 +1835,7 @@ function parseShoppingQuantity(raw) {
  * Vorrat einen Tap entfernt.
  */
 async function openPantryTransfer(container) {
-  const checked = state.items.filter((i) => i.is_checked);
+  const checked = state.items.filter((i) => checkedOf(i));
   if (!checked.length) return;
 
   let locations = [];
@@ -1898,7 +1923,7 @@ async function openPantryTransfer(container) {
             // Daten löschen kann (siehe routes/pantry.js).
             await api.delete(`/shopping/${listId}/items/checked`);
             const removed = checked.length;
-            state.items = state.items.filter((i) => !i.is_checked);
+            state.items = state.items.filter((i) => !checkedOf(i));
             updateItemsList(container);
             updateListCounter(listId, -removed, -removed);
             renderTabs(container);
@@ -1954,7 +1979,7 @@ async function openPantryTransfer(container) {
  * aber nie von sich aus eine neue.
  */
 function updateCheckedActions(container, { userChecked = false } = {}) {
-  const checkedCount = state.items.filter((i) => i.is_checked).length;
+  const checkedCount = state.items.filter((i) => checkedOf(i)).length;
   if (!checkedCount) {
     clearPillTimer();
     pillPhase = 'idle';
@@ -2028,7 +2053,7 @@ function updateCheckedActions(container, { userChecked = false } = {}) {
  * Shell und ist von dort aus nicht mehr erreichbar - sie ruft direkt.
  */
 function clearCheckedUndoable(container) {
-  const checked = state.items.filter((i) => i.is_checked);
+  const checked = state.items.filter((i) => checkedOf(i));
   const count   = checked.length;
   if (!count) return;
 
@@ -2041,7 +2066,7 @@ function clearCheckedUndoable(container) {
   const listId = state.activeListId;
 
   // Optimistisch entfernen
-  state.items = state.items.filter((i) => !i.is_checked);
+  state.items = state.items.filter((i) => !checkedOf(i));
   updateItemsList(container);
   updateListCounter(listId, -count, -count);
   renderTabs(container);
@@ -2229,38 +2254,37 @@ async function loadItems(listId) {
   // Auffrischung des Kategorie-Managers laeuft, waehrend die Seite wieder
   // bedienbar ist.
   if (state.activeListId !== listId) return;
-  // Und wer aelter ist als das, was schon steht, fasst den Stand nicht mehr an.
+  // Wer aelter ist als das, was schon steht, fasst den Stand nicht mehr an.
   // Die Wache darueber deckt das nicht ab: dieselbe Liste, zwei Rundlaeufe.
+  // Nur eine netzfrische Antwort setzt die Marke - bei wackligem Netz scheitert
+  // die spaeter begonnene Anfrage oft zuerst und wird aus dem Cache bedient.
   if (startedAt < (_appliedLoad.get(listId) ?? 0)) return;
-  // Die Marke setzt NUR eine netzfrische Antwort. Sonst haette bei wackligem
-  // Netz die schneller gescheiterte, aus dem Cache bediente Anfrage die Marke
-  // hochgezogen - und die aeltere, aber ECHTE Antwort waere danach als
-  // veraltet verworfen worden. Der Cache haette den frischen Stand verdraengt.
+  // EINE GECACHTE ANTWORT ERSETZT KEINEN FRISCHEREN STAND. Sie ist beliebig
+  // alt; steht fuer diese Liste schon etwas Netzfrisches, waere sie ein
+  // Rueckschritt - offline gehoert der zuletzt bekannte Stand auf den Schirm,
+  // nicht ein aelterer. Nur wenn noch gar nichts geladen wurde, ist sie das
+  // Beste, was es gibt.
+  if (fromCache && _appliedLoad.has(listId)) return;
   if (!fromCache) _appliedLoad.set(listId, startedAt);
-  // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte den Wert
-  // beim Lesen schon, seine Antwort ist die frischere Wahrheit - auch wenn
-  // inzwischen jemand anderes die Zeile wieder zurueckgeholt hat.
-  //
-  // NUR bei einer netzfrischen Antwort. Eine aus dem Cache beweist gar nichts:
-  // sie kann beliebig alt sein, der Service Worker leert ihn bei einer Mutation
-  // nicht, und ihr Status 200 sieht aus wie ein erfolgreicher Rundlauf. Wer den
-  // Merker darauf hin raeumte, traegt im Laden bei wackligem Netz genau den
-  // Ruecksprung ein, gegen den er gebaut ist.
-  //
-  // Und nur Merker DIESER Liste: die Antwort sagt ueber die Artikel einer
-  // anderen nichts aus. Als der Lauf ueber alle ging, raeumte eine
-  // Auffrischung von Liste B den Merker eines in Liste A abgehakten Artikels -
-  // wer danach zu A zurueckwechselte und dabei offline war, bekam den
-  // gecachten Stand von vor dem Abhaken, ohne etwas zum Wiederauftragen.
-  if (!fromCache) {
-    for (const [itemId, entry] of pendingChecks) {
-      if (entry.listId !== listId) continue;
-      if (entry.settledAt != null && entry.settledAt < startedAt) pendingChecks.delete(itemId);
+
+  // `state.items` traegt NUR den Serverstand - die Absichten liegen daneben und
+  // ueberlagern beim Zeichnen. Deshalb wird hier nichts aufgetragen; es faellt
+  // nur, was die Antwort erfuellt hat.
+  // EIN BESTAETIGTER ARTIKEL WIRD VON EINER AELTEREN ANTWORT NICHT
+  // ZURUECKGEDREHT. Die Antwort selbst bleibt gueltig - ihre uebrigen Artikel,
+  // die Liste und die Kategorien werden gebraucht -, nur der eine Wert, von
+  // dem wir sicher wissen, dass er juenger ist, bleibt stehen.
+  const vorherige = new Map(state.items.map((i) => [i.id, i]));
+  const frisch = data.data ?? [];
+  for (const item of frisch) {
+    const bestaetigt = settledAt.get(item.id);
+    if (bestaetigt != null && bestaetigt >= startedAt) {
+      const alt = vorherige.get(item.id);
+      if (alt) item.is_checked = alt.is_checked;
     }
   }
-  // Alles Uebrige ueberlebt den Tausch: die Antwort kann einen Schnappschuss
-  // tragen, der aelter ist als die laufende Bearbeitung.
-  state.items      = applyPendingChecks(data.data ?? [], { fromCache, startedAt });
+  state.items = frisch;
+  settleIntents(state.items, listId, { fromCache, startedAt });
   state.activeList = data.list ?? null;
   // Kategorien aus API-Antwort übernehmen wenn vorhanden (immer aktuell)
   if (data.categories?.length) state.categories = data.categories;
@@ -2806,6 +2830,14 @@ export const __test = {
   // Abhaken gesetzt und beim Laden gelesen.
   toggleShoppingItem,
   loadItems,
-  pendingChecks,
   deleteItemUndoable,
+  // Die Absichten-Karte und ihre Lesefunktion: die Tests pruefen an ihnen die
+  // Trennung selbst - dass `state.items` den Serverstand behaelt und die Zeile
+  // die Ueberlagerung zeigt.
+  intents,
+  checkedOf,
+  // Die Ladeordnung ueberlebt sonst von Test zu Test: `_loadSeq` waechst
+  // global, und eine Wasserstandsmarke aus einem frueheren Fall verwirft die
+  // Auffrischung des naechsten. Aufraeumen gehoert an den ANFANG jedes Falls.
+  resetLoadOrderForTest: () => { _appliedLoad.clear(); settledAt.clear(); },
 };

@@ -71,6 +71,11 @@ global.localStorage = makeMemoryStorage();
 const { __test } = await import('../public/pages/shopping.js');
 
 function resetShoppingState() {
+  // AUFRAEUMEN AM ANFANG. `_loadSeq` waechst global weiter, und eine
+  // Wasserstandsmarke aus einem frueheren Fall verwirft sonst die Auffrischung
+  // des naechsten - der Fall ist dann isoliert gruen und in der Suite rot.
+  __test.intents.clear();
+  __test.resetLoadOrderForTest();
   __test.state.items = [];
   __test.state.categories = [];
   __test.state.activeListId = 1;
@@ -607,7 +612,7 @@ function milk(isChecked) {
 
 test('Abhaken ueberlebt eine Auffrischung, deren GET aelter ist als der PATCH', async () => {
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -622,39 +627,39 @@ test('Abhaken ueberlebt eine Auffrischung, deren GET aelter ist als der PATCH', 
   const loading = __test.loadItems(1);
   // 2. Die Liste ist bedienbar: der Nutzer hakt ab, der PATCH ist durch.
   await __test.toggleShoppingItem(10, 0, makeNullContainer());
-  assert.equal(__test.state.items[0].is_checked, 1, 'optimistisch abgehakt');
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1, 'optimistisch abgehakt');
   // 3. ERST JETZT trifft die alte Antwort ein.
   gate.resolve({ data: [milk(0)] });
   await loading;
 
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'die alte Antwort darf die Bearbeitung nicht zurueckdrehen');
   delete globalThis.__apiStub;
 });
 
 test('ein spaeter begonnenes Laden raeumt den Merker - fremde Aenderungen kommen durch', async () => {
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
   globalThis.__apiStub = { get: async () => ({ data: [milk(0)] }), patch: async () => ({ data: null }) };
   await __test.toggleShoppingItem(10, 0, makeNullContainer());
-  assert.equal(__test.state.items[0].is_checked, 1);
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1);
 
   // Dieses Laden beginnt NACH der Bestaetigung: sein Schnappschuss kennt den
   // Wert, seine Antwort ist die frischere Wahrheit. Haelt der Merker hier noch,
   // koennte niemand im Haushalt den Artikel je wieder zurueckholen.
   await __test.loadItems(1);
-  assert.equal(__test.state.items[0].is_checked, 0,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 0,
     'ein Merker, der nie geraeumt wird, macht den Server unwirksam');
-  assert.equal(__test.pendingChecks.size, 0, 'kein Rest im Merker');
+  assert.equal(__test.intents.size, 0, 'kein Rest im Merker');
   delete globalThis.__apiStub;
 });
 
 test('scheitert der PATCH, bleibt kein Merker stehen', async () => {
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -666,13 +671,13 @@ test('scheitert der PATCH, bleibt kein Merker stehen', async () => {
   };
 
   await __test.toggleShoppingItem(10, 0, makeNullContainer());
-  assert.equal(__test.state.items[0].is_checked, 0, 'zurueckgedreht');
-  assert.equal(__test.pendingChecks.size, 0, 'ein gescheiterter Wunsch darf nichts auftragen');
+  assert.equal(__test.checkedOf(__test.state.items[0]), 0, 'zurueckgedreht');
+  assert.equal(__test.intents.size, 0, 'ein gescheiterter Wunsch darf nichts auftragen');
   assert.equal(toasts.length, 1);
 
   // Und die naechste Auffrischung traegt nichts nach.
   await __test.loadItems(1);
-  assert.equal(__test.state.items[0].is_checked, 0);
+  assert.equal(__test.checkedOf(__test.state.items[0]), 0);
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
 });
@@ -682,7 +687,7 @@ test('eine aeltere Antwort, die NACH einer juengeren landet, fasst den Stand nic
   // die juengere Antwort raeumt den Merker zu Recht - sie kennt den Wert -, und
   // die aeltere schrieb danach den Stand von vor der Bearbeitung zurueck.
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -698,13 +703,13 @@ test('eine aeltere Antwort, die NACH einer juengeren landet, fasst den Stand nic
   // Die JUENGERE landet zuerst und raeumt den Merker.
   neu.resolve({ data: [milk(1)] });
   await ladenNeu;
-  assert.equal(__test.state.items[0].is_checked, 1);
-  assert.equal(__test.pendingChecks.size, 0, 'die juengere Antwort kennt den Wert, der Merker darf gehen');
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1);
+  assert.equal(__test.intents.size, 0, 'die juengere Antwort kennt den Wert, der Merker darf gehen');
 
   // Und jetzt trifft die AELTERE ein.
   alt.resolve({ data: [milk(0)] });
   await ladenAlt;
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'eine ueberholte Antwort darf den bereits angewandten Stand nicht mehr ueberschreiben');
   delete globalThis.__apiStub;
 });
@@ -714,7 +719,7 @@ test('scheitert der PATCH, springt die Zeile auf den FRISCHEN Serverstand zuruec
   // Angabe, die der Server nie hatte, wenn jemand anderes die Zeile inzwischen
   // umgestellt hat. Die Auffrischung ist die letzte Stelle, die davon weiss.
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -729,13 +734,13 @@ test('scheitert der PATCH, springt die Zeile auf den FRISCHEN Serverstand zuruec
 
   const abhaken = __test.toggleShoppingItem(10, 0, makeNullContainer());
   await __test.loadItems(1);
-  assert.equal(__test.state.items[0].is_checked, 1);
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1);
 
   patchGate.promise.catch(() => {});
   patchGate.resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
   await abhaken;
 
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'der Ruecksprung muss den frischen Serverstand treffen, nicht den Stand von vor dem Antippen');
   assert.equal(__test.state.lists[0].item_checked, 1, 'und der Zaehler muss dazu passen');
   assert.equal(toasts.length, 1);
@@ -755,7 +760,7 @@ test('scheitert der PATCH, springt die Zeile auf den FRISCHEN Serverstand zuruec
 
 test('eine gecachte Antwort raeumt den Merker NICHT', async () => {
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -766,18 +771,18 @@ test('eine gecachte Antwort raeumt den Merker NICHT', async () => {
   };
 
   await __test.toggleShoppingItem(10, 0, makeNullContainer());
-  assert.equal(__test.state.items[0].is_checked, 1);
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1);
 
   // Ein spaeter begonnenes Laden - aber offline. Es beweist nichts.
   await __test.loadItems(1);
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'offline darf die Zeile nicht auf den Cache-Stand zurueckspringen');
-  assert.equal(__test.pendingChecks.size, 1, 'der Merker muss stehen bleiben');
+  assert.equal(__test.intents.size, 1, 'der Merker muss stehen bleiben');
 
   // Sobald das Netz wieder da ist, raeumt eine echte Antwort auf.
   globalThis.__apiStub.getWithSource = async () => ({ data: { data: [milk(1)] }, fromCache: false });
   await __test.loadItems(1);
-  assert.equal(__test.pendingChecks.size, 0, 'die netzfrische Antwort raeumt');
+  assert.equal(__test.intents.size, 0, 'die netzfrische Antwort raeumt');
   delete globalThis.__apiStub;
 });
 
@@ -785,7 +790,7 @@ test('eine gecachte Antwort setzt die Ruecksprung-Grundlage nicht neu', async ()
   // Sonst haette der Cache-Stand das letzte Wort darueber, was „der Server
   // zuletzt sagte" - und er ist beliebig alt.
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -808,7 +813,7 @@ test('eine gecachte Antwort setzt die Ruecksprung-Grundlage nicht neu', async ()
   patchGate.resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
   await abhaken;
 
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'die Grundlage bleibt die frische 1, nicht die gecachte 0');
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
@@ -820,7 +825,7 @@ test('eine gecachte Antwort verdraengt keine echte, die spaeter eintrifft', asyn
   // frueher begonnene, aber ECHTE Antwort danach „veraltet" - der Cache haette
   // den frischen Stand verdraengt (Codex-Befund P2 zu PR #1072).
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -837,7 +842,7 @@ test('eine gecachte Antwort verdraengt keine echte, die spaeter eintrifft', asyn
   frisch.resolve({ data: { data: [milk(1)] }, fromCache: false });
   await ladenFrisch;
 
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'die echte Antwort muss ankommen, auch wenn eine gecachte spaeter begann');
   delete globalThis.__apiStub;
 });
@@ -848,7 +853,7 @@ test('ein zweites Antippen springt nicht am ersten, erfolgreichen vorbei zurueck
   // ein. Setzte sie die Ruecksprung-Grundlage auf ihre 0, landete ein
   // Fehlschlag des zweiten Antippens bei 0 - obwohl der Server 1 bestaetigt hat.
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -866,14 +871,14 @@ test('ein zweites Antippen springt nicht am ersten, erfolgreichen vorbei zurueck
 
   const laden = __test.loadItems(1);                                   // Schnappschuss: 0
   await __test.toggleShoppingItem(10, 0, makeNullContainer());         // 0 -> 1, bestaetigt
-  assert.equal(__test.state.items[0].is_checked, 1);
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1);
 
   const zweites = __test.toggleShoppingItem(10, 1, makeNullContainer()); // 1 -> 0, ausstehend
   alt.resolve({ data: { data: [milk(0)] }, fromCache: false });
   await laden;
   await zweites;
 
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'der Ruecksprung gehoert auf die bestaetigte 1, nicht auf die 0 des alten Schnappschusses');
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
@@ -885,7 +890,7 @@ test('ein zweites Antippen springt nicht am ersten, erfolgreichen vorbei zurueck
 
 test('eine Auffrischung von Liste B raeumt den Merker von Liste A nicht', async () => {
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [
     { id: 1, name: 'A', item_total: 1, item_checked: 0 },
     { id: 2, name: 'B', item_total: 0, item_checked: 0 },
@@ -899,26 +904,26 @@ test('eine Auffrischung von Liste B raeumt den Merker von Liste A nicht', async 
   };
 
   await __test.toggleShoppingItem(10, 0, makeNullContainer());
-  assert.equal(__test.pendingChecks.size, 1);
+  assert.equal(__test.intents.size, 1);
 
   // Zu B wechseln und dort auffrischen. Die Antwort sagt ueber A nichts aus.
   __test.state.activeListId = 2;
   await __test.loadItems(2);
-  assert.equal(__test.pendingChecks.size, 1,
+  assert.equal(__test.intents.size, 1,
     'der Merker von Liste A gehoert nicht Liste B');
 
   // Zurueck zu A, und diesmal offline: ohne den Merker kaeme der Cache-Stand.
   __test.state.activeListId = 1;
   globalThis.__apiStub.getWithSource = async () => ({ data: { data: [milk(0)] }, fromCache: true });
   await __test.loadItems(1);
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'der abgehakte Artikel muss den Umweg ueber B ueberstehen');
   delete globalThis.__apiStub;
 });
 
 test('die Wasserstandsmarke gilt je Liste, nicht global', async () => {
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [
     { id: 1, name: 'A', item_total: 1, item_checked: 0 },
     { id: 2, name: 'B', item_total: 0, item_checked: 0 },
@@ -951,7 +956,7 @@ test('zweimal antippen vor dem ersten Rundlauf: der Ruecksprung bleibt der Serve
   // zweite springt zurueck - und zwar auf 0, nicht auf den optimistischen
   // Zwischenwert 1, den der Server nie hatte.
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.items = [milk(0)];
 
@@ -972,7 +977,7 @@ test('zweimal antippen vor dem ersten Rundlauf: der Ruecksprung bleibt der Serve
   }
   await Promise.all([erstes, zweites]);
 
-  assert.equal(__test.state.items[0].is_checked, 0,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 0,
     'nach zwei Fehlschlaegen gehoert der Stand von vor dem ERSTEN Antippen in die Zeile');
   assert.equal(__test.state.lists[0].item_checked, 0, 'und der Zaehler dazu');
   delete globalThis.__apiStub;
@@ -985,7 +990,7 @@ test('ein ueberholter, aber ERFOLGREICHER Rundlauf bleibt die Ruecksprung-Grundl
   // BEIDEN zurueck - der Server steht dann auf dem Wert des ersten
   // (Codex-Befund P2 zu PR #1072, sechste Runde).
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.activeListId = 1;
   __test.state.items = [milk(0)];
@@ -1007,7 +1012,7 @@ test('ein ueberholter, aber ERFOLGREICHER Rundlauf bleibt die Ruecksprung-Grundl
   tore[1].resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
   await zweites;
 
-  assert.equal(__test.state.items[0].is_checked, 1,
+  assert.equal(__test.checkedOf(__test.state.items[0]), 1,
     'der Server steht auf dem Wert des ERSTEN Rundlaufs, dorthin gehoert der Ruecksprung');
   assert.equal(__test.state.lists[0].item_checked, 1, 'und der Zaehler dazu');
   delete globalThis.__apiStub;
@@ -1020,7 +1025,7 @@ test('ein Fehlschlag nach dem Listenwechsel dreht den Zaehler der URSPRUNGSLISTE
   // optimistische Erhoehung von A stehen - und `loadItems` frischt nur die
   // Artikel auf, die Zaehler kommen aus `loadLists`.
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [
     { id: 1, name: 'A', item_total: 1, item_checked: 0 },
     { id: 2, name: 'B', item_total: 0, item_checked: 0 },
@@ -1059,7 +1064,7 @@ test('ein geloeschter Artikel bucht seinen Zaehler nicht doppelt zurueck', async
   // ein zweites Mal und hinterliess `item_checked: -1` (Codex-Befund P2 zu
   // PR #1072, siebte Runde - Folge der Zaehlerbuchung aus der sechsten).
   resetShoppingState();
-  __test.pendingChecks.clear();
+  __test.intents.clear();
   __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
   __test.state.activeListId = 1;
   __test.state.items = [milk(0)];
@@ -1078,7 +1083,11 @@ test('ein geloeschter Artikel bucht seinen Zaehler nicht doppelt zurueck', async
   __test.deleteItemUndoable(10, makeNullContainer());
   assert.equal(__test.state.lists[0].item_total, 0);
   assert.equal(__test.state.lists[0].item_checked, 0, 'das Loeschen hat schon korrigiert');
-  assert.equal(__test.pendingChecks.size, 0, 'ein geloeschter Artikel hat keinen offenen Vorgang');
+  // Die Absicht bleibt liegen - sie wird beim Zuruecknehmen gebraucht, damit
+  // die wiederhergestellte Zeile zeigt, was der Server inzwischen hat. Was das
+  // Loeschen ihr nimmt, ist nur die ZAEHLERQUITTUNG.
+  assert.equal(__test.intents.size, 1, 'die Absicht ueberlebt fuer das Zuruecknehmen');
+  assert.equal(__test.intents.get(10).delta, 0, 'ihre Buchung ist mit dem Loeschen abgegolten');
 
   tor.promise.catch(() => {});
   tor.resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
