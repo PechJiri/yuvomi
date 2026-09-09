@@ -246,12 +246,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `<main id="main-content">` without one, and focusing an element that cannot take focus is the very
   no-op this entry is about.
 
+  The same break has a second, more common shape: a handler that re-renders **after** the dialog
+  closed - `closeModal()` and `renderGrid()` on the next line. There the restore was correct and got
+  re-rendered away a moment later, which no check at close time can see. Measured: 30 such places,
+  and the typical trigger there is not a toolbar button but a **list row** - a note card, a meal
+  cell - which carries `data-id` or `data-action` rather than an id. The layer now looks the element
+  up again by those attributes, and where the target is destroyed right after the restore it takes a
+  second pass on the next frame: only if the target really vanished, only if focus actually fell to
+  `document.body`, and only if no dialog has opened in the meantime. Where nothing broke, nothing
+  moves - the common path is unchanged.
+
+  Eleven of those places re-render after an `await`, which is past that frame. There only the page
+  knows when it is done, so it says so: `refocusAfterRender()` runs the same three checks and does
+  nothing where nothing broke. A scanner in the test suite finds the pattern rather than a list of
+  files, so a new place that re-renders after an `await` is caught without anyone editing the test.
+
+  A third shape hides between the two and was found in review: a handler that re-renders
+  asynchronously **while the dialog is still open** - `await loadBudgetMeta(); renderBody();` in the
+  category manager. Close the dialog while that request is in flight and the opening button is still
+  connected, so the restore correctly lands on it and the re-render detaches it a moment later.
+  Measured in the browser, focus ends up on `document.body` again. Eleven handlers of that shape now
+  pull focus across their own re-render, with a second scanner holding the line.
+
+  Where the trigger is a list row, the row itself is what identifies it: inventory and pantry put
+  `data-id` on the row and only `data-action` on the button inside it, so every row looks alike from
+  the button's side. The lookup now carries the row it sat in, and where more than one candidate
+  still matches it returns none and falls back to the page root, because a wrong focus target puts
+  the reader somewhere they did not choose. Not every `data-` value carries identity, though: a
+  subtask's rename button also holds its title, and that is what just changed - so the lookup makes a
+  second pass on the identifying fields alone, still insisting on a single match.
+
+  The scanners look through wrappers as well: a handler that awaits `reload()` rebuilds the page just
+  as much as one that calls `renderContent()` directly, and the name says nothing about it. Counting
+  only names beginning with `render` left 25 places uncovered across six more modules. They follow
+  those wrappers through nesting, too - `reloadMedViews()` calls `reloadMeds()`, and only that one
+  reaches a render - and they count an awaited callback as a rebuild, since `await onChanged()`
+  replaces the whole list without naming anything.
+
+  Focus is now also checked for arrival rather than assumed: a rebuilt button can come back
+  `disabled` - the redeem button in Rewards does, once the points no longer suffice - and focusing it
+  is the same silent no-op the whole entry is about. Where it does not take, the page root does. And
+  where that root was chosen as a stand-in, a later rebuild is allowed to take the focus off it
+  again, so a loader that swaps its opener for a skeleton and rebuilds it after the request does not
+  leave the reader stranded at the top of the page. What decides is whether the target still holds
+  focus, not whether it is still in the document: deleting a task hides its row rather than removing
+  it, and a hidden row keeps its place in the tree while dropping focus to `body`.
+
   Measured across the seven callers of the category manager, exactly one - the budget page - puts
-  its button inside the very section it re-renders. The other six keep theirs in a toolbar their
-  handler does not touch, so they were never affected, and the shopping menu turned out to be a
-  non-case: the popover hands focus back to its trigger before the page handler even runs. The fix
-  sits in the shared layer regardless, because the same break arises anywhere a handler re-renders
-  the region an open dialog was opened from - and it fails silently when it does.
+  its button inside the very section it re-renders while the dialog is open. The others keep theirs
+  in a toolbar their handler does not touch, and the shopping menu turned out to be a non-case: the
+  popover hands focus back to its trigger before the page handler even runs.
 
 - **Paying extra on a loan now shortens the remaining term, not only the balance** (#964). Since
   #954 the remaining principal follows the money you actually paid, but the remaining term beside it

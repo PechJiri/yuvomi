@@ -16,6 +16,7 @@ import {
   advancedSection,
   wireBlurValidation,
   reportFieldError,
+  refocusAfterRender,
 } from '/components/modal.js';
 import { renderKitchenTabsBar } from '/utils/kitchen-tabs.js';
 import { resolveShoppingTarget, announceTransfer } from '/utils/kitchen-transfer.js';
@@ -1089,6 +1090,7 @@ function openItemModal(mode, item = null) {
       panel.querySelector('#pantry-delete')?.addEventListener('click', async () => {
         closeSharedModal({ force: true });
         await removeItem(item);
+        refocusAfterRender();
       });
 
       wireBlurValidation(panel);
@@ -1180,6 +1182,7 @@ async function openLocationManager() {
       await loadPantry();
       renderFilters();
       renderList();
+      refocusAfterRender();
     } catch (err) {
       // NICHT „meldet der Manager selbst": der quittiert nur seine eigene
       // Mutation, und `_notifyChanged()` kommt erst nach deren Erfolg. Was hier
