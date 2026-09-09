@@ -878,3 +878,103 @@ test('ein zweites Antippen springt nicht am ersten, erfolgreichen vorbei zurueck
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
 });
+
+// --------------------------------------------------------
+// Die Liste gehoert zur Aktion (Codex-Befunde P1/P2 zu PR #1072, vierte Runde)
+// --------------------------------------------------------
+
+test('eine Auffrischung von Liste B raeumt den Merker von Liste A nicht', async () => {
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [
+    { id: 1, name: 'A', item_total: 1, item_checked: 0 },
+    { id: 2, name: 'B', item_total: 0, item_checked: 0 },
+  ];
+  __test.state.activeListId = 1;
+  __test.state.items = [milk(0)];
+
+  globalThis.__apiStub = {
+    getWithSource: async () => ({ data: { data: [] }, fromCache: false }),
+    patch: async () => ({ data: null }),
+  };
+
+  await __test.toggleShoppingItem(10, 0, makeNullContainer());
+  assert.equal(__test.pendingChecks.size, 1);
+
+  // Zu B wechseln und dort auffrischen. Die Antwort sagt ueber A nichts aus.
+  __test.state.activeListId = 2;
+  await __test.loadItems(2);
+  assert.equal(__test.pendingChecks.size, 1,
+    'der Merker von Liste A gehoert nicht Liste B');
+
+  // Zurueck zu A, und diesmal offline: ohne den Merker kaeme der Cache-Stand.
+  __test.state.activeListId = 1;
+  globalThis.__apiStub.getWithSource = async () => ({ data: { data: [milk(0)] }, fromCache: true });
+  await __test.loadItems(1);
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'der abgehakte Artikel muss den Umweg ueber B ueberstehen');
+  delete globalThis.__apiStub;
+});
+
+test('die Wasserstandsmarke gilt je Liste, nicht global', async () => {
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [
+    { id: 1, name: 'A', item_total: 1, item_checked: 0 },
+    { id: 2, name: 'B', item_total: 0, item_checked: 0 },
+  ];
+  __test.state.activeListId = 1;
+  __test.state.items = [];
+
+  const aLauf = deferred();
+  const antworten = [
+    () => aLauf.promise,                                                 // A, beginnt zuerst
+    async () => ({ data: { data: [] }, fromCache: false }),              // B, beginnt danach
+  ];
+  globalThis.__apiStub = { getWithSource: () => antworten.shift()() };
+
+  const ladenA = __test.loadItems(1);      // startedAt 1, Liste A
+  __test.state.activeListId = 2;
+  await __test.loadItems(2);               // startedAt 2, Liste B - zieht global die Marke hoch
+  __test.state.activeListId = 1;
+
+  aLauf.resolve({ data: { data: [milk(0)] }, fromCache: false });
+  await ladenA;
+
+  assert.equal(__test.state.items.length, 1,
+    'die brauchbare A-Antwort darf nicht daran scheitern, dass B dazwischen lief');
+  delete globalThis.__apiStub;
+});
+
+test('zweimal antippen vor dem ersten Rundlauf: der Ruecksprung bleibt der Serverstand', async () => {
+  // Beide PATCHes scheitern. Der erste schweigt wegen der Folgenummer, der
+  // zweite springt zurueck - und zwar auf 0, nicht auf den optimistischen
+  // Zwischenwert 1, den der Server nie hatte.
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  global.window.yuvomi.showToast = () => {};
+  const tore = [deferred(), deferred()];
+  let n = 0;
+  globalThis.__apiStub = {
+    getWithSource: async () => ({ data: { data: [milk(0)] }, fromCache: false }),
+    patch: () => tore[n++].promise,
+  };
+
+  const erstes  = __test.toggleShoppingItem(10, 0, makeNullContainer());   // 0 -> 1
+  const zweites = __test.toggleShoppingItem(10, 1, makeNullContainer());   // 1 -> 0
+
+  for (const tor of tore) {
+    tor.promise.catch(() => {});
+    tor.resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
+  }
+  await Promise.all([erstes, zweites]);
+
+  assert.equal(__test.state.items[0].is_checked, 0,
+    'nach zwei Fehlschlaegen gehoert der Stand von vor dem ERSTEN Antippen in die Zeile');
+  assert.equal(__test.state.lists[0].item_checked, 0, 'und der Zaehler dazu');
+  delete globalThis.__apiStub;
+  delete global.window.yuvomi.showToast;
+});

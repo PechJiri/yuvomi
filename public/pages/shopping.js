@@ -296,6 +296,12 @@ let _checkSeq = 0;
  * hat der Server den Wert schon gehabt, als er DIESE Antwort las? Ein Merker,
  * der beim PATCH-Erfolg verschwindet, hilft nicht - die ueberholende Antwort
  * kommt ja gerade DANACH.
+ *
+ * Die Wasserstandsmarke darunter steht JE LISTE. Als eine einzige Zahl machte
+ * ein erfolgreiches Laden von Liste B eine noch laufende Anfrage fuer Liste A
+ * ungueltig: bei A -> B -> A, scheiterndem zweitem A-Lauf und danach
+ * eintreffender erster A-Antwort wurde die brauchbare Antwort verworfen, und
+ * `switchList` zeichnete die leere Liste als echte Leere.
  */
 let _loadSeq = 0;
 /**
@@ -307,7 +313,7 @@ let _loadSeq = 0;
  * der Bearbeitung - der Ruecksprung, den der Merker verhindern sollte, ist
  * wieder da. Beide Wachen werden gebraucht, jede fuer ihren eigenen Fall.
  */
-let _appliedLoad = 0;
+const _appliedLoad = new Map();
 
 /**
  * Ausstehende Abhak-Werte ueber einen frisch geladenen Bestand legen.
@@ -367,11 +373,20 @@ async function toggleShoppingItem(id, checked, container) {
   // ersetzt, und mit ihm ginge sonst die Information verloren, dass fuer diesen
   // Artikel bereits erfolgreich geschrieben wurde.
   const vorher = pendingChecks.get(id);
+  // Der Ruecksprung ist der letzte SERVERBESTAETIGTE Wert, nicht der letzte
+  // optimistische - dieselbe Regel wie beim Vorrats-Stepper. Wer zweimal
+  // antippt, bevor der erste Rundlauf durch ist, uebernimmt dessen Grundlage:
+  // sonst stuende nach zwei Fehlschlaegen der Zwischenwert in der Zeile, den
+  // der Server nie hatte (der erste Fehlschlag schweigt wegen der Folgenummer).
+  const zurueck = vorher && vorher.settledAt == null ? vorher.rollback : checked;
   pendingChecks.set(id, {
     value: newVal,
     seq,
-    rollback: checked,
+    rollback: zurueck,
     confirmedAt: vorher?.settledAt ?? vorher?.confirmedAt ?? null,
+    // DIE LISTE GEHOERT ZUR AKTION, nicht zum Zeitpunkt des Aufraeumens -
+    // dieselbe Regel wie beim Undo-Loeschen weiter oben.
+    listId: state.activeListId,
   });
 
   try {
@@ -399,7 +414,7 @@ async function toggleShoppingItem(id, checked, container) {
     if (current) {
       // Der Ruecksprung kommt aus dem Merker, nicht aus dem Abschluss: eine
       // Auffrischung im Fenster hat dort den frischeren Serverwert hinterlegt.
-      const back   = entry.rollback ?? checked;
+      const back   = entry.rollback ?? checked;   // siehe `zurueck` oben
       const before = current.is_checked;
       current.is_checked = back;
       updateItemRow(container, current);
@@ -2180,12 +2195,12 @@ async function loadItems(listId) {
   if (state.activeListId !== listId) return;
   // Und wer aelter ist als das, was schon steht, fasst den Stand nicht mehr an.
   // Die Wache darueber deckt das nicht ab: dieselbe Liste, zwei Rundlaeufe.
-  if (startedAt < _appliedLoad) return;
+  if (startedAt < (_appliedLoad.get(listId) ?? 0)) return;
   // Die Marke setzt NUR eine netzfrische Antwort. Sonst haette bei wackligem
   // Netz die schneller gescheiterte, aus dem Cache bediente Anfrage die Marke
   // hochgezogen - und die aeltere, aber ECHTE Antwort waere danach als
   // veraltet verworfen worden. Der Cache haette den frischen Stand verdraengt.
-  if (!fromCache) _appliedLoad = startedAt;
+  if (!fromCache) _appliedLoad.set(listId, startedAt);
   // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte den Wert
   // beim Lesen schon, seine Antwort ist die frischere Wahrheit - auch wenn
   // inzwischen jemand anderes die Zeile wieder zurueckgeholt hat.
@@ -2195,8 +2210,15 @@ async function loadItems(listId) {
   // nicht, und ihr Status 200 sieht aus wie ein erfolgreicher Rundlauf. Wer den
   // Merker darauf hin raeumte, traegt im Laden bei wackligem Netz genau den
   // Ruecksprung ein, gegen den er gebaut ist.
+  //
+  // Und nur Merker DIESER Liste: die Antwort sagt ueber die Artikel einer
+  // anderen nichts aus. Als der Lauf ueber alle ging, raeumte eine
+  // Auffrischung von Liste B den Merker eines in Liste A abgehakten Artikels -
+  // wer danach zu A zurueckwechselte und dabei offline war, bekam den
+  // gecachten Stand von vor dem Abhaken, ohne etwas zum Wiederauftragen.
   if (!fromCache) {
     for (const [itemId, entry] of pendingChecks) {
+      if (entry.listId !== listId) continue;
       if (entry.settledAt != null && entry.settledAt < startedAt) pendingChecks.delete(itemId);
     }
   }
