@@ -10191,8 +10191,12 @@ test('der Aufgaben-Filter loest sich von einer Kategorie, die geloescht wurde', 
   assert.ok(fn, 'openTaskCategoryManager nicht gefunden');
   assert.match(fn, /state\.filters\.category\.filter\([\s\S]*?state\.filters\.category = /,
     'der Handler muss geloeschte Keys aus state.filters.category werfen');
-  assert.match(fn, /renderFilters\(container\)[\s\S]*?loadTasks\(container\)/,
-    'nach dem Bereinigen muessen Filterleiste und Liste neu geladen werden');
+  // Die Leiste UNBEDINGT, das Nachladen nur bei geaenderter Abfrage: ein hinter
+  // dem Manager offenes Panel boete sonst die geloeschte Kategorie weiter an.
+  assert.match(fn, /renderFilters\(container\);\n\s*if \(filterBereinigt\) \{/,
+    'renderFilters gehoert VOR die Bedingung - das offene Panel veraltet sonst');
+  assert.match(fn, /if \(filterBereinigt\) \{[\s\S]*?loadTasks\(container\)/,
+    'nur die geaenderte Abfrage rechtfertigt ein Nachladen');
 });
 
 // Zwei Fallen des Einkaufs-Handlers, beide erst dadurch erreichbar, dass er

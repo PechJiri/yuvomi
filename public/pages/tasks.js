@@ -1526,10 +1526,16 @@ function openTaskCategoryManager(container) {
       // gibt: dauerhaft leere Liste, dazu ein Chip, der sie weiter benennt.
       const bekannt = new Set(state.categories.map((c) => c.key));
       const behalten = state.filters.category.filter((key) => bekannt.has(key));
-      if (behalten.length !== state.filters.category.length) {
-        state.filters.category = behalten;
-        renderFilters(container);
-        await loadTasks(container); // laedt mit der bereinigten Abfrage und rendert
+      const filterBereinigt = behalten.length !== state.filters.category.length;
+      state.filters.category = behalten;
+      // Die Leiste IMMER neu bauen, nicht nur beim Bereinigen: das Filter-Panel
+      // kann hinter dem Manager offen stehen. Es boete sonst weiter die eben
+      // geloeschte Kategorie zur Auswahl an - ein Klick darauf installierte den
+      // toten Key erneut -, und nach Umbenennen oder Anlegen stuenden dort die
+      // alten Namen.
+      renderFilters(container);
+      if (filterBereinigt) {
+        await loadTasks(container); // die Abfrage hat sich geaendert; laedt und rendert
         return;
       }
       renderTaskList(container);
