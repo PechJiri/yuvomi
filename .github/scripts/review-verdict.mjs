@@ -17,7 +17,8 @@
  * Ausfuehren: node .github/scripts/review-verdict.mjs --seit <ISO-8601>
  *             --ergebnis <execution_file> --aeusserungen <datei.jsonl> [...]
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Ein Abbruch im Tor des Plugins ("stop and do not proceed"), der KEIN Befund
@@ -441,4 +442,29 @@ function main() {
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith('review-verdict.mjs')) main();
+// DER EINSTIEG DARF NICHT AM DATEINAMEN HAENGEN. Hier stand
+// `process.argv[1].endsWith('review-verdict.mjs')`, und der Workflow laedt die
+// vertrauenswuerdige Fassung als `review-verdict-basis.mjs` herunter - der
+// Name endet also NICHT so. Das Modul lud seine Deklarationen, rief nie
+// `main()` und endete mit 0: der Waechter gegen stilles Gruen war selbst
+// still gruen. Gemessen am 09.09.2026, Exit 1 unter dem einen Namen, Exit 0
+// unter dem anderen, bei identischer Eingabe.
+//
+// Verglichen werden AUFGELOESTE Pfade, nicht Zeichenketten. Der erste Anlauf
+// verglich `import.meta.url` direkt mit `pathToFileURL(process.argv[1])` und
+// fiel auf macOS durch: das Temp-Verzeichnis liegt hinter dem Symlink
+// /var -> /private/var, und die eine Seite loest ihn auf, die andere nicht. Ein
+// Einstieg, der von Symlink-Aufloesung abhaengt, gehoert nicht in einen
+// Waechter - die neue Probe hat es beim ersten Lauf gezeigt.
+//
+// Beim Import aus einer Suite zeigt `process.argv[1]` auf den Testlauf und
+// nicht hierher, also bleibt `main()` dort weiterhin aus.
+function alsProgramm() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+if (alsProgramm()) main();

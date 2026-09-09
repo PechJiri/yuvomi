@@ -17,7 +17,12 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { copyFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { beurteile, bejaht, zaehleGepostet, zaehleSeit } from '../.github/scripts/review-verdict.mjs';
 
@@ -438,4 +443,63 @@ test('der echte Abbruchtext bleibt trotz Verneinungspruefung erkannt', () => {
     bejaht('Claude has not already commented on this PR.', /already\s+commented/i),
     false
   );
+});
+
+// ---------------------------------------------------------------------------
+// Der Aufruf selbst, nicht nur das Urteil.
+//
+// Bis zum 09.09.2026 hat NICHTS das Skript als Programm gefahren - die Proben
+// oben rufen `beurteile()` direkt, die Workflow-Suite liest nur Text. Genau
+// dazwischen fiel der schwerste Fehler dieses Zweigs durch: der Einstieg hing
+// am Dateinamen (`endsWith('review-verdict.mjs')`), und der Workflow laedt die
+// vertrauenswuerdige Fassung als `review-verdict-basis.mjs` herunter. Das Modul
+// lud seine Deklarationen, rief nie `main()` und endete mit 0 - der Waechter
+// gegen stilles Gruen war selbst still gruen.
+// ---------------------------------------------------------------------------
+
+const SKRIPT = fileURLToPath(new URL('../.github/scripts/review-verdict.mjs', import.meta.url));
+
+/** Faehrt das Skript als Programm, unter einem frei waehlbaren Dateinamen. */
+function fahre(dateiname, { ergebnis, aeusserungen = [], seit = '2026-09-09T06:40:37Z', kopf = 'abc' }) {
+  const ordner = mkdtempSync(join(tmpdir(), 'review-proof-'));
+  const ziel = join(ordner, dateiname);
+  copyFileSync(SKRIPT, ziel);
+  const strom = join(ordner, 'exec.json');
+  writeFileSync(strom, JSON.stringify(ergebnis));
+  const liste = join(ordner, 'aeusserungen.jsonl');
+  writeFileSync(liste, aeusserungen.map((a) => JSON.stringify(a)).join('\n'));
+  return spawnSync(process.execPath, [
+    ziel, '--seit', seit, '--kopf', kopf, '--ergebnis', strom, '--aeusserungen', liste
+  ], { encoding: 'utf8' });
+}
+
+const ABBRUCH_STROM = [{ ...fixture.ergebnisse['abbruch-schon-kommentiert'], type: 'result' }];
+
+test('DAS SKRIPT URTEILT AUCH UNTER FREMDEM DATEINAMEN', () => {
+  // Der Workflow kopiert es als `review-verdict-basis.mjs` - der Name endet
+  // also nicht auf den erwarteten. Haengt der Einstieg am Namen, laeuft hier
+  // gar nichts, und Exit 0 heisst dann "kein Befund" statt "nicht geprueft".
+  const lauf = fahre('review-verdict-basis.mjs', { ergebnis: ABBRUCH_STROM });
+  assert.equal(lauf.status, 1, `Exit 0 heisst hier: main() lief nicht.\n${lauf.stdout}`);
+  assert.match(lauf.stdout, /UNGEPRUEFT/);
+  assert.match(lauf.stdout, /::error::/);
+});
+
+test('und unter einem beliebigen anderen Namen genauso', () => {
+  // Nicht die eine Ausnahme nachbauen, sondern die Regel: der Name ist egal.
+  const lauf = fahre('irgendwas.mjs', { ergebnis: ABBRUCH_STROM });
+  assert.equal(lauf.status, 1);
+});
+
+test('ein gelieferter Lauf endet als Programm mit 0', () => {
+  // Die Gegenrichtung, damit die Probe nicht nur "faellt immer" beweist.
+  const lauf = fahre('review-verdict-basis.mjs', {
+    ergebnis: [
+      ...fixture.strom.gepostet,
+      { ...fixture.ergebnisse['saubere-review'], type: 'result' }
+    ],
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }]
+  });
+  assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
+  assert.match(lauf.stdout, /Postbefehle dieses Laufs: 1 von 1/);
 });
