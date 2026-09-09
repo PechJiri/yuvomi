@@ -264,7 +264,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The scanners look through wrappers as well: a handler that awaits `reload()` rebuilds the page just
   as much as one that calls `renderContent()` directly, and the name says nothing about it. Counting
-  only names beginning with `render` left 25 places uncovered across six more modules.
+  only names beginning with `render` left 25 places uncovered across six more modules. They follow
+  those wrappers through nesting, too - `reloadMedViews()` calls `reloadMeds()`, and only that one
+  reaches a render - and they count an awaited callback as a rebuild, since `await onChanged()`
+  replaces the whole list without naming anything.
 
   Focus is now also checked for arrival rather than assumed: a rebuilt button can come back
   `disabled` - the redeem button in Rewards does, once the points no longer suffice - and focusing it

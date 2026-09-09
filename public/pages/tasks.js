@@ -1740,6 +1740,7 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     // sofort in Filterleiste und Vorschlägen stehen (#586).
     await refreshTags();
     await onChanged();
+    refocusAfterRender();
   } catch (err) {
     resetSubmit(err.message);
     btnError(submitBtn);

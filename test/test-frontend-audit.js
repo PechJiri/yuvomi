@@ -15927,17 +15927,47 @@ function rendererIn(lines) {
     const m = l.match(/^(?:async )?function ([A-Za-z_]\w*)/);
     if (m) defs.push({ i, name: m[1] });
   });
+  const koerper = defs.map((d, k) => ({
+    name: d.name,
+    text: lines.slice(d.i, k + 1 < defs.length ? defs[k + 1].i : lines.length).join('\n'),
+  }));
   const namen = new Set();
-  defs.forEach((d, k) => {
-    const text = lines.slice(d.i, k + 1 < defs.length ? defs[k + 1].i : lines.length).join('\n');
-    if (RENDER_DIREKT.test(text) && !/\breturn\s+`/.test(text)) namen.add(d.name);
-  });
+  // Bis zum Fixpunkt: `reloadMedViews()` ruft `reloadMeds()`, und ERST das
+  // ruft `renderMedsShell()`. Eine Ebene sah nur die mittlere Schicht.
+  for (let runde = 0; runde < 5; runde++) {
+    let gewachsen = false;
+    for (const { name, text } of koerper) {
+      if (namen.has(name)) continue;
+      // Ein reiner HTML-Baustein gibt ein Template zurueck und schreibt
+      // nirgends ins Dokument - ohne diesen Ausschluss zieht der Abschluss
+      // jeden String-Bauer mit (gemessen 539 statt 402 Namen), und ein Guard,
+      // der alles fuer einen Renderer haelt, sagt nichts mehr aus.
+      if (/\breturn\s+`/.test(text)) continue;
+      if (RENDER_DIREKT.test(text)
+        || [...namen].some((r) => new RegExp(`\\b${r}\\s*\\(`).test(text))) {
+        namen.add(name);
+        gewachsen = true;
+      }
+    }
+    if (!gewachsen) break;
+  }
   return namen;
 }
 
-/** Rendert diese Zeile - direkt oder ueber einen modul-lokalen Wrapper? */
+/**
+ * Ein abgewarteter Rueckruf baut per Definition Unbekanntes um.
+ *
+ * `await onChanged()` in tasks.js hat als Vorgabe `loadTasks(container)` und
+ * ersetzt damit die ganze Liste; `await onDone()` im Quick-Links-Manager ist
+ * dasselbe Muster. Wer nur nach Namen sucht, die er kennt, sieht davon nichts
+ * (Review zu #1070).
+ */
+const AWAIT_RUECKRUF = /\bawait\s+(\w+\.)*(on[A-Z]\w*|opts\.\w+)\s*\??\.?\(/;
+
+/** Rendert diese Zeile - direkt, ueber einen Wrapper oder ueber einen Rueckruf? */
 function istNeuaufbau(zeile, wrapper) {
   if (RENDER_DIREKT.test(zeile)) return true;
+  if (AWAIT_RUECKRUF.test(zeile)) return true;
   for (const w of wrapper) if (new RegExp(`\\b${w}\\s*\\(`).test(zeile)) return true;
   return false;
 }

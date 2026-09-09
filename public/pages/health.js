@@ -2013,6 +2013,7 @@ function openMedLogModal(logId) {
           closeModal({ force: true });
           window.yuvomi?.showToast(t('health.meds.log.saved'), 'success');
           await reloadMedViews();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] med log save error:', err);
           submitBtn.disabled = false;
@@ -2031,6 +2032,7 @@ async function deleteMedLog(entry) {
     closeModal({ force: true });
     window.yuvomi?.showToast(t('health.meds.log.deleted'), 'success');
     await reloadMedViews();
+    refocusAfterRender();
   } catch (err) {
     console.error('[Health] med log delete error:', err);
     window.yuvomi?.showToast(err?.data?.error || t('health.meds.log.saveError'), 'danger');
@@ -2303,6 +2305,7 @@ function openMedModal(med) {
           closeModal({ force: true });
           window.yuvomi?.showToast(t('health.meds.saved'), 'success');
           await reloadMedViews();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] med save error:', err);
           submitBtn.disabled = false;
