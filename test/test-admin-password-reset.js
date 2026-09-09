@@ -9,18 +9,20 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { listenOnFreePort } from './server-ready.js';
 
 const tmpDir = mkdtempSync(join(tmpdir(), 'oikos-admin-pwreset-test-'));
 
 process.env.SESSION_SECRET = 'test-admin-pwreset-secret-minimum-32ch';
 process.env.DB_PATH = join(tmpDir, 'test.db');
 process.env.SESSION_SECURE = 'false';
+// Der Test spricht ueber listenOnFreePort() mit einem eigenen Listener. PORT gilt
+// nur noch dem Listener, den server/index.js beim Import selbst startet: ohne
+// die Zuweisung waere das 3000, wo lokal gern schon ein Dev-Server sitzt.
 process.env.PORT = '13098';
 
 const { default: app } = await import('../server/index.js');
-await new Promise((r) => setTimeout(r, 400));
-
-const BASE = 'http://localhost:13098';
+const BASE = await listenOnFreePort(app);
 
 function cookieHeader(setCookie) {
   return String(setCookie || '')
