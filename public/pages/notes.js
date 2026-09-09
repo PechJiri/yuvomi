@@ -184,7 +184,7 @@ export async function render(container, { user, signal }) {
           <span class="toolbar-new-btn__label">${t('newLabel.notes')}</span>
         </button>
       </div>
-      <div class="notes-filters" id="notes-filters" aria-label="${t('noteCategories.filterLabel')}" hidden></div>
+      <div class="notes-filters" id="notes-filters" hidden></div>
       <div class="notes-scroll page-scrollport">
         <div id="notes-grid" class="notes-grid" aria-busy="true">${renderSkeletonList({ rows: 5, lines: 3 })}</div>
       </div>
@@ -600,6 +600,7 @@ function openNoteModal({ mode, note = null }) {
   const swatchColors = NOTE_COLORS.includes(selColor) ? NOTE_COLORS : [selColor, ...NOTE_COLORS];
   // Bestehende Notizen öffnen im Lese-Modus (#507); neue direkt im Editor.
   const initialView = isEdit ? 'read' : 'edit';
+  let editorClosed = false;
 
   const content = `
     <div class="note-modal" data-view="${initialView}"${isEdit ? ` data-note-id="${note.id}"` : ''} style="--note-color:${esc(selColor)};">
@@ -681,6 +682,9 @@ function openNoteModal({ mode, note = null }) {
     // weit: bei 960px wird die Zeile zum Lesen wie zum Schreiben zu lang, und
     // die Leseansicht derselben Notiz haengt an derselben Breite.
     size: 'lg',
+    onClose() {
+      editorClosed = true;
+    },
     onSave(panel) {
       wireCategoryScopeHelp(panel);
       // Reader/Editor-Umschalter (#507): beide Panes bleiben im DOM, damit
@@ -843,7 +847,12 @@ function openNoteModal({ mode, note = null }) {
       const categoryCreateRow = panel.querySelector('#note-category-create-row');
       const categoryCreateButton = panel.querySelector('#note-category-create');
       const categoryScopeSelect = panel.querySelector('#note-category-new-scope');
+      const saveButton = panel.querySelector('#note-modal-save');
       let activeCategoryOption = -1;
+      let pendingCategoryCreate = null;
+      let noteSavePending = false;
+
+      const editorIsCurrent = () => !editorClosed && panel.isConnected;
 
       const selectedCreationScope = () => categoryScopeSelect?.value || 'personal';
 
@@ -990,6 +999,7 @@ function openNoteModal({ mode, note = null }) {
       });
 
       categoryCreateButton?.addEventListener('click', async () => {
+        if (!editorIsCurrent() || pendingCategoryCreate || noteSavePending) return;
         const name = categorySearch.value.trim();
         if (!name) {
           reportFieldError(categorySearch, t('common.required'));
@@ -1001,24 +1011,37 @@ function openNoteModal({ mode, note = null }) {
           return;
         }
         categoryCreateButton.disabled = true;
+        saveButton.disabled = true;
+        const scope = selectedCreationScope();
+        const createRequest = api.post('/notes/categories', { name, scope });
+        pendingCategoryCreate = createRequest;
         try {
-          const scope = selectedCreationScope();
-          const res = await api.post('/notes/categories', { name, scope });
+          const res = await createRequest;
           const category = res.data;
-          state.categories.push(category);
+          if (!state.categories.some((item) => Number(item.id) === Number(category.id))) {
+            state.categories.push(category);
+          }
+          if (!editorIsCurrent()) return;
           selectCategory(category);
           renderFilters();
         } catch (err) {
-          window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
+          if (editorIsCurrent()) {
+            window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
+          }
         } finally {
-          categoryCreateButton.disabled = false;
+          if (pendingCategoryCreate === createRequest) pendingCategoryCreate = null;
+          if (editorIsCurrent() && !noteSavePending) {
+            categoryCreateButton.disabled = false;
+            saveButton.disabled = false;
+          }
         }
       });
 
       panel.querySelector('#note-modal-cancel').addEventListener('click', closeModal);
 
       panel.querySelector('#note-modal-save').addEventListener('click', async () => {
-        const saveBtn = panel.querySelector('#note-modal-save');
+        if (!editorIsCurrent() || noteSavePending || pendingCategoryCreate) return;
+        const saveBtn = saveButton;
         const title   = panel.querySelector('#note-title').value.trim() || null;
         const cnt     = panel.querySelector('#note-content').value.trim();
         const color   = panel.querySelector('.note-color-swatch--active')?.dataset.color || NOTE_COLORS[0];
@@ -1032,6 +1055,8 @@ function openNoteModal({ mode, note = null }) {
           return;
         }
 
+        noteSavePending = true;
+        categoryCreateButton.disabled = true;
         saveBtn.disabled    = true;
         saveBtn.textContent = '…';
 
@@ -1049,8 +1074,11 @@ function openNoteModal({ mode, note = null }) {
           renderNotesAndFilters();
           window.yuvomi?.showToast(mode === 'create' ? t('notes.createdToast') : t('notes.savedToast'), 'success');
         } catch (err) {
+          if (!editorIsCurrent()) return;
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
           btnError(saveBtn);
+          noteSavePending = false;
+          categoryCreateButton.disabled = false;
           saveBtn.disabled    = false;
           saveBtn.textContent = isEdit ? t('common.save') : t('common.create');
         }

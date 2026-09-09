@@ -309,6 +309,7 @@ export async function openPage(harness, { device = 'mobile', theme = 'light', lo
   await page.setRequestInterception(true);
   page.on('request', (req) => {
     if (new URL(req.url()).pathname === '/sw.js') req.abort();
+    else if (page.__yuvomiRequestInterceptor?.(req)) return;
     else req.continue();
   });
 
