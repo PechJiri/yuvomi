@@ -58,6 +58,7 @@ db.exec(`
   );
 `);
 db.exec(MIGRATIONS_SQL[1]);
+db.exec(MIGRATIONS_SQL[2]);  // sync_config - traegt die Haushaltszone (siehe unten)
 db.exec(MIGRATIONS_SQL[85]); // calendar_event_exceptions (EXDATE, #489)
 
 // Testdaten einfügen
@@ -76,6 +77,16 @@ const uid2 = u2.lastInsertRowid;
 // `inOneHour` bleibt ein echter Instant und damit korrekt in UTC.
 const today = toLocalDateKey();
 const tomorrow = addLocalDays(today, 1);
+
+// DIE HAUSHALTSZONE MUSS DIESELBE SEIN, AUS DER DIE SAAT IHREN TAG NIMMT.
+// Serverseitig beantwortet `todayKey()` die Frage "welcher Tag ist heute" aus
+// `sync_config.household_timezone`; fehlt der Eintrag, faellt es still auf die
+// Zone des RECHNERS zurueck. Genau dieser stille Rueckfall hat hier zweimal
+// zugeschlagen (siehe den Kommentar oben zu 00:00-02:00 CEST, und #1076). Er
+// stimmte bisher nur zufaellig mit `toLocalDateKey()` ueberein - jetzt steht es
+// da, und der Waechter darunter faellt, wenn es jemand auseinanderzieht.
+db.prepare('INSERT INTO sync_config (key, value) VALUES (?, ?)')
+  .run('household_timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
 const currentMonth = today.slice(0, 7);
 const inOneHour = new Date(Date.now() + 3600000).toISOString();
 const in30h = toLocalDateKey(new Date(Date.now() + 30 * 3600000));
@@ -824,35 +835,40 @@ test('Angepinnte Notizen: nicht angepinnte werden ausgeschlossen', () => {
 // --------------------------------------------------------
 // Tests: Geburtstage
 // --------------------------------------------------------
-/* Der Bezugszeitpunkt ist MITTAG DES HAUSHALTSTAGS, nicht Mittag UTC.
- *
- * Hier stand `new Date(`${today}T12:00:00Z`)`. `today` ist der lokale
- * Kalendertag (siehe der Kommentar beim Seed weiter oben), `...T12:00:00Z` aber
- * ein Zeitpunkt in UTC - und `hydrateBirthday` reicht ihn an
- * `todayKey(database, from)` weiter, das ihn in der HAUSHALTSZONE liest. Ab
- * Offset +12 liegt Mittag UTC dort schon auf dem Folgetag: der Stichtag war
- * `today + 1`, der als "heute" geseedete Geburtstag stand auf `days_until` 1
- * statt 0. Gemessen mit `todayKey(null, ...)` am 2026-09-09:
- *
- *   TZ=UTC / Europe/Berlin / America/Los_Angeles -> Stichtag == today  (gruen)
- *   TZ=Pacific/Auckland (+12)                    -> today + 1          (rot)
- *   TZ=Pacific/Kiritimati (+14)                  -> today + 1          (rot)
- *
- * Der Produktivcode ist daran unbeteiligt: alle Aufrufer von
- * `hydrateBirthday` in `server/routes/` uebergeben gar kein `from` und
- * bekommen `new Date()`, also einen echten Zeitpunkt, den `todayKey` korrekt
- * in den Haushaltstag umrechnet. Nur dieser Test baute sich einen Zeitpunkt,
- * der nicht der Tag war, den er meinte.
- *
- * Ohne `Z` ist es der lokale Mittag - dieselbe Uhr, aus der `today` stammt,
- * und damit in JEDER Zone derselbe Kalendertag. Die Regel dahinter: ein Key
- * ('2026-09-09') ist zonenlos, ein Date daraus ist es nicht mehr. Wer aus einem
- * Key einen Zeitpunkt baut, muss sagen, in welcher Zone er ihn meint - sonst
- * meint er UTC und rechnet gegen eine andere Uhr.
+test('Saattag und Haushaltstag sind derselbe Tag', async () => {
+  // Der Nagel, auf dem die halbe Datei haengt: 36 Stellen saeen ihre Daten mit
+  // `toLocalDateKey()`, und der Server liest sie ueber die Haushaltszone zurueck.
+  // Laufen die beiden auseinander, faellt nicht dieser Test, sondern irgendein
+  // anderer, ein paar Stunden am Tag, und die Ursache steht nirgends. Deshalb
+  // hier, mit Namen, und zwar an BEIDEN Enden des Tages.
+  const { todayKey } = await import('../server/utils/timezone.js');
+  for (const stunde of ['00:00:01', '12:00:00', '23:59:59']) {
+    nodeAssert.equal(
+      todayKey(db, new Date(`${today}T${stunde}`)),
+      today,
+      `Haushaltszone und Saatzone driften auseinander (${stunde}): ` +
+      `sync_config sagt ${db.prepare("SELECT value FROM sync_config WHERE key='household_timezone'").get()?.value}`
+    );
+  }
+});
+
+/* Nachgesehen, weil ein Testfehler ueber Kalendertage sonst leicht einen
+ * Produktfehler versteckt: hier ist keiner dahinter. Alle Aufrufer von
+ * `hydrateBirthday` (server/routes/birthdays.js dreimal, server/routes/
+ * dashboard.js ueber `hydrateBirthdayOccurrences`) uebergeben gar kein `from`
+ * und bekommen `new Date()` - einen echten Zeitpunkt, den `todayKey` korrekt
+ * in den Haushaltstag umrechnet. Nur der Test baute sich einen Zeitpunkt, der
+ * nicht der Tag war, den er meinte.
  */
 test('Geburtstage: haushaltsweit, sortiert nach nächstem Geburtstag', () => {
   const rows = db.prepare('SELECT * FROM birthdays ORDER BY name COLLATE NOCASE ASC').all();
   const birthdays = rows
+    // Mittag des gesaeten Tages in der HAUSHALTSZONE, nicht 12:00 UTC. Mit dem
+    // `Z` stand hier ein Instant, der ab einem Zonenversatz von +12 schon auf dem
+    // FOLGETAG liegt: unter Pacific/Kiritimati (+14) hielt `hydrateBirthday` den
+    // 11. fuer heute, waehrend die Saat auf dem 10. lag, und "Morgen Geburtstag"
+    // bekam `days_until: 0`. Ohne das `Z` liest `new Date` lokal, also in
+    // derselben Zone, aus der `toLocalDateKey()` den Saattag genommen hat.
     .map((row) => hydrateBirthday(db, row, new Date(`${today}T12:00:00`)))
     .sort((a, b) => a.days_until - b.days_until || a.name.localeCompare(b.name))
     .slice(0, 3);
@@ -864,19 +880,21 @@ test('Geburtstage: haushaltsweit, sortiert nach nächstem Geburtstag', () => {
   assert(birthdays.some((birthday) => birthday.name === 'Anderer Nutzer'), 'Geburtstag eines anderen Nutzers muss enthalten sein');
 });
 
-/* Und der Gegen-Test dazu: die Zone BEWUSST verschieben.
+/* Und die Zone einmal WEG von der des Rechners.
  *
- * Die Probe darueber nagelt den Bezugszeitpunkt fest, misst die Zone aber nicht
- * - sie laeuft mit der Rueckfallzone des Servers, weil diese Testdatenbank gar
- * kein `sync_config` hat. Damit waere die Suite gegen genau die Fehlerklasse
- * blind, die sie am dringendsten sehen muesste: dass der Stichtag der
- * HAUSHALTSZONE folgt und nicht der der Maschine.
+ * Die geteilte Datenbank oben setzt `household_timezone` bewusst auf die Zone
+ * der Maschine, damit Saattag und Haushaltstag zusammenfallen. Der Preis dafuer
+ * ist, dass in dieser Datenbank beide Uhren dasselbe sagen: ob `hydrateBirthday`
+ * den Stichtag aus der HAUSHALTSZONE nimmt oder einfach aus der des Servers,
+ * ist dort nicht zu unterscheiden. Der Waechter `Saattag und Haushaltstag sind
+ * derselbe Tag` bliebe gruen, wenn jemand die Haushaltszone ganz herausnaehme.
  *
- * Diese Probe stellt deshalb eine eigene Datenbank MIT `sync_config` hin und
- * liest denselben Zeitpunkt zweimal, in zwei Zonen beiderseits der
- * Datumsgrenze. Weil beide Antworten aus EINEM Zeitpunkt kommen und sich
- * unterscheiden MUESSEN, kann keine Fassung sie erfuellen, die stattdessen die
- * Zone der Maschine liest - die ist innerhalb eines Laufs konstant.
+ * Diese Probe stellt deshalb eine eigene Datenbank hin, in der die
+ * Haushaltszone NICHT die der Maschine ist, und liest EINEN Zeitpunkt zweimal,
+ * in zwei Zonen beiderseits der Datumsgrenze. Weil beide Antworten aus
+ * demselben Zeitpunkt kommen und sich unterscheiden MUESSEN, kann keine
+ * Fassung sie erfuellen, die stattdessen die Zone der Maschine liest - die ist
+ * innerhalb eines Laufs konstant.
  */
 test('Geburtstage: der Stichtag folgt der Haushaltszone, nicht der des Servers', () => {
   const zdb = new DatabaseSync(':memory:');
@@ -888,7 +906,7 @@ test('Geburtstage: der Stichtag folgt der Haushaltszone, nicht der des Servers',
     );
   `);
   zdb.exec(MIGRATIONS_SQL[1]);
-  zdb.exec(MIGRATIONS_SQL[2]); // sync_config - ohne die Tabelle faellt householdTimeZone() auf die Serverzone zurueck
+  zdb.exec(MIGRATIONS_SQL[2]); // sync_config - traegt die Haushaltszone, hier bewusst eine fremde
 
   const zoneUser = zdb.prepare(`INSERT INTO users (username, display_name, password_hash, avatar_color)
     VALUES ('zonen-test', 'Zonen Test', 'x', '#FF9500')`).run().lastInsertRowid;
