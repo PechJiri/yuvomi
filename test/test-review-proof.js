@@ -364,6 +364,75 @@ test('ein bewiesener Postbefehl schlaegt die Abbruchbehauptung (#1082)', () => {
   assert.equal(urteil.grund, 'postbefehl');
 });
 
+/* Und ein Befehl, der zwar so AUSSIEHT, aber nichts angelegt hat (Review zu
+ * #1085). Die Erlaubnisliste im Workflow gibt `Bash(gh pr comment:*)` als
+ * Ganzes frei: `--help` endet mit 0 und postet nichts, `--delete-last --yes`
+ * endet mit 0 und loescht sogar einen. Beides zaehlte bis dahin als Beleg -
+ * und seit die Abbruchbehauptung davon geschlagen wird, waere das eine Tuer.
+ * Verlangt wird deshalb die Adresse des Angelegten im ERGEBNIS. */
+const stromMit = (befehl, inhalt) => [
+  { type: 'assistant', message: { content: [
+    { type: 'tool_use', id: 'toolu_probe', name: 'Bash', input: { command: befehl } }
+  ] } },
+  { type: 'user', message: { content: [
+    { type: 'tool_result', tool_use_id: 'toolu_probe', content: inhalt, is_error: false }
+  ] } }
+];
+
+test('ein Postbefehl OHNE Adresse im Ergebnis ist kein Beleg (#1085)', () => {
+  for (const [befehl, inhalt] of [
+    ['gh pr comment --help', 'Add a comment to a pull request\n\nUSAGE\n  gh pr comment ...'],
+    ['gh pr comment 1085 --repo ulsklyc/yuvomi --delete-last --yes', 'Deleted comment.']
+  ]) {
+    assert.deepEqual(zaehleGepostet(stromMit(befehl, inhalt)), { versuche: 1, erfolge: 0 },
+      `${befehl}: endet mit 0, legt aber nichts an`);
+
+    const urteil = beurteile({
+      seit: seit(ABBRUCH_LAUF),
+      kopf: kopf(ABBRUCH_LAUF),
+      ergebnis: ABBRUCH,
+      aeusserungen: [],
+      gepostet: zaehleGepostet(stromMit(befehl, inhalt))
+    });
+    assert.equal(urteil.ausgang, 'stumm', `${befehl} darf die Abbruchbehauptung nicht aushebeln`);
+    assert.equal(urteil.grund, 'schon-kommentiert');
+  }
+});
+
+test('die Adresse zaehlt auch aus einer JSON-Antwort', () => {
+  // `gh api .../comments` gibt ein Objekt zurueck, keine nackte Adresse.
+  const strom = stromMit(
+    'gh api repos/ulsklyc/yuvomi/pulls/1066/comments -f body=x',
+    { html_url: 'https://github.com/ulsklyc/yuvomi/pull/1066#discussion_r3968998598' }
+  );
+  assert.deepEqual(zaehleGepostet(strom), { versuche: 1, erfolge: 1 });
+});
+
+/* Die Meldung darf nur behaupten, was der Aufrufer ihr mitgegeben hat (Review
+ * zu #1085). Fuenf Rueckgaben in `beurteile` fallen, BEVOR `zahl.gebunden`
+ * geprueft wird - "keine davon belegt DIESEN Lauf" waere dort ins Blaue
+ * gesprochen. Bei einem Lauf, der gepostet hat und danach auf seine Agenten
+ * wartet, ist es sogar falsch: der bleibt rot, aber weil er UNFERTIG ist, nicht
+ * weil nichts zuzuordnen waere. */
+test('ein Lauf, der gepostet hat und dann wartet, wird richtig benannt', () => {
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 9, subtype: 'success', is_error: false, permission_denials: [],
+      result: "I'll wait for both background agents to complete before continuing."
+    },
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: kopf(ABBRUCH_LAUF) }],
+    gepostet: zaehleGepostet(fixture.strom.gepostet)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'agenten', 'der Grund bleibt die Unvollstaendigkeit');
+  assert.match(urteil.meldung, /zwar gepostet/);
+  assert.match(urteil.meldung, /ABGESCHLOSSENE Pruefung/);
+  assert.ok(!/keine davon belegt DIESEN Lauf/.test(urteil.meldung),
+    'das waere falsch: die Aeusserung traegt die SHA dieses Laufs');
+});
+
 test('ein GESCHEITERTER Postbefehl rettet die Abbruchbehauptung nicht', () => {
   // Die Gegenrichtung, damit die Ausnahme oben nicht zur Tuer wird: `erfolge`
   // zaehlt nur `tool_result` ohne `is_error`. Ein Versuch allein genuegt nicht.

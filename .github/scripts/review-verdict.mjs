@@ -93,6 +93,25 @@ export function bejaht(text, muster) {
 const POSTBEFEHL = /\bgh\s+pr\s+(?:comment|review)\b|\bgh\s+api\b[^"]*\/(?:comments|reviews)\b/i;
 const POSTWERKZEUG = /inline_comment|create_.*comment/i;
 
+/**
+ * Der Beleg im ERGEBNIS, nicht nur im Befehl.
+ *
+ * Ein zweiter Blick nach dem Review zu #1085: die Erlaubnisliste im Workflow
+ * gibt `Bash(gh pr comment:*)` als GANZES frei, und bis hierher genuegte der
+ * Befehlsanfang plus ein `tool_result` ohne Fehler. `gh pr comment --help`
+ * endet mit 0 und postet nichts; `gh pr comment --delete-last --yes` endet mit
+ * 0 und LOESCHT sogar einen. Beides haette `erfolge` erhoeht - und seit die
+ * Abbruchbehauptung von diesem Zaehler geschlagen wird, waere das eine Tuer.
+ *
+ * Ein echter Postbefehl gibt die Adresse dessen zurueck, was er angelegt hat
+ * (an #1066 gemessen: `.../pull/1066#issuecomment-5596556584`); auch die
+ * JSON-Antwort von `gh api .../comments` traegt sie als `html_url`. Genau das
+ * wird verlangt. Faellt eine echte Lieferung ohne Adresse durch, ist das die
+ * SICHERE Richtung: dieses Modul faerbt im Zweifel rot, und der Fallback ueber
+ * `zahl.gebunden` faengt Reviews und Inline-Anmerkungen ohnehin ab.
+ */
+const POSTADRESSE = /\/(?:pull|issues)\/\d+#(?:issuecomment-\d+|discussion_r\d+|pullrequestreview-\d+)/i;
+
 export function zaehleGepostet(eintraege) {
   const versuche = new Set();
   const bloecke = [];
@@ -111,6 +130,11 @@ export function zaehleGepostet(eintraege) {
     if (block?.type !== 'tool_result') continue;
     if (!versuche.has(block.tool_use_id)) continue;
     if (block.is_error === true) continue;
+    // Kein Exit-Code, sondern die Adresse des Angelegten - siehe POSTADRESSE.
+    const inhalt = typeof block.content === 'string'
+      ? block.content
+      : JSON.stringify(block.content ?? '');
+    if (!POSTADRESSE.test(inhalt)) continue;
     erfolge += 1;
   }
   return { versuche: versuche.size, erfolge };
@@ -185,8 +209,8 @@ export function beurteile({
   const zahl = zaehleSeit(aeusserungen, seit, kopf);
   const neu = zahl.gesamt;
 
-  if (kaputt > 0) return stumm('daten-kaputt', neu, seit, ergebnis);
-  if (!ergebnis) return stumm('kein-ergebnis', neu, seit, ergebnis);
+  if (kaputt > 0) return stumm('daten-kaputt', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
+  if (!ergebnis) return stumm('kein-ergebnis', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
 
   const text = String(ergebnis.result ?? '');
   const sperren = Array.isArray(ergebnis.permission_denials)
@@ -196,9 +220,9 @@ export function beurteile({
   // DAS PROTOKOLL DES LAUFS SCHLAEGT DIE KOMMENTARZAEHLUNG. Was dieser Lauf
   // getan hat, weiss nur sein eigener Strom; die Kommentare am PR sind die
   // Wirkung und koennen von woanders stammen.
-  if (ergebnis.is_error === true) return stumm('lauf-fehler', neu, seit, ergebnis);
+  if (ergebnis.is_error === true) return stumm('lauf-fehler', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
   if (ergebnis.subtype && ergebnis.subtype !== 'success') {
-    return stumm('lauf-fehler', neu, seit, ergebnis);
+    return stumm('lauf-fehler', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
   }
   // ... MIT EINER AUSNAHME, und nur mit dieser einen: hat DIESER Lauf
   // nachweislich gepostet, kann er nicht im Tor abgebrochen sein. Der Abbruch
@@ -223,7 +247,7 @@ export function beurteile({
   // unterwegs abgesetzte Anmerkung belegt dann nur einen Teil - hier dagegen
   // widerspricht der Strom der Behauptung, gar nichts getan zu haben.
   if (gepostet.erfolge === 0 && bejaht(text, SCHON_KOMMENTIERT)) {
-    return stumm('schon-kommentiert', neu, seit, ergebnis);
+    return stumm('schon-kommentiert', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
   }
 
   // EIN BELEG FUER UNVOLLSTAENDIGKEIT SCHLAEGT JEDEN BELEG FUER LIEFERUNG.
@@ -231,7 +255,7 @@ export function beurteile({
   // Pruefung nicht fertig, auch wenn unterwegs schon eine Anmerkung
   // herausgegangen ist. Stuende diese Zeile hinter den Belegen, machte eine
   // einzelne Inline-Anmerkung eines abgebrochenen Laufs den Haken gruen.
-  if (WARTET_AUF_AGENTEN.test(text)) return stumm('agenten', neu, seit, ergebnis);
+  if (WARTET_AUF_AGENTEN.test(text)) return stumm('agenten', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
 
   // DER EINE BELEG, DER NICHT AUF PROSA BERUHT: dieser Lauf hat den Postbefehl
   // ausgefuehrt, und er kam ohne Fehler zurueck. Er schlaegt auch die
@@ -263,7 +287,7 @@ export function beurteile({
     };
   }
 
-  if (sperren > 0) return stumm('werkzeugsperre', neu, seit, ergebnis);
+  if (sperren > 0) return stumm('werkzeugsperre', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
 
   if (bejaht(text, TOR_STOPP) && TRIVIAL.test(text) && !VERNEINT.test(text)) {
     return {
@@ -278,8 +302,8 @@ export function beurteile({
     };
   }
 
-  if (zahl.frei > 0) return stumm('nicht-zuzuordnen', neu, seit, ergebnis);
-  return stumm('unbekannt', neu, seit, ergebnis);
+  if (zahl.frei > 0) return stumm('nicht-zuzuordnen', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
+  return stumm('unbekannt', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
 }
 
 const DIAGNOSE = {
@@ -339,19 +363,30 @@ const DIAGNOSE = {
     'vollstaendig und schweigt danach absichtlich.'
 };
 
-function stumm(grund, neu, seit, ergebnis) {
+function stumm(grund, neu, seit, ergebnis, gebunden = 0, erfolge = 0) {
   // Die Zahl, die zwei Zeilen weiter oben im Job-Log steht, muss hier
   // wiederauftauchen. Stand hier pauschal "nichts hinterlassen", waehrend der
   // Schritt darueber "Aeusserungen von claude seit dem Laufbeginn: 1" ausgab,
   // widersprachen sich zwei Zeilen desselben Logs - und der Leser sucht den
   // Fehler an der falschen Stelle (09.09., #1082).
+  //
+  // Und die Meldung darf nur behaupten, was der Aufrufer ihr auch mitgegeben
+  // hat (Review zu #1085): fuenf der Rueckgaben hier fallen, BEVOR
+  // `zahl.gebunden` ueberhaupt geprueft wird. "Keine davon belegt DIESEN Lauf"
+  // ist dann eine Behauptung ins Blaue - und bei einem Lauf, der gepostet hat
+  // und danach auf seine Agenten wartet, schlicht falsch. Dieser Fall bleibt
+  // rot, aber aus dem RICHTIGEN Grund: geliefert schon, fertig nicht.
+  const belegt = gebunden > 0 || erfolge > 0;
   const kopf =
     grund === 'kein-stand'
       ? 'Der Nachweis konnte den Laufbeginn nicht bestimmen.'
-      : neu > 0
-        ? `Die Review hat zu diesem Stand nichts Zuzuordnendes hinterlassen: ${neu} ` +
-          `Aeusserung(en) nach dem Laufbeginn ${seit}, aber keine davon belegt DIESEN Lauf.`
-        : `Die Review hat in diesem Lauf nichts hinterlassen (nichts nach dem Laufbeginn ${seit}).`;
+      : neu === 0
+        ? `Die Review hat in diesem Lauf nichts hinterlassen (nichts nach dem Laufbeginn ${seit}).`
+        : belegt
+          ? `Die Review hat in diesem Lauf zwar gepostet (${neu} Aeusserung(en) nach dem ` +
+            `Laufbeginn ${seit}), aber keine davon belegt eine ABGESCHLOSSENE Pruefung.`
+          : `Die Review hat zu diesem Stand nichts Zuzuordnendes hinterlassen: ${neu} ` +
+            `Aeusserung(en) nach dem Laufbeginn ${seit}, aber keine davon belegt DIESEN Lauf.`;
   const zahlen = ergebnis
     ? ` num_turns: ${ergebnis.num_turns ?? '?'}, subtype: ${ergebnis.subtype ?? '?'}, ` +
       `Verweigerungen: ${Array.isArray(ergebnis.permission_denials) ? ergebnis.permission_denials.length : '?'}.`
