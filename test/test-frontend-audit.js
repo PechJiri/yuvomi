@@ -2251,40 +2251,54 @@ test('browser loader supports personal settings API and auth imports', () => {
   assert.match(source, /promptPwaInstall/);
 });
 
-test('wer optimistisch schreibt UND offline gecacht wird, liest ueber getWithSource', () => {
-  // DIE KOPPLUNG, DIE SONST STILL IST. Eine Seite, die eine Bearbeitung
-  // optimistisch anzeigt und ihren Merker beim Laden raeumt, darf eine Antwort
-  // aus dem Offline-Cache nicht wie eine frische behandeln: `networkFirstApi`
-  // gibt sie mit Status 200 zurueck, sie kann beliebig alt sein, und eine
-  // Mutation leert diesen Cache nicht (nur Logout tut das). Der Merker faellt
-  // dann, und die Zeile springt auf den Stand von vor der Bearbeitung.
+test('wer an der Frische haengt UND offline gecacht wird, liest ueber getWithSource', () => {
+  // DIE KOPPLUNG, DIE SONST STILL IST. Eine Seite, deren Entscheidung von der
+  // FRISCHE einer Antwort abhaengt, darf eine aus dem Offline-Cache nicht wie
+  // eine frische behandeln: `networkFirstApi` gibt sie mit Status 200 zurueck,
+  // sie kann beliebig alt sein, und eine Mutation leert diesen Cache nicht (nur
+  // Logout tut das). Der Merker faellt dann, oder es wird gegen veraltete
+  // Referenzlisten gefiltert.
   //
-  // Heute betrifft das genau den Einkauf: `/shopping` steht auf der Whitelist,
-  // `/pantry` nicht - deshalb liest der Vorrat weiter mit `api.get`, und das
-  // ist richtig, solange das so bleibt. Setzt jemand `/pantry` auf die
-  // Whitelist, faellt dieser Guard und nennt den fehlenden Schritt.
+  // DIE BETROFFENEN SEITEN WERDEN ABGELEITET, NICHT GEPFLEGT. Die erste Fassung
+  // fuehrte eine Liste von drei Dateinamen - und liess damit genau die Sorte
+  // Geschwister durch, fuer die sie gedacht war: `pantry.js` fehlte eine Runde
+  // lang, `tasks.js` eine weitere. Erkannt wird die Abhaengigkeit stattdessen an
+  // zwei Strukturmerkmalen, die eine Seite nicht zufaellig traegt:
+  //   - eine `pending…`-Map: ausstehende Schreibvorgaenge, die ein Laden raeumt
+  //   - ein `…Stale`-Feld: „diese Referenzlisten sind nicht nachweislich frisch"
   const sw = read('../public/sw.js');
   const whitelist = sw.match(/const API_CACHE_WHITELIST\s*=\s*\[([^\]]*)\]/)?.[1];
   assert.ok(whitelist, 'API_CACHE_WHITELIST in sw.js nicht gefunden - der Guard liest ins Leere');
   const cached = [...whitelist.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 
-  // Seiten, deren Entscheidung von der FRISCHE der Antwort abhaengt: ein Merker,
-  // den das Laden raeumt, oder eine Referenzliste, gegen die gefiltert wird.
-  // Tasks gehoert aus dem zweiten Grund dazu - `/tasks/meta/options` faellt
-  // unter das `/tasks`-Praefix, und `getRecentFilters` wuerde gegen beliebig
-  // alte Kategorien, Tags und Mitglieder beschneiden.
-  const seiten = [
-    { pfad: '/shopping', datei: '../public/pages/shopping.js' },
-    { pfad: '/pantry',   datei: '../public/pages/pantry.js' },
-    { pfad: '/tasks',    datei: '../public/pages/tasks.js' },
-  ];
-  for (const { pfad, datei } of seiten) {
+  const seiten = readdirSync(new URL('../public/pages/', import.meta.url))
+    .filter((f) => f.endsWith('.js'));
+
+  const verletzt = [];
+  let geprueft = 0;
+  for (const datei of seiten) {
+    const src = read(`../public/pages/${datei}`);
+    const haengtAnFrische = /const pending[A-Z]\w*\s*=\s*new Map\(/.test(src)
+      || /^\s*\w*[sS]tale:\s/m.test(src);
+    if (!haengtAnFrische) continue;
+    // Der Modulpfad einer Seite traegt ihren Dateinamen - und der Guard glaubt
+    // das nicht, sondern verlangt, dass die Seite ihn auch wirklich liest.
+    const pfad = `/${datei.replace(/\.js$/, '')}`;
     if (!cached.includes(pfad)) continue;
-    assert.match(read(datei), /getWithSource\(/,
-      `${pfad} steht in API_CACHE_WHITELIST, aber ${datei} liest nicht ueber `
-      + 'api.getWithSource() - eine gecachte Antwort raeumt dort den Merker fuer '
-      + 'ausstehende Bearbeitungen und traegt den Stand von vorher ein');
+    if (!new RegExp(`api\\.get(WithSource)?\\([\`'"]${pfad}`).test(src)) continue;
+    geprueft += 1;
+    if (!/getWithSource\(/.test(src)) verletzt.push(`${datei} (Pfad ${pfad})`);
   }
+
+  // REICHWEITE VOR DEM URTEIL: faende der Guard gar keine Seite, waere er
+  // gruen, ohne je etwas geprueft zu haben - dieselbe Falle wie beim
+  // Browser-Ketten-Guard weiter oben.
+  assert.ok(geprueft > 0,
+    'keine einzige Seite geprueft - Merkmale oder Whitelist-Format haben sich geaendert');
+  assert.deepEqual(verletzt, [],
+    `haengt an der Frische und steht in API_CACHE_WHITELIST, liest aber nicht ueber `
+    + `api.getWithSource(): ${verletzt.join(', ')} - eine gecachte Antwort raeumt dort `
+    + 'den Merker fuer ausstehende Bearbeitungen oder wird als frische Referenz gelesen');
 });
 
 test('legacy settings page remains available during the leaf migration', () => {
