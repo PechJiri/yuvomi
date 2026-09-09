@@ -2333,8 +2333,19 @@ async function openCategoryManager(container, { fromDeepLink = false } = {}) {
   // ab, bevor `api.delete` laeuft. Ein in onClose ausgewerteter `changed`-Merker
   // stuende genau dann auf false, und die sichtbare Liste behielte ihre
   // Gruppierung nach einer Kategorie, die es nicht mehr gibt.
+  //
+  // Und es reichen NICHT die Kategorien allein. Anders als Aufgaben, Kontakte
+  // und Budget, die ueber einen stabilen `key` zeigen, steht die Kategorie im
+  // Einkauf als NAME in `shopping_items.category` - der Server schreibt also in
+  // die Artikelzeilen: Umbenennen per `UPDATE shopping_items SET category = ?`,
+  // Loeschen weist sie der naechsten Kategorie zu. `loadCategories()` fasst
+  // `state.items` nicht an, und `groupItemsByCategory` liest den Namen von dort;
+  // die Zeilen landeten sonst unter der alten Ueberschrift am Listenende.
   const onCategoriesChanged = async () => {
-    await loadCategories();
+    await Promise.all([
+      loadCategories(),
+      state.activeListId ? loadItems(state.activeListId) : Promise.resolve(),
+    ]);
     if (state.activeList) {
       renderListContent(container);
       wireListContentEvents(container);

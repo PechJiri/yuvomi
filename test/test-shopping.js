@@ -125,6 +125,14 @@ test('Der Kategorie-Manager frischt im Ereignis auf, nicht beim Schliessen', () 
   assert(!/removeEventListener\('category-manager-changed'/.test(fn), 'onClose darf sich nicht abmelden - das liefe vor dem Loeschen');
   assert(/const onCategoriesChanged = async \(\) => \{[\s\S]*?loadCategories\(\)[\s\S]*?renderListContent\(container\)/.test(fn),
     'die Auffrischung der sichtbaren Liste gehoert in den Ereignis-Handler');
+  // Und die Artikel muessen mit: der Einkauf haelt die Kategorie als NAME in
+  // `shopping_items.category`, also schreibt der Server beim Umbenennen und
+  // beim Loeschen in die Artikelzeilen (`UPDATE shopping_items SET category`).
+  // `loadCategories()` fasst `state.items` nicht an, und `groupItemsByCategory`
+  // liest den Namen von dort - ohne Nachladen stehen die Zeilen unter der alten
+  // Ueberschrift am Listenende.
+  assert(/const onCategoriesChanged = async \(\) => \{[\s\S]*?loadItems\(state\.activeListId\)[\s\S]*?renderListContent\(container\)/.test(fn),
+    'der Handler muss auch die Artikel nachladen - der Server weist sie beim Loeschen um');
 });
 
 let listId, list2Id, itemId1, itemId2, itemId3;
