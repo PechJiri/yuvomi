@@ -56,39 +56,54 @@ const state = {
 };
 
 /**
- * Mengenaenderungen, die noch nicht abgeschlossen sind (Stepper-Entprellung).
+ * DIE ABSICHT, NICHT DER STAND - dieselbe Trennung wie im Einkauf.
  *
- * Zwei Zustaende, ein Eintrag je Artikel:
- *   ausstehend   { timer, rollback, seq, quantity, flush }
- *   bestaetigt   { seq, quantity, settledAt }
+ * `state.items` traegt ausschliesslich, was der Server zuletzt gesagt hat. Was
+ * der Nutzer WILL, steht hier: id -> { quantity, seq, timer, flush }. Die Zeile
+ * zeigt die Ueberlagerung (`withIntent`).
  *
- * `quantity` ist in beiden Faellen der Wert, der gilt - er steht hier und nicht
- * nur am Artikelobjekt, weil jede Auffrischung `state.items` durch NEUE Objekte
- * ersetzt: das festgehaltene haengt danach an keinem Bestand mehr, und die
- * Anzeige zeigte die Menge von vor dem Schritt.
+ * Der Vorlaeufer vermischte beides in `item.quantity`. Dann braucht ein
+ * Fehlschlag eine Ruecksprung-Grundlage, und die wurde ueber vier
+ * Review-Runden hinweg immer wieder falsch: mal vom alten Schnappschuss
+ * ueberschrieben, mal am bestaetigten Wert vorbei, mal aus dem Offline-Cache.
+ * Getrennt gehalten gibt es sie nicht mehr - ein Ruecksprung ist das ENTFERNEN
+ * der Absicht.
+ *
+ * Drei Regeln:
+ *   - Ein Schritt setzt die Absicht (entprellt, deshalb Timer und `flush`).
+ *   - Scheitert der Schreibvorgang, faellt sie.
+ *   - Bestaetigt der Server, wandert der Wert in den Serverstand und die
+ *     Absicht faellt - geschuetzt von `settledAt`, damit eine Antwort, die
+ *     vorher losgeschickt wurde, ihn nicht zurueckdreht.
  */
-const pendingQuantity = new Map();
+const intents = new Map();
 let QUANTITY_DEBOUNCE_MS_OVERRIDE = null; // nur fuer Tests, siehe __test unten
 const QUANTITY_DEBOUNCE_MS = 450;
 /** Monotone Folgenummer, die überholte PATCH-Antworten erkennbar macht. */
 let _quantitySeq = 0;
-/**
- * Monotone Nummer je Ladevorgang.
- *
- * Ein Eintrag, der beim PATCH-Erfolg verschwindet, hilft nicht: die
- * ueberholende Antwort kommt gerade DANACH. `settledAt` haelt fest, welcher
- * Ladevorgang zuletzt begonnen hatte, als der Server bestaetigte - erst ein
- * spaeter begonnener hat den Wert nachweislich gelesen und raeumt auf.
- */
+/** Monotone Nummer je Ladevorgang, und wann ein Artikel zuletzt bestaetigt wurde. */
 let _pantryLoadSeq = 0;
-/**
- * Die Nummer des zuletzt ANGEWANDTEN Ladevorgangs.
- *
- * `settledAt` allein deckt zwei sich ueberholende Auffrischungen nicht ab:
- * landet die JUENGERE zuerst, raeumt sie den Eintrag zu Recht, und die
- * AELTERE schreibt danach die Menge von vor dem Schritt zurueck.
- */
 let _pantryAppliedLoad = 0;
+const settledAt = new Map();
+
+/** Die Menge, die die Zeile ZEIGT: die Absicht, sonst der Serverstand. */
+function quantityOf(item) {
+  const intent = intents.get(item?.id);
+  return intent ? intent.quantity : Number(item?.quantity ?? 0);
+}
+
+/**
+ * Der Artikel, wie ihn die Zeile zeigt.
+ *
+ * Als Kopie statt als Einzelwert, weil die Menge in abgeleitete Angaben
+ * einfliesst - Badges, Bestandsstatus, Fehlmenge. So bleiben `quantityText`,
+ * `pantryItemStatus` und `shortfallText` unveraendert und bekommen einfach den
+ * ueberlagerten Artikel.
+ */
+function withIntent(item) {
+  const intent = intents.get(item?.id);
+  return intent ? { ...item, quantity: intent.quantity } : item;
+}
 
 // --------------------------------------------------------
 // Formatierung
@@ -154,37 +169,6 @@ function stockBadge(item) {
 // Laden
 // --------------------------------------------------------
 
-/**
- * Ausstehende Mengen ueber einen frisch geladenen Bestand legen.
- *
- * Nur die Zeilen mit offenem PATCH; alles andere kommt unveraendert vom Server,
- * denn genau dafuer laeuft die Auffrischung - eine verworfene Antwort haette
- * auch die frischen Lagerorte mitgenommen.
- */
-function applyPendingQuantities(items, { startedAt = 0 } = {}) {
-  if (!pendingQuantity.size) return items;
-  for (const item of items) {
-    const pending = pendingQuantity.get(item.id);
-    if (!pending) continue;
-    // Der Serverwert, der hier ueberschrieben wird, ist ab jetzt die
-    // Ruecksprung-Grundlage. Hat jemand anderes den Bestand inzwischen
-    // geaendert, waere die Menge von vor dem Tippen nach einem Fehlschlag eine
-    // Zahl, die der Server nie hatte - und diese Zeile ist die letzte, die den
-    // frischen Wert ueberhaupt noch sieht. Nur fuer den noch AUSSTEHENDEN
-    // Eintrag: ein bestaetigter springt nirgends mehr zurueck.
-    //
-    // Und nicht aus einer Antwort, die BEGANN, bevor fuer diesen Artikel
-    // zuletzt bestaetigt wurde (`confirmedAt`) - sie kennt den bestaetigten
-    // Wert nicht. Ohne diese Bedingung sprang ein zweiter Schritt nach einem
-    // gescheiterten PATCH am ersten, ERFOLGREICHEN vorbei zurueck.
-    const kenntBestaetigung = pending.confirmedAt == null || pending.confirmedAt < startedAt;
-    if (pending.settledAt == null && kenntBestaetigung) {
-      pending.rollback = Number(item.quantity);
-    }
-    item.quantity = pending.quantity;
-  }
-  return items;
-}
 
 async function loadPantry() {
   const startedAt = ++_pantryLoadSeq;
@@ -193,15 +177,21 @@ async function loadPantry() {
   if (startedAt < _pantryAppliedLoad) return;
   _pantryAppliedLoad = startedAt;
   // Anders als der Einkauf liest der Vorrat mit `api.get`: `/pantry` steht
-  // NICHT in `API_CACHE_WHITELIST` (sw.js), es gibt hier also keine Antwort
-  // aus dem Cache, die die Marke faelschlich hochziehen koennte. Haelt der
-  // Guard in `test-frontend-audit.js` fest.
-  // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte die Menge
-  // beim Lesen schon, seine Antwort ist die frischere Wahrheit.
-  for (const [itemId, entry] of pendingQuantity) {
-    if (entry.settledAt != null && entry.settledAt < startedAt) pendingQuantity.delete(itemId);
+  // NICHT in `API_CACHE_WHITELIST` (sw.js), es gibt hier also keine Antwort aus
+  // dem Cache. Haelt der Guard in `test-frontend-audit.js` fest.
+
+  // EIN BESTAETIGTER ARTIKEL WIRD VON EINER AELTEREN ANTWORT NICHT
+  // ZURUECKGEDREHT - alles andere an ihr wird gebraucht und landet.
+  const vorherige = new Map(state.items.map((i) => [i.id, i]));
+  const frisch = res.data ?? [];
+  for (const item of frisch) {
+    const bestaetigt = settledAt.get(item.id);
+    if (bestaetigt != null && bestaetigt >= startedAt) {
+      const alt = vorherige.get(item.id);
+      if (alt) item.quantity = alt.quantity;
+    }
   }
-  state.items = applyPendingQuantities(res.data ?? [], { startedAt });
+  state.items = frisch;
   state.locations = res.locations ?? [];
   state.categories = res.categories ?? [];
 }
@@ -220,7 +210,9 @@ async function ensureLists() {
 
 function visibleItems() {
   const q = state.query.toLowerCase();
-  return state.items.filter((item) => {
+  // Gefiltert wird nach dem, was die Zeile ZEIGT - sonst faellt ein Artikel aus
+  // „Fast leer", waehrend die Zeile ihn noch dort zeigt.
+  return state.items.map(withIntent).filter((item) => {
     if (!matchesPantryFilter(item, state.filter, state.todayKey)) return false;
     if (!q) return true;
     return item.name?.toLowerCase().includes(q)
@@ -442,7 +434,7 @@ function renderFilters() {
     wireScrollFade(bar);
   }
 
-  const counts = pantryFilterCounts(state.items, state.todayKey);
+  const counts = pantryFilterCounts(state.items.map(withIntent), state.todayKey);
   const active = PANTRY_FILTERS.filter((key) => counts[key] > 0);
 
   // Der aktive Filter hat gerade seinen letzten Treffer verloren → zurück auf Alle.
@@ -598,7 +590,7 @@ function renderList() {
 
     const rows = document.createElement('ul');
     rows.className = 'list-rows pantry-rows';
-    for (const item of group.items) rows.appendChild(rowEl(item));
+    for (const item of group.items) rows.appendChild(rowEl(withIntent(item)));
     section.appendChild(rows);
     list.appendChild(section);
   }
@@ -889,96 +881,74 @@ function onListClick(e) {
  */
 function adjustQuantity(item, direction, row) {
   const step = Number(row.querySelector('.pantry-stepper')?.dataset.step) || 1;
-  const previous = Number(item.quantity);
+  // Der Ausgangspunkt ist, was die Zeile ZEIGT - eine schon laufende Absicht
+  // eingeschlossen, sonst zaehlte jeder Schritt vom Serverstand aus neu.
+  const previous = quantityOf(item);
   const next = normalizePantryQuantity(previous + direction * step, { fallback: previous });
   if (next === previous) return;
 
-  item.quantity = next;
-  vibrate(8);
-  refreshRowQuantity(row, item);
-  if (renderFilters().wasReset) renderList();
-
-  const pending = pendingQuantity.get(item.id);
-  if (pending) clearTimeout(pending.timer);
-  // Rollback ist der letzte serverbestätigte Wert, nicht der letzte optimistische:
-  // der Eintrag bleibt bis zum Settle in der Map, deshalb überlebt er auch einen
-  // Tap während des laufenden Requests. Ein bereits BESTAETIGTER Eintrag traegt
-  // keinen `rollback` mehr - dann ist `previous` selbst der bestaetigte Wert,
-  // denn die Antwort hat ihn in `state.items` geschrieben.
-  const rollback = pending?.rollback ?? previous;
+  const vorher = intents.get(item.id);
+  if (vorher) clearTimeout(vorher.timer);
   const seq = ++_quantitySeq;
 
-  // Der Artikel und die Zeile werden beim Settle NEU aufgeloest, nicht aus dem
-  // Abschluss genommen: eine Auffrischung im Entprell-Fenster tauscht beide aus.
-  // `next` steht dagegen fest - es ist der Wunsch dieses Schritts, und den
-  // traegt der Merker auch dann noch, wenn `item` laengst abgehaengt ist.
   const timer = setTimeout(async () => {
     try {
       const res = await api.patch(`/pantry/${item.id}`, { quantity: next });
-      // Überholte Antwort verwerfen. Ohne diese Prüfung überschrieb eine
-      // langsame Antwort den neueren optimistischen Stand, die Menge sprang
-      // sichtbar zurück und der nächste PATCH schrieb die veraltete Zahl fest.
-      const entry = pendingQuantity.get(item.id);
-      if (entry?.seq !== seq) return;
-      const current = state.items.find((i) => i.id === item.id) ?? item;
-      // NUR die Menge, nicht die ganze Zeile. Die Route antwortet mit dem
-      // vollen Datensatz, und der ist ein Schnappschuss vom Zeitpunkt DIESES
-      // Schreibvorgangs: hat jemand anderes inzwischen Name, Ort, Kategorie
-      // oder Notiz geaendert und eine Auffrischung das gebracht, machte ein
-      // `Object.assign` daraus wieder den alten Stand. Autoritativ ist diese
-      // Antwort nur fuer das Feld, das sie geschrieben hat - alles andere holt
-      // die naechste Auffrischung.
-      current.quantity = normalizePantryQuantity(res.data?.quantity, { fallback: next });
-      // Der Eintrag bleibt als BESTAETIGT stehen, bis ein Ladevorgang laeuft,
-      // der nach dieser Antwort begonnen hat - ohne ihn drehte eine aeltere
-      // Auffrischung die Menge zurueck. Timer und `flush` gehen dabei weg: der
-      // Timer ist gefeuert, und ein `pagehide` haette sonst den schon
-      // bestaetigten Wert ein zweites Mal geschickt.
-      pendingQuantity.set(item.id, {
-        seq,
-        quantity: Number(current.quantity),
-        settledAt: _pantryLoadSeq,
-        confirmedAt: _pantryLoadSeq,
-      });
+      // Ueberholt: ein spaeterer Schritt hat die Absicht ersetzt, sein Ausgang
+      // entscheidet. Der Server steht trotzdem auf `next` - das gehoert in den
+      // SERVERSTAND, damit ein Fehlschlag des spaeteren nicht daran vorbei
+      // zurueckfaellt.
+      const aktuell = intents.get(item.id);
+      // NUR die Menge aus der Antwort. Sie ist ein Schnappschuss vom Zeitpunkt
+      // DIESES Schreibvorgangs und fuer nichts anderes autoritativ - hat jemand
+      // Name, Ort oder Notiz geaendert, holt die naechste Auffrischung das.
+      const bestaetigt = normalizePantryQuantity(res.data?.quantity, { fallback: next });
+      const current = state.items.find((i) => i.id === item.id);
+      if (current) current.quantity = bestaetigt;
+      settledAt.set(item.id, _pantryLoadSeq);
+      if (aktuell?.seq !== seq) return;
+      // Die eigene Absicht ist erfuellt und faellt - was die Zeile danach
+      // zeigt, ist der bestaetigte Serverstand.
+      intents.delete(item.id);
       const rowNow = liveRow(item.id, row);
-      if (rowNow) refreshRowQuantity(rowNow, current);
+      if (rowNow && current) refreshRowQuantity(rowNow, withIntent(current));
     } catch (err) {
-      const entry = pendingQuantity.get(item.id);
-      if (entry?.seq !== seq) return;
-      pendingQuantity.delete(item.id);
-      const current = state.items.find((i) => i.id === item.id) ?? item;
-      // Der Ruecksprung kommt aus dem Merker, nicht aus dem Abschluss: eine
-      // Auffrischung im Entprell-Fenster hat dort den frischeren Serverwert
-      // hinterlegt, und der Wert von vor dem Tippen ist dann veraltet.
-      current.quantity = entry.rollback ?? rollback;
+      const aktuell = intents.get(item.id);
+      if (aktuell?.seq !== seq) return;
+      // DIE ABSICHT FAELLT, mehr passiert nicht. Was die Zeile danach zeigt,
+      // ist der Serverstand - der aktuellste, den wir haben. Es gibt keinen
+      // gemerkten Ruecksprungwert mehr, der dabei veralten koennte.
+      intents.delete(item.id);
+      const current = state.items.find((i) => i.id === item.id);
       // Die Seite wurde inzwischen verlassen: kein Zurückzeichnen einer
       // abgehängten Zeile und kein Vorrats-Toast auf einer fremden Seite.
       const rowNow = liveRow(item.id, row);
       if (!rowNow) return;
-      refreshRowQuantity(rowNow, current);
+      if (current) refreshRowQuantity(rowNow, withIntent(current));
       if (renderFilters().wasReset) renderList();
       window.yuvomi?.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
     }
   }, QUANTITY_DEBOUNCE_MS_OVERRIDE ?? QUANTITY_DEBOUNCE_MS);
 
-  // `flush` schickt den gedebouncten Wert sofort ab, wenn die Seite verschwindet.
-  pendingQuantity.set(item.id, {
-    timer,
-    rollback,
-    seq,
+  intents.set(item.id, {
     quantity: next,
-    // Wandert MIT: der Eintrag des vorigen Schritts wird hier ersetzt, und mit
-    // ihm ginge sonst verloren, dass fuer diesen Artikel schon bestaetigt wurde.
-    confirmedAt: pending?.settledAt ?? pending?.confirmedAt ?? null,
+    seq,
+    timer,
+    // `flush` schickt den gedebouncten Wert sofort ab, wenn die Seite
+    // verschwindet. Die Absicht faellt dabei nicht - der Rundlauf laeuft ja
+    // noch, nur ohne Timer.
     flush: () => {
       clearTimeout(timer);
-      pendingQuantity.delete(item.id);
       // keepalive: der Request muss den Seitenwechsel überleben. Ohne ihn
       // bricht der Browser ihn mit dem Dokument ab.
       api.patch(`/pantry/${item.id}`, { quantity: next }, { keepalive: true })
         .catch(() => { /* Die Seite ist weg; ein Toast hätte kein Ziel mehr. */ });
     },
   });
+
+  vibrate(8);
+  refreshRowQuantity(row, withIntent(item));
+  if (renderFilters().wasReset) renderList();
   bindQuantityFlush();
 }
 
@@ -1000,7 +970,7 @@ function bindQuantityFlush() {
   if (_quantityFlushBound) return;
   _quantityFlushBound = true;
   window.addEventListener('pagehide', () => {
-    for (const entry of [...pendingQuantity.values()]) entry.flush?.();
+    for (const intent of [...intents.values()]) intent.flush?.();
   });
 }
 
@@ -1349,9 +1319,15 @@ export const __test = {
   state,
   adjustQuantity,
   loadPantry,
-  pendingQuantity,
+  intents,
+  quantityOf,
+  withIntent,
   setContainerForTest: (el) => { _container = el; },
   // Eine echte, aber knapp bemessene Frist statt eines Uhr-Objekts - wie beim
   // Sammelaktions-Automaten des Einkaufs.
   setQuantityDebounceMsForTest: (ms) => { QUANTITY_DEBOUNCE_MS_OVERRIDE = ms; },
+  // Aufraeumen am ANFANG: `_pantryLoadSeq` waechst global weiter, und eine
+  // Bestaetigung aus einem frueheren Fall schuetzt sonst den Artikel des
+  // naechsten vor seiner eigenen Auffrischung.
+  resetLoadOrderForTest: () => { _pantryAppliedLoad = 0; settledAt.clear(); },
 };

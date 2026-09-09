@@ -77,7 +77,8 @@ function rice(quantity, extra = {}) {
 }
 
 function resetPantry() {
-  __test.pendingQuantity.clear();
+  __test.intents.clear();
+  __test.resetLoadOrderForTest();
   __test.state.items = [];
   __test.state.locations = [];
   __test.state.categories = [];
@@ -105,11 +106,11 @@ test('ein Schritt ueberlebt eine Auffrischung mitten im Entprell-Fenster', async
 
   const { row } = makeRow();
   __test.adjustQuantity(__test.state.items[0], +1, row);
-  assert.equal(__test.state.items[0].quantity, 3, 'optimistisch erhoeht');
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3, 'optimistisch erhoeht');
 
   // Die Auffrischung faellt in das Fenster - vor dem PATCH.
   await __test.loadPantry();
-  assert.equal(__test.state.items[0].quantity, 3,
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3,
     'die alte Antwort darf den Schritt nicht zuruecknehmen');
 
   await settled();
@@ -135,7 +136,7 @@ test('die Antwort landet im NEUEN Artikelobjekt, nicht im abgehaengten', async (
   await __test.loadPantry();   // tauscht `state.items` gegen neue Objekte aus
   await settled();
 
-  assert.equal(__test.state.items[0].quantity, 2.5,
+  assert.equal(__test.quantityOf(__test.state.items[0]), 2.5,
     'ohne frische Aufloesung schreibt die Antwort in ein Objekt, das an nichts mehr haengt');
 });
 
@@ -161,7 +162,7 @@ test('die PATCH-Antwort ueberschreibt keine frisch geladenen Fremdfelder', async
   assert.equal(__test.state.items[0].name, 'Basmatireis');
   await settled();
 
-  assert.equal(__test.state.items[0].quantity, 3, 'die Menge kommt aus der Antwort');
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3, 'die Menge kommt aus der Antwort');
   assert.equal(__test.state.items[0].name, 'Basmatireis',
     'der frisch geladene Name darf nicht auf den Stand der Antwort zurueckfallen');
 });
@@ -192,14 +193,14 @@ test('ein zweiter Schritt springt nicht am ersten, erfolgreichen vorbei zurueck'
   const { row } = makeRow();
   __test.adjustQuantity(__test.state.items[0], +1, row);   // 2 -> 3
   await settled();                                          // bestaetigt
-  assert.equal(__test.state.items[0].quantity, 3);
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3);
 
   __test.adjustQuantity(__test.state.items[0], +1, row);   // 3 -> 4, ausstehend
   alt.resolve({ data: [rice(2)], locations: [], categories: [] });
   await laden;
   await settled();                                          // Schritt 2 scheitert
 
-  assert.equal(__test.state.items[0].quantity, 3,
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3,
     'der Ruecksprung gehoert auf die bestaetigte 3, nicht auf die 2 des alten Schnappschusses');
   delete global.window.yuvomi.showToast;
 });
@@ -228,13 +229,13 @@ test('eine Antwort, die den PATCH ueberholt hat, dreht den Schritt nicht zurueck
   const { row } = makeRow();
   __test.adjustQuantity(__test.state.items[0], +1, row);
   await settled();
-  assert.equal(__test.state.items[0].quantity, 3);
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3);
   // 3. ERST JETZT trifft die alte Antwort ein - ein Merker, der beim
   //    PATCH-Erfolg verschwaende, waere hier schon weg.
   gate.resolve({ data: [rice(2)], locations: [], categories: [] });
   await loading;
 
-  assert.equal(__test.state.items[0].quantity, 3,
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3,
     'die bestaetigte Menge muss die aeltere Antwort ueberstehen');
 });
 
@@ -251,13 +252,13 @@ test('ein spaeter begonnenes Laden raeumt den Merker - fremde Aenderungen kommen
   const { row } = makeRow();
   __test.adjustQuantity(__test.state.items[0], +1, row);
   await settled();
-  assert.equal(__test.state.items[0].quantity, 3);
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3);
 
   // Dieses Laden beginnt NACH der Bestaetigung: jemand anderes hat den Vorrat
   // aufgefuellt. Haelt der Merker hier noch, waere der Server unwirksam.
   await __test.loadPantry();
-  assert.equal(__test.state.items[0].quantity, 9);
-  assert.equal(__test.pendingQuantity.size, 0, 'kein Rest im Merker');
+  assert.equal(__test.quantityOf(__test.state.items[0]), 9);
+  assert.equal(__test.intents.size, 0, 'kein Rest im Merker');
 });
 
 test('scheitert der PATCH, bleibt kein Merker stehen', async () => {
@@ -276,8 +277,8 @@ test('scheitert der PATCH, bleibt kein Merker stehen', async () => {
   __test.adjustQuantity(__test.state.items[0], +1, row);
   await settled();
 
-  assert.equal(__test.state.items[0].quantity, 2, 'zurueckgedreht');
-  assert.equal(__test.pendingQuantity.size, 0, 'ein gescheiterter Wunsch darf nichts auftragen');
+  assert.equal(__test.quantityOf(__test.state.items[0]), 2, 'zurueckgedreht');
+  assert.equal(__test.intents.size, 0, 'ein gescheiterter Wunsch darf nichts auftragen');
   assert.equal(toasts.length, 1);
   delete global.window.yuvomi.showToast;
 });
@@ -304,12 +305,12 @@ test('eine aeltere Antwort, die NACH einer juengeren landet, fasst den Stand nic
 
   neu.resolve({ data: [rice(3)], locations: [], categories: [] });
   await ladenNeu;
-  assert.equal(__test.state.items[0].quantity, 3);
-  assert.equal(__test.pendingQuantity.size, 0, 'die juengere Antwort kennt den Wert, der Eintrag darf gehen');
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3);
+  assert.equal(__test.intents.size, 0, 'die juengere Antwort kennt den Wert, der Eintrag darf gehen');
 
   alt.resolve({ data: [rice(2)], locations: [], categories: [] });
   await ladenAlt;
-  assert.equal(__test.state.items[0].quantity, 3,
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3,
     'eine ueberholte Antwort darf den bereits angewandten Stand nicht mehr ueberschreiben');
 });
 
@@ -331,11 +332,85 @@ test('scheitert der PATCH, springt die Menge auf den FRISCHEN Serverstand zuruec
   const { row } = makeRow();
   __test.adjustQuantity(__test.state.items[0], +1, row);
   await __test.loadPantry();
-  assert.equal(__test.state.items[0].quantity, 3, 'der Schritt ueberlebt die Auffrischung');
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3, 'der Schritt ueberlebt die Auffrischung');
 
   await settled();
-  assert.equal(__test.state.items[0].quantity, 5,
+  assert.equal(__test.quantityOf(__test.state.items[0]), 5,
     'der Ruecksprung muss den frischen Serverstand treffen, nicht den Stand von vor dem Tippen');
   assert.equal(toasts.length, 1);
   delete global.window.yuvomi.showToast;
+});
+
+test('die Zeile zeigt die Absicht, nicht den Serverstand', async () => {
+  // Die Trennung selbst: `state.items` behaelt, was der Server sagte, und die
+  // Ueberlagerung liefert, was gezeigt wird - samt der davon abgeleiteten
+  // Angaben. Ohne diesen Test bliebe `withIntent` ungeprueft (gemessen: das
+  // Totstellen der Ueberlagerung liess alle anderen Faelle gruen).
+  resetPantry();
+  __test.state.items = [rice(2)];
+  __test.setQuantityDebounceMsForTest(5000);   // der PATCH kommt hier nie dran
+
+  globalThis.__apiStub = { patch: async () => ({ data: rice(3) }) };
+  const { row } = makeRow();
+  __test.adjustQuantity(__test.state.items[0], +1, row);
+
+  assert.equal(__test.state.items[0].quantity, 2, 'der Serverstand bleibt unberuehrt');
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3, 'die Zeile zeigt die Absicht');
+  const gezeigt = __test.withIntent(__test.state.items[0]);
+  assert.equal(gezeigt.quantity, 3, 'und die abgeleiteten Angaben rechnen damit');
+  assert.equal(__test.state.items[0].quantity, 2, 'die Ueberlagerung ist eine Kopie, kein Schreiben');
+});
+
+test('ein ueberholter, aber erfolgreicher Schritt landet im Serverstand', async () => {
+  // Zwei Schritte, der erste gelingt und ist da schon ueberstimmt. Sein
+  // Ergebnis gehoert trotzdem verbucht - sonst faellt ein Fehlschlag des
+  // zweiten an ihm vorbei auf einen Stand zurueck, den der Server nicht hat.
+  resetPantry();
+  __test.state.items = [rice(2)];
+  __test.setQuantityDebounceMsForTest(5);
+
+  const tore = [deferred(), deferred()];
+  let n = 0;
+  globalThis.__apiStub = { get: async () => ({ data: [rice(2)], locations: [], categories: [] }),
+                           patch: () => tore[n++].promise };
+  const { row } = makeRow();
+  __test.adjustQuantity(__test.state.items[0], +1, row);           // 2 -> 3
+  await new Promise((r) => setTimeout(r, 15));                     // Timer 1 feuert
+  __test.adjustQuantity(__test.state.items[0], +1, row);           // 3 -> 4, ueberstimmt
+  await new Promise((r) => setTimeout(r, 15));                     // Timer 2 feuert
+
+  tore[0].resolve({ data: rice(3) });                              // erster: Erfolg
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(__test.state.items[0].quantity, 3,
+    'der bestaetigte Wert des ueberholten Schritts gehoert in den Serverstand');
+  assert.equal(__test.quantityOf(__test.state.items[0]), 4, 'die Zeile zeigt weiter die 4');
+
+  global.window.yuvomi.showToast = () => {};
+  tore[1].promise.catch(() => {});
+  tore[1].resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
+  await settled();
+  assert.equal(__test.quantityOf(__test.state.items[0]), 3,
+    'der Fehlschlag faellt auf die bestaetigte 3, nicht auf die 2 von vor beiden');
+  delete global.window.yuvomi.showToast;
+});
+
+test('eine aeltere Auffrischung ueberschreibt keine juengere', async () => {
+  // Die reine Ladeordnung, ohne Absicht im Spiel - sonst faengt die
+  // Bestaetigungswache den Fall mit und die Ordnung bliebe ungeprueft.
+  resetPantry();
+  __test.state.items = [rice(2)];
+
+  const alt = deferred();
+  const antworten = [() => alt.promise,
+                     async () => ({ data: [rice(9)], locations: [], categories: [] })];
+  globalThis.__apiStub = { get: () => antworten.shift()() };
+
+  const ladenAlt = __test.loadPantry();      // beginnt zuerst
+  await __test.loadPantry();                 // beginnt danach, landet zuerst
+  assert.equal(__test.state.items[0].quantity, 9);
+
+  alt.resolve({ data: [rice(2)], locations: [], categories: [] });
+  await ladenAlt;
+  assert.equal(__test.state.items[0].quantity, 9,
+    'die ueberholte Antwort darf den juengeren Stand nicht ersetzen');
 });
