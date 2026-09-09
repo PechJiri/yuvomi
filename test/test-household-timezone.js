@@ -289,7 +289,16 @@ test('Guard: der null-Rueckfall steht nur als Default-Parameter', () => {
   // nicht neben dem `function`. Alle neun heutigen Vorkommen stehen einzeilig;
   // wer das aendert, bekommt hier einen Fehlalarm und keinen blinden Fleck,
   // und das ist die richtige Richtung fuer einen Irrtum.
-  const CALL = /(?:householdTimeZone|todayKey)\s*\(\s*null\s*\)/;
+  //
+  // Das `[,)]` am Ende ist nachgetragen: die erste Fassung endete auf `\)` und
+  // verlangte damit `null` DIREKT vor der Klammer. Sie fing `todayKey(null)`
+  // und liess `todayKey(null, from)` durch - dieselbe uebersprungene
+  // Einstellung, nur mit einem zweiten Argument dahinter. Gemessen am
+  // 2026-09-09: `todayKey(database, from)` -> `todayKey(null, from)` an
+  // server/services/birthdays.js:318 liess diese Suite gruen, waehrend die
+  // einargumentige Schwester eine Zeile darunter sie rot machte. In server/
+  // standen 21 zweiargumentige Aufrufstellen so unbewacht.
+  const CALL = /(?:householdTimeZone|todayKey)\s*\(\s*null\s*[,)]/;
   const DECLARES_FN = /\bfunction\b|=>/;
   const offenders = [];
   for (const file of serverFiles()) {
