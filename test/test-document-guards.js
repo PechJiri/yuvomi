@@ -286,7 +286,7 @@ function holdNextNoteCategoryCreate(page) {
   let request = null;
   let settled = false;
   let markSeen;
-  const seen = new Promise((resolve) => { markSeen = resolve; });
+  const captured = new Promise((resolve) => { markSeen = resolve; });
   page.__yuvomiRequestInterceptor = (candidate) => {
     if (
       !request
@@ -299,24 +299,57 @@ function holdNextNoteCategoryCreate(page) {
     }
     return false;
   };
+  const waitForCapture = async () => {
+    let timeout;
+    try {
+      return await Promise.race([
+        captured,
+        new Promise((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('note category POST was not captured within 5 seconds')),
+            5000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
   const finish = async (action, ...args) => {
     if (settled) return;
-    if (!request) await seen;
+    if (!request) await waitForCapture();
     settled = true;
     page.__yuvomiRequestInterceptor = null;
     await request[action](...args);
   };
   return {
-    seen,
+    get seen() { return waitForCapture(); },
     release: () => finish('continue'),
     reject: () => finish('respond', {
       status: 500,
       contentType: 'application/json',
       body: JSON.stringify({ error: 'Sonde 22 delayed failure' }),
     }),
-    dispose: () => finish('abort'),
+    async dispose() {
+      page.__yuvomiRequestInterceptor = null;
+      if (settled) return;
+      settled = true;
+      if (request) await request.abort();
+    },
   };
 }
+
+test('eine unbenutzte Request-Sperre laesst sich ohne Warten entsorgen', async () => {
+  const page = {};
+  const hold = holdNextNoteCategoryCreate(page);
+  const disposed = await Promise.race([
+    hold.dispose().then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 50)),
+  ]);
+
+  assert.equal(disposed, true, 'dispose must not wait for a request that never started');
+  assert.equal(page.__yuvomiRequestInterceptor, null);
+});
 
 async function removeNoteProbeRecords(page, { titles, categoryNames }) {
   await page.evaluate(async (fixture) => {
