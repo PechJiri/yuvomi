@@ -324,6 +324,18 @@ npm run test:installer-a11y  # Zielgrößen, Kontrast und Fokus des Web-Installe
 # Ganztagsdatum, live UNTIL sowie die zugänglichen Monats-/Agenda-Namen nach Lucide.
 ```
 
+## Focused linked occurrence suite
+
+Run `npm run test:calendar-occurrence-overrides`
+for migration 194, original-slot identity, inheritance and owner resolution,
+atomic edit/delete/split operations, bounded exact-count orphan handling,
+visibility-equivalent mutation rights, provider outbound exclusion, nested
+savepoint fallback, projection caching, and cross-reader degradation contracts. The suite sets a fresh temporary
+`DB_PATH` before importing the route serializer, whose dependency graph
+initializes `server/db.js`, and removes that database and its SQLite sidecars at
+process exit. It also runs inside `npm run test:calendar`, so `npm test` and CI
+cannot omit it.
+
 ## Dokument-Guards (eigene Kette, von Hand vor dem Release)
 
 ```bash

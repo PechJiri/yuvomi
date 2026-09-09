@@ -8,7 +8,7 @@ import { createLogger } from '../logger.js';
 import express from 'express';
 import * as db from '../db.js';
 import { hydrateBirthdayOccurrences } from '../services/birthdays.js';
-import { getUpcomingEvents } from '../services/calendar-events.js';
+import { getUpcomingEvents } from '../services/calendar-event-reader.js';
 import { taskScopeWhere, taskCategoryWhere, categoryBindings, normalizeCategoryFilter } from '../services/task-scope.js';
 import { getCountdowns } from '../services/countdowns.js';
 import { listQuickLinksFor } from './quick-links.js';
@@ -16,6 +16,7 @@ import { visibilityWhere } from '../services/visibility.js';
 import { resolveBudgetMode } from '../services/budget-visibility.js';
 import { deniedModules } from '../permissions.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
+import { isAdminUser, serializeEvents } from './calendar/helpers.js';
 
 const log = createLogger('Dashboard');
 
@@ -216,13 +217,9 @@ router.get('/', (req, res) => {
   // Geteilte Logik mit /calendar/upcoming: expandiert wiederkehrende Serien,
   // sodass auch Termine erscheinen, deren Master-Start in der Vergangenheit liegt.
   if (allows('calendar')) try {
-    result.upcomingEvents = getUpcomingEvents(d, {
+    result.upcomingEvents = serializeEvents(getUpcomingEvents(d, {
       userId, limit: 5, fromToday: true, assignedTo: eventsAssignedTo, includeBirthdays,
-    })
-      .map(({ assigned_users_json, ...event }) => {
-        event.assigned_users = assigned_users_json ? JSON.parse(assigned_users_json) : [];
-        return event;
-      });
+    }), { database: d, actorId: userId, isAdmin: isAdminUser(req) });
   } catch (err) {
     log.error('upcomingEvents error:', err.message);
     result.upcomingEvents = [];

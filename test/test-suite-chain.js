@@ -52,15 +52,26 @@ function needsBrowser(name) {
   return imports.some((spec) => spec === 'puppeteer' || spec.includes('document-guards-harness'));
 }
 
-const runsIn = (script, name) => {
+const runsIn = (script, name, visited = new Set()) => {
   if (script.includes(`npm run ${name}`)) return true;
   const file = suiteFile(name);
-  return Boolean(file && script.includes(file));
+  if (file && script.includes(file)) return true;
+
+  // Follow composed suite scripts as npm itself does. Focused suites commonly
+  // belong to a domain chain (for example test:calendar); requiring every leaf
+  // to be repeated in the root command would make those chains misleading.
+  for (const match of script.matchAll(/(?:^|&&|;)\s*npm run (test:[\w:-]+)/g)) {
+    const child = match[1];
+    if (visited.has(child)) continue;
+    visited.add(child);
+    if (runsIn(pkg.scripts[child] ?? '', name, visited)) return true;
+  }
+  return false;
 };
 
 test('jedes test:*-Script hängt in genau einer Kette', () => {
-  // Die Kette ruft Suiten entweder als `npm run test:x` oder inlined sie als
-  // direktes node-Kommando - dann genügt der Testdatei-Pfad als Nachweis.
+  // Die Kette ruft Suiten direkt, über eine weitere test:*-Kette oder inlined
+  // sie als node-Kommando - dann genügt der Testdatei-Pfad als Nachweis.
   const wrong = [];
   for (const name of suiteScripts) {
     if (name === BROWSER_CHAIN) continue; // die Kette selbst, siehe oben

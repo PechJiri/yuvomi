@@ -454,6 +454,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   about 51px per block and therefore a taller hour scale - that is a change to the scale, not to
   the block, and is not part of this fix.
 
+- **Editing one occurrence of a local recurring event now keeps it linked to its series** (#975).
+  The edited occurrence keeps all three series scopes when reopened, follows later series changes
+  for fields that were not deliberately changed, and keeps its original recurrence slot even when
+  moved to another date. The replacement and its skipped original slot are saved atomically, and
+  the read-only ICS feed now exports the replacement with standard `RECURRENCE-ID` semantics.
+  Provider-synced and generated series keep their existing behavior, and historic detached edits
+  are left unchanged rather than guessed back into a series. iCloud auto-sync leaves a still-local
+  series with linked or deletion-only occurrence state local instead of uploading an incomplete
+  master or a replacement as an unrelated event.
+
 ## [2.65.1] - 2026-09-08
 
 ### Security

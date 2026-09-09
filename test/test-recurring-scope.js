@@ -17,10 +17,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 
 const { withoutBlockComments } = await import('./source-text.js');
 
+const recurrenceScope = await import('../public/utils/recurrence-scope.js');
 const { truncateRuleBefore, shiftSeriesStart, shiftEndForStart,
-        isLocalRecurringSeries, isExternalRecurringSeries,
-        followingMeansWholeSeries } =
-  await import('../public/utils/recurrence-scope.js');
+        isLocalRecurringSeries, isExternalRecurringSeries, canOverrideCalendarOccurrence,
+        followingMeansWholeSeries, requiresWholeSeriesConfirmation } = recurrenceScope;
 const { expandRecurringEvents } = await import('../server/services/calendar-events.js');
 
 // Der Server-Validator, gegen den gekürzte Regeln bestehen müssen.
@@ -146,13 +146,22 @@ test('shiftEndForStart: ganztägig mehrtägig, Dauer in Tagen erhalten', () => {
 const RULE = 'FREQ=WEEKLY';
 
 test('isLocalRecurringSeries: eine rein lokale Serie', () => {
-  assert.equal(isLocalRecurringSeries({ recurrence_rule: RULE, external_source: 'local' }), true);
+  assert.equal(isLocalRecurringSeries({
+    recurrence_rule: RULE,
+    external_source: 'local',
+    is_local_recurring_series: true,
+    can_override_occurrence: true,
+  }), true);
 });
 
-test('isLocalRecurringSeries: fehlendes external_source zählt als lokal', () => {
-  // Der Server führt die Spalte NOT NULL DEFAULT 'local'; das Fallback fängt
-  // eine Antwort ab, die sie gar nicht mitliefert.
-  assert.equal(isLocalRecurringSeries({ recurrence_rule: RULE }), true);
+test('isLocalRecurringSeries: linked child without its own rule uses server capability', () => {
+  assert.equal(isLocalRecurringSeries({
+    recurrence_rule: null,
+    series_id: 41,
+    recurrence_id: '2026-10-31',
+    is_local_recurring_series: true,
+    can_override_occurrence: true,
+  }), true);
 });
 
 test('isLocalRecurringSeries: ein Einzeltermin ist keine Serie', () => {
@@ -177,12 +186,51 @@ test('isLocalRecurringSeries: ein Kalenderbezug schließt aus, auch bei source=l
   assert.equal(isLocalRecurringSeries({ recurrence_rule: RULE, external_source: 'local', subscription_id: 3 }), false);
 });
 
+test('isLocalRecurringSeries: client does not override a negative server capability', () => {
+  assert.equal(isLocalRecurringSeries({
+    recurrence_rule: RULE,
+    external_source: 'local',
+    is_local_recurring_series: true,
+    can_override_occurrence: false,
+  }), true);
+});
+
+test('canOverrideCalendarOccurrence remains actor-specific for a non-owner local series', () => {
+  const visibleNonOwnerSeries = {
+    recurrence_rule: RULE,
+    external_source: 'local',
+    is_local_recurring_series: true,
+    can_override_occurrence: false,
+  };
+  assert.equal(isLocalRecurringSeries(visibleNonOwnerSeries), true);
+  assert.equal(isExternalRecurringSeries(visibleNonOwnerSeries), false);
+  assert.equal(canOverrideCalendarOccurrence(visibleNonOwnerSeries), false);
+});
+
+test('a structurally local series without occurrence authority requires a whole-series confirmation', () => {
+  const localNonOwnerSeries = {
+    recurrence_rule: RULE,
+    is_local_recurring_series: true,
+    can_override_occurrence: false,
+  };
+  assert.equal(requiresWholeSeriesConfirmation(localNonOwnerSeries), true);
+  assert.equal(requiresWholeSeriesConfirmation({
+    ...localNonOwnerSeries,
+    can_override_occurrence: true,
+  }), false);
+  assert.equal(requiresWholeSeriesConfirmation({
+    recurrence_rule: RULE,
+    is_local_recurring_series: false,
+    can_override_occurrence: false,
+  }), false);
+});
+
 test('isExternalRecurringSeries ist das Gegenstück, nicht die Verneinung', () => {
   // Der Unterschied ist der Einzeltermin: er ist nicht lokal-wiederkehrend,
   // aber auch nicht extern-wiederkehrend - er darf keine Rückfrage auslösen.
   const single   = { external_source: 'caldav', calendar_ref_id: 7 };
-  const external = { recurrence_rule: RULE, external_source: 'caldav', calendar_ref_id: 7 };
-  const local    = { recurrence_rule: RULE, external_source: 'local' };
+  const external = { recurrence_rule: RULE, external_source: 'caldav', calendar_ref_id: 7, can_override_occurrence: false };
+  const local    = { recurrence_rule: RULE, external_source: 'local', is_local_recurring_series: true, can_override_occurrence: true };
 
   assert.equal(isExternalRecurringSeries(single),   false, 'Einzeltermin würde nachfragen');
   assert.equal(isExternalRecurringSeries(external), true,  'fremde Serie fragt nicht nach');
@@ -192,10 +240,10 @@ test('isExternalRecurringSeries ist das Gegenstück, nicht die Verneinung', () =
 test('Die beiden Fälle überschneiden sich nie', () => {
   const cases = [
     {},
-    { recurrence_rule: RULE },
-    { recurrence_rule: RULE, external_source: 'google' },
-    { recurrence_rule: RULE, external_source: 'local', calendar_ref_id: 1 },
-    { recurrence_rule: RULE, external_source: 'local', subscription_id: 1 },
+    { recurrence_rule: RULE, can_override_occurrence: false },
+    { recurrence_rule: RULE, external_source: 'google', can_override_occurrence: false },
+    { recurrence_rule: RULE, external_source: 'local', calendar_ref_id: 1, can_override_occurrence: false },
+    { recurrence_rule: RULE, external_source: 'local', subscription_id: 1, can_override_occurrence: false },
     { external_source: 'google', calendar_ref_id: 1 },
   ];
   for (const ev of cases) {
@@ -210,10 +258,10 @@ test('Jede Serie fällt in genau einen der beiden Fälle', () => {
   // Sonst gäbe es eine Serie, die weder die Auswahl noch die Rückfrage bekommt
   // und damit wortlos ganz gelöscht würde - genau der Zustand aus #880.
   const series = [
-    { recurrence_rule: RULE, external_source: 'local' },
-    { recurrence_rule: RULE, external_source: 'caldav', calendar_ref_id: 4 },
-    { recurrence_rule: RULE, subscription_id: 9 },
-    { recurrence_rule: RULE },
+    { recurrence_rule: RULE, external_source: 'local', can_override_occurrence: true },
+    { recurrence_rule: RULE, external_source: 'caldav', calendar_ref_id: 4, can_override_occurrence: false },
+    { recurrence_rule: RULE, subscription_id: 9, can_override_occurrence: false },
+    { recurrence_rule: RULE, can_override_occurrence: false },
   ];
   for (const ev of series) {
     assert.ok(
@@ -221,6 +269,192 @@ test('Jede Serie fällt in genau einen der beiden Fälle', () => {
       `keiner der beiden Fälle greift für ${JSON.stringify(ev)}`,
     );
   }
+});
+
+test('mutation targets use the server series and original slot for a moved linked child', () => {
+  const moved = {
+    id: 99,
+    series_id: 41,
+    recurrence_id: '2026-10-31',
+    start_datetime: '2026-11-02T11:00',
+    can_override_occurrence: true,
+  };
+
+  assert.deepEqual(recurrenceScope.calendarOccurrenceMutationTarget(moved, 'this'), {
+    method: 'put',
+    path: '/calendar/41/occurrences/2026-10-31',
+    carriesReminderOffsets: true,
+  });
+  assert.deepEqual(recurrenceScope.calendarOccurrenceMutationTarget(moved, 'following'), {
+    method: 'put',
+    path: '/calendar/41/occurrences/2026-10-31/following',
+    carriesReminderOffsets: true,
+  });
+  assert.deepEqual(recurrenceScope.calendarOccurrenceMutationTarget(moved, 'series'), {
+    method: 'put',
+    path: '/calendar/41',
+    carriesReminderOffsets: false,
+  });
+  assert.deepEqual(recurrenceScope.calendarOccurrenceDeleteTarget(moved, 'this'), {
+    method: 'delete',
+    path: '/calendar/41/occurrences/2026-10-31',
+  });
+  assert.deepEqual(recurrenceScope.calendarOccurrenceDeleteTarget(moved, 'following'), {
+    method: 'delete',
+    path: '/calendar/41/occurrences/2026-10-31/following',
+  });
+});
+
+test('only-this save sends one atomic request with offsets and no series-owned fields', async () => {
+  const calls = [];
+  const event = {
+    id: 99,
+    series_id: 41,
+    recurrence_id: '2026-10-31',
+    start_datetime: '2026-11-02T11:00',
+  };
+  const response = await recurrenceScope.requestCalendarOccurrenceMutation({
+    api: {
+      put: async (path, body) => {
+        calls.push({ path, body });
+        return { data: { id: 99 } };
+      },
+    },
+    event,
+    scope: 'this',
+    body: {
+      title: 'Moved appointment',
+      recurrence_rule: 'FREQ=MONTHLY',
+      target_google_calendar_id: 'provider-calendar',
+    },
+    reminderOffsets: [60, 1440],
+    confirmCount: async () => true,
+  });
+
+  assert.deepEqual(calls, [{
+    path: '/calendar/41/occurrences/2026-10-31',
+    body: {
+      title: 'Moved appointment',
+      reminder_offsets: [60, 1440],
+    },
+  }]);
+  assert.equal(response.data.id, 99);
+});
+
+test('following save keeps validated successor sync targets and reminder offsets', async () => {
+  const calls = [];
+  await recurrenceScope.requestCalendarOccurrenceMutation({
+    api: { put: async (path, body) => { calls.push({ path, body }); return { data: { id: 42 } }; } },
+    event: { series_id: 41, recurrence_id: '2026-10-31' },
+    scope: 'following',
+    body: {
+      title: 'Synced successor',
+      target_google_calendar_id: null,
+      target_caldav_account_id: 7,
+      target_caldav_calendar_url: 'https://dav.test/family/',
+      target_outlook_account_id: null,
+      target_outlook_calendar_id: null,
+    },
+    reminderOffsets: [15],
+    confirmCount: async () => true,
+  });
+
+  assert.deepEqual(calls, [{
+    path: '/calendar/41/occurrences/2026-10-31/following',
+    body: {
+      title: 'Synced successor',
+      target_google_calendar_id: null,
+      target_caldav_account_id: 7,
+      target_caldav_calendar_url: 'https://dav.test/family/',
+      target_outlook_account_id: null,
+      target_outlook_calendar_id: null,
+      reminder_offsets: [15],
+    },
+  }]);
+});
+
+test('recurring delete sends the selected server target and keepalive option', async () => {
+  const calls = [];
+  await recurrenceScope.requestCalendarOccurrenceDelete({
+    api: { delete: async (path, options) => { calls.push({ path, options }); } },
+    event: { series_id: 41, recurrence_id: '2026-10-31' },
+    scope: 'this',
+    keepalive: true,
+  });
+  assert.deepEqual(calls, [{
+    path: '/calendar/41/occurrences/2026-10-31',
+    options: { keepalive: true },
+  }]);
+});
+
+test('orphan confirmation retries the exact count the user confirmed', async () => {
+  const attempts = [];
+  const confirmations = [];
+  const result = await recurrenceScope.withCalendarOrphanConfirmation(
+    async (confirmedCount) => {
+      attempts.push(confirmedCount);
+      if (attempts.length === 1) {
+        const error = new Error('server prose must not be rendered');
+        error.status = 409;
+        error.data = {
+          code: 409,
+          conflict: 'calendar_override_orphans',
+          orphaned_override_count: 2,
+        };
+        throw error;
+      }
+      return { data: { id: 41 } };
+    },
+    async (count) => { confirmations.push(count); return true; },
+  );
+
+  assert.deepEqual(attempts, [undefined, 2]);
+  assert.deepEqual(confirmations, [2]);
+  assert.equal(result.data.id, 41);
+});
+
+test('a stale orphan count requires a fresh confirmation before another retry', async () => {
+  const attempts = [];
+  const confirmations = [];
+  const counts = [2, 3];
+  const result = await recurrenceScope.withCalendarOrphanConfirmation(
+    async (confirmedCount) => {
+      attempts.push(confirmedCount);
+      if (counts.length) {
+        const error = new Error('server prose must not be rendered');
+        error.status = 409;
+        error.data = {
+          code: 409,
+          conflict: 'calendar_override_orphans',
+          orphaned_override_count: counts.shift(),
+        };
+        throw error;
+      }
+      return { data: { id: 41 } };
+    },
+    async (count) => { confirmations.push(count); return true; },
+  );
+
+  assert.deepEqual(attempts, [undefined, 2, 3]);
+  assert.deepEqual(confirmations, [2, 3]);
+  assert.equal(result.data.id, 41);
+});
+
+test('orphan confirmation stops after three changing conflicts', async () => {
+  let count = 0;
+  await assert.rejects(
+    recurrenceScope.withCalendarOrphanConfirmation(async () => {
+      const error = new Error('conflict');
+      error.status = 409;
+      error.data = {
+        conflict: 'calendar_override_orphans',
+        orphaned_override_count: ++count,
+      };
+      throw error;
+    }, async () => true),
+    /changed too many times/,
+  );
+  assert.equal(count, 3);
 });
 
 // --------------------------------------------------------
@@ -272,6 +506,33 @@ test('Eine fremde Serie wird nur gelöscht, wenn sie bestätigt wurde', () => {
     branch.slice(0, del),
     /if\s*\(\s*await\s+confirmExternalSeriesDelete\(/,
     'das Löschen haengt nicht am ERGEBNIS der Rueckfrage',
+  );
+});
+
+test('a local series without occurrence authority confirms edit and delete as whole-series actions', () => {
+  const deleteBody = requestDeleteEventBody();
+  const restrictedBranch = deleteBody.slice(deleteBody.indexOf('!canOverrideCalendarOccurrence('));
+  assert.match(
+    restrictedBranch,
+    /if\s*\(\s*await\s+confirmLocalWholeSeriesDelete\(event\)\s*\)\s*await\s+deleteEvent\(event\)/,
+    'restricted local series deletion is not conditional on the whole-series confirmation',
+  );
+
+  const saveStart = calendarSrc.indexOf('async function saveEvent(');
+  const saveEnd = calendarSrc.indexOf('\n}', saveStart);
+  const saveBody = calendarSrc.slice(saveStart, saveEnd);
+  assert.match(saveBody, /requiresWholeSeriesConfirmation\(event\)/);
+  assert.match(saveBody, /await\s+confirmLocalWholeSeriesEdit\(event\)/);
+
+  const renderStart = calendarSrc.indexOf('function buildEventModalContent(');
+  const renderEnd = calendarSrc.indexOf('\n}', renderStart);
+  const renderBody = calendarSrc.slice(renderStart, renderEnd);
+  assert.match(renderBody, /requiresWholeSeriesConfirmation\(event\)/);
+  assert.match(renderBody, /calendar\.wholeSeriesOnlyNotice/);
+  assert.match(
+    renderBody,
+    /isLocalRecurringSeries\(event\)\s*&&\s*canOverrideCalendarOccurrence\(event\)[\s\S]*renderRecurringScopeChooser/,
+    'occurrence scope chooser is not guarded by occurrence authority',
   );
 });
 
@@ -331,6 +592,35 @@ test('Die Schlüssel beider Rückfragen stehen in allen Locales', () => {
   }
   const cs = JSON.parse(readFileSync(new URL('cs.json', dir), 'utf-8')).calendar;
   assert.equal(cs.deleteNameDayEventTitle, 'Odstranit svátek?');
+});
+
+test('whole-series-only warnings are meaningful in every locale and use no dash punctuation', () => {
+  const keys = [
+    'wholeSeriesOnlyNotice',
+    'editWholeSeriesOnlyTitle',
+    'editWholeSeriesOnlyDetail',
+    'editWholeSeriesOnlyConfirm',
+    'deleteWholeSeriesOnlyTitle',
+    'deleteWholeSeriesOnlyDetail',
+    'deleteWholeSeriesOnlyConfirm',
+  ];
+  const dir = new URL('../public/locales/', import.meta.url);
+  const locales = readdirSync(dir).filter((file) => file.endsWith('.json'));
+  assert.equal(locales.length, 24);
+  for (const file of locales) {
+    const cal = JSON.parse(readFileSync(new URL(file, dir), 'utf-8')).calendar;
+    for (const key of keys) {
+      assert.ok(typeof cal?.[key] === 'string' && cal[key].trim().length >= 4,
+        `${file}: calendar.${key} fehlt oder ist bedeutungslos`);
+      assert.doesNotMatch(cal[key], /[\u2010-\u2015]/, `${file}: calendar.${key} contains dash punctuation`);
+    }
+    assert.ok(cal.editWholeSeriesOnlyDetail.includes('{{title}}'), `${file}: edit detail omits title`);
+    assert.ok(cal.deleteWholeSeriesOnlyDetail.includes('{{title}}'), `${file}: delete detail omits title`);
+  }
+
+  const de = JSON.parse(readFileSync(new URL('de.json', dir), 'utf-8')).calendar;
+  assert.equal(de.editWholeSeriesOnlyTitle, 'Ganze Serie bearbeiten?');
+  assert.equal(de.deleteWholeSeriesOnlyTitle, 'Ganze Serie löschen?');
 });
 
 test('truncateRuleBefore behaelt "am letzten Tag des Monats" (#960)', async () => {
@@ -403,19 +693,7 @@ test('Ein Schnitt am ersten Vorkommen wuerde die Serie leeren - deshalb die Rege
   assert.equal(uebrig.length, 0, `der Schnitt liesse nichts stehen: ${gekuerzt}`);
 });
 
-test('Jeder Schnitt der Regel nimmt den Serienanfang aus', () => {
-  // ALS REGEL UEBER ALLE AUFRUFSTELLEN, NICHT ALS LISTE VON ZWEIEN. Bearbeiten
-  // und Loeschen hatten dieselbe Annahme doppelt stehen ("erstes Vorkommen ==
-  // gespeichertes Datum"), und der Fix traf beide - eine dritte Stelle wuerde
-  // ihn genauso brauchen. Der Guard prueft deshalb, was fuer jede gilt.
-  const bloecke = calendarSrc.split(/\n(?=(?:async )?function )/);
-  const schnitte = bloecke.filter((b) => b.includes('truncateRuleBefore('));
-  assert.ok(schnitte.length >= 2,
-    `erwartet mindestens zwei Schnittstellen (Bearbeiten + Loeschen), gefunden ${schnitte.length}`);
-  for (const b of schnitte) {
-    const name = (b.match(/^(?:async )?function (\w+)/) || [, '(anonym)'])[1];
-    assert.ok(b.includes('followingMeansWholeSeries('),
-      `${name}: kuerzt die Regel, ohne den Serienanfang auszunehmen - am ersten `
-      + 'Vorkommen entstuende eine leere Serie, die der Server ablehnt');
-  }
+test('Der Browser schneidet keine Kalender-RRULE mehr selbst', () => {
+  assert.doesNotMatch(calendarSrc, /truncateRuleBefore\(/,
+    'Bearbeiten und Loeschen muessen den originalen Slot an den atomaren Server-Endpunkt senden');
 });
