@@ -135,12 +135,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same spot, and otherwise puts focus on the page root - the same target the skip link uses. Not
   a good place, but a place inside the page, which `document.body` is not.
 
+  The same break has a second, more common shape: a handler that re-renders **after** the dialog
+  closed - `closeModal()` and `renderGrid()` on the next line. There the restore was correct and got
+  re-rendered away a moment later, which no check at close time can see. Measured: 29 such places,
+  and the typical trigger there is not a toolbar button but a **list row** - a note card, a meal
+  cell - which carries `data-id` or `data-action` rather than an id. The layer now looks the element
+  up again by those attributes, and where the target is destroyed right after the restore it takes a
+  second pass on the next frame: only if the target really vanished, only if focus actually fell to
+  `document.body`, and only if no dialog has opened in the meantime. Where nothing broke, nothing
+  moves - the common path is unchanged.
+
+  Ten of those places re-render after an `await`, which is past that frame; they still need the page
+  to pull focus across itself, and are listed as follow-up work rather than silently half-fixed.
+
   Measured across the seven callers of the category manager, exactly one - the budget page - puts
-  its button inside the very section it re-renders. The other six keep theirs in a toolbar their
-  handler does not touch, so they were never affected, and the shopping menu turned out to be a
-  non-case: the popover hands focus back to its trigger before the page handler even runs. The fix
-  sits in the shared layer regardless, because the same break arises anywhere a handler re-renders
-  the region an open dialog was opened from - and it fails silently when it does.
+  its button inside the very section it re-renders while the dialog is open. The others keep theirs
+  in a toolbar their handler does not touch, and the shopping menu turned out to be a non-case: the
+  popover hands focus back to its trigger before the page handler even runs.
 
 - **Paying extra on a loan now shortens the remaining term, not only the balance** (#964). Since
   #954 the remaining principal follows the money you actually paid, but the remaining term beside it

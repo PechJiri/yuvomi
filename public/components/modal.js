@@ -538,50 +538,126 @@ function _discardSuspendedModal({ overlay, restoreFocus }) {
 /**
  * WOHIN DER FOKUS BEIM SCHLIESSEN GEHT - der gemerkte Ausloeser kann weg sein.
  *
- * Ein Handler, der waehrend des offenen Modals einen Seitenbereich neu rendert,
- * tauscht den Knopf aus, der das Modal geoeffnet hat. Der gemerkte Zeiger zeigt
- * danach auf einen abgehaengten Knoten, und `.focus()` darauf ist ein No-op:
- * der Fokus faellt auf `document.body`, und wer mit Tastatur oder Screenreader
- * bedient, verliert seine Position in der Seite.
+ * Ein Handler, der den Bereich neu rendert, aus dem das Modal kam, tauscht den
+ * Knopf aus, der es geoeffnet hat. `.focus()` auf dem abgehaengten Knoten ist
+ * ein No-op - ohne Fehler, ohne Spur: der Fokus faellt auf `document.body`, und
+ * wer mit Tastatur oder Screenreader bedient, verliert seine Position.
  *
- * Zwei Stufen, weil die erste nicht ueberall greift. Die id-Suche trifft den
- * Knopf, der an derselben Stelle wieder aufgebaut wurde; nur 3 der 7 Nutzer des
- * Kategorie-Managers geben ihrem Ausloeser aber ueberhaupt eine id (inventory
- * 2x und pantry haengen den Handler an `data-action`, shopping an einem
- * Popover-Trigger). Fuer sie ist die Seitenwurzel der Halt - kein guter Platz,
- * aber ein Platz IN der Seite, von dem aus Tab weiterlaeuft. `document.body`
- * ist dagegen kein Fokusziel, sondern das Fehlen eines Fokus.
+ * DAS PASSIERT AN ZWEI STELLEN, und sie brauchen verschiedene Antworten:
  *
- * DIE ZWEITE STUFE IST VORSORGE, nicht Reparatur: gemessen liegt heute genau
- * bei EINEM der sieben - dem Budget - der Ausloeser im Bereich, den der Handler
- * austauscht, und der hat eine id. Die Wurzel faengt den naechsten id-losen
- * Ausloeser, der dazukommt. Ohne sie waere das wieder ein stiller Ausfall, und
- * genau das war der Befund.
+ *   A) Der Handler rendert, WAEHREND das Modal offen ist. Beim Schliessen ist
+ *      der gemerkte Knoten schon tot - der Wiederfinder unten greift.
+ *      Gemessen: 1 Stelle (der Kategorie-Manager im Budget).
+ *   B) Der Handler rendert, NACHDEM geschlossen wurde - `closeModal()` und in
+ *      der Zeile darauf `renderGrid()`. Der Restore war korrekt und wird eine
+ *      Zeile spaeter weggerendert. Gemessen: 29 Stellen, davon 19 synchron.
+ *      Dagegen hilft nur das Nachfassen in `_refocusIfDropped`.
+ *
+ * Der Wiederfinder haengt nicht an der id: die typischen Ausloeser sind
+ * Listenzeilen und Rasterzellen, und die tragen `data-id` oder `data-action`,
+ * keine id. Von den sieben Nutzern des Kategorie-Managers geben nur drei ihrem
+ * Ausloeser eine id - bei den 83 Modal-Oeffnungen im Projekt ist das die
+ * Ausnahme, nicht die Regel.
+ *
+ * Bleibt nichts wiederzufinden, ist die Seitenwurzel der Halt - kein guter
+ * Platz, aber ein Platz IN der Seite, von dem aus Tab weiterlaeuft.
+ * `document.body` ist dagegen kein Fokusziel, sondern das Fehlen eines Fokus.
  *
  * EIN VERSTECKTER POPOVER-EINTRAG IST KEIN FALL DAVON, obwohl er danach
  * aussieht: `utils/popover-menu.js` blendet sein Menue nur aus, ein Eintrag
  * meldet also weiter `isConnected === true`. Gemessen (Chrome 152, Maus wie
- * Tastatur) gibt `hidePopover()` den Fokus aber an den TRIGGER zurueck, und
- * zwar in der Capture-Phase des Klicks - also bevor der Seiten-Handler das
- * Modal oeffnet. `previouslyFocused` ist damit nie der Menueintrag, sondern der
+ * Tastatur) gibt `hidePopover()` den Fokus aber schon in der Capture-Phase des
+ * Klicks an den TRIGGER zurueck - also bevor der Seiten-Handler das Modal
+ * oeffnet. Der gemerkte Ausloeser ist damit nie der Menueintrag, sondern der
  * Trigger, und der ist sichtbar und fokussierbar. Eine Sichtbarkeitspruefung
  * hier waere ein Layout-Read auf jedem Schliessen ohne einen Fall, der ihn
  * braucht.
  *
- * Eine Seite, die es genauer will, gibt ihrem Ausloeser eine id. Das ist
- * billiger als eine Option, die jede aufrufende Stelle einzeln pflegen muesste.
- *
- * Exportiert fuer die Sonde in `test/test-modal-utils.js`: das Fokusziel laesst
- * sich so ohne den vollen Oeffnen-Schliessen-Pfad messen, der ein echtes DOM
- * braeuchte.
+ * `rememberFocus` und `focusRestoreTarget` sind fuer die Sonden in
+ * `test/test-modal-utils.js` exportiert: die Entscheidung laesst sich so ohne
+ * den vollen Oeffnen-Schliessen-Pfad messen, der ein echtes DOM braeuchte.
  */
-export function focusRestoreTarget(remembered) {
-  if (!remembered) return null;
-  if (remembered.isConnected) return remembered;
-  // getElementById und kein Selektor: eine id darf Zeichen enthalten, an denen
-  // querySelector scheitert.
-  const replacement = remembered.id ? document.getElementById(remembered.id) : null;
-  return replacement ?? document.getElementById(PAGE_ROOT_ID);
+export function rememberFocus(el) {
+  if (!el || !el.tagName || typeof el.focus !== 'function') return null;
+  return {
+    el,
+    id: el.id || null,
+    tag: el.tagName,
+    // Als Attribut lesen: bei SVG ist `className` ein Objekt, kein String.
+    cls: el.getAttribute?.('class') ?? null,
+    data: el.dataset ? { ...el.dataset } : {},
+  };
+}
+
+/**
+ * Denselben Knopf im frisch gebauten Baum wiederfinden.
+ *
+ * Ueber die id, wo es eine gibt. Sonst ueber die data-Attribute: eine
+ * Listenzeile heisst `.note-card[data-id="42"]`, eine Kalenderzelle
+ * `[data-action="add-meal"][data-date][data-type]` - die id fehlt dort, die
+ * Identitaet steht in den data-Werten. Verglichen wird in JS statt per
+ * Selektor-String, weil ein Attributwert Anfuehrungszeichen enthalten darf und
+ * ein gebauter Selektor daran zerbraeche.
+ *
+ * Ohne data-Attribute wird NICHT gesucht: Tag und Klasse allein treffen
+ * irgendeinen Knopf derselben Sorte, und ein falsches Fokusziel ist schlimmer
+ * als keines.
+ */
+function _findAgain(memo) {
+  if (memo.id) {
+    const byId = document.getElementById(memo.id);
+    if (byId) return byId;
+  }
+  const keys = Object.keys(memo.data);
+  if (!keys.length) return null;
+  for (const kandidat of document.getElementsByTagName(memo.tag)) {
+    if (kandidat.getAttribute('class') !== memo.cls) continue;
+    if (keys.every((k) => kandidat.dataset[k] === memo.data[k])) return kandidat;
+  }
+  return null;
+}
+
+export function focusRestoreTarget(memo) {
+  if (!memo) return null;
+  if (memo.el?.isConnected) return memo.el;
+  return _findAgain(memo) ?? document.getElementById(PAGE_ROOT_ID);
+}
+
+/**
+ * NACHFASSEN, WENN DIE SEITE DAS FOKUSZIEL GLEICH DANACH WEGRENDERT.
+ *
+ * 29 Stellen im Projekt rufen `closeModal()` und rendern in der Zeile darauf
+ * neu. Der Restore oben ist dann korrekt und trotzdem wertlos: er sitzt auf
+ * einem Knoten, den der naechste `replaceChildren()` entfernt. Gemessen landet
+ * der Fokus danach auf `document.body`.
+ *
+ * BEWUSST NACHTRAEGLICH UND NICHT VERZOEGERT. Den Restore generell einen Frame
+ * spaeter zu setzen haette den Normalfall aller 83 Modal-Oeffnungen angefasst,
+ * fuer einen Fehler, der nur einen Teil davon trifft. So bleibt der haeufige
+ * Weg Zeichen fuer Zeichen der alte, und nur der kaputte bekommt eine zweite
+ * Runde.
+ *
+ * Drei Bedingungen, und jede einzelne verhindert einen Schaden:
+ *   - das Ziel ist wirklich verschwunden (sonst gab es nichts zu reparieren),
+ *   - der Fokus liegt auf `body` (hat die Seite selbst etwas fokussiert, ist
+ *     ihre Wahl die bessere - wir wuerden sie ueberschreiben),
+ *   - es ist kein Modal offen (sonst risse das Nachfassen den Fokus aus einem
+ *     Dialog, der in derselben Geste aufgegangen ist).
+ *
+ * Der asynchrone Fall bleibt offen: rendert die Seite erst nach einem `await`
+ * (10 der 29 Stellen), ist dieser Frame laengst vorbei. Dort muss die Seite
+ * selbst nachziehen; ein laengeres Warten waere geraten und nicht gemessen.
+ */
+function _refocusIfDropped(memo, ziel) {
+  if (typeof requestAnimationFrame !== 'function') return;
+  requestAnimationFrame(() => {
+    if (ziel.isConnected) return;
+    if (document.activeElement !== document.body) return;
+    if (activeOverlay) return;
+    const ersatz = focusRestoreTarget(memo);
+    if (!ersatz || typeof ersatz.focus !== 'function') return;
+    ersatz.focus(ersatz.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
+  });
 }
 
 function _doClose(overlayEl) {
@@ -603,15 +679,18 @@ function _doClose(overlayEl) {
     document.body.style.overflow = '';
 
     // Focus-Restore
-    const restoreTarget = focusRestoreTarget(previouslyFocused);
+    const merkzettel = previouslyFocused;
+    previouslyFocused = null;
+    const restoreTarget = focusRestoreTarget(merkzettel);
     if (restoreTarget && typeof restoreTarget.focus === 'function') {
       // Nur die Seitenwurzel bekommt `preventScroll`: sie IST der Scrollport
       // (#main-content == .app-content), ein Fokus mit Scroll risse die
       // wiederhergestellte Position nach oben. Ein Ersatzknopf steht dagegen
       // an der Stelle, an der der Nutzer ohnehin war.
       restoreTarget.focus(restoreTarget.id === PAGE_ROOT_ID ? { preventScroll: true } : undefined);
+      // Rendert die Seite gleich danach, ist dieser Fokus schon wieder weg.
+      _refocusIfDropped(merkzettel, restoreTarget);
     }
-    previouslyFocused = null;
 
     // Standalone: Statusbar-Farbe zur aktuellen Route wiederherstellen
     if (window.yuvomi?.restoreThemeColor) {
@@ -718,7 +797,7 @@ export function openModal({
   }
 
   // Focus-Restore vorbereiten
-  previouslyFocused = document.activeElement;
+  previouslyFocused = rememberFocus(document.activeElement);
 
   // Scroll-Lock
   document.body.style.overflow = 'hidden';
