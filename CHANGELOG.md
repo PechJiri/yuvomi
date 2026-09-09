@@ -134,6 +134,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A failing test in the three suites that start the server now turns the run red.** Those suites
+  import `server/index.js` as a program rather than reading it as a file, which opens a real HTTP
+  socket and starts the background schedulers. Their handles kept the process alive, so each suite
+  ended with `process.exit(0)` in its `after()` hook - and that call overwrites the exit code
+  node:test only sets when the process ends by itself. Measured on 2026-09-09: a deliberately wrong
+  assertion reported `exit=0` while two `✖` lines stood in the log and the summary was cut off. In
+  the `npm test` chain these suites could only ever turn red through a top-level error, never
+  through a failed `test()` block.
+
+  Forcing a better code does not work. Inside the `after()` hook `process.exitCode` is still
+  `undefined`, also after `setImmediate` and after `setTimeout(…, 50)` - both measured - so
+  `process.exit(process.exitCode ?? 0)` reads nothing there. The way out is to stop calling
+  `process.exit` at all and clear the handles instead. Exactly three held the process:
+  `getActiveResourcesInfo()` named a `TCPServerWrap` and two `Timeout`. The shared
+  `test/server-ready.js` now closes the server, the two auto-sync timers `unref()` like the four
+  schedulers that already did, and the backup cron stays off under the documented
+  `BACKUP_ENABLED=false`. The process then ends on its own and node:test sets the real code, which
+  also counts a failure in a hook or an uncaught exception rather than only one inside a `test()`.
+
+  The proof is a program, not a text search. `test:suite-exit-code` runs a fixture suite of exactly
+  that build twice, once green and once red, and demands 0 and 1 - both times with an end of its
+  own, no timeout. With the `unref()` taken out again the guard turns red on that timeout, while
+  the text guard beside it, which forbids `process.exit(` in a server-starting suite, stays green:
+  the wording would have survived what the behaviour did not.
+
+  Two things came along. The three suites no longer reserve fixed ports (13098-13100) and take
+  whichever one the kernel hands them, so two runs at the same time stop colliding. And the
+  database-isolation guard had to learn the same rule one file further out: it looked for `DB_PATH`
+  in the suite itself and would otherwise have reported all three for setting it through the shared
+  helper - which sets it earlier and more strictly than the form the guard knew.
+
 - **An ingredient written in the household's own digits now counts towards the shopping list.**
   Moving a meal plan to the shopping list adds up the same ingredient across meals. The server read
   the quantity with an ASCII-only pattern, so a Persian, Arabic, Hindi or Thai amount - "۲۵۰ g" -

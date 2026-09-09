@@ -4,39 +4,16 @@
  * aber ein bestehendes Passwort nicht mehr ändern. Dieser Test deckt das
  * optionale `password`-Feld von PATCH /api/v1/auth/users/:id ab.
  */
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { listenOnFreePort } from './server-ready.js';
 
-const tmpDir = mkdtempSync(join(tmpdir(), 'oikos-admin-pwreset-test-'));
+import { startTestServer, cookieHeader } from './server-ready.js';
 
-process.env.SESSION_SECRET = 'test-admin-pwreset-secret-minimum-32ch';
-process.env.DB_PATH = join(tmpDir, 'test.db');
-process.env.SESSION_SECURE = 'false';
-// Auch der Listener, den server/index.js beim Import selbst startet, darf keinen
-// festen Port belegen: `app.listen(PORT)` dort hat keinen error-Handler, ein
-// EADDRINUSE endet also als uncaughtException und reisst die Suite mit. Port 0
-// laesst das Betriebssystem einen freien waehlen; der Test selbst spricht ohnehin
-// ueber den eigenen Listener aus listenOnFreePort().
-process.env.PORT = '0';
-
-const { default: app } = await import('../server/index.js');
-const BASE = await listenOnFreePort(app);
-
-function cookieHeader(setCookie) {
-  return String(setCookie || '')
-    .split(/,(?=\s*[^;,]+=)/)
-    .map((cookie) => cookie.split(';')[0].trim())
-    .filter(Boolean)
-    .join('; ');
-}
-
-after(() => {
-  rmSync(tmpDir, { recursive: true, force: true });
-  process.exit(0);
+// Start, Portwahl und Abbau liegen im Helfer - inklusive des Grundes, warum
+// hier kein `process.exit(0)` mehr steht.
+const { baseUrl: BASE } = await startTestServer({
+  name: 'admin-password-reset',
+  env: { SESSION_SECRET: 'test-admin-pwreset-secret-minimum-32ch' },
 });
 
 async function login(username, password) {

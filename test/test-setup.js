@@ -1,38 +1,16 @@
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { listenOnFreePort } from './server-ready.js';
 
-const tmpDir = mkdtempSync(join(tmpdir(), 'oikos-setup-test-'));
+import { startTestServer, cookieHeader } from './server-ready.js';
 
-process.env.SESSION_SECRET = 'test-setup-secret-minimum-32-chars-x';
-process.env.DB_PATH = join(tmpDir, 'test.db');
-process.env.SESSION_SECURE = 'false';
-// Auch der Listener, den server/index.js beim Import selbst startet, darf keinen
-// festen Port belegen: `app.listen(PORT)` dort hat keinen error-Handler, ein
-// EADDRINUSE endet also als uncaughtException und reisst die Suite mit. Port 0
-// laesst das Betriebssystem einen freien waehlen; der Test selbst spricht ohnehin
-// ueber den eigenen Listener aus listenOnFreePort().
-process.env.PORT = '0';
-process.env.APP_BUILD_REVISION = 'acceptance-route-test';
-
-// Dynamic import so env vars are set before module initialization
-const { default: app } = await import('../server/index.js');
-const BASE = await listenOnFreePort(app);
-
-function cookieHeader(setCookie) {
-  return String(setCookie || '')
-    .split(/,(?=\s*[^;,]+=)/)
-    .map((cookie) => cookie.split(';')[0].trim())
-    .filter(Boolean)
-    .join('; ');
-}
-
-after(() => {
-  rmSync(tmpDir, { recursive: true, force: true });
-  process.exit(0);
+// Start, Portwahl und Abbau liegen im Helfer - inklusive des Grundes, warum
+// hier kein `process.exit(0)` mehr steht.
+const { baseUrl: BASE } = await startTestServer({
+  prefix: 'oikos-setup-test-',
+  env: {
+    SESSION_SECRET: 'test-setup-secret-minimum-32-chars-x',
+    APP_BUILD_REVISION: 'acceptance-route-test',
+  },
 });
 
 // Validation tests run first (DB is empty at this point)
