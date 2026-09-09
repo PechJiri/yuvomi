@@ -164,7 +164,7 @@ test('calendar event responses expose optional occurrence metadata on every clie
 
   const occurrenceFields = [
     'series_id', 'recurrence_id', 'is_occurrence_override',
-    'is_local_recurring_series', 'can_override_occurrence',
+    'is_local_recurring_series', 'can_override_occurrence', 'can_detach_occurrence',
     'assignment_owner_id', 'attachment_owner_id', 'reminder_owner_id',
     'reminder_anchor_start',
   ];

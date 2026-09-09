@@ -51,7 +51,8 @@ export function loadEventExceptions(d, eventIds) {
  * @param {string}   to      YYYY-MM-DD
  * @param {Map<number, Set<string>>?} exceptionsByEvent  event.id → Set ausgenommener
  *        Instanz-Daten (YYYY-MM-DD); diese Vorkommen werden übersprungen (EXDATE, #489)
- * @param {{includeRecurrenceIdentity?: boolean, maxIterations?: number}} [options]
+ * @param {{includeRecurrenceIdentity?: boolean, maxIterations?: number,
+ *   maxOccurrencesPerSeries?: number, occurrenceFilter?: function}} [options]
  * @returns {object[]}  Expandiertes, sortiertes Array
  */
 export function expandRecurringEvents(
@@ -59,12 +60,18 @@ export function expandRecurringEvents(
   from,
   to,
   exceptionsByEvent = null,
-  { includeRecurrenceIdentity = false, maxIterations = DEFAULT_EXPANSION_ITERATIONS } = {},
+  {
+    includeRecurrenceIdentity = false, maxIterations = DEFAULT_EXPANSION_ITERATIONS,
+    maxOccurrencesPerSeries = null, occurrenceFilter = null,
+  } = {},
 ) {
   const result = [];
   const iterationLimit = Number.isInteger(maxIterations) && maxIterations > 0
     ? Math.min(maxIterations, MAX_EXPANSION_ITERATIONS)
     : DEFAULT_EXPANSION_ITERATIONS;
+  const occurrenceLimit = Number.isInteger(maxOccurrencesPerSeries) && maxOccurrencesPerSeries > 0
+    ? Math.min(maxOccurrencesPerSeries, iterationLimit)
+    : Infinity;
 
   for (const event of events) {
     if (!event.recurrence_rule) {
@@ -106,6 +113,7 @@ export function expandRecurringEvents(
     // (RFC 5545): ausgenommene Vorkommen zählen mit, erzeugen aber keine Instanz (#513).
     const maxCount   = parseRRule(event.recurrence_rule)?.count ?? null;
     let   occurrence = 0;
+    let accepted = 0;
 
     while (currentDate <= to && iterations < iterationLimit) {
       iterations++;
@@ -170,7 +178,7 @@ export function expandRecurringEvents(
           }
         }
 
-        result.push({
+        const instance = {
           ...event,
           start_datetime:       newStart,
           end_datetime:         newEnd,
@@ -188,7 +196,14 @@ export function expandRecurringEvents(
           // Vorkommen - eine leere Serie, die der Server zu Recht abwies. Der
           // Zaehler steht hier ohnehin, weil COUNT ihn braucht.
           is_series_start: occurrence === 1 ? 1 : 0,
-        });
+        };
+        // Upcoming readers count only eligible results. Historical instances,
+        // EXDATEs and instances rejected by the reader must not fill the cap.
+        if (!occurrenceFilter || occurrenceFilter(instance)) {
+          result.push(instance);
+          accepted++;
+          if (accepted >= occurrenceLimit) break;
+        }
       }
 
       const next = nextOccurrence(currentDate, event.recurrence_rule, { anchor: seriesStart, utcDiffersFromLocal: zonenUnsicher });

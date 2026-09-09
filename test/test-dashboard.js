@@ -22,6 +22,7 @@ import { withoutBlockComments } from './source-text.js';
 // (`test:db-isolation` wacht darüber).
 const { hydrateBirthday, syncBirthdayArtifacts } = await import('../server/services/birthdays.js');
 const { getUpcomingEvents } = await import('../server/services/calendar-event-reader.js');
+const { expandRecurringEvents } = await import('../server/services/calendar-events.js');
 
 register('./test-browser-loader.mjs', import.meta.url);
 
@@ -1361,6 +1362,74 @@ insertEvent({ title: 'Morning Meeting Today', start_datetime: todayStartIso(), c
 const soccerId = insertEvent({ title: 'Theodore Soccer Game', start_datetime: isoIn(3 * DAY), created_by: cuTheo });
 cdb.prepare(`INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)`).run(soccerId, cuTheo);
 cdb.prepare(`INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)`).run(soccerId, cuSofia);
+
+test('upcoming expansion stops after eligible occurrences, without counting EXDATE or expired slots', () => {
+  const events = expandRecurringEvents([{
+    id: 1, start_datetime: '2090-01-01T09:00:00Z', recurrence_rule: 'FREQ=DAILY',
+  }], '2090-01-01', '9999-12-31', new Map([[1, new Set(['2090-01-03'])]]), {
+    maxOccurrencesPerSeries: 2,
+    occurrenceFilter: (event) => event.start_datetime >= '2090-01-02T12:00:00Z',
+  });
+  nodeAssert.deepEqual(events.map((event) => event.start_datetime), [
+    '2090-01-04T09:00:00Z', '2090-01-05T09:00:00Z',
+  ]);
+});
+
+test('getUpcomingEvents reaches an old daily series and fills the limit after expired slots', () => {
+  cdb.exec('SAVEPOINT old_upcoming');
+  try {
+    const id = insertEvent({
+      title: 'Old daily series', start_datetime: '2080-01-01T09:00:00Z',
+      recurrence_rule: 'FREQ=DAILY', created_by: cuTheo,
+    });
+    cdb.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(id, cuTheo);
+    cdb.prepare('INSERT INTO calendar_event_exceptions (event_id, exception_date) VALUES (?, ?)')
+      .run(id, '2090-01-02');
+    const events = getUpcomingEvents(cdb, {
+      userId: cuTheo, assignedTo: cuTheo, limit: 2, windowDays: null,
+      now: new Date('2090-01-01T12:00:00Z'),
+    });
+    nodeAssert.deepEqual(events.map((event) => event.start_datetime), [
+      '2090-01-03T09:00:00Z', '2090-01-04T09:00:00Z',
+    ]);
+  } finally {
+    cdb.exec('ROLLBACK TO old_upcoming; RELEASE old_upcoming');
+  }
+});
+
+test('getUpcomingEvents limits by effective instant after merging moved occurrences and filters', () => {
+  cdb.exec('SAVEPOINT limited_upcoming');
+  try {
+    const series = insertEvent({
+      title: 'Late UTC series', start_datetime: '2090-01-01T11:00:00Z',
+      recurrence_rule: 'FREQ=DAILY', created_by: cuTheo,
+    });
+    const moved = insertEvent({
+      title: 'Moved earlier', start_datetime: '2090-01-01T12:00:00+02:00',
+      recurrence_parent_id: series, recurrence_id: '2090-01-03',
+      overridden_fields: '["title","start_datetime"]', created_by: cuTheo,
+    });
+    cdb.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(series, cuTheo);
+    const birthday = insertEvent({
+      title: 'Birthday before everything', start_datetime: '2090-01-01T08:00:00Z',
+      recurrence_rule: 'FREQ=YEARLY', created_by: cuTheo,
+    });
+    cdb.prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(birthday, cuTheo);
+    cdb.prepare('INSERT INTO birthdays (name, birth_date, calendar_event_id) VALUES (?, ?, ?)')
+      .run('Birthday fixture', '2000-01-01', birthday);
+    insertEvent({
+      title: 'Unassigned before everything', start_datetime: '2090-01-01T07:00:00Z',
+      recurrence_rule: 'FREQ=DAILY', created_by: cuTheo,
+    });
+    const events = getUpcomingEvents(cdb, {
+      userId: cuTheo, assignedTo: cuTheo, includeBirthdays: false,
+      limit: 2, now: new Date('2090-01-01T06:00:00Z'),
+    });
+    nodeAssert.deepEqual(events.map((event) => Number(event.id)), [Number(moved), Number(series)]);
+  } finally {
+    cdb.exec('ROLLBACK TO limited_upcoming; RELEASE limited_upcoming');
+  }
+});
 
 test('getUpcomingEvents: wiederkehrender Termin mit Vergangenheits-Start erscheint (Issue #224)', () => {
   const events = getUpcomingEvents(cdb, { userId: cuTheo, limit: 10 });

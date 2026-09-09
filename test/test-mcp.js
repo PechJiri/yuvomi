@@ -343,7 +343,7 @@ test('tools/call list_upcoming_events: enthält das neue Event', async () => {
   assert.ok(events.some((e) => e.title === 'Zahnarzt'));
 });
 
-test('tools/call list_upcoming_events: reicht über 90 Tage, bleibt aber auf zwei Jahre begrenzt', async () => {
+test('tools/call list_upcoming_events: enthält auch Termine nach mehr als zwei Jahren', async () => {
   const beyondDashboardWindow = new Date();
   beyondDashboardWindow.setUTCDate(beyondDashboardWindow.getUTCDate() + 120);
   const dateKey = beyondDashboardWindow.toISOString().slice(0, 10);
@@ -364,9 +364,9 @@ test('tools/call list_upcoming_events: reicht über 90 Tage, bleibt aber auf zwe
       (title, start_datetime, end_datetime, all_day, created_by, external_source, visibility)
     VALUES ('MCP außerhalb horizontu', ?, ?, 0, ?, 'local', 'all')
   `).run(`${beyondKey}T09:00:00`, `${beyondKey}T10:00:00`, uid).lastInsertRowid;
-  const bounded = parseContent(await toolCall('list_upcoming_events', { limit: 100 }));
-  assert.ok(!bounded.some((event) => Number(event.id) === Number(farId)),
-    'Termin za dvouletým horizontem se nesmí před LIMIT expandovat');
+  const upcoming = parseContent(await toolCall('list_upcoming_events', { limit: 100 }));
+  assert.ok(upcoming.some((event) => Number(event.id) === Number(farId)),
+    'Termin nach 800 Tagen fehlt');
 });
 
 test('tools/call list_upcoming_events liest keine großen attachment_data-Bodies', async () => {

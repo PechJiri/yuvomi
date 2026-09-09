@@ -23,6 +23,64 @@ const { truncateRuleBefore, shiftSeriesStart, shiftEndForStart,
         followingMeansWholeSeries, requiresWholeSeriesConfirmation } = recurrenceScope;
 const { expandRecurringEvents } = await import('../server/services/calendar-events.js');
 
+test('outbound-local occurrence editing uses legacy detach and carries provider targets', async () => {
+  const calls = [];
+  const event = { id: 9, series_id: 9, recurrence_id: '2026-10-03',
+    recurrence_rule: 'FREQ=DAILY', is_local_recurring_series: true,
+    can_override_occurrence: false, can_detach_occurrence: true };
+  const api = {
+    post: async (path, body) => { calls.push({ path, body }); return { data: { id: 10 } }; },
+    put: async () => { throw new Error('Linked endpoint is forbidden'); },
+  };
+  const result = await recurrenceScope.requestCalendarOccurrenceMutation({
+    api, event, scope: 'this', body: { title: 'Moved', target_google_calendar_id: 'family' },
+  });
+  assert.equal(result.data.id, 10);
+  assert.deepEqual(calls, [
+    { path: '/calendar', body: { title: 'Moved', target_google_calendar_id: 'family', recurrence_rule: null } },
+    { path: '/calendar/9/exceptions', body: { date: '2026-10-03' } },
+  ]);
+  assert.equal(recurrenceScope.requiresWholeSeriesConfirmation(event), false);
+});
+
+test('outbound-local occurrence deletion uses EXDATE and following uses legacy truncation', async () => {
+  const calls = [];
+  const event = { id: 9, series_id: 9, recurrence_id: '2026-10-03',
+    recurrence_rule: 'FREQ=DAILY', is_recurring_instance: 1, is_series_start: 0,
+    can_detach_occurrence: true, can_override_occurrence: false };
+  const api = Object.fromEntries(['post', 'put', 'delete'].map((method) => [method,
+    async (...args) => calls.push([method, ...args])]));
+  await recurrenceScope.requestCalendarOccurrenceDelete({ api, event, scope: 'this', keepalive: true });
+  await recurrenceScope.requestCalendarOccurrenceDelete({ api, event, scope: 'following', keepalive: true });
+  await recurrenceScope.requestCalendarOccurrenceDelete({ api, event: { ...event, is_series_start: 1 }, scope: 'following' });
+  assert.deepEqual(calls, [
+    ['post', '/calendar/9/exceptions', { date: '2026-10-03' }, { keepalive: true }],
+    ['put', '/calendar/9', { recurrence_rule: 'FREQ=DAILY;UNTIL=20261002' }, { keepalive: true }],
+    ['delete', '/calendar/9', { keepalive: false }],
+  ]);
+  assert.throws(() => recurrenceScope.requestCalendarOccurrenceDelete({ api, event, scope: 'typo' }), TypeError);
+  assert.equal(calls.length, 3, 'unknown scope must not delete the whole series');
+});
+
+test('outbound-local following edit truncates before creating the provider-targeted successor', async () => {
+  const calls = [];
+  const event = { id: 9, series_id: 9, recurrence_id: '2026-10-03',
+    recurrence_rule: 'FREQ=DAILY', is_recurring_instance: 1, is_series_start: 0,
+    can_detach_occurrence: true, can_override_occurrence: false };
+  const body = { title: 'Successor', recurrence_rule: 'FREQ=WEEKLY', target_outlook_account_id: 2,
+    target_outlook_calendar_id: 'family', start_datetime: '2026-10-03T12:00' };
+  const api = {
+    put: async (...args) => calls.push(['put', ...args]),
+    post: async (...args) => { calls.push(['post', ...args]); return { data: { id: 10 } }; },
+  };
+  const result = await recurrenceScope.requestCalendarOccurrenceMutation({ api, event, scope: 'following', body });
+  assert.equal(result.data.id, 10);
+  assert.deepEqual(calls, [
+    ['put', '/calendar/9', { recurrence_rule: 'FREQ=DAILY;UNTIL=20261002' }],
+    ['post', '/calendar', body],
+  ]);
+});
+
 // Der Server-Validator, gegen den gekürzte Regeln bestehen müssen.
 const RRULE_RE = /^(FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?(;BYDAY=[A-Z,]{2,}(,[A-Z]{2})*)?(;(UNTIL=\d{8}(T\d{6}Z)?|COUNT=\d{1,4}))?)?$/;
 
@@ -511,7 +569,7 @@ test('Eine fremde Serie wird nur gelöscht, wenn sie bestätigt wurde', () => {
 
 test('a local series without occurrence authority confirms edit and delete as whole-series actions', () => {
   const deleteBody = requestDeleteEventBody();
-  const restrictedBranch = deleteBody.slice(deleteBody.indexOf('!canOverrideCalendarOccurrence('));
+  const restrictedBranch = deleteBody.slice(deleteBody.indexOf('!canEditCalendarOccurrence('));
   assert.match(
     restrictedBranch,
     /if\s*\(\s*await\s+confirmLocalWholeSeriesDelete\(event\)\s*\)\s*await\s+deleteEvent\(event\)/,
@@ -531,7 +589,7 @@ test('a local series without occurrence authority confirms edit and delete as wh
   assert.match(renderBody, /calendar\.wholeSeriesOnlyNotice/);
   assert.match(
     renderBody,
-    /isLocalRecurringSeries\(event\)\s*&&\s*canOverrideCalendarOccurrence\(event\)[\s\S]*renderRecurringScopeChooser/,
+    /isLocalRecurringSeries\(event\)\s*&&\s*canEditCalendarOccurrence\(event\)[\s\S]*renderRecurringScopeChooser/,
     'occurrence scope chooser is not guarded by occurrence authority',
   );
 });
@@ -693,7 +751,7 @@ test('Ein Schnitt am ersten Vorkommen wuerde die Serie leeren - deshalb die Rege
   assert.equal(uebrig.length, 0, `der Schnitt liesse nichts stehen: ${gekuerzt}`);
 });
 
-test('Der Browser schneidet keine Kalender-RRULE mehr selbst', () => {
+test('Die Kalenderseite delegiert die Scope-Arithmetik an die getesteten Helfer', () => {
   assert.doesNotMatch(calendarSrc, /truncateRuleBefore\(/,
-    'Bearbeiten und Loeschen muessen den originalen Slot an den atomaren Server-Endpunkt senden');
+    'Verknüpfte Scopes nutzen atomare Endpunkte; nur der Legacy-Helfer kürzt clientseitig');
 });

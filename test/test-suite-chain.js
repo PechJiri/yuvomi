@@ -53,21 +53,27 @@ function needsBrowser(name) {
 }
 
 const runsIn = (script, name, visited = new Set()) => {
-  if (script.includes(`npm run ${name}`)) return true;
   const file = suiteFile(name);
   if (file && script.includes(file)) return true;
 
   // Follow composed suite scripts as npm itself does. Focused suites commonly
   // belong to a domain chain (for example test:calendar); requiring every leaf
   // to be repeated in the root command would make those chains misleading.
-  for (const match of script.matchAll(/(?:^|&&|;)\s*npm run (test:[\w:-]+)/g)) {
+  for (const match of script.matchAll(/(?:^|&&|;)\s*npm run (test:[\w:-]+)(?=\s|$|;|&)/g)) {
     const child = match[1];
+    if (child === name) return true;
     if (visited.has(child)) continue;
     visited.add(child);
     if (runsIn(pkg.scripts[child] ?? '', name, visited)) return true;
   }
   return false;
 };
+
+test('suite names must match complete commands, not prefixes or echo arguments', () => {
+  assert.equal(runsIn('npm run test:calendar-occurrence-overrides', 'test:calendar'), false);
+  assert.equal(runsIn('echo npm run test:calendar', 'test:calendar'), false);
+  assert.equal(runsIn('npm run test:calendar && npm run test:tasks', 'test:calendar'), true);
+});
 
 test('jedes test:*-Script hängt in genau einer Kette', () => {
   // Die Kette ruft Suiten direkt, über eine weitere test:*-Kette oder inlined

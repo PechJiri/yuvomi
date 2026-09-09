@@ -361,31 +361,59 @@ function hasColumn(database, table, column) {
   return tableColumns(database, table).has(column);
 }
 
-function hasConfiguredOutlookAutoSyncTarget(database, row, assignments) {
+function configuredOutlookWritableTargets(database) {
   const requiredColumns = [
+    ['outlook_accounts', 'id'],
     ['outlook_accounts', 'auto_sync_calendar_id'],
     ['outlook_accounts', 'owner_user_id'],
+    ['outlook_calendar_selection', 'account_id'],
+    ['outlook_calendar_selection', 'calendar_id'],
+    ['outlook_calendar_selection', 'enabled'],
+    ['outlook_calendar_selection', 'can_edit'],
     ['calendar_events', 'visibility'],
     ['calendar_events', 'created_by'],
     ['event_assignments', 'event_id'],
     ['event_assignments', 'user_id'],
   ];
-  if (!requiredColumns.every(([table, column]) => hasColumn(database, table, column))) return false;
+  if (!requiredColumns.every(([table, column]) => hasColumn(database, table, column))) return [];
+  // needs_reauth ist nur vorübergehend: ein Reconnect darf die Serie nicht
+  // unbemerkt mit verknüpften Einzelausnahmen an ein beschreibbares Ziel senden.
+  return database.prepare(`
+    SELECT a.id, a.owner_user_id, a.auto_sync_calendar_id, c.calendar_id
+    FROM outlook_accounts a
+    JOIN outlook_calendar_selection c ON c.account_id = a.id
+    WHERE a.auto_sync_calendar_id IS NOT NULL AND a.owner_user_id IS NOT NULL
+      AND c.enabled = 1 AND c.can_edit = 1
+  `).all();
+}
+
+function hasConfiguredOutlookAutoSyncTarget(database, row, assignments,
+  targets = configuredOutlookWritableTargets(database)) {
   if (!row || row.external_source !== 'local') return false;
   const assignedIds = assignments === undefined
     ? canonicalIds(assignmentIds(database, row.id))
     : canonicalIds(assignments);
   const assigned = new Set(assignedIds.map(Number));
-  const accounts = database.prepare(`
-    SELECT owner_user_id
-    FROM outlook_accounts
-    WHERE auto_sync_calendar_id IS NOT NULL AND owner_user_id IS NOT NULL
-  `).all();
-  return accounts.some(({ owner_user_id: ownerUserId }) => (
-    row.visibility === 'all'
-    || Number(row.created_by) === Number(ownerUserId)
-    || (row.visibility === 'assignees' && assigned.has(Number(ownerUserId)))
-  ));
+  return targets.some((target) => {
+    const calendarId = Number(row.target_outlook_account_id) === Number(target.id)
+      ? row.target_outlook_calendar_id
+      : target.auto_sync_calendar_id;
+    return calendarId === target.calendar_id && (
+      row.visibility === 'all'
+      || Number(row.created_by) === Number(target.owner_user_id)
+      || (row.visibility === 'assignees' && assigned.has(Number(target.owner_user_id)))
+    );
+  });
+}
+
+function hasLocalSeriesOrigin(row) {
+  return !!row?.recurrence_rule
+    && row.external_source === 'local'
+    && row.external_calendar_id == null
+    && row.calendar_ref_id == null
+    && row.subscription_id == null
+    && row.external_object_url == null
+    && row.recurrence_parent_id == null;
 }
 
 function structurallyIneligible(row) {
@@ -410,8 +438,8 @@ export function classifyLocalSeriesBatch(database, rows) {
     .map((row) => [Number(row.id), row])).values()];
   const result = new Map(masters.map((row) => [
     Number(row.id),
-    structurallyIneligible(row)
-      ? { eligible: false, reason: 'ineligible_series' }
+    !hasLocalSeriesOrigin(row)
+      ? { eligible: false, reason: 'ineligible_series', local: false }
       : null,
   ]));
   const candidates = masters.filter((row) => result.get(Number(row.id)) === null);
@@ -420,6 +448,7 @@ export function classifyLocalSeriesBatch(database, rows) {
   const ids = candidates.map((row) => Number(row.id));
   const placeholders = ids.map(() => '?').join(',');
   const disqualified = new Set();
+  const generated = new Set();
   const generatedOwnerColumns = [
     ['birthdays', 'calendar_event_id'],
     ['birthdays', 'name_day_calendar_event_id'],
@@ -431,6 +460,7 @@ export function classifyLocalSeriesBatch(database, rows) {
     const params = generatedOwnerColumns.flatMap(() => ids);
     for (const row of database.prepare(unions.join('\nUNION\n')).all(...params)) {
       disqualified.add(Number(row.event_id));
+      generated.add(Number(row.event_id));
     }
   }
   if (hasColumn(database, 'outlook_event_links', 'event_id')) {
@@ -440,43 +470,28 @@ export function classifyLocalSeriesBatch(database, rows) {
     `).all(...ids)) disqualified.add(Number(row.event_id));
   }
 
-  const autoSyncColumns = [
-    ['outlook_accounts', 'auto_sync_calendar_id'],
-    ['outlook_accounts', 'owner_user_id'],
-    ['calendar_events', 'visibility'],
-    ['calendar_events', 'created_by'],
-    ['event_assignments', 'event_id'],
-    ['event_assignments', 'user_id'],
-  ];
-  if (autoSyncColumns.every(([table, column]) => hasColumn(database, table, column))) {
-    const accountOwners = database.prepare(`
-      SELECT owner_user_id FROM outlook_accounts
-      WHERE auto_sync_calendar_id IS NOT NULL AND owner_user_id IS NOT NULL
-    `).all().map((row) => Number(row.owner_user_id));
-    if (accountOwners.length > 0) {
-      const assignments = new Map();
-      for (const row of database.prepare(`
-        SELECT event_id, user_id FROM event_assignments
-        WHERE event_id IN (${placeholders})
-      `).all(...ids)) {
-        if (!assignments.has(Number(row.event_id))) assignments.set(Number(row.event_id), new Set());
-        assignments.get(Number(row.event_id)).add(Number(row.user_id));
-      }
-      for (const row of candidates) {
-        const assigned = assignments.get(Number(row.id)) ?? new Set();
-        if (accountOwners.some((ownerId) => row.visibility === 'all'
-          || Number(row.created_by) === ownerId
-          || (row.visibility === 'assignees' && assigned.has(ownerId)))) {
-          disqualified.add(Number(row.id));
-        }
+  const autoSyncTargets = configuredOutlookWritableTargets(database);
+  if (autoSyncTargets.length > 0) {
+    const assignments = new Map();
+    for (const row of database.prepare(`
+      SELECT event_id, user_id FROM event_assignments
+      WHERE event_id IN (${placeholders})
+    `).all(...ids)) {
+      if (!assignments.has(Number(row.event_id))) assignments.set(Number(row.event_id), []);
+      assignments.get(Number(row.event_id)).push(Number(row.user_id));
+    }
+    for (const row of candidates) {
+      if (hasConfiguredOutlookAutoSyncTarget(database, row,
+        assignments.get(Number(row.id)) ?? [], autoSyncTargets)) {
+        disqualified.add(Number(row.id));
       }
     }
   }
 
   for (const row of candidates) {
-    result.set(Number(row.id), disqualified.has(Number(row.id))
-      ? { eligible: false, reason: 'ineligible_series' }
-      : { eligible: true, reason: null });
+    const local = !generated.has(Number(row.id));
+    const eligible = !structurallyIneligible(row) && !disqualified.has(Number(row.id));
+    result.set(Number(row.id), { eligible, reason: eligible ? null : 'ineligible_series', local });
   }
   return result;
 }
@@ -486,7 +501,13 @@ export function classifyLocalSeries(database, row) {
   if (!row || !Number.isInteger(Number(row.id))) {
     return { eligible: false, reason: 'ineligible_series' };
   }
-  return classifyLocalSeriesBatch(database, [row]).get(Number(row.id));
+  const { eligible, reason } = classifyLocalSeriesBatch(database, [row]).get(Number(row.id));
+  return { eligible, reason };
+}
+
+/** Local origin is independent of whether the provider can carry linked overrides. */
+export function isLocallyOwnedSeries(database, row) {
+  return classifyLocalSeriesBatch(database, [row]).get(Number(row?.id))?.local === true;
 }
 
 function actorCanSeeSeries(database, row, actorId) {
@@ -522,6 +543,17 @@ export function buildRecurrenceCapabilityMap(database, events, {
 
   const masters = [...mastersById.values()].filter(Boolean);
   const classifications = classifyLocalSeriesBatch(database, masters);
+  // Provider write access can change outside our configuration endpoints. A
+  // linked series must never fall back to the standalone+EXDATE workflow: that
+  // workflow cannot remove or replace an existing linked child.
+  const legacyCandidates = masters.filter((master) => {
+    const classification = classifications.get(Number(master.id));
+    return classification?.local && !classification.eligible;
+  }).map((master) => Number(master.id));
+  const linkedParents = new Set(legacyCandidates.length === 0 ? [] : database.prepare(`
+    SELECT DISTINCT recurrence_parent_id FROM calendar_events
+    WHERE recurrence_parent_id IN (${legacyCandidates.map(() => '?').join(',')})
+  `).all(...legacyCandidates).map((row) => Number(row.recurrence_parent_id)));
   const capabilities = new Map();
   for (const [seriesId, master] of mastersById) {
     if (!master) continue;
@@ -529,8 +561,11 @@ export function buildRecurrenceCapabilityMap(database, events, {
       ?? { eligible: false, reason: 'ineligible_series' };
     capabilities.set(seriesId, {
       master,
-      isLocalRecurringSeries: classification.eligible,
+      isLocalRecurringSeries: classification.local === true,
       canOverrideOccurrence: classification.eligible
+        && actorCanSeeSeries(database, master, actorId),
+      canDetachOccurrence: classification.local === true && !classification.eligible
+        && !linkedParents.has(seriesId)
         && actorCanSeeSeries(database, master, actorId),
     });
   }
@@ -1425,6 +1460,19 @@ export function splitSeries(database, {
     successorValues.overridden_fields = null;
     successorValues.created_by = master.created_by;
 
+    const selectedFields = selectedChild ? parseOverrideFields(selectedChild.overridden_fields) : [];
+    const requestedAssignments = assignments === undefined ? undefined : orderedIds(assignments);
+    const successorAssignments = requestedAssignments === undefined
+      ? selectedFields.includes('assignments')
+        ? canonicalIds(assignmentIds(database, selectedChild.id))
+        : canonicalIds(assignmentIds(database, master.id))
+      : requestedAssignments;
+    successorValues.assigned_to = requestedAssignments === undefined
+      ? selectedFields.includes('assignments')
+        ? assignmentPrimary(selectedChild, successorAssignments)
+        : assignmentPrimary(master, successorAssignments)
+      : requestedAssignments[0] ?? null;
+
     assertValidEffectiveInterval(successorValues);
     assertSuccessorHasOccurrence(successorValues);
     const futureChildren = children.filter((child) =>
@@ -1432,7 +1480,8 @@ export function splitSeries(database, {
     const orphans = classifyOrphans(
       futureChildren,
       successorValues,
-      hasOutboundTarget(successorValues),
+      hasOutboundTarget(successorValues)
+        || hasConfiguredOutlookAutoSyncTarget(database, successorValues, successorAssignments),
     );
     const confirmationSupplied = confirmedOrphanCount !== undefined;
     if ((orphans.length > 0 || confirmationSupplied)
@@ -1457,18 +1506,6 @@ export function splitSeries(database, {
       }
     });
 
-    const selectedFields = selectedChild ? parseOverrideFields(selectedChild.overridden_fields) : [];
-    const requestedAssignments = assignments === undefined ? undefined : orderedIds(assignments);
-    const successorAssignments = requestedAssignments === undefined
-      ? selectedFields.includes('assignments')
-        ? canonicalIds(assignmentIds(database, selectedChild.id))
-        : canonicalIds(assignmentIds(database, master.id))
-      : requestedAssignments;
-    successorValues.assigned_to = requestedAssignments === undefined
-      ? selectedFields.includes('assignments')
-        ? assignmentPrimary(selectedChild, successorAssignments)
-        : assignmentPrimary(master, successorAssignments)
-      : requestedAssignments[0] ?? null;
     const inheritedDocumentId = !selectedFields.includes('attachment')
       ? Number(master.attachment_document_id)
       : null;
@@ -1948,19 +1985,8 @@ export function updateSeriesWithOverrides(database, {
       }
     }
 
-    const exceptions = database.prepare(`
-      SELECT exception_date FROM calendar_event_exceptions WHERE event_id = ?
-    `).all(master.id);
-    for (const exception of exceptions) {
-      try {
-        baseOccurrenceFor(updated, exception.exception_date);
-      } catch {
-        database.prepare(`
-          DELETE FROM calendar_event_exceptions
-          WHERE event_id = ? AND exception_date = ?
-        `).run(master.id, exception.exception_date);
-      }
-    }
+    // A deleted slot stays deleted even if a temporary rule change cannot reach
+    // it. Only detaching a linked replacement removes its own paired EXDATE.
 
     return {
       series: loadProjectedEvent(database, master.id),

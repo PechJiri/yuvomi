@@ -43,10 +43,6 @@ function collectLocalOutboundEvents(database) {
         SELECT 1 FROM calendar_events child
         WHERE child.recurrence_parent_id = e.id
       )
-      AND NOT EXISTS (
-        SELECT 1 FROM calendar_event_exceptions exception
-        WHERE exception.event_id = e.id
-      )
   `).all();
 }
 

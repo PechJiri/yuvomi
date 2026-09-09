@@ -192,5 +192,51 @@ test('vererbter Child-Text dupliziert den Master nicht, expliziter Titel bleibt 
     'explicitně změněný child titul musí zůstat dohledatelný');
 });
 
+test('JSON-escaped override field names remain searchable after insert, update and backfill', () => {
+  const masterId = addEvent({ title: 'Escaped fields master', start: '2032-01-01T09:00:00' });
+  const cases = [
+    ['title', '["ti\\u0074le"]', 'Qzxescapedtitle'],
+    ['description', '["descri\\u0070tion"]', 'Qzxescapeddescription'],
+    ['location', '["loca\\u0074ion"]', 'Qzxescapedlocation'],
+  ];
+  for (const [index, [field, metadata, keyword]] of cases.entries()) {
+    const childId = db.prepare(`
+      INSERT INTO calendar_events
+        (title, description, location, start_datetime, recurrence_parent_id,
+         recurrence_id, overridden_fields, created_by)
+      VALUES (?, ?, ?, '2032-01-02T11:00:00', ?, ?, ?, ?)
+    `).run(field === 'title' ? keyword : 'Inherited title',
+      field === 'description' ? keyword : null, field === 'location' ? keyword : null,
+      masterId, `2032-01-0${index + 2}`, metadata, uid).lastInsertRowid;
+    assert(search(keyword).some(({ id }) => id === Number(childId)), `${field}: escaped INSERT value is missing`);
+    db.prepare(`UPDATE calendar_events SET ${field} = ? WHERE id = ?`).run(`Updated${keyword}`, childId);
+    assert(search(keyword).length === 0, `${field}: stale INSERT value remains indexed`);
+    assert(search(`Updated${keyword}`).some(({ id }) => id === Number(childId)), `${field}: escaped UPDATE value is missing`);
+  }
+  const migration = MIGRATIONS_SQL[190];
+  db.exec(migration.slice(migration.lastIndexOf("DELETE FROM search_index WHERE entity = 'event';")));
+  for (const [field, , keyword] of cases) {
+    assert(search(`Updated${keyword}`).length === 1, `${field}: escaped backfill value is missing`);
+  }
+});
+
+test('invalid or non-array override metadata neither aborts FTS writes nor indexes inherited text', () => {
+  const masterId = addEvent({ title: 'Malformed fields master', start: '2033-01-01T09:00:00' });
+  const metadataCases = [null, '', '[broken', '["title"', '{"field":"title"}', '"title"'];
+  for (const [index, metadata] of metadataCases.entries()) {
+    const childId = db.prepare(`
+      INSERT INTO calendar_events
+        (title, start_datetime, recurrence_parent_id, recurrence_id, overridden_fields, created_by)
+      VALUES ('Qzxinvalidmetadata', '2033-01-02T11:00:00', ?, ?, ?, ?)
+    `).run(masterId, `2033-01-0${index + 2}`, metadata, uid).lastInsertRowid;
+    db.prepare('UPDATE calendar_events SET title = ? WHERE id = ?').run('Qzxinvalidupdated', childId);
+  }
+  assert(search('Qzxinvalidmetadata').length === 0, 'invalid metadata indexed an inherited INSERT value');
+  assert(search('Qzxinvalidupdated').length === 0, 'invalid metadata indexed an inherited UPDATE value');
+  const migration = MIGRATIONS_SQL[190];
+  db.exec(migration.slice(migration.lastIndexOf("DELETE FROM search_index WHERE entity = 'event';")));
+  assert(search('Qzxinvalidupdated').length === 0, 'invalid metadata indexed inherited text during backfill');
+});
+
 console.log(`\n[Calendar-Search-Test] ${passed} bestanden, ${failed} fehlgeschlagen\n`);
 process.exit(failed === 0 ? 0 : 1);

@@ -7511,15 +7511,24 @@ const MIGRATIONS = [
         INSERT INTO search_index (entity, entity_id, title, body)
         VALUES ('event', NEW.id,
           CASE WHEN NEW.recurrence_parent_id IS NULL
-                 OR instr(COALESCE(NEW.overridden_fields, ''), '"title"') > 0
+                 OR EXISTS (SELECT 1 FROM json_each(
+                      CASE WHEN json_valid(NEW.overridden_fields) THEN
+                        CASE WHEN json_type(NEW.overridden_fields) = 'array' THEN NEW.overridden_fields END
+                      END) WHERE type = 'text' AND value = 'title')
                THEN COALESCE(NEW.title, '') ELSE '' END,
           TRIM(
             CASE WHEN NEW.recurrence_parent_id IS NULL
-                    OR instr(COALESCE(NEW.overridden_fields, ''), '"description"') > 0
+                    OR EXISTS (SELECT 1 FROM json_each(
+                         CASE WHEN json_valid(NEW.overridden_fields) THEN
+                           CASE WHEN json_type(NEW.overridden_fields) = 'array' THEN NEW.overridden_fields END
+                         END) WHERE type = 'text' AND value = 'description')
                  THEN COALESCE(NEW.description, '') ELSE '' END
             || ' ' ||
             CASE WHEN NEW.recurrence_parent_id IS NULL
-                    OR instr(COALESCE(NEW.overridden_fields, ''), '"location"') > 0
+                    OR EXISTS (SELECT 1 FROM json_each(
+                         CASE WHEN json_valid(NEW.overridden_fields) THEN
+                           CASE WHEN json_type(NEW.overridden_fields) = 'array' THEN NEW.overridden_fields END
+                         END) WHERE type = 'text' AND value = 'location')
                  THEN COALESCE(NEW.location, '') ELSE '' END));
       END;
       CREATE TRIGGER trg_search_events_au AFTER UPDATE ON calendar_events BEGIN
@@ -7527,15 +7536,24 @@ const MIGRATIONS = [
         INSERT INTO search_index (entity, entity_id, title, body)
         VALUES ('event', NEW.id,
           CASE WHEN NEW.recurrence_parent_id IS NULL
-                 OR instr(COALESCE(NEW.overridden_fields, ''), '"title"') > 0
+                 OR EXISTS (SELECT 1 FROM json_each(
+                      CASE WHEN json_valid(NEW.overridden_fields) THEN
+                        CASE WHEN json_type(NEW.overridden_fields) = 'array' THEN NEW.overridden_fields END
+                      END) WHERE type = 'text' AND value = 'title')
                THEN COALESCE(NEW.title, '') ELSE '' END,
           TRIM(
             CASE WHEN NEW.recurrence_parent_id IS NULL
-                    OR instr(COALESCE(NEW.overridden_fields, ''), '"description"') > 0
+                    OR EXISTS (SELECT 1 FROM json_each(
+                         CASE WHEN json_valid(NEW.overridden_fields) THEN
+                           CASE WHEN json_type(NEW.overridden_fields) = 'array' THEN NEW.overridden_fields END
+                         END) WHERE type = 'text' AND value = 'description')
                  THEN COALESCE(NEW.description, '') ELSE '' END
             || ' ' ||
             CASE WHEN NEW.recurrence_parent_id IS NULL
-                    OR instr(COALESCE(NEW.overridden_fields, ''), '"location"') > 0
+                    OR EXISTS (SELECT 1 FROM json_each(
+                         CASE WHEN json_valid(NEW.overridden_fields) THEN
+                           CASE WHEN json_type(NEW.overridden_fields) = 'array' THEN NEW.overridden_fields END
+                         END) WHERE type = 'text' AND value = 'location')
                  THEN COALESCE(NEW.location, '') ELSE '' END));
       END;
       CREATE TRIGGER trg_search_events_ad AFTER DELETE ON calendar_events BEGIN
@@ -7545,15 +7563,24 @@ const MIGRATIONS = [
       INSERT INTO search_index (entity, entity_id, title, body)
       SELECT 'event', id,
         CASE WHEN recurrence_parent_id IS NULL
-               OR instr(COALESCE(overridden_fields, ''), '"title"') > 0
+               OR EXISTS (SELECT 1 FROM json_each(
+                    CASE WHEN json_valid(overridden_fields) THEN
+                      CASE WHEN json_type(overridden_fields) = 'array' THEN overridden_fields END
+                    END) WHERE type = 'text' AND value = 'title')
              THEN COALESCE(title, '') ELSE '' END,
         TRIM(
           CASE WHEN recurrence_parent_id IS NULL
-                  OR instr(COALESCE(overridden_fields, ''), '"description"') > 0
+                  OR EXISTS (SELECT 1 FROM json_each(
+                       CASE WHEN json_valid(overridden_fields) THEN
+                         CASE WHEN json_type(overridden_fields) = 'array' THEN overridden_fields END
+                       END) WHERE type = 'text' AND value = 'description')
                THEN COALESCE(description, '') ELSE '' END
           || ' ' ||
           CASE WHEN recurrence_parent_id IS NULL
-                  OR instr(COALESCE(overridden_fields, ''), '"location"') > 0
+                  OR EXISTS (SELECT 1 FROM json_each(
+                       CASE WHEN json_valid(overridden_fields) THEN
+                         CASE WHEN json_type(overridden_fields) = 'array' THEN overridden_fields END
+                       END) WHERE type = 'text' AND value = 'location')
                THEN COALESCE(location, '') ELSE '' END)
       FROM calendar_events;
     `,

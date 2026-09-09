@@ -25,6 +25,7 @@ import {
   CalendarOccurrenceError,
   deleteOccurrence,
   isEligibleLocalSeries,
+  isLocallyOwnedSeries,
   splitSeries,
   truncateSeries,
   upsertOccurrenceOverride,
@@ -132,17 +133,17 @@ function validateOccurrenceAssignments(database, value) {
   if (value === null) return { value: [], error: null };
   const ids = Array.isArray(value) ? value : [value];
   if (ids.some((id) => !Number.isInteger(id) || id < 1)) {
-    return { value: null, error: 'assigned_to must contain positive integer user IDs.' };
+    return { value: null, error: 'Zuweisung: Wähle Personen mit gültigen positiven Benutzer-IDs aus.' };
   }
   if (new Set(ids).size !== ids.length) {
-    return { value: null, error: 'assigned_to must not contain duplicate user IDs.' };
+    return { value: null, error: 'Zuweisung: Wähle jede Person höchstens einmal aus.' };
   }
   if (ids.length > 0) {
     const found = database.prepare(`
       SELECT COUNT(*) AS count FROM users WHERE id IN (${ids.map(() => '?').join(',')})
     `).get(...ids).count;
     if (Number(found) !== ids.length) {
-      return { value: null, error: 'assigned_to contains an unknown user ID.' };
+      return { value: null, error: 'Eine zugewiesene Person existiert nicht mehr. Lade die Personenauswahl erneut.' };
     }
   }
   return { value: ids, error: null };
@@ -179,14 +180,14 @@ function validateOccurrenceMutationBody(database, body, { following = false } = 
       return;
     }
     if (typeof body[field] !== 'string') {
-      errors.push(`${field} must be a string${nullable ? ' or null' : ''}.`);
+      errors.push(`${label} muss als Text angegeben werden${nullable ? ' oder leer bleiben' : ''}.`);
       return;
     }
     const result = str(body[field], label, {
       max: options.max,
       required: options.required !== false,
     });
-    if (result.error) errors.push(result.error);
+    if (result.error) errors.push(`${label}: Gib einen gültigen Text mit höchstens ${options.max} Zeichen ein.`);
     else values[field] = result.value;
   };
   const validateDateTime = (field, label, { nullable = false } = {}) => {
@@ -196,13 +197,13 @@ function validateOccurrenceMutationBody(database, body, { following = false } = 
       return;
     }
     if (typeof body[field] !== 'string' || body[field].trim() === '') {
-      errors.push(`${field} must be a non-empty calendar date or date-time${nullable ? ', or null' : ''}.`);
+      errors.push(`${label}: Gib ein Datum mit optionaler Uhrzeit an${nullable ? ' oder lasse das Feld leer' : ''}.`);
       return;
     }
     const result = datetime(body[field], label, true);
-    if (result.error) errors.push(result.error);
+    if (result.error) errors.push(`${label}: Gib ein gültiges Datum mit optionaler Uhrzeit an.`);
     else if (!isPossibleCalendarDateTime(body[field])) {
-      errors.push(`${field} must be a valid calendar date or date-time.`);
+      errors.push(`${label}: Gib ein gültiges Datum mit optionaler Uhrzeit an.`);
     } else values[field] = result.value;
   };
 
@@ -214,31 +215,31 @@ function validateOccurrenceMutationBody(database, body, { following = false } = 
 
   if (Object.hasOwn(body, 'color')) {
     if (body.color !== null && typeof body.color !== 'string') {
-      errors.push('color must be a string or null.');
+      errors.push('Farbe muss als Text angegeben werden oder leer bleiben.');
     } else {
       const result = color(body.color, 'Farbe');
-      if (result.error) errors.push(result.error);
+      if (result.error) errors.push('Farbe: Wähle eine gültige Farbe im Format #RRGGBB aus.');
       else values.color = result.value;
     }
   }
   if (following && Object.hasOwn(body, 'recurrence_rule')) {
     if (body.recurrence_rule !== null && typeof body.recurrence_rule !== 'string') {
-      errors.push('recurrence_rule must be a string or null.');
+      errors.push('Die Wiederholungsregel muss als Text angegeben werden oder leer bleiben.');
     } else {
       const result = rrule(body.recurrence_rule, 'Wiederholung');
-      if (result.error) errors.push(result.error);
+      if (result.error) errors.push('Die Wiederholungsregel ist ungültig. Prüfe die Wiederholungseinstellungen.');
       else values.recurrence_rule = result.value;
     }
   }
   for (const field of ['all_day', 'countdown']) {
     if (Object.hasOwn(body, field)) {
-      if (typeof body[field] !== 'boolean') errors.push(`${field} must be a boolean.`);
+      if (typeof body[field] !== 'boolean') errors.push(`${field === 'all_day' ? 'Ganztägig' : 'Countdown'} muss aktiviert oder deaktiviert sein (true oder false).`);
       else values[field] = body[field];
     }
   }
   if (Object.hasOwn(body, 'visibility')) {
     if (!['all', 'assignees', 'private'].includes(body.visibility)) {
-      errors.push('visibility must be one of: all, assignees, private.');
+      errors.push('Sichtbarkeit: Wähle alle Personen, zugewiesene Personen oder privat (all, assignees, private).');
     } else values.visibility = body.visibility;
   }
   const assignments = validateOccurrenceAssignments(database, body.assigned_to);
@@ -474,9 +475,22 @@ function loadVisibleEvent(id, req) {
   `).get(id, me, me);
 }
 
+const CALENDAR_OCCURRENCE_ERRORS = {
+  calendar_series_not_found: 'Terminserie nicht gefunden. Lade den Kalender erneut.',
+  not_authorized: 'Du darfst diese Terminserie nicht bearbeiten.',
+  ineligible_series: 'Einzelausnahmen sind nur für lokale Terminserien ohne aktive externe Synchronisierung verfügbar. Hat eine lokale Serie bereits verknüpfte Einzelausnahmen, deaktiviere zuerst ihren Outlook-Zielkalender. Danach kannst du sie wieder bearbeiten, ohne Ausnahmen zu löschen.',
+  invalid_recurrence_id: 'Der ausgewählte Serientermin gehört nicht zu diesem Datum. Lade den Kalender erneut und wähle den Termin noch einmal aus.',
+  invalid_override_fields: 'Die Angaben zur Einzelausnahme sind ungültig. Prüfe die geänderten Felder.',
+  invalid_occurrence_interval: 'Das Ende darf nicht vor dem Beginn liegen. Prüfe Datum und Uhrzeit der Einzelausnahme.',
+  calendar_override_orphans: 'Die Änderung benötigt eine aktuelle Bestätigung. Prüfe die Anzahl der betroffenen Einzelausnahmen und bestätige, dass sie als eigenständige Termine erhalten bleiben sollen.',
+  calendar_occurrence_route_required: 'Öffne den Serientermin im Kalender und wähle den gewünschten Änderungsumfang, um diese Einzelausnahme zu bearbeiten.',
+  empty_successor_series: 'Die Folgeserie enthält ab ihrem Startdatum keinen Termin. Passe das Startdatum oder die Wiederholungsregel an.',
+  invalid_successor_override: 'Eine Einzelausnahme passt nicht zur Folgeserie. Prüfe die Wiederholungsregel und die betroffene Einzelausnahme.',
+};
+
 function sendCalendarOccurrenceError(res, error) {
   return res.status(error.status).json({
-    error: error.message,
+    error: CALENDAR_OCCURRENCE_ERRORS[error.code] || 'Die Einzelausnahme konnte nicht geändert werden. Lade den Kalender erneut und prüfe deine Angaben.',
     code: error.status,
     ...(error.conflict ? { conflict: error.conflict } : { reason: error.code }),
     ...(error.orphanedOverrideCount !== undefined
@@ -565,11 +579,11 @@ router.put('/:id', async (req, res) => {
     if (vOutlook) checks.push(vOutlook);
     const errors = collectErrors(checks);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
-    if (req.body.confirmed_orphan_count !== undefined
+    if (event.recurrence_rule && req.body.confirmed_orphan_count !== undefined
         && (!Number.isInteger(req.body.confirmed_orphan_count)
           || req.body.confirmed_orphan_count < 0)) {
       return res.status(400).json({
-        error: 'confirmed_orphan_count must be a non-negative integer.',
+        error: 'Die bestätigte Anzahl der betroffenen Einzelausnahmen muss eine ganze Zahl ab 0 sein. Prüfe die aktuelle Anzahl und bestätige erneut.',
         code: 400,
       });
     }
@@ -843,7 +857,7 @@ router.put('/:id', async (req, res) => {
         getUserId(req),
       ).eligible;
     if (linkedOverrideCount > 0
-        || Object.hasOwn(req.body, 'confirmed_orphan_count')
+        || (event.recurrence_rule && Object.hasOwn(req.body, 'confirmed_orphan_count'))
         || canUseOccurrenceTransaction) {
       const seriesChanges = {};
       if (title !== undefined) seriesChanges.title = title?.trim() || null;
@@ -998,7 +1012,7 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
           || req.body.reminder_offsets.some((value) =>
             !Number.isInteger(value) || value < 0))) {
       return res.status(400).json({
-        error: 'reminder_offsets must be an array of at most 5 non-negative integers.',
+        error: 'Erinnerungen: Wähle höchstens fünf unterschiedliche Vorlaufzeiten in ganzen Minuten ab 0.',
         code: 400,
       });
     }
@@ -1149,7 +1163,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
         && (!Number.isInteger(req.body.confirmed_orphan_count)
           || req.body.confirmed_orphan_count < 0)) {
       return res.status(400).json({
-        error: 'confirmed_orphan_count must be a non-negative integer.',
+        error: 'Die bestätigte Anzahl der betroffenen Einzelausnahmen muss eine ganze Zahl ab 0 sein. Prüfe die aktuelle Anzahl und bestätige erneut.',
         code: 400,
       });
     }
@@ -1160,7 +1174,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
           || req.body.reminder_offsets.some((value) =>
             !Number.isInteger(value) || value < 0))) {
       return res.status(400).json({
-        error: 'reminder_offsets must be an array of at most 5 non-negative integers.',
+        error: 'Erinnerungen: Wähle höchstens fünf unterschiedliche Vorlaufzeiten in ganzen Minuten ab 0.',
         code: 400,
       });
     }
@@ -1384,7 +1398,7 @@ router.post('/:id/exceptions', (req, res) => {
     const event = loadVisibleEvent(id, req);
     if (!event) return res.status(404).json({ error: 'Termin nicht gefunden', code: 404 });
     const eligibility = isEligibleLocalSeries(db.get(), event, getUserId(req));
-    if (!eligibility.eligible) {
+    if (!isLocallyOwnedSeries(db.get(), event)) {
       const notSeries = !event.recurrence_rule;
       return res.status(400).json({
         error: notSeries

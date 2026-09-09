@@ -97,6 +97,13 @@ function createDatabase() {
       auto_sync_calendar_id TEXT,
       owner_user_id INTEGER
     );
+    CREATE TABLE outlook_calendar_selection (
+      account_id INTEGER NOT NULL,
+      calendar_id TEXT NOT NULL,
+      can_edit INTEGER NOT NULL DEFAULT 1,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (account_id, calendar_id)
+    );
     CREATE TABLE outlook_event_links (
       event_id INTEGER NOT NULL,
       account_id INTEGER NOT NULL,
@@ -399,7 +406,7 @@ test('local recurring series with an Outlook push link is ineligible without an 
   });
 });
 
-test('Apple outbound collector leaves linked and deletion-only occurrence state local', () => {
+test('Apple outbound collector excludes linked state but preserves deletion-only series', () => {
   const database = createDatabase();
   const plainId = Number(insertSeries(database, { title: 'Apple plain local series' }));
   const masterId = Number(insertSeries(database, { title: 'Apple master' }));
@@ -422,7 +429,7 @@ test('Apple outbound collector leaves linked and deletion-only occurrence state 
   const outbound = appleCalendarTest.collectLocalOutboundEvents(database);
   assert.equal(outbound.some((event) => Number(event.id) === plainId), true);
   assert.equal(outbound.some((event) => Number(event.id) === masterId), false);
-  assert.equal(outbound.some((event) => Number(event.id) === deletionOnlyId), false);
+  assert.equal(outbound.some((event) => Number(event.id) === deletionOnlyId), true);
   assert.equal(outbound.some((event) => Number(event.recurrence_parent_id) === masterId), false);
 });
 
@@ -432,9 +439,15 @@ test('Outlook auto-sync eligibility follows visible event ownership and assignme
     INSERT INTO outlook_accounts (id, needs_reauth, auto_sync_calendar_id, owner_user_id)
     VALUES (20, 0, 'family-calendar', 2)
   `).run();
+  database.prepare(`INSERT INTO outlook_calendar_selection
+    (account_id, calendar_id, enabled, can_edit) VALUES (20, 'family-calendar', 1, 1)`).run();
 
   const publicEvent = database.prepare('SELECT * FROM calendar_events WHERE id = ?')
     .get(insertSeries(database));
+  const serialized = serializeEvent(publicEvent, { database, actorId: 1 });
+  assert.equal(serialized.is_local_recurring_series, true);
+  assert.equal(serialized.can_override_occurrence, false);
+  assert.equal(serialized.can_detach_occurrence, true);
   assert.deepEqual(isEligibleLocalSeries(database, publicEvent, 1, true), {
     eligible: false,
     reason: 'ineligible_series',
@@ -457,6 +470,62 @@ test('Outlook auto-sync eligibility follows visible event ownership and assignme
     eligible: false,
     reason: 'ineligible_series',
   });
+});
+
+test('disabled, read-only and missing Outlook targets preserve linked capabilities and mutation eligibility', () => {
+  for (const selection of [{ enabled: 0, canEdit: 1 }, { enabled: 1, canEdit: 0 }, null]) {
+    const database = createDatabase();
+    database.prepare(`INSERT INTO outlook_accounts
+      (id, auto_sync_calendar_id, owner_user_id) VALUES (20, 'family-calendar', 2)`).run();
+    if (selection) database.prepare(`INSERT INTO outlook_calendar_selection
+      (account_id, calendar_id, enabled, can_edit) VALUES (20, 'family-calendar', ?, ?)`)
+      .run(selection.enabled, selection.canEdit);
+    const seriesId = Number(insertSeries(database, {
+      start_datetime: '2026-10-01T09:00:00', recurrence_rule: 'FREQ=DAILY',
+    }));
+    const row = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(seriesId);
+    const serialized = serializeEvents([row], { database, actorId: 1 })[0];
+    assert.equal(serialized.can_override_occurrence, true);
+    assert.equal(serialized.can_detach_occurrence, false);
+    assert.deepEqual(isEligibleLocalSeries(database, row, 1), { eligible: true, reason: null });
+    const child = upsertOccurrenceOverride(database, {
+      seriesId, recurrenceId: '2026-10-04', actorId: 1, changes: { title: 'Still linked' },
+    });
+    assert.equal(child.event.recurrence_parent_id, seriesId);
+  }
+});
+
+test('visibility and assignment changes keep linked overrides when Outlook target cannot push', () => {
+  for (const selection of [{ enabled: 0, canEdit: 1 }, { enabled: 1, canEdit: 0 }, null]) {
+    for (const mode of ['visibility', 'assignments']) {
+      for (const scope of ['series', 'following']) {
+        const database = createDatabase();
+        database.prepare(`INSERT INTO outlook_accounts
+          (id, auto_sync_calendar_id, owner_user_id) VALUES (20, 'family-calendar', 2)`).run();
+        if (selection) database.prepare(`INSERT INTO outlook_calendar_selection
+          (account_id, calendar_id, enabled, can_edit) VALUES (20, 'family-calendar', ?, ?)`)
+          .run(selection.enabled, selection.canEdit);
+        const seriesId = Number(insertSeries(database, {
+          visibility: mode === 'visibility' ? 'private' : 'assignees',
+          start_datetime: '2026-10-01T09:00:00', recurrence_rule: 'FREQ=DAILY',
+        }));
+        upsertOccurrenceOverride(database, {
+          seriesId, recurrenceId: '2026-10-04', actorId: 1, changes: { title: 'Preserved override' },
+        });
+        const options = {
+          seriesId, actorId: 1,
+          changes: mode === 'visibility' ? { visibility: 'all' } : {},
+          ...(mode === 'assignments' ? { assignments: [2] } : {}),
+        };
+        const result = scope === 'series'
+          ? updateSeriesWithOverrides(database, options)
+          : splitSeries(database, { ...options, recurrenceId: '2026-10-03' });
+        assert.equal(result.orphanedOverrideCount, 0);
+        assert.equal(database.prepare("SELECT recurrence_parent_id FROM calendar_events WHERE title = 'Preserved override'")
+          .get().recurrence_parent_id, Number(result.series.id));
+      }
+    }
+  }
 });
 
 test('daily recurrence identity resolves the exact timed occurrence', () => {
@@ -1930,6 +1999,46 @@ test('following edit honors an explicitly changed successor COUNT', () => {
     .get(result.series.id).recurrence_rule, 'FREQ=DAILY;COUNT=4');
 });
 
+test('following edit confirms all linked children before successor enters Outlook auto-sync', () => {
+  for (const mode of ['visibility', 'assignments', 'selected assignments']) {
+    const database = createDatabase();
+    const seriesId = Number(insertSeries(database, {
+      start_datetime: '2026-10-01T09:00:00',
+      visibility: mode === 'visibility' ? 'private' : 'assignees',
+      recurrence_rule: 'FREQ=DAILY',
+    }));
+    database.prepare(`INSERT INTO outlook_accounts
+      (id, auto_sync_calendar_id, owner_user_id) VALUES (20, 'family-calendar', 2)`).run();
+    database.prepare(`INSERT INTO outlook_calendar_selection
+      (account_id, calendar_id, enabled, can_edit) VALUES (20, 'family-calendar', 1, 1)`).run();
+    for (const date of ['2026-10-03', '2026-10-04']) {
+      upsertOccurrenceOverride(database, {
+        seriesId, recurrenceId: date, actorId: 1, changes: { title: `Edited ${date}` },
+      });
+    }
+    if (mode === 'selected assignments') {
+      upsertOccurrenceOverride(database, {
+        seriesId, recurrenceId: '2026-10-02', actorId: 1, changes: {}, assignments: [2],
+      });
+    }
+    const options = {
+      seriesId, recurrenceId: '2026-10-02', actorId: 1,
+      changes: mode === 'visibility' ? { visibility: 'all' } : {},
+      ...(mode === 'assignments' ? { assignments: [2] } : {}),
+    };
+    for (const confirmedOrphanCount of [undefined, 1]) {
+      assert.throws(() => splitSeries(database, { ...options, confirmedOrphanCount }),
+        (error) => error.code === 'calendar_override_orphans' && error.orphanedOverrideCount === 2, mode);
+    }
+    const result = splitSeries(database, { ...options, confirmedOrphanCount: 2 });
+    assert.equal(result.orphanedOverrideCount, 2);
+    assert.equal(database.prepare('SELECT COUNT(*) AS n FROM calendar_events WHERE recurrence_parent_id = ?')
+      .get(result.series.id).n, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) AS n FROM calendar_events WHERE title LIKE 'Edited %' AND recurrence_parent_id IS NULL")
+      .get().n, 2);
+  }
+});
+
 test('following edit drops deletion-only exceptions excluded by the successor rule', () => {
   const database = createDatabase();
   const seriesId = Number(insertSeries(database, {
@@ -2468,7 +2577,7 @@ test('occurrence assignment changes own only the effective reminder recipients',
   }
 });
 
-test('rule changes require an exact orphan count and clean deletion-only exceptions', () => {
+test('rule changes detach confirmed orphans but retain deleted slots across a round trip', () => {
   const database = createDatabase();
   const seriesId = Number(insertSeries(database, {
     start_datetime: '2026-10-01T09:00:00',
@@ -2523,7 +2632,13 @@ test('rule changes require an exact orphan count and clean deletion-only excepti
   assert.deepEqual(database.prepare(`
     SELECT exception_date FROM calendar_event_exceptions
     WHERE event_id = ? ORDER BY exception_date
-  `).all(seriesId).map((row) => row.exception_date), ['2026-10-08']);
+  `).all(seriesId).map((row) => row.exception_date), ['2026-10-04', '2026-10-08']);
+  updateSeriesWithOverrides(database, {
+    seriesId, actorId: 1, changes: { recurrence_rule: 'FREQ=DAILY' },
+  });
+  const rows = database.prepare('SELECT * FROM calendar_events').all();
+  const restored = expandAndResolveEventRows(database, rows, '2026-10-01', '2026-10-10');
+  assert.equal(restored.some((event) => event.start_datetime.startsWith('2026-10-04')), false);
 });
 
 test('a supplied orphan confirmation must equal a recomputed zero count', () => {

@@ -1120,6 +1120,35 @@ test('POST /:id/exceptions — 404 + 400 keine Serie + 400 extern', async () => 
   assert.equal((await call('POST', `/${extern}/exceptions`, { body: { date: '2042-02-04' } })).status, 400, 'externe Serie gesperrt');
 });
 
+test('single event PUT ignores irrelevant orphan confirmation metadata', async () => {
+  const id = insertEvent({ title: 'Single confirmation', start_datetime: '2042-02-03T09:00' });
+  for (const count of [0, null, 'obsolete metadata', -1]) {
+    const result = await call('PUT', `/${id}`, {
+      body: { title: 'Still editable', confirmed_orphan_count: count },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.data.title, 'Still editable');
+  }
+});
+
+test('local outbound targets retain legacy exception scopes without linked overrides', async () => {
+  for (const target of [
+    { target_google_calendar_id: 'family' },
+    { target_caldav_account_id: 1, target_caldav_calendar_url: '/family/' },
+    { target_outlook_account_id: 1, target_outlook_calendar_id: 'family' },
+  ]) {
+    const id = insertEvent({ title: 'Outbound legacy', start_datetime: '2042-02-01T09:00', recurrence_rule: 'FREQ=DAILY' });
+    for (const [field, value] of Object.entries(target)) {
+      db.prepare(`UPDATE calendar_events SET ${field} = ? WHERE id = ?`).run(value, id);
+    }
+    const event = (await call('GET', `/${id}`)).body.data;
+    assert.equal(event.is_local_recurring_series, true);
+    assert.equal(event.can_override_occurrence, false);
+    assert.equal((await call('POST', `/${id}/exceptions`, { body: { date: '2042-02-03' } })).status, 201);
+    assert.equal((await call('PUT', `/${id}/occurrences/2042-02-04`, { body: { title: 'Must stay legacy' } })).status, 400);
+  }
+});
+
 test('POST /:id/exceptions — sichtbare Nicht-Eigentümer dürfen wie bei der ganzen Serie ändern', async () => {
   const serie = insertEvent({ title: 'EXC-OK', start_datetime: '2042-03-01T09:00', recurrence_rule: 'FREQ=DAILY', created_by: MARIA.id });
   const ok = await call('POST', `/${serie}/exceptions`, { actor: TOM, body: { date: '2042-03-05' } });
@@ -1313,6 +1342,7 @@ test('occurrence PUT distinguishes missing, ineligible and invalid original slot
   assert.equal(invalid.status, 400);
   assert.equal(invalid.body.code, 400);
   assert.equal(invalid.body.reason, 'invalid_recurrence_id');
+  assert.match(invalid.body.error, /Serientermin.*Datum/);
 });
 
 test('occurrence PUT refuses every provider-owned, imported, generated and outbound-targeted series', async () => {
@@ -1365,6 +1395,9 @@ test('occurrence PUT refuses every provider-owned, imported, generated and outbo
           (name, access_token, refresh_token, auto_sync_calendar_id, owner_user_id)
         VALUES ('Occurrence auto-sync', 'token', 'refresh', 'outlook-cal', 1)
       `).run().lastInsertRowid;
+      db.prepare(`INSERT INTO outlook_calendar_selection
+        (account_id, calendar_id, calendar_name, can_edit, enabled)
+        VALUES (?, 'outlook-cal', 'Outlook', 1, 1)`).run(accountId);
       return () => db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
     }],
   ];
@@ -1440,12 +1473,105 @@ test('Outlook account activation reports linked override conflicts with an exact
 
   assert.equal(response.status, 409);
   assert.deepEqual(response.body, {
-    error: 'Outlook auto-sync cannot be activated while matching recurring series have linked occurrence overrides.',
+    error: response.body.error,
     code: 409,
     conflict: 'outlook_auto_sync_overrides',
     linked_override_count: existingLinkedCandidateCount + 1,
   });
+  assert.ok(response.body.error.length > 0);
   assert.equal(stored, null);
+});
+
+test('Outlook calendar enabling reports an override conflict and preserves disabled selection', async () => {
+  const accountId = db.prepare(`
+    INSERT INTO outlook_accounts (name, access_token, refresh_token)
+    VALUES ('Route selection guard', 'token', 'refresh')
+  `).run().lastInsertRowid;
+  db.prepare(`
+    INSERT INTO outlook_calendar_selection
+      (account_id, calendar_id, calendar_name, can_edit, enabled)
+    VALUES (?, 'selection-guard-cal', 'Selection guard', 1, 0)
+  `).run(accountId);
+  const masterId = insertEvent({
+    title: 'Selection guard series', recurrence_rule: 'FREQ=DAILY',
+  });
+  db.prepare("UPDATE calendar_events SET target_outlook_account_id = ?, target_outlook_calendar_id = 'selection-guard-cal' WHERE id = ?")
+    .run(accountId, masterId);
+  const childId = insertEvent({ title: 'Selection guard occurrence' });
+  db.prepare(`
+    UPDATE calendar_events
+    SET recurrence_parent_id = ?, recurrence_id = '2035-03-11', overridden_fields = '["title"]'
+    WHERE id = ?
+  `).run(masterId, childId);
+  const response = await call('PATCH', `/outlook/accounts/${accountId}/calendars`, {
+    actor: ADMIN,
+    body: { calendarId: 'selection-guard-cal', enabled: true },
+  });
+  const stored = db.prepare('SELECT enabled FROM outlook_calendar_selection WHERE account_id = ?')
+    .get(accountId).enabled;
+  db.prepare('DELETE FROM calendar_events WHERE id = ?').run(masterId);
+  db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
+
+  assert.equal(response.status, 409);
+  assert.equal(response.body.code, 409);
+  assert.equal(response.body.conflict, 'outlook_auto_sync_overrides');
+  assert.equal(response.body.linked_override_count, 1);
+  assert.ok(response.body.error.length > 0);
+  assert.equal(stored, 0);
+});
+
+test('restored Outlook write access never sends existing linked children through legacy mutations', async () => {
+  const { requestCalendarOccurrenceMutation, requestCalendarOccurrenceDelete } =
+    await import('../public/utils/recurrence-scope.js');
+  const accountId = db.prepare(`INSERT INTO outlook_accounts
+    (name, access_token, refresh_token, auto_sync_calendar_id, owner_user_id)
+    VALUES ('Restored write access', 'token', 'refresh', 'restored-cal', 2)`).run().lastInsertRowid;
+  db.prepare(`INSERT INTO outlook_calendar_selection
+    (account_id, calendar_id, calendar_name, can_edit, enabled)
+    VALUES (?, 'restored-cal', 'Restored', 0, 1)`).run(accountId);
+  const seriesId = insertEvent({ title: 'Restored rights series',
+    start_datetime: '2046-03-01T09:00:00', recurrence_rule: 'FREQ=DAILY' });
+  try {
+    const created = await call('PUT', `/${seriesId}/occurrences/2046-03-02`, { body: { title: 'Linked' } });
+    assert.equal(created.status, 200);
+    const childId = created.body.data.id;
+    db.prepare('UPDATE outlook_calendar_selection SET can_edit = 1 WHERE account_id = ?').run(accountId);
+    const writes = [];
+    const api = Object.fromEntries(['post', 'put', 'delete'].map((method) => [method, async (path, body) => {
+      writes.push({ method, path });
+      const response = await call(method.toUpperCase(), path.replace(/^\/calendar/, ''), { body });
+      if (response.status >= 400) throw Object.assign(new Error(response.body.error), {
+        status: response.status, data: response.body,
+      });
+      return response.body;
+    }]));
+    for (const id of [seriesId, childId]) {
+      const event = (await call('GET', `/${id}`)).body.data;
+      assert.equal(event.is_local_recurring_series, true);
+      assert.equal(event.can_override_occurrence, false);
+      assert.equal(event.can_detach_occurrence, false, 'existing linked state must never become legacy');
+    }
+    const event = (await call('GET', `/${childId}`)).body.data;
+    await assert.rejects(requestCalendarOccurrenceDelete({ api, event, scope: 'this' }), { status: 400 });
+    await assert.rejects(requestCalendarOccurrenceMutation({ api, event, scope: 'this', body: { title: 'Duplicate' } }),
+      (error) => error.status === 400 && /deaktiviere/i.test(error.data.error));
+    assert.equal(writes.some((write) => write.method === 'post'), false);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM calendar_events WHERE recurrence_parent_id = ?').get(seriesId).n, 1);
+    const disabled = await call('PATCH', `/outlook/accounts/${accountId}/calendars`, {
+      body: { calendarId: 'restored-cal', enabled: false },
+    });
+    assert.equal(disabled.status, 200);
+    const recovered = (await call('GET', `/${childId}`)).body.data;
+    assert.equal(recovered.can_override_occurrence, true);
+    const updated = await requestCalendarOccurrenceMutation({ api, event: recovered, scope: 'this', body: { title: 'Recovered' } });
+    assert.equal(updated.data.id, childId);
+    assert.equal(updated.data.title, 'Recovered');
+    await requestCalendarOccurrenceDelete({ api, event: recovered, scope: 'this' });
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM calendar_events WHERE recurrence_parent_id = ?').get(seriesId).n, 0);
+  } finally {
+    db.prepare('DELETE FROM calendar_events WHERE id = ?').run(seriesId);
+    db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
+  }
 });
 
 test('occurrence route rolls back child creation when EXDATE insertion fails', async () => {
@@ -1587,6 +1713,7 @@ test('following rejects an empty successor before attachment persistence', async
     assert.equal(response.status, 400);
     assert.equal(response.body.code, 400);
     assert.equal(response.body.reason, 'empty_successor_series');
+    assert.match(response.body.error, /Folgeserie.*Startdatum/);
     assert.equal(db.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
       .get(seriesId).recurrence_rule, 'FREQ=DAILY');
     assert.equal(db.prepare(`
@@ -2271,6 +2398,7 @@ test('occurrence mutation routes reject schema-invalid values before persistence
         body,
       });
       assert.equal(response.status, 400, `${suffix || '/only'} ${JSON.stringify(body)}`);
+      assert.doesNotMatch(response.body.error, /\bmust\b|unknown user ID|duplicate user IDs/);
       assert.equal(db.prepare(`
         SELECT COUNT(*) AS count FROM calendar_events WHERE recurrence_parent_id = ?
       `).get(seriesId).count, 0);
@@ -2416,7 +2544,7 @@ test('whole-series rule update requires the exact orphan count and detaches conf
   });
   assert.equal(first.status, 409);
   assert.deepEqual(first.body, {
-    error: 'Edited occurrences no longer fit this recurrence rule.',
+    error: 'Die Änderung benötigt eine aktuelle Bestätigung. Prüfe die Anzahl der betroffenen Einzelausnahmen und bestätige, dass sie als eigenständige Termine erhalten bleiben sollen.',
     code: 409,
     conflict: 'calendar_override_orphans',
     orphaned_override_count: 1,
@@ -2450,7 +2578,7 @@ test('whole-series rule update requires the exact orphan count and detaches conf
   assert.deepEqual(db.prepare(`
     SELECT exception_date FROM calendar_event_exceptions
     WHERE event_id = ? ORDER BY exception_date
-  `).all(seriesId).map((row) => row.exception_date), ['2046-10-08']);
+  `).all(seriesId).map((row) => row.exception_date), ['2046-10-04', '2046-10-08']);
 });
 
 test('visible non-owner keeps generic whole-series edit and delete authorization after children exist', async () => {
@@ -2495,12 +2623,55 @@ test('visible non-owner keeps generic whole-series edit and delete authorization
   `).get(seriesId, seriesId).count, 0);
 });
 
+test('setting an Outlook owner with an unpushable target preserves linked occurrence editing', async () => {
+  for (const selection of [{ enabled: 0, canEdit: 1 }, { enabled: 1, canEdit: 0 }, null]) {
+    const accountId = db.prepare(`INSERT INTO outlook_accounts
+      (name, access_token, refresh_token, auto_sync_calendar_id)
+      VALUES ('Inactive target edit guard', 'token', 'refresh', 'inactive-target')`).run().lastInsertRowid;
+    if (selection) db.prepare(`INSERT INTO outlook_calendar_selection
+      (account_id, calendar_id, calendar_name, enabled, can_edit)
+      VALUES (?, 'inactive-target', 'Inactive target', ?, ?)`)
+      .run(accountId, selection.enabled, selection.canEdit);
+    const seriesId = insertEvent({
+      title: 'Inactive target series', start_datetime: '2046-10-01T09:00:00',
+      recurrence_rule: 'FREQ=DAILY', visibility: 'all',
+    });
+    const created = await call('PUT', `/${seriesId}/occurrences/2046-10-02`, {
+      body: { title: 'Linked before owner change' },
+    });
+    assert.equal(created.status, 200);
+    const accountUpdated = await call('PUT', `/outlook/accounts/${accountId}`, {
+      body: { ownerUserId: MARIA.id },
+    });
+    assert.equal(accountUpdated.status, 200);
+    const read = await call('GET', `/${seriesId}`);
+    assert.equal(read.body.data.can_override_occurrence, true);
+    assert.equal(read.body.data.can_detach_occurrence, false);
+    const editedSeries = await call('PUT', `/${seriesId}`, { body: { title: 'Series still editable' } });
+    assert.equal(editedSeries.status, 200);
+    const editedChild = await call('PUT', `/${seriesId}/occurrences/2046-10-02`, {
+      body: { title: 'Linked after owner change' },
+    });
+    assert.equal(editedChild.status, 200);
+    assert.equal(editedChild.body.data.series_id, seriesId);
+    assert.equal(db.prepare('SELECT recurrence_parent_id FROM calendar_events WHERE id = ?')
+      .get(editedChild.body.data.id).recurrence_parent_id, seriesId);
+    assert.equal(editedChild.body.data.can_override_occurrence, true);
+    assert.equal(editedChild.body.data.can_detach_occurrence, false);
+    db.prepare('DELETE FROM outlook_accounts WHERE id = ?').run(accountId);
+    db.prepare('DELETE FROM calendar_events WHERE id = ?').run(seriesId);
+  }
+});
+
 test('whole-series Outlook auto-sync visibility and assignment transitions require exact detach confirmation', async () => {
   const accountId = db.prepare(`
     INSERT INTO outlook_accounts
       (name, access_token, refresh_token, needs_reauth, auto_sync_calendar_id, owner_user_id)
     VALUES ('Configured reauth target', 'token', 'refresh', 1, 'configured-cal', ?)
   `).run(TOM.id).lastInsertRowid;
+  db.prepare(`INSERT INTO outlook_calendar_selection
+    (account_id, calendar_id, calendar_name, can_edit, enabled)
+    VALUES (?, 'configured-cal', 'Configured', 1, 1)`).run(accountId);
 
   const privateMasterId = insertEvent({
     title: 'Private transition',
@@ -2593,7 +2764,7 @@ test('whole-series stale orphan confirmation is rejected after the count reaches
   assert.deepEqual(response, {
     status: 409,
     body: {
-      error: 'Edited occurrences no longer fit this recurrence rule.',
+      error: 'Die Änderung benötigt eine aktuelle Bestätigung. Prüfe die Anzahl der betroffenen Einzelausnahmen und bestätige, dass sie als eigenständige Termine erhalten bleiben sollen.',
       code: 409,
       conflict: 'calendar_override_orphans',
       orphaned_override_count: 0,
@@ -2619,7 +2790,7 @@ test('first-slot following update returns and accepts the exact orphan confirmat
   assert.deepEqual(first, {
     status: 409,
     body: {
-      error: 'Edited occurrences no longer fit this recurrence rule.',
+      error: 'Die Änderung benötigt eine aktuelle Bestätigung. Prüfe die Anzahl der betroffenen Einzelausnahmen und bestätige, dass sie als eigenständige Termine erhalten bleiben sollen.',
       code: 409,
       conflict: 'calendar_override_orphans',
       orphaned_override_count: 1,

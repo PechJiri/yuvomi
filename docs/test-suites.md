@@ -326,8 +326,15 @@ visibility-equivalent mutation rights, provider outbound exclusion, nested
 savepoint fallback, projection caching, and cross-reader degradation contracts. The suite sets a fresh temporary
 `DB_PATH` before importing the route serializer, whose dependency graph
 initializes `server/db.js`, and removes that database and its SQLite sidecars at
-process exit. It also runs inside `npm run test:calendar`, so `npm test` and CI
-cannot omit it.
+process exit. Its dedicated script runs through `test:calendar` in the `npm test`
+chain and CI; the registration guard follows those composed scripts recursively.
+The suite-chain guard matches complete npm commands rather than name prefixes;
+`test:search` is explicitly chained, not inferred from `test:search-diacritics`.
+Calendar route and recurring-scope suites cover local outbound legacy scopes;
+dashboard and MCP suites cover limit-aware future expansion without a two-year
+cutoff. Calendar search covers JSON-escaped field names and malformed metadata.
+The browser document guards exercise save-confirmation preservation of the same
+editor, while the ICS suite checks actual EXDATE output across both midnight offsets.
 
 ## Dokument-Guards (eigene Kette, von Hand vor dem Release)
 

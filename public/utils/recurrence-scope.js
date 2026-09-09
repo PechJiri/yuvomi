@@ -1,10 +1,10 @@
 /**
  * Reine Hilfslogik für scope-basiertes Bearbeiten/Löschen von Serienterminen (#532).
  *
- * „nur dieser Termin", „dieser und folgende", „ganze Serie" werden clientseitig
- * über die bestehenden Kalender-Endpunkte (PUT/POST/DELETE + /exceptions)
- * orchestriert. Diese Datei kapselt nur die datums-/regel-arithmetischen Teile,
- * damit sie ohne DOM getestet werden können. Bewusst frei von Framework-/DOM-Bezug.
+ * „nur dieser Termin", „dieser und folgende", „ganze Serie" nutzen für lokale
+ * verknüpfte Ausnahmen atomare Endpunkte. Lokal angelegte, ausgehend synchronisierte
+ * Serien behalten den bisherigen mehrstufigen Ablauf (Einzeltermin + EXDATE bzw.
+ * Kürzen + Folgeserie). Datumsarithmetik und Request-Auswahl bleiben DOM-frei testbar.
  */
 
 import { parseLocalDateKey, addLocalDays } from './date.js';
@@ -32,9 +32,13 @@ export function canOverrideCalendarOccurrence(event) {
   return event?.can_override_occurrence === true;
 }
 
+export function canEditCalendarOccurrence(event) {
+  return canOverrideCalendarOccurrence(event) || event?.can_detach_occurrence === true;
+}
+
 /** Whether this actor must acknowledge that only whole-series actions are available. */
 export function requiresWholeSeriesConfirmation(event) {
-  return isLocalRecurringSeries(event) && !canOverrideCalendarOccurrence(event);
+  return isLocalRecurringSeries(event) && !canEditCalendarOccurrence(event);
 }
 
 /**
@@ -129,14 +133,26 @@ export async function withCalendarOrphanConfirmation(request, confirmCount) {
   throw new Error('Calendar override conflict changed too many times; reload and try again.');
 }
 
-/** Sends exactly one atomic server request for a recurring delete. */
+/** Selects linked deletion or the established outbound-local EXDATE/truncation path. */
 export function requestCalendarOccurrenceDelete({ api, event, scope, keepalive = false }) {
   const target = calendarOccurrenceDeleteTarget(event, scope);
+  if (event?.can_detach_occurrence && !canOverrideCalendarOccurrence(event)) {
+    const path = `/calendar/${serverSeriesId(event)}`;
+    if (scope === 'this') {
+      return api.post(`${path}/exceptions`, { date: serverRecurrenceId(event) }, { keepalive });
+    }
+    if (scope === 'following' && !followingMeansWholeSeries(event)) {
+      return api.put(path, {
+        recurrence_rule: truncateRuleBefore(event.recurrence_rule, serverRecurrenceId(event)),
+      }, { keepalive });
+    }
+    return api.delete(path, { keepalive });
+  }
   return api.delete(target.path, { keepalive });
 }
 
-/** Sends exactly one atomic server request for a recurring edit attempt. */
-export function requestCalendarOccurrenceMutation({
+/** Linked edits are atomic; outbound-local edits retain their legacy request sequence. */
+export async function requestCalendarOccurrenceMutation({
   api,
   event,
   scope,
@@ -144,6 +160,22 @@ export function requestCalendarOccurrenceMutation({
   reminderOffsets = [],
   confirmCount,
 }) {
+  // Outbound-local series retain the pre-linked-override workflow (#532).
+  // These separate requests intentionally retain its existing atomicity limits.
+  if (event?.can_detach_occurrence && !canOverrideCalendarOccurrence(event) && scope !== 'series') {
+    const path = `/calendar/${serverSeriesId(event)}`;
+    const date = serverRecurrenceId(event);
+    if (scope === 'this') {
+      const response = await api.post('/calendar', { ...body, recurrence_rule: null });
+      await api.post(`${path}/exceptions`, { date });
+      return response;
+    }
+    if (scope === 'following' && !followingMeansWholeSeries(event)) {
+      await api.put(path, { recurrence_rule: truncateRuleBefore(event.recurrence_rule, date) });
+      return api.post('/calendar', body);
+    }
+    throw new TypeError('The first following occurrence must use the whole-series edit path.');
+  }
   const target = calendarOccurrenceMutationTarget(event, scope);
   const payload = { ...body };
   if (target.carriesReminderOffsets) {

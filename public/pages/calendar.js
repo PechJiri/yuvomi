@@ -19,6 +19,8 @@ import {
   calendarOccurrenceDeleteTarget,
   calendarOccurrenceMutationTarget,
   canOverrideCalendarOccurrence,
+  canEditCalendarOccurrence,
+  followingMeansWholeSeries,
   isExternalRecurringSeries,
   isLocalRecurringSeries,
   requestCalendarOccurrenceMutation,
@@ -4558,12 +4560,12 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
       startDate,
     })}
 
-    ${isEdit && isLocalRecurringSeries(event) && canOverrideCalendarOccurrence(event)
+    ${isEdit && isLocalRecurringSeries(event) && canEditCalendarOccurrence(event)
       ? renderRecurringScopeChooser('modal-edit', event.start_datetime.slice(0, 10))
       : ''}
 
     ${isEdit && requiresWholeSeriesConfirmation(event) ? `
-      <p class="form-hint field-hint--warn" id="modal-whole-series-only" role="status">
+      <p class="cal-field-hint field-hint--warn" id="modal-whole-series-only" role="status">
         <i data-lucide="alert-triangle" aria-hidden="true"></i>
         <span>${t('calendar.wholeSeriesOnlyNotice')}</span>
       </p>` : ''}
@@ -4583,6 +4585,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
 
 function confirmCalendarOverrideOrphans(count) {
   return confirmOverModal(t('calendar.overrideOrphanConfirmTitle', { count }), {
+    closeOnConfirm: false,
     detail: t('calendar.overrideOrphanConfirmDetail'),
     confirmLabel: t('calendar.overrideOrphanConfirmAction'),
   });
@@ -4590,6 +4593,7 @@ function confirmCalendarOverrideOrphans(count) {
 
 function confirmLocalWholeSeriesEdit(event) {
   return confirmOverModal(t('calendar.editWholeSeriesOnlyTitle'), {
+    closeOnConfirm: false,
     detail: t('calendar.editWholeSeriesOnlyDetail', { title: event.title }),
     confirmLabel: t('calendar.editWholeSeriesOnlyConfirm'),
   });
@@ -4767,10 +4771,11 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
     } else {
       const localRecurring = isLocalRecurringSeries(event);
       const canOverrideOccurrence = canOverrideCalendarOccurrence(event);
-      const scope = localRecurring && canOverrideOccurrence
+      let scope = localRecurring && canEditCalendarOccurrence(event)
         ? getRecurringScope(overlay, 'modal-edit')
         : 'series';
-      if (localRecurring && canOverrideOccurrence && (scope === 'this' || scope === 'following')) {
+      if (!canOverrideOccurrence && scope === 'following' && followingMeansWholeSeries(event)) scope = 'series';
+      if (localRecurring && canEditCalendarOccurrence(event) && (scope === 'this' || scope === 'following')) {
         const target = calendarOccurrenceMutationTarget(event, scope);
         const res = await requestCalendarOccurrenceMutation({
           api,
@@ -4786,7 +4791,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
           return;
         }
         savedEventId = res.data?.id;
-        remindersHandledAtomically = target.carriesReminderOffsets;
+        remindersHandledAtomically = canOverrideOccurrence && target.carriesReminderOffsets;
         reloadAfter = true;
       } else {
         let seriesBody = body;
@@ -5008,7 +5013,7 @@ async function requestDeleteEvent(event) {
     await deleteEvent(event);
     return;
   }
-  if (!canOverrideCalendarOccurrence(event)) {
+  if (!canEditCalendarOccurrence(event)) {
     if (await confirmLocalWholeSeriesDelete(event)) await deleteEvent(event);
     return;
   }

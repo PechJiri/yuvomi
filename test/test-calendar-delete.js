@@ -6,6 +6,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   applyPendingCalendarDeleteOverlay,
   beginOptimisticCalendarDelete,
@@ -462,6 +463,34 @@ test('a committed overlapping delete cannot be resurrected by another Undo', () 
       assert.deepEqual(state.events.map(({ title }) => title), ['Independent']);
     }
   }
+});
+
+test('calendar page guards the complete range', () => {
+  const calendarPageSource = readFileSync(
+    new URL('../public/pages/calendar.js', import.meta.url),
+    'utf8',
+  );
+  function functionIndex(name, from = 0) {
+    const match = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`)
+      .exec(calendarPageSource.slice(from));
+    return match ? from + match.index : -1;
+  }
+  function functionSource(name, nextName = null) {
+    const start = functionIndex(name);
+    const end = nextName ? functionIndex(nextName, start + 1) : calendarPageSource.length;
+    assert.notEqual(start, -1, `${name} must exist`);
+    if (nextName) assert.notEqual(end, -1, `${nextName} must follow ${name}`);
+    return calendarPageSource.slice(start, end);
+  }
+
+  const loadRange = functionSource('loadRange', 'openTaskFromCalendar');
+  assert.match(loadRange, /calendarLoads\.run/);
+  assert.match(loadRange, /isCurrent:/);
+  assert.match(loadRange, /state\.rangeFrom\s*=\s*from/);
+  assert.match(loadRange, /applyPendingCalendarDeleteOverlay/);
+
+  const reloadForView = functionSource('reloadForView');
+  assert.match(reloadForView, /calendarLoads\.invalidate\(\)/);
 });
 
 test('latest response applier ignores an obsolete request failure', async () => {

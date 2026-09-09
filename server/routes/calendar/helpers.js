@@ -12,7 +12,7 @@ import {
   fanOutEventReminders, dropInheritedEventReminders, eventAuthorId,
 } from '../../services/event-reminder-fanout.js';
 import {
-  buildRecurrenceCapabilityMap, classifyLocalSeries, isEligibleLocalSeries, isLinkedOccurrence,
+  buildRecurrenceCapabilityMap, isLinkedOccurrence,
   parseOverrideFields, recurrenceIdFor, seriesIdFor,
 } from '../../services/calendar-occurrence-overrides.js';
 
@@ -306,18 +306,20 @@ function recurrenceMetadata(event, context) {
   if (!master && !linked) master = event;
 
   let canOverride = Boolean(event.can_override_occurrence);
+  let canDetach = Boolean(event.can_detach_occurrence);
   let isLocalRecurringSeries = Boolean(event.is_local_recurring_series);
   if (capability) {
     isLocalRecurringSeries = capability.isLocalRecurringSeries;
     canOverride = capability.canOverrideOccurrence;
+    canDetach = capability.canDetachOccurrence;
   } else if (context?.database && master) {
-    const classification = classifyLocalSeries(context.database, master);
-    const eligibility = isEligibleLocalSeries(
-      context.database, master, context.actorId,
-    );
-    isLocalRecurringSeries = classification.eligible;
+    const derived = buildRecurrenceCapabilityMap(context.database, [master], {
+      actorId: context.actorId,
+    }).get(Number(master.id));
+    isLocalRecurringSeries = derived?.isLocalRecurringSeries ?? false;
     // Same visibility rights as a whole-series edit, without a creator-only tier.
-    canOverride = eligibility.eligible;
+    canOverride = derived?.canOverrideOccurrence ?? false;
+    canDetach = derived?.canDetachOccurrence ?? false;
   }
 
   let fields = [];
@@ -339,6 +341,7 @@ function recurrenceMetadata(event, context) {
     is_occurrence_override: linked,
     is_local_recurring_series: isLocalRecurringSeries,
     can_override_occurrence: canOverride,
+    can_detach_occurrence: canDetach,
     assignment_owner_id: Number(assignmentOwnerId),
     attachment_owner_id: Number(attachmentOwnerId),
     reminder_owner_id: Number(reminderOwnerId),

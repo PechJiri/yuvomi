@@ -199,8 +199,8 @@ function listUpcomingEvents(db, actorId, args) {
   return getUpcomingEvents(db, {
     userId: actorId,
     limit,
-    // Keep expansion bounded: the result limit does not bound work before sort.
-    windowDays: 730,
+    // The shared reader bounds eligible occurrences per series by limit.
+    windowDays: null,
     fromToday: true,
   }).map((event) => ({
     id: event.id,
