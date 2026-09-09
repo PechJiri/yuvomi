@@ -575,13 +575,37 @@ function _discardSuspendedModal({ overlay, restoreFocus }) {
  * sich so ohne den vollen Oeffnen-Schliessen-Pfad messen, der ein echtes DOM
  * braeuchte.
  */
+/**
+ * Die Seitenwurzel, und zwar eine, die den Fokus auch ANNIMMT.
+ *
+ * `renderAppShell()` in router.js setzt `tabIndex = -1` - aber nur fuer die
+ * Routen mit App-Shell. Die fuenf Auth-Seiten (login, setup, join,
+ * forgot-password, reset-password) rendern ihr eigenes
+ * `<main id="main-content">` ohne das Attribut, und dort ist `.focus()` ein
+ * No-op: gemessen faellt der Fokus auf `document.body` - genau der stille
+ * Ausfall, den diese Weiche verhindern soll, nur eine Route weiter.
+ *
+ * Erreichbar ist das ueber ein Sitzungsende bei offenem Dialog:
+ * `closeAllOverlays()` schliesst mit `force`, und auf Mobil haengt `_doClose`
+ * an `animationend` beziehungsweise einem 400-ms-Timer - es kann also laufen,
+ * nachdem `/login` schon gerendert hat.
+ *
+ * `hasAttribute` und nicht `el.tabIndex`: das Property liest auch ohne Attribut
+ * `-1` und kann die beiden Faelle gar nicht unterscheiden (gemessen).
+ */
+function _pageRoot() {
+  const root = document.getElementById(PAGE_ROOT_ID);
+  if (root && !root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
+  return root;
+}
+
 export function focusRestoreTarget(remembered) {
   if (!remembered) return null;
   if (remembered.isConnected) return remembered;
   // getElementById und kein Selektor: eine id darf Zeichen enthalten, an denen
   // querySelector scheitert.
   const replacement = remembered.id ? document.getElementById(remembered.id) : null;
-  return replacement ?? document.getElementById(PAGE_ROOT_ID);
+  return replacement ?? _pageRoot();
 }
 
 function _doClose(overlayEl) {
