@@ -6,7 +6,7 @@
  */
 
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, confirmOverModal, advancedSection, wireBlurValidation, reportFieldError, refocusAfterRender } from '/components/modal.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
 import { stagger, vibrate, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireTablist } from '/utils/tablist.js';
@@ -1461,6 +1461,7 @@ function openAccountModal(account = null) {
           closeModal({ force: true });
           await loadAccounts();
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(nextArchived ? t('budget.accountArchivedToast') : t('budget.accountRestoredToast'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
@@ -1480,6 +1481,7 @@ function openAccountModal(account = null) {
           await api.delete(`/budget/accounts/${account.id}`);
           await loadMonth(state.month);
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(t('budget.accountDeletedToast'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
@@ -1527,6 +1529,7 @@ function openAccountModal(account = null) {
           closeModal({ force: true });
           await loadAccounts();
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(isEdit ? t('budget.accountSavedToast') : t('budget.accountAddedToast'), 'success');
         } catch (err) {
           saveBtn.disabled = false;
@@ -2041,12 +2044,12 @@ function openCategoryManager() {
   const onChanged = async () => {
     await loadBudgetMeta();
     // `renderBody()` baut `#budget-body` neu auf - und darin liegt der Knopf,
-    // der diesen Manager geoeffnet hat. Nach dem Loeschen hat `confirmOverModal`
-    // den Fokus schon dorthin zurueckgegeben, bevor dieser Handler laeuft; ohne
-    // das Nachfassen faellt er beim Austausch auf `document.body`.
-    const hadFocus = document.activeElement === _container?.querySelector('#budget-manage-categories');
+    // der diesen Manager geoeffnet hat. Das Nachziehen macht die geteilte
+    // Schicht: `refocusAfterRender()` findet ihn ueber seine id wieder. Der
+    // frueher hier stehende `hadFocus`-Griff ist damit weg - eine Regel an
+    // einer Stelle statt einer Kopie je Seite.
     renderBody();
-    if (hadFocus) _container?.querySelector('#budget-manage-categories')?.focus();
+    refocusAfterRender();
   };
   openSharedModal({
     title: t('budget.manageCategories'),
@@ -2477,6 +2480,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
       panel.querySelector('#bm-delete')?.addEventListener('click', async () => {
         closeModal({ force: true });
         await deleteEntry(entry.id);
+        refocusAfterRender();
       });
 
       panel.querySelector('#bm-save').addEventListener('click', async () => {
@@ -2599,6 +2603,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
             }
             await loadMonth(state.month);
             renderBody();
+            refocusAfterRender();
           } else {
             const res = await api.put(`/budget/${entry.id}`, await withReceipts());
             const idx = state.entries.findIndex((e) => e.id === entry.id);
@@ -3318,6 +3323,7 @@ async function openConfirmBookingModal(id) {
           closeModal({ force: true });
           await loadMonth(state.month);
           renderBody();
+          refocusAfterRender();
           window.yuvomi?.showToast(t('budget.confirmSaved'), 'success');
         } catch (err) {
           window.yuvomi?.showToast(err.message || t('common.errorGeneric'), 'danger');

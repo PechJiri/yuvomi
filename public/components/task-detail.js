@@ -32,7 +32,7 @@
 import { api } from '/api.js';
 import { t, formatDate, formatTime } from '/i18n.js';
 import { openDetailView, closeDetailView, visibilityRow, assignedRow } from '/components/detail-view.js';
-import { closeModal, promptModal, btnLoading } from '/components/modal.js';
+import { closeModal, promptModal, btnLoading, refocusAfterRender } from '/components/modal.js';
 import { recurrenceRow } from '/rrule-ui.js';
 import { scheduleUndoableDelete } from '/utils/ux.js';
 import { renderMarkdownLight } from '/utils/html.js';
@@ -964,6 +964,7 @@ async function advanceTaskStatus(task, status, button, ctx) {
     // an, etwas rückgängig zu machen, was gar nicht mehr aussteht (#625).
     await closeDetailView({ force: true });
     await ctx.onChanged();
+    refocusAfterRender();
   } catch (err) {
     task.status = previous;
     stop();
@@ -987,6 +988,7 @@ async function toggleTaskArchive(task, button, ctx) {
     await closeDetailView({ force: true });
     window.yuvomi.showToast(archived ? t('tasks.unarchivedToast') : t('tasks.archivedToast'), 'success');
     await ctx.onChanged();
+    refocusAfterRender();
   } catch (err) {
     stop();
     window.yuvomi.showToast(err.message ?? t('common.errorGeneric'), 'danger');
