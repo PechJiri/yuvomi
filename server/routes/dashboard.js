@@ -6,6 +6,7 @@
 
 import { createLogger } from '../logger.js';
 import express from 'express';
+import { hydrateNotesWithCategories } from '../services/note-categories.js';
 import * as db from '../db.js';
 import { hydrateBirthdayOccurrences } from '../services/birthdays.js';
 import { getUpcomingEvents } from '../services/calendar-events.js';
@@ -16,7 +17,6 @@ import { visibilityWhere } from '../services/visibility.js';
 import { resolveBudgetMode } from '../services/budget-visibility.js';
 import { deniedModules } from '../permissions.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
-import { hydrateNotesWithCategories } from '../services/note-categories.js';
 
 const log = createLogger('Dashboard');
 
