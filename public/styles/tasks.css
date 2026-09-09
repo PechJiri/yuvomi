@@ -1855,6 +1855,18 @@
   overflow-x: auto;
 }
 
+/* Die Marke, die bleibt, wenn das Label faellt (#1068).
+ *
+ * Sie darf nicht schrumpfen: die Reihe scrollt (`overflow-x` darueber), und in
+ * einer scrollenden Flex-Zeile gibt ein Kind mit Standard-`flex-shrink` unter
+ * Druck zuerst seine Breite her - dann stuende bei vielen Mitgliedern statt der
+ * Scheibe ein Strich. Die Groesse selbst bringt der Avatar inline mit
+ * (`renderAvatarStack`), hier steht nur, dass sie ihm bleibt. */
+.history-people__mark {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
 /* „Mehr anzeigen" schliesst die Liste ab, mittig unter ihr. */
 .history-more {
   display: flex;

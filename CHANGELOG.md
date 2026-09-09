@@ -134,6 +134,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The person filter in the task history is no longer a row of blank buttons on a phone** (#1068).
+  Below 640px the label-loss rule removes every `.group-toggle__label`; it is built on the
+  assumption that an icon stays behind, which is true for the view switcher next to it. These chips
+  had none, so nothing remained but the tinted surface of the active one. The loss was not only
+  visual: `display: none` takes the text out of the accessibility tree as well, so the buttons were
+  just as nameless to a screen reader. Each chip now carries what the rest of the module already
+  uses to identify a person - their avatar, the same disc the history rows below it show - and
+  "All" gets an icon from the same family as the switchers. The name itself moved onto the button
+  as `aria-label`, where no media query can take it away.
+
 - **A recurring event synced from Google no longer shows an end time hours after its start**
   (#1089). Every occurrence of a series is generated from the master, and its end was derived by
   adding the duration to the new start. Which format that end was written in depended on a test
