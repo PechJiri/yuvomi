@@ -27,6 +27,14 @@ const STUBS = {
     );
     export const api = {
       get: async (...a) => viaStub('get', a, { data: null }),
+      // Liefert im Echtbetrieb { data, fromCache } - siehe api.js. Der Stub
+      // faellt auf 'get' zurueck, damit Suiten, die die Cache-Herkunft gar
+      // nicht pruefen, nichts davon wissen muessen.
+      getWithSource: async (...a) => (
+        typeof globalThis.__apiStub?.getWithSource === 'function'
+          ? globalThis.__apiStub.getWithSource(...a)
+          : { data: await viaStub('get', a, { data: null }), fromCache: false }
+      ),
       post: async (...a) => viaStub('post', a, { data: null }),
       put: async (...a) => viaStub('put', a, { data: null }),
       patch: async (...a) => viaStub('patch', a, { data: null }),

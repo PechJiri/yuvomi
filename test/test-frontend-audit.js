@@ -2251,6 +2251,37 @@ test('browser loader supports personal settings API and auth imports', () => {
   assert.match(source, /promptPwaInstall/);
 });
 
+test('wer optimistisch schreibt UND offline gecacht wird, liest ueber getWithSource', () => {
+  // DIE KOPPLUNG, DIE SONST STILL IST. Eine Seite, die eine Bearbeitung
+  // optimistisch anzeigt und ihren Merker beim Laden raeumt, darf eine Antwort
+  // aus dem Offline-Cache nicht wie eine frische behandeln: `networkFirstApi`
+  // gibt sie mit Status 200 zurueck, sie kann beliebig alt sein, und eine
+  // Mutation leert diesen Cache nicht (nur Logout tut das). Der Merker faellt
+  // dann, und die Zeile springt auf den Stand von vor der Bearbeitung.
+  //
+  // Heute betrifft das genau den Einkauf: `/shopping` steht auf der Whitelist,
+  // `/pantry` nicht - deshalb liest der Vorrat weiter mit `api.get`, und das
+  // ist richtig, solange das so bleibt. Setzt jemand `/pantry` auf die
+  // Whitelist, faellt dieser Guard und nennt den fehlenden Schritt.
+  const sw = read('../public/sw.js');
+  const whitelist = sw.match(/const API_CACHE_WHITELIST\s*=\s*\[([^\]]*)\]/)?.[1];
+  assert.ok(whitelist, 'API_CACHE_WHITELIST in sw.js nicht gefunden - der Guard liest ins Leere');
+  const cached = [...whitelist.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+
+  // Seiten mit optimistischem Schreiben und einem Merker, den das Laden raeumt.
+  const seiten = [
+    { pfad: '/shopping', datei: '../public/pages/shopping.js' },
+    { pfad: '/pantry',   datei: '../public/pages/pantry.js' },
+  ];
+  for (const { pfad, datei } of seiten) {
+    if (!cached.includes(pfad)) continue;
+    assert.match(read(datei), /getWithSource\(/,
+      `${pfad} steht in API_CACHE_WHITELIST, aber ${datei} liest nicht ueber `
+      + 'api.getWithSource() - eine gecachte Antwort raeumt dort den Merker fuer '
+      + 'ausstehende Bearbeitungen und traegt den Stand von vorher ein');
+  }
+});
+
 test('legacy settings page remains available during the leaf migration', () => {
   assert.equal(existsSync(new URL('../public/pages/settings.js', import.meta.url)), true);
 });

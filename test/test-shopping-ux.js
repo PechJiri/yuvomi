@@ -742,3 +742,74 @@ test('scheitert der PATCH, springt die Zeile auf den FRISCHEN Serverstand zuruec
   delete globalThis.__apiStub;
   delete global.window.yuvomi.showToast;
 });
+
+// --------------------------------------------------------
+// Eine Antwort aus dem Offline-Cache ist kein Beweis
+//
+// `/shopping` steht in `API_CACHE_WHITELIST` (sw.js). Faellt das Netz aus,
+// liefert `networkFirstApi` die zuletzt gecachte Antwort mit ihrem
+// urspruenglichen Status 200 - vom Aufrufer sonst nicht von einer frischen zu
+// unterscheiden, und eine Mutation leert diesen Cache nicht. Genau der Fall im
+// Laden bei wackligem Netz (Codex-Befund P1 zu PR #1072).
+// --------------------------------------------------------
+
+test('eine gecachte Antwort raeumt den Merker NICHT', async () => {
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  globalThis.__apiStub = {
+    // Der Cache-Stand ist von VOR dem Abhaken - und traegt trotzdem 200.
+    getWithSource: async () => ({ data: { data: [milk(0)] }, fromCache: true }),
+    patch: async () => ({ data: null }),
+  };
+
+  await __test.toggleShoppingItem(10, 0, makeNullContainer());
+  assert.equal(__test.state.items[0].is_checked, 1);
+
+  // Ein spaeter begonnenes Laden - aber offline. Es beweist nichts.
+  await __test.loadItems(1);
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'offline darf die Zeile nicht auf den Cache-Stand zurueckspringen');
+  assert.equal(__test.pendingChecks.size, 1, 'der Merker muss stehen bleiben');
+
+  // Sobald das Netz wieder da ist, raeumt eine echte Antwort auf.
+  globalThis.__apiStub.getWithSource = async () => ({ data: { data: [milk(1)] }, fromCache: false });
+  await __test.loadItems(1);
+  assert.equal(__test.pendingChecks.size, 0, 'die netzfrische Antwort raeumt');
+  delete globalThis.__apiStub;
+});
+
+test('eine gecachte Antwort setzt die Ruecksprung-Grundlage nicht neu', async () => {
+  // Sonst haette der Cache-Stand das letzte Wort darueber, was „der Server
+  // zuletzt sagte" - und er ist beliebig alt.
+  resetShoppingState();
+  __test.pendingChecks.clear();
+  __test.state.lists = [{ id: 1, name: 'Einkauf', item_total: 1, item_checked: 0 }];
+  __test.state.items = [milk(0)];
+
+  global.window.yuvomi.showToast = () => {};
+  const patchGate = deferred();
+  globalThis.__apiStub = {
+    // Erst frisch: jemand anderes hat den Artikel ebenfalls abgehakt.
+    getWithSource: async () => ({ data: { data: [milk(1)] }, fromCache: false }),
+    patch: () => patchGate.promise,
+  };
+
+  const abhaken = __test.toggleShoppingItem(10, 0, makeNullContainer());
+  await __test.loadItems(1);
+
+  // Dann faellt das Netz aus, und der Cache traegt noch den Stand von vorher.
+  globalThis.__apiStub.getWithSource = async () => ({ data: { data: [milk(0)] }, fromCache: true });
+  await __test.loadItems(1);
+
+  patchGate.promise.catch(() => {});
+  patchGate.resolve(Promise.reject(Object.assign(new Error('nope'), { data: { error: 'kaputt' } })));
+  await abhaken;
+
+  assert.equal(__test.state.items[0].is_checked, 1,
+    'die Grundlage bleibt die frische 1, nicht die gecachte 0');
+  delete globalThis.__apiStub;
+  delete global.window.yuvomi.showToast;
+});

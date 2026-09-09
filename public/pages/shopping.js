@@ -315,7 +315,7 @@ let _appliedLoad = 0;
  * Nur die Zeilen mit offenem Schreibvorgang; alles andere kommt unveraendert
  * vom Server, denn genau dafuer laeuft die Auffrischung.
  */
-function applyPendingChecks(items) {
+function applyPendingChecks(items, { fromCache = false } = {}) {
   if (!pendingChecks.size) return items;
   for (const item of items) {
     const pending = pendingChecks.get(item.id);
@@ -326,7 +326,11 @@ function applyPendingChecks(items) {
     // eine Angabe, die der Server nie hatte - und die letzte, die davon
     // wuesste, ist diese Zeile hier. Nur fuer den noch AUSSTEHENDEN Eintrag:
     // ein bestaetigter springt nirgends mehr zurueck.
-    if (pending.settledAt == null) pending.rollback = item.is_checked;
+    //
+    // Und NICHT aus dem Cache: dessen Wert ist beliebig alt, er waere als
+    // „was der Server zuletzt sagte" schlicht falsch. Offline bleibt die
+    // Grundlage deshalb die, die vor dem Netzverlust galt.
+    if (!fromCache && pending.settledAt == null) pending.rollback = item.is_checked;
     item.is_checked = pending.value;
   }
   return items;
@@ -2142,7 +2146,11 @@ async function loadStores() {
 
 async function loadItems(listId) {
   const startedAt  = ++_loadSeq;
-  const data       = await api.get(`/shopping/${listId}/items`);
+  // `getWithSource`, weil dieser Pfad in der Offline-Whitelist des Service
+  // Workers steht (`API_CACHE_WHITELIST` in sw.js): faellt das Netz aus, kommt
+  // die zuletzt gecachte Antwort mit Status 200 zurueck, und die ist von einer
+  // frischen sonst nicht zu unterscheiden.
+  const { data, fromCache } = await api.getWithSource(`/shopping/${listId}/items`);
   // Ein Rundlauf kann von einem Listenwechsel ueberholt werden. Alle sechs
   // Aufrufer laden die GERADE aktive Liste - `switchList` setzt
   // `state.activeListId` sogar vor dem Warten -, die Antworten kommen aber in
@@ -2160,12 +2168,20 @@ async function loadItems(listId) {
   // Bestaetigt, BEVOR dieser Ladevorgang begann: der Server hatte den Wert
   // beim Lesen schon, seine Antwort ist die frischere Wahrheit - auch wenn
   // inzwischen jemand anderes die Zeile wieder zurueckgeholt hat.
-  for (const [itemId, entry] of pendingChecks) {
-    if (entry.settledAt != null && entry.settledAt < startedAt) pendingChecks.delete(itemId);
+  //
+  // NUR bei einer netzfrischen Antwort. Eine aus dem Cache beweist gar nichts:
+  // sie kann beliebig alt sein, der Service Worker leert ihn bei einer Mutation
+  // nicht, und ihr Status 200 sieht aus wie ein erfolgreicher Rundlauf. Wer den
+  // Merker darauf hin raeumte, traegt im Laden bei wackligem Netz genau den
+  // Ruecksprung ein, gegen den er gebaut ist.
+  if (!fromCache) {
+    for (const [itemId, entry] of pendingChecks) {
+      if (entry.settledAt != null && entry.settledAt < startedAt) pendingChecks.delete(itemId);
+    }
   }
   // Alles Uebrige ueberlebt den Tausch: die Antwort kann einen Schnappschuss
   // tragen, der aelter ist als die laufende Bearbeitung.
-  state.items      = applyPendingChecks(data.data ?? []);
+  state.items      = applyPendingChecks(data.data ?? [], { fromCache });
   state.activeList = data.list ?? null;
   // Kategorien aus API-Antwort übernehmen wenn vorhanden (immer aktuell)
   if (data.categories?.length) state.categories = data.categories;

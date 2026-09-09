@@ -141,6 +141,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   categories with it - the very thing the refresh exists to bring. A refresh that is overtaken by a
   later one now steps aside rather than writing an older picture over a newer one.
 
+  A refresh answered from the offline cache no longer counts as proof. `/shopping` is in the service
+  worker's read-only offline whitelist, so on a dropped connection the last cached response comes
+  back with its original success status and is otherwise indistinguishable from a fresh one - while
+  being arbitrarily old, since writing does not clear that cache. Taking it at face value put the
+  pre-edit value straight back on the row, which is exactly the situation this is for: standing in
+  the shop on a bad connection. The read now carries whether it came from the cache.
+
   If the change to the server does fail, the row goes back to what the server last said rather than
   to what it showed before the tap. Those are the same value in the ordinary case and differ exactly
   when someone else in the household changed the same row in the meantime - and then the value from
