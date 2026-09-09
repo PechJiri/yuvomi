@@ -16086,6 +16086,30 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
     + `Nach dem Rendern refocusAfterRender() rufen:\n  ${fehlend.join('\n  ')}`);
 });
 
+/**
+ * Steht `zeile` in einem Funktionsausdruck INNERHALB der Funktion ab `start`?
+ *
+ * Gesucht wird rueckwaerts nach einer Zeile, die einen Rueckruf oeffnet
+ * (`=> {`, `async () => {`, ein `function` mitten im Rumpf) und flacher liegt
+ * als die fragliche Zeile - dann liegt diese in seinem Koerper. Ein `try {` auf
+ * Funktionsebene zaehlt dabei nicht als Rueckruf, sonst waere jeder
+ * `try`-Block eine Verschachtelung.
+ */
+function inVerschachtelterFunktion(lines, start, zeile) {
+  const tiefe = lines[zeile].match(/^\s*/)[0].length;
+  for (let j = zeile - 1; j > start; j--) {
+    const l = lines[j];
+    if (l.trim() === '') continue;
+    const t = l.match(/^\s*/)[0].length;
+    if (t >= tiefe) continue;
+    // Eine flachere Zeile: oeffnet sie einen Rueckruf?
+    if (/=>\s*\{\s*$|\bfunction\s*\w*\s*\([^)]*\)\s*\{\s*$/.test(l)) return true;
+    // Eine flachere Zeile, die keinen Rueckruf oeffnet (`try {`, `if (…) {`):
+    // weitersuchen, aber ab jetzt auf ihrer Ebene.
+  }
+  return false;
+}
+
 /* DIE ZWEITE BAUART: ASYNCHRON RENDERN, WAEHREND DER DIALOG NOCH OFFEN IST.
  *
  * Der Guard darueber deckt den Handler ab, der nach `closeModal()` rendert.
@@ -16125,10 +16149,26 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
         if (!lines.slice(s, e).some((l) => /open(Shared)?Modal\s*\(\s*\{/.test(l))) return;
         for (let j = s; j < e; j++) {
           if (!/\bawait\s+(load|refresh)[A-Z]\w*\s*\(/.test(lines[j])) continue;
-          // NUR NACH DEM OEFFNEN. Ein `await load…()` DAVOR bereitet den Dialog
-          // vor - es baut nichts neu auf, was ein Schliessen betreffen koennte.
-          // (Fehlalarm an `openEditMemberModal` in admin-family.js gemessen.)
-          if (!lines.slice(s, j).some((x) => /open(Shared)?Modal\s*\(\s*\{/.test(x))) continue;
+          // VERSCHACHTELUNG ENTSCHEIDET, NICHT DIE REIHENFOLGE.
+          //
+          // Eine fruehere Fassung verlangte, dass das `openModal({` TEXTLICH vor
+          // dem `await` steht. Das stellte zwar den Fehlalarm an
+          // `openEditMemberModal` in admin-family.js ab - dort bereitet das
+          // `await` den Dialog wirklich nur vor -, schloss aber die haeufigste
+          // Bauart mit aus: den Rueckruf zuerst deklarieren, dann uebergeben.
+          //
+          //   const onChanged = async () => { await loadX(); renderY(); };
+          //   openSharedModal({ … onChanged … });
+          //
+          // Fuenf Stellen haben diese Form (budget, inventory 2x, pantry,
+          // shopping), und der Guard sah keine davon: das Loeschen ihres
+          // `refocusAfterRender()` liess beide Suiten gruen. Ein Guard, der
+          // Schutz behauptet und keinen gibt, ist schlimmer als keiner.
+          //
+          // Der Unterschied liegt in der Verschachtelung: ein `await` INNERHALB
+          // eines verschachtelten Funktionsausdrucks ist eine Auffrischung, eines
+          // auf der Ebene der oeffnenden Funktion ist Vorbereitung.
+          if (!inVerschachtelterFunktion(lines, s, j)) continue;
           const fenster = blockAb(lines, j);
           if (!fenster.some((x) => istNeuaufbau(x, wrapper))) continue;
           // closeModal dazwischen: der synchrone Fall, den der Frame abdeckt.
@@ -16384,4 +16424,46 @@ test('wer refocusAfterRender importiert, ruft es auch', () => {
   }
   assert.deepEqual(tot, [],
     `Diese Dateien importieren refocusAfterRender, ohne es zu rufen:\n  ${tot.join('\n  ')}`);
+});
+
+
+/* VERSCHACHTELUNG, NICHT REIHENFOLGE - direkt geprueft.
+ *
+ * Die Unterscheidung traegt den Ratchet fuer die haeufigste Bauart, und sie ist
+ * an echten Dateien nur zu sehen, solange dort jemand die Form benutzt. Deshalb
+ * hier an einer kuenstlichen Quelle: ein `await` im Rueckruf zaehlt, eines auf
+ * der Ebene der oeffnenden Funktion nicht.
+ */
+test('inVerschachtelterFunktion trennt Rueckruf von Dialogvorbereitung', () => {
+  const imRueckruf = [
+    'function openManager() {',
+    '  const onChanged = async () => {',
+    '    await loadMeta();',
+    '  };',
+    '  openSharedModal({ onChanged });',
+    '}',
+  ];
+  assert.equal(inVerschachtelterFunktion(imRueckruf, 0, 2), true,
+    'ein `await` im Rueckruf ist eine Auffrischung - genau die Bauart, die der Ratchet halten muss');
+
+  const vorbereitung = [
+    'async function openEditor(member) {',
+    '  const ids = await loadIds(member.id);',
+    '  openModal({ content: ids });',
+    '}',
+  ];
+  assert.equal(inVerschachtelterFunktion(vorbereitung, 0, 1), false,
+    'ein `await` auf der Ebene der oeffnenden Funktion bestueckt den Dialog und baut nichts neu auf');
+
+  // Ein `try {` ist kein Rueckruf - sonst waere jeder try-Block eine Verschachtelung.
+  const imTry = [
+    'async function speichern() {',
+    '  try {',
+    '    await loadMeta();',
+    '  } catch (err) {}',
+    '  openModal({});',
+    '}',
+  ];
+  assert.equal(inVerschachtelterFunktion(imTry, 0, 2), false,
+    'ein try-Block oeffnet keinen Rueckruf');
 });
