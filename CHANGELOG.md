@@ -19,7 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The cause was a matter of order. Confirming the deletion closes the dialog first and sends the
   request second, so the "something changed" signal arrived after each page had already stopped
   listening. Refreshing now happens when the change actually lands rather than when the dialog
-  closes. Adding and renaming were never affected.
+  closes.
+
+  Shopping had a second version of the same staleness, and *renaming* triggered that one: it stores
+  a category by its name rather than by an internal key, so both renaming and deleting rewrite the
+  items themselves. The list only reloaded its categories, leaving the affected entries under their
+  old heading at the bottom of the list. It now reloads the items with them.
 
 - **Paying extra on a loan now shortens the remaining term, not only the balance** (#964). Since
   #954 the remaining principal follows the money you actually paid, but the remaining term beside it
