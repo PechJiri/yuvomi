@@ -19,6 +19,7 @@
 
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import {
   ROUTES,
@@ -283,42 +284,54 @@ after(async () => {
 
 test('Sonde 21 - Notiz-Kategorien behalten Fokus, Gruppenrolle und Reader-Icons', async () => {
   const page = await openPage(harness, { device: 'desktop', locale: 'en' });
+  const fixtureName = `Sonde 21 ${randomUUID()}`;
+  const categoryIds = [];
+  let noteId = null;
+  let probeError = null;
   try {
-    const fixture = await page.evaluate(async () => {
+    const first = await page.evaluate(async (name) => {
       const { api } = await import('/api.js');
-      const first = (await api.post('/notes/categories', {
-        name: 'Focus regression one',
+      return (await api.post('/notes/categories', {
+        name: `${name} one`,
         scope: 'personal',
       })).data;
-      const second = (await api.post('/notes/categories', {
-        name: 'Focus regression two',
+    }, fixtureName);
+    categoryIds.push(first.id);
+    const second = await page.evaluate(async (name) => {
+      const { api } = await import('/api.js');
+      return (await api.post('/notes/categories', {
+        name: `${name} two`,
         scope: 'personal',
       })).data;
-      const note = (await api.post('/notes', {
-        title: 'Category browser regression',
+    }, fixtureName);
+    categoryIds.push(second.id);
+    const note = await page.evaluate(async ({ name, ids }) => {
+      const { api } = await import('/api.js');
+      return (await api.post('/notes', {
+        title: name,
         content: 'Reader icons survive repeated pane replacement.',
-        category_ids: [first.id, second.id],
+        category_ids: ids,
       })).data;
-      return { firstId: first.id, noteId: note.id };
-    });
+    }, { name: fixtureName, ids: categoryIds });
+    noteId = note.id;
 
     await gotoRoute(page, '/notes');
-    await page.waitForSelector(`[data-category-id="${fixture.firstId}"]`);
-    await page.$eval(`[data-category-id="${fixture.firstId}"]`, (chip) => {
+    await page.waitForSelector(`[data-category-id="${first.id}"]`);
+    await page.$eval(`[data-category-id="${first.id}"]`, (chip) => {
       chip.focus();
       chip.click();
     });
     await page.waitForFunction(
       (id) => document.activeElement?.dataset.categoryId === String(id),
       {},
-      fixture.firstId,
+      first.id,
     );
     const focusState = await page.evaluate(() => ({
       focusedCategory: document.activeElement?.dataset.categoryId ?? null,
       categoryPressed: document.activeElement?.getAttribute('aria-pressed') ?? null,
     }));
 
-    await page.click(`.note-card[data-id="${fixture.noteId}"] .note-card__open`);
+    await page.click(`.note-card[data-id="${noteId}"] .note-card__open`);
     await page.waitForSelector('.note-modal[data-view="read"]');
     const readTurns = [];
     for (let turn = 0; turn < 2; turn += 1) {
@@ -333,10 +346,10 @@ test('Sonde 21 - Notiz-Kategorien behalten Fokus, Gruppenrolle und Reader-Icons'
     const actual = await page.evaluate(({ noteId }) => ({
       cardRole: document.querySelector(`.note-card[data-id="${noteId}"] .note-card__categories`)?.getAttribute('role'),
       readRole: document.querySelector('.note-read__categories')?.getAttribute('role'),
-    }), fixture);
+    }), { noteId });
 
     assert.deepEqual({ ...focusState, ...actual, readTurns }, {
-      focusedCategory: String(fixture.firstId),
+      focusedCategory: String(first.id),
       categoryPressed: 'true',
       cardRole: 'group',
       readRole: 'group',
@@ -345,9 +358,63 @@ test('Sonde 21 - Notiz-Kategorien behalten Fokus, Gruppenrolle und Reader-Icons'
         { icons: 2, placeholders: 0 },
       ],
     });
+  } catch (err) {
+    probeError = err;
   } finally {
-    await page.close();
+    const cleanupErrors = [];
+    if (noteId !== null) {
+      try {
+        await page.evaluate(async (id) => {
+          const { api } = await import('/api.js');
+          await api.delete(`/notes/${id}`);
+        }, noteId);
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+    }
+    for (const id of categoryIds) {
+      try {
+        await page.evaluate(async (categoryId) => {
+          const { api } = await import('/api.js');
+          await api.delete(`/notes/categories/${categoryId}`);
+        }, id);
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+    }
+    try {
+      await page.evaluate(async ({ expectedNoteId, expectedCategoryIds }) => {
+        const { api } = await import('/api.js');
+        const [notes, categories] = await Promise.all([
+          api.get('/notes'),
+          api.get('/notes/categories'),
+        ]);
+        if (expectedNoteId !== null && notes.data.some(({ id }) => id === expectedNoteId)) {
+          throw new Error(`note ${expectedNoteId} survived Sonde 21 cleanup`);
+        }
+        const survivors = categories.data
+          .filter(({ id }) => expectedCategoryIds.includes(id))
+          .map(({ id }) => id);
+        if (survivors.length) {
+          throw new Error(`categories ${survivors.join(', ')} survived Sonde 21 cleanup`);
+        }
+      }, { expectedNoteId: noteId, expectedCategoryIds: categoryIds });
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    try {
+      await page.close();
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    if (cleanupErrors.length) {
+      throw new AggregateError(
+        probeError ? [probeError, ...cleanupErrors] : cleanupErrors,
+        'Sonde 21 cleanup failed',
+      );
+    }
   }
+  if (probeError) throw probeError;
 });
 
 test('PR2 #975 - das zusammengesetzte Kalenderformular und seine Seriennamen bleiben wahr', async () => {

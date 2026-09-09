@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Notes gain category management, a category picker and an AND filter.** Manage personal
-  categories — and household categories when permitted — on the Notes board, then select several
+  categories and, when permitted, household categories on the Notes board, then select several
   categories to show notes that belong to every selection. Household categories remain assignable
   for members who cannot manage them. The dashboard Notes widget supports the same filter. Category
   badges stay on one line; a +N control reveals and correctly announces the remaining categories on
