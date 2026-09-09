@@ -740,21 +740,38 @@ test('der zweite Anlauf raet nicht - Mehrdeutigkeit bleibt Mehrdeutigkeit', () =
   });
 });
 
-/* REVIEW ZU #1070: der Merker darf nicht ueber sein Schliessen hinaus wirken.
+/* DER MERKER GILT FUER SEINEN VORGANG, NICHT FUER EINEN AUFRUF.
  *
- * `closeDetailView()` kehrt im Popover-Zweig frueh zurueck, ohne `closeModal()`
- * anzufassen - der Merker bleibt dann der des VORIGEN Dialogs. Ein
- * `refocusAfterRender()` danach haette den Fokus auf ein Element aus einem
- * unbeteiligten Zusammenhang setzen koennen. Ein falsches Ziel ist schlimmer
- * als keines.
+ * Ein Schliessvorgang kann mehrfach neu aufbauen - das Loeschen eines
+ * Budget-Plans rendert sofort und noch einmal, wenn jemand den
+ * Toast-Rueckgaengig drueckt. Beide Male ist derselbe Knopf gemeint. Ein
+ * Merker, der beim ersten Gebrauch verfaellt, macht den zweiten Weg wirkungslos
+ * (Review zu #1070, nachdem ein frueherer Anlauf genau das eingebaut hatte).
+ *
+ * Gegen den anderen Fehler - der Merker wirkt weiter, wo diese Schicht gar
+ * nicht geschlossen hat - hilft nicht der Verbrauch, sondern das gezielte
+ * Verwerfen: `closeDetailView()` kehrt im Popover-Zweig frueh zurueck und ruft
+ * dafuer `forgetRestore()`.
  */
-test('refocusAfterRender verbraucht seinen Merker', () => {
+test('refocusAfterRender behaelt seinen Merker fuer weitere Neuaufbauten', () => {
   const src = readFileSync(new URL('../public/components/modal.js', import.meta.url), 'utf8');
   const fn = src.match(/export function refocusAfterRender\([\s\S]*?\n\}/)?.[0] ?? '';
   assert.ok(fn, 'refocusAfterRender nicht gefunden');
-  assert.match(fn, /_lastRestore = null;/,
-    'der Merker gehoert zu genau einem Schliessen - bleibt er stehen, wirkt er spaeter dort weiter, '
-    + 'wo diese Schicht gar nichts geschlossen hat');
-  assert.match(fn, /_tryRefocus\(merker\.memo, merker\.ziel\)/,
-    'gearbeitet wird auf der entnommenen Kopie, nicht auf dem globalen Merker');
+  assert.doesNotMatch(fn, /_lastRestore = null/,
+    'der Merker darf beim Gebrauch NICHT verfallen - ein Vorgang kann mehrfach neu aufbauen, '
+    + 'und der zweite Weg (Toast-Rueckgaengig) meint denselben Knopf');
+  assert.match(src, /export function forgetRestore\(\)/,
+    'zum Verwerfen braucht es einen eigenen Griff fuer alle, die an dieser Schicht vorbei schliessen');
+});
+
+/* Wer an modal.js vorbei schliesst, muss den Merker verwerfen - sonst wirkt er
+ * dort weiter, wo diese Schicht nicht beteiligt war, und setzt den Fokus in
+ * einen fremden Zusammenhang. */
+test('closeDetailView verwirft den Merker, wenn es am Modal vorbei schliesst', () => {
+  const src = readFileSync(new URL('../public/components/detail-view.js', import.meta.url), 'utf8');
+  const fn = src.match(/export function closeDetailView\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'closeDetailView nicht gefunden');
+  assert.match(fn, /forgetRestore\(\)/,
+    'der Popover-Zweig kehrt ohne closeModal() zurueck - ohne Verwerfen bliebe der Merker '
+    + 'des vorigen Dialogs stehen');
 });

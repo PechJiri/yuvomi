@@ -819,18 +819,29 @@ function _refocusIfDropped(memo, ziel) {
  */
 export function refocusAfterRender() {
   if (!_lastRestore) return;
-  // DER MERKER GEHOERT ZU GENAU EINEM SCHLIESSEN und wird dabei verbraucht.
+  // DER MERKER GILT FUER SEINEN GANZEN SCHLIESSVORGANG, nicht fuer einen Aufruf.
   //
-  // Sonst wirkt er weiter, wo gar nichts von dieser Schicht geschlossen wurde:
-  // `closeDetailView()` in components/detail-view.js kehrt im Popover-Zweig
-  // frueh zurueck, ohne `closeModal()` anzufassen. Ein `refocusAfterRender()`
-  // danach fand den Merker des VORIGEN, unbeteiligten Dialogs vor und konnte
-  // den Fokus auf ein Element aus dessen Zusammenhang setzen - ein falsches
-  // Ziel ist schlimmer als keines, und genau davor soll diese Schicht schuetzen
-  // (Review zu #1070).
-  const merker = _lastRestore;
+  // Ein Vorgang kann mehrfach neu aufbauen: das Loeschen eines Budget-Plans
+  // rendert einmal sofort und ein zweites Mal, wenn jemand den Toast-Rueckgaengig
+  // drueckt. Beide Male ist derselbe Knopf gemeint. Ein Merker, der beim ersten
+  // Gebrauch verfaellt, macht den zweiten Weg wirkungslos (Review zu #1070).
+  //
+  // Verworfen wird er stattdessen gezielt - beim naechsten Oeffnen und ueber
+  // `forgetRestore()`, das jeder aufruft, der etwas AN DIESER SCHICHT VORBEI
+  // schliesst. Sonst wirkte er dort weiter, wo sie gar nicht beteiligt war.
+  _tryRefocus(_lastRestore.memo, _lastRestore.ziel);
+}
+
+/**
+ * Den Merker verwerfen, weil etwas an dieser Schicht vorbei geschlossen wurde.
+ *
+ * `closeDetailView()` kehrt im Popover-Zweig frueh zurueck, ohne `closeModal()`
+ * anzufassen. Ohne diesen Ruf bliebe der Merker des vorigen, unbeteiligten
+ * Dialogs stehen, und ein spaeteres Nachfassen setzte den Fokus in dessen
+ * Zusammenhang - ein falsches Ziel ist schlimmer als keines.
+ */
+export function forgetRestore() {
   _lastRestore = null;
-  _tryRefocus(merker.memo, merker.ziel);
 }
 
 function _doClose(overlayEl) {

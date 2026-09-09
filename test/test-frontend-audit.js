@@ -16040,7 +16040,7 @@ function blockAb(lines, i, grenze = 40) {
  * auskommentierten und bei einem geloeschten Aufruf, gemessen je 1 von 364.
  */
 test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () => {
-  const dirs = ['../public/pages', '../public/components'];
+  const dirs = ['../public/pages', '../public/components', '../public/settings/pages'];
   const fehlend = [];
   for (const dir of dirs) {
     const basis = new URL(`${dir}/`, import.meta.url);
@@ -16112,7 +16112,7 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
  */
 test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nach', () => {
   const fehlend = [];
-  for (const dir of ['../public/pages', '../public/components']) {
+  for (const dir of ['../public/pages', '../public/components', '../public/settings/pages']) {
     const basis = new URL(`${dir}/`, import.meta.url);
     for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
@@ -16125,6 +16125,10 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
         if (!lines.slice(s, e).some((l) => /open(Shared)?Modal\s*\(\s*\{/.test(l))) return;
         for (let j = s; j < e; j++) {
           if (!/\bawait\s+(load|refresh)[A-Z]\w*\s*\(/.test(lines[j])) continue;
+          // NUR NACH DEM OEFFNEN. Ein `await load…()` DAVOR bereitet den Dialog
+          // vor - es baut nichts neu auf, was ein Schliessen betreffen koennte.
+          // (Fehlalarm an `openEditMemberModal` in admin-family.js gemessen.)
+          if (!lines.slice(s, j).some((x) => /open(Shared)?Modal\s*\(\s*\{/.test(x))) continue;
           const fenster = blockAb(lines, j);
           if (!fenster.some((x) => istNeuaufbau(x, wrapper))) continue;
           // closeModal dazwischen: der synchrone Fall, den der Frame abdeckt.
@@ -16159,7 +16163,7 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
  */
 test('refocusAfterRender steht nach dem LETZTEN Neuaufbau im Block', () => {
   const zuFrueh = [];
-  for (const dir of ['../public/pages', '../public/components']) {
+  for (const dir of ['../public/pages', '../public/components', '../public/settings/pages']) {
     const basis = new URL(`${dir}/`, import.meta.url);
     for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
@@ -16245,7 +16249,7 @@ test('jede exportierte close-Fassade steht in SCHLIESS_FASSADEN', () => {
  */
 test('kein refocusAfterRender ohne ein Schliessen, auf das es sich beziehen kann', () => {
   const tot = [];
-  for (const dir of ['../public/pages', '../public/components']) {
+  for (const dir of ['../public/pages', '../public/components', '../public/settings/pages']) {
     const basis = new URL(`${dir}/`, import.meta.url);
     for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');

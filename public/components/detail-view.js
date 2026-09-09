@@ -18,7 +18,7 @@
 
 import { t } from '/i18n.js';
 import {
-  openModal, closeModal, mountFooter, refreshDirtySnapshot,
+  openModal, closeModal, mountFooter, refreshDirtySnapshot, forgetRestore,
   focusFirstField, updateHeaderAction,
 } from '/components/modal.js';
 import { pushOverlay, dropOverlay } from '/utils/overlay-history.js';
@@ -710,6 +710,10 @@ export function closeDetailView({ force = false } = {}) {
     el.remove();
     dropOverlay(overlayToken);
     if (typeof onClose === 'function') onClose();
+    // Hier wurde AN modal.js VORBEI geschlossen. Ohne dieses Verwerfen bliebe
+    // dessen Merker des vorigen Dialogs stehen, und ein spaeteres
+    // `refocusAfterRender()` setzte den Fokus in einen fremden Zusammenhang.
+    forgetRestore();
     return Promise.resolve();
   }
   return closeModal({ force });

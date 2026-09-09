@@ -97,6 +97,7 @@ const STUBS = {
     export const btnSuccess = () => {};
     export const btnError = () => {};
     export const refocusAfterRender = () => {};
+    export const forgetRestore = () => {};
   `,
   '/components/detail-view.js': `
     export const openDetailView = () => ({ update: () => true, isOpen: () => true });
