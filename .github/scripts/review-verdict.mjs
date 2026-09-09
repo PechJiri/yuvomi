@@ -52,24 +52,68 @@ const SCHON_KOMMENTIERT = /already\s+(?:left\s+a\s+comment|commented|posted|revi
 const WARTET_AUF_AGENTEN = /wait(?:ing|s)?\s+for\b[^.]{0,80}\bagents?\b|notified\s+automatically/i;
 
 /**
- * Der Lauf sagt SELBST, dass er geliefert hat.
+ * Verneiner, die unmittelbar vor einem Treffer stehen koennen.
  *
- * Ohne dieses Muster stand hier eine Zuordnung aus ABWESENHEIT: "keines der
- * bekannten Fehlermuster passt, also wird die Review schon gesprochen haben".
- * Das traegt nicht. Ein Lauf, der still mit `result: "Done."` endet, faellt in
- * keines der Muster - und eine ungebundene claude-Aeusserung von woanders
- * (Mention-Pfad, Nachzuegler eines abgebrochenen Vorgaengers) haette ihn dann
- * gruen gefaerbt. Die Zusammenfassung traegt keine SHA, also muss die Bindung
- * aus dem einzigen Artefakt kommen, das nur DIESER Lauf schreiben kann: seinem
- * eigenen result-Objekt.
- *
- * Drei echte Wortlaute abgeschlossener Laeufe an #1066, alle drei gemessen:
- *   "Review complete for ulsklyc/yuvomi#1066."   (sauber, nur Zusammenfassung)
- *   "The review is posted. Summary: ..."          (mit Inline-Befund)
- *   "Review posted. Summary: ..."                 (mit Inline-Befund)
+ * Die result-Texte sind Modellprosa, und Prosa verneint. "Claude has NOT already
+ * commented on this PR. Review posted." trug bis hierher den Abbruchgrund und
+ * faerbte eine gueltige Review rot; "The review could NOT be completed" trug die
+ * Lieferzusage und haette einen gescheiterten Lauf gruen gemacht. Geprueft wird
+ * ein enges Fenster VOR dem Treffer, nicht der ganze Text: ein "not" drei Saetze
+ * weiter oben gehoert zu etwas anderem.
  */
-const REVIEW_GELIEFERT =
-  /\breview\b[^.]{0,40}\b(?:complete|completed|posted|finished)\b|\b(?:posted|completed|finished)\b[^.]{0,30}\breview\b/i;
+const VERNEINER = /\b(?:not|never|no|cannot|can'?t|couldn'?t|didn'?t|doesn'?t|won'?t|unable|failed|without)\b/i;
+const FENSTER = 30;
+
+/** Trifft das Muster, und steht davor kein Verneiner? */
+export function bejaht(text, muster) {
+  const treffer = muster.exec(String(text ?? ''));
+  if (!treffer) return false;
+  const von = Math.max(0, treffer.index - FENSTER);
+  return !VERNEINER.test(text.slice(von, treffer.index + treffer[0].length));
+}
+
+/**
+ * Werkzeugaufrufe, mit denen dieser Lauf etwas an den PR geschrieben hat.
+ *
+ * DAS IST DIE EINZIGE ZUORDNUNG, DIE NICHT AUF PROSA BERUHT. Der Strom in
+ * `execution_file` gehoert diesem Lauf allein - kein Mention-Pfad und kein
+ * abgebrochener Vorgaenger schreibt hinein. Ein `tool_use` mit dem Postbefehl
+ * und ein `tool_result` ohne Fehler dazu sind ein Beleg, den der Text daneben
+ * weder herbeireden noch wegreden kann. An #1066 gemessen:
+ *
+ *   tool_use    { name: "Bash", input.command: "gh pr comment 1066 --repo ..." }
+ *   tool_result { tool_use_id: ..., is_error: false,
+ *                 content: ".../pull/1066#issuecomment-5596556584" }
+ *
+ * Das setzt voraus, dass `show_full_output: true` im Workflow steht - sonst
+ * enthaelt der Strom diese Bloecke nicht. Der Schalter ist damit tragend, und
+ * eine Probe in test-claude-review-workflow.js haelt ihn fest.
+ */
+const POSTBEFEHL = /\bgh\s+pr\s+(?:comment|review)\b|\bgh\s+api\b[^"]*\/(?:comments|reviews)\b/i;
+const POSTWERKZEUG = /inline_comment|create_.*comment/i;
+
+export function zaehleGepostet(eintraege) {
+  const versuche = new Set();
+  const bloecke = [];
+  for (const eintrag of eintraege) {
+    const inhalt = eintrag?.message?.content ?? eintrag?.content;
+    if (Array.isArray(inhalt)) bloecke.push(...inhalt);
+  }
+  for (const block of bloecke) {
+    if (block?.type !== 'tool_use') continue;
+    const name = String(block.name ?? '');
+    const befehl = String(block.input?.command ?? '');
+    if (POSTWERKZEUG.test(name) || POSTBEFEHL.test(befehl)) versuche.add(block.id);
+  }
+  let erfolge = 0;
+  for (const block of bloecke) {
+    if (block?.type !== 'tool_result') continue;
+    if (!versuche.has(block.tool_use_id)) continue;
+    if (block.is_error === true) continue;
+    erfolge += 1;
+  }
+  return { versuche: versuche.size, erfolge };
+}
 
 /**
  * Zaehlt, was claude SEIT dem Beginn dieses Laufs gesagt hat.
@@ -122,7 +166,14 @@ const ZEITSTEMPEL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
  *        Aeusserung gebunden wird.
  * @param {number} [eingabe.kaputt]  Zeilen, die nicht zu lesen waren.
  */
-export function beurteile({ seit, ergebnis, aeusserungen = [], kopf = '', kaputt = 0 }) {
+export function beurteile({
+  seit,
+  ergebnis,
+  aeusserungen = [],
+  kopf = '',
+  gepostet = { versuche: 0, erfolge: 0 },
+  kaputt = 0
+}) {
   // Ohne belastbaren Stand gibt es nichts zu vergleichen. Der leere Fallback
   // waere hier der gefaehrlichste: er wuerde JEDE Aeusserung mitzaehlen und
   // damit genau das stille Gruen erzeugen, das dieser Nachweis abschafft.
@@ -133,9 +184,6 @@ export function beurteile({ seit, ergebnis, aeusserungen = [], kopf = '', kaputt
   const zahl = zaehleSeit(aeusserungen, seit, kopf);
   const neu = zahl.gesamt;
 
-  // Waere hier auch nur eine Zeile unlesbar, koennte "nichts gefunden" schlicht
-  // heissen "nicht gelesen". Ein Rot aus dem falschen Grund schickt die naechste
-  // Runde in die falsche Richtung, deshalb bekommt der Fall seinen eigenen.
   if (kaputt > 0) return stumm('daten-kaputt', neu, seit, ergebnis);
   if (!ergebnis) return stumm('kein-ergebnis', neu, seit, ergebnis);
 
@@ -144,25 +192,41 @@ export function beurteile({ seit, ergebnis, aeusserungen = [], kopf = '', kaputt
     ? ergebnis.permission_denials.length
     : 0;
 
-  // DAS PROTOKOLL DES LAUFS SCHLAEGT DIE KOMMENTARZAEHLUNG, und zwar in dieser
-  // Reihenfolge und nicht umgekehrt. Vorher stand ein "hat irgendwer nach dem
-  // Laufbeginn geredet?" ganz oben und schloss kurz - damit konnte eine FREMDE
-  // claude-Aeusserung einen abgebrochenen Lauf gruen faerben: eine Antwort des
-  // Mention-Pfades, oder ein Nachzuegler des abgebrochenen Vorgaengers. Was
-  // dieser Lauf getan hat, weiss nur sein eigenes result-Objekt; die Kommentare
-  // sind die Wirkung und koennen von anderen stammen.
+  // DAS PROTOKOLL DES LAUFS SCHLAEGT DIE KOMMENTARZAEHLUNG. Was dieser Lauf
+  // getan hat, weiss nur sein eigener Strom; die Kommentare am PR sind die
+  // Wirkung und koennen von woanders stammen.
   if (ergebnis.is_error === true) return stumm('lauf-fehler', neu, seit, ergebnis);
   if (ergebnis.subtype && ergebnis.subtype !== 'success') {
     return stumm('lauf-fehler', neu, seit, ergebnis);
   }
-  if (SCHON_KOMMENTIERT.test(text)) return stumm('schon-kommentiert', neu, seit, ergebnis);
+  if (bejaht(text, SCHON_KOMMENTIERT)) return stumm('schon-kommentiert', neu, seit, ergebnis);
 
-  // EINE GEBUNDENE AEUSSERUNG SCHLAEGT ALLES, WAS DANACH KOMMT - auch die
-  // Verweigerungen. Eine Review oder Inline-Anmerkung, die genau diesen Commit
-  // nennt, ist geliefert; ob unterwegs ein Werkzeug gesperrt war, aendert daran
-  // nichts. Die echte Review an #1066 ist genau dieser Fall: sie lief in vier
-  // verweigerte `gh api`-Versuche auf ein CLAUDE.md, das es nicht gibt, und
-  // postete danach ihren Befund. Stuende die Sperrpruefung davor, waere sie rot.
+  // EIN BELEG FUER UNVOLLSTAENDIGKEIT SCHLAEGT JEDEN BELEG FUER LIEFERUNG.
+  // Der Lauf sagt hier selbst, dass er auf seine Agenten wartet - dann ist die
+  // Pruefung nicht fertig, auch wenn unterwegs schon eine Anmerkung
+  // herausgegangen ist. Stuende diese Zeile hinter den Belegen, machte eine
+  // einzelne Inline-Anmerkung eines abgebrochenen Laufs den Haken gruen.
+  if (WARTET_AUF_AGENTEN.test(text)) return stumm('agenten', neu, seit, ergebnis);
+
+  // DER EINE BELEG, DER NICHT AUF PROSA BERUHT: dieser Lauf hat den Postbefehl
+  // ausgefuehrt, und er kam ohne Fehler zurueck. Er schlaegt auch die
+  // Verweigerungen - die echte Review an #1066 lief in vier verweigerte
+  // `gh api`-Versuche auf ein CLAUDE.md, das es nicht gibt, und postete danach.
+  if (gepostet.erfolge > 0) {
+    return {
+      ausgang: 'geprueft',
+      grund: 'postbefehl',
+      neu,
+      meldung:
+        `Die Review hat in diesem Lauf gepostet: ${gepostet.erfolge} von ` +
+        `${gepostet.versuche} Postbefehl(en) kam ohne Fehler zurueck. Das steht in ` +
+        'ihrem eigenen Strom und laesst sich von aussen nicht herbeifuehren.'
+    };
+  }
+
+  // Fallback, falls der Strom die Werkzeugbloecke nicht enthaelt (dann fehlt
+  // `show_full_output: true`): eine Review oder Inline-Anmerkung, die genau
+  // diesen Commit nennt, ist der naechststaerkste Beleg.
   if (zahl.gebunden > 0) {
     return {
       ausgang: 'geprueft',
@@ -174,15 +238,9 @@ export function beurteile({ seit, ergebnis, aeusserungen = [], kopf = '', kaputt
     };
   }
 
-  if (WARTET_AUF_AGENTEN.test(text)) return stumm('agenten', neu, seit, ergebnis);
-
-  // DIE SPERRE VOR DER TOR-AUSNAHME. Andersherum konnte ein Lauf, der an einer
-  // Werkzeugsperre gescheitert war, ueber die Tor-Ausnahme gruen werden, wenn
-  // sein Text zufaellig beide Woerter trug - die einzige stille Gruen-Ausnahme
-  // darf nicht vor der Fehlerpruefung liegen.
   if (sperren > 0) return stumm('werkzeugsperre', neu, seit, ergebnis);
 
-  if (TOR_STOPP.test(text) && TRIVIAL.test(text) && !VERNEINT.test(text)) {
+  if (bejaht(text, TOR_STOPP) && TRIVIAL.test(text) && !VERNEINT.test(text)) {
     return {
       ausgang: 'ausgesetzt',
       grund: 'trivial',
@@ -195,22 +253,6 @@ export function beurteile({ seit, ergebnis, aeusserungen = [], kopf = '', kaputt
     };
   }
 
-  // Eine Zusammenfassung ohne Commit-Bindung ("## Code review / No issues
-  // found") ist der einzige Beleg, den ein sauberer PR hinterlaesst. Sie zaehlt
-  // nur zusammen mit einer BEJAHENDEN Aussage dieses Laufs, geliefert zu haben.
-  // Fuer sich genommen koennte sie von jemand anderem stammen, und "kein
-  // bekanntes Fehlermuster" ist keine Zuordnung, sondern nur Unwissen.
-  if (zahl.frei > 0 && REVIEW_GELIEFERT.test(text)) {
-    return {
-      ausgang: 'geprueft',
-      grund: 'ungebunden',
-      neu,
-      meldung:
-        `Die Review hat in diesem Lauf gesprochen: ${zahl.frei} Aeusserung(en) ohne ` +
-        'Commit-Bindung (eine Zusammenfassung traegt keine SHA) nach dem Laufbeginn ' +
-        `${seit}. Ihr result-Objekt zeigt keinen Abbruch und keine Sperre.`
-    };
-  }
   if (zahl.frei > 0) return stumm('nicht-zuzuordnen', neu, seit, ergebnis);
   return stumm('unbekannt', neu, seit, ergebnis);
 }
@@ -261,8 +303,10 @@ const DIAGNOSE = {
     'ihm damit nicht zuzuordnen: als derselbe Bot antwortet auch der Mention-Pfad ' +
     '(.github/workflows/claude.yml), und ein per cancel-in-progress abgebrochener ' +
     'Vorgaenger kann noch posten. Lies den result-Text im Job-Log - sagt er, die ' +
-    'Review sei fertig, gehoert sein Wortlaut in REVIEW_GELIEFERT; sagt er etwas ' +
-    'anderes, hat dieser Lauf wirklich nichts geliefert.',
+    'Review sei fertig, obwohl kein Postbefehl im Strom steht, dann fehlt vermutlich ' +
+    '`show_full_output: true` im Workflow - ohne den Schalter enthaelt der Strom die ' +
+    'Werkzeugbloecke nicht. Sagt er etwas anderes, hat dieser Lauf wirklich nichts ' +
+    'geliefert.',
   unbekannt:
     'Die Review ist durchgelaufen und hat zu diesem Stand nichts hinterlassen, ohne eines ' +
     'der bekannten Muster zu zeigen. Zuerst den result-Text im Job-Log lesen: er sagt ' +
@@ -292,13 +336,22 @@ function stumm(grund, neu, seit, ergebnis) {
  * `execution_file` ausgibt. Sie enthaelt den ganzen Strom der Sitzung; das
  * Urteil steht im letzten Eintrag mit `"type": "result"`.
  */
-export function leseErgebnis(pfad) {
-  if (!pfad) return null;
+export function leseLauf(pfad) {
+  const eintraege = leseStrom(pfad);
+  const ergebnisse = eintraege.filter((e) => e && e.type === 'result');
+  return {
+    ergebnis: ergebnisse.length ? ergebnisse[ergebnisse.length - 1] : null,
+    gepostet: zaehleGepostet(eintraege)
+  };
+}
+
+function leseStrom(pfad) {
+  if (!pfad) return [];
   let roh;
   try {
     roh = readFileSync(pfad, 'utf8');
   } catch {
-    return null;
+    return [];
   }
   const eintraege = [];
   try {
@@ -318,8 +371,7 @@ export function leseErgebnis(pfad) {
       }
     }
   }
-  const ergebnisse = eintraege.filter((e) => e && e.type === 'result');
-  return ergebnisse.length ? ergebnisse[ergebnisse.length - 1] : null;
+  return eintraege;
 }
 
 export function leseAeusserungen(pfade) {
@@ -371,17 +423,13 @@ function main() {
     process.argv.slice(2)
   );
   const { eintraege, kaputt } = leseAeusserungen(pfade);
-  const urteil = beurteile({
-    seit,
-    kopf,
-    ergebnis: leseErgebnis(ergebnisPfad),
-    aeusserungen: eintraege,
-    kaputt
-  });
+  const { ergebnis, gepostet } = leseLauf(ergebnisPfad);
+  const urteil = beurteile({ seit, kopf, ergebnis, aeusserungen: eintraege, gepostet, kaputt });
 
   console.log(`Laufbeginn: ${seit || '(unbekannt)'}`);
   console.log(`Aktueller Stand: ${kopf || '(unbekannt)'}`);
   console.log(`Aeusserungen von claude seit dem Laufbeginn: ${urteil.neu}`);
+  console.log(`Postbefehle dieses Laufs: ${gepostet.erfolge} von ${gepostet.versuche} ohne Fehler`);
   console.log('');
   console.log(urteil.meldung);
 

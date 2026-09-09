@@ -350,6 +350,8 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           SEIT: ${{ steps.stand.outputs.seit }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASIS: ${{ github.event.repository.default_branch }}
+          URTEIL: .github/scripts/review-verdict.mjs
           EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
         run: |
           set -euo pipefail
@@ -370,7 +372,31 @@ jobs:
           gh api "repos/$REPO/pulls/$PR/comments" --paginate \
             --jq '.[] | {login: .user.login, zeit: .created_at, commit: (.original_commit_id // .commit_id)}' \
             > "$RUNNER_TEMP/inline.jsonl"
-          node .github/scripts/review-verdict.mjs \
+          # DAS URTEIL KOMMT VOM DEFAULT-BRANCH, NICHT AUS DEM PR. Hier stand
+          # `node .github/scripts/review-verdict.mjs` aus dem Checkout - also
+          # Code, den der PR selbst schreibt, ausgefuehrt in einem Job, der
+          # CLAUDE_CODE_OAUTH_TOKEN, ein GH_TOKEN mit Schreibrecht auf Pull
+          # Requests und OIDC im Ruecken hat. Ein PR haette damit beliebiges
+          # JavaScript mit diesen Rechten laufen lassen koennen - und ganz
+          # nebenbei sein eigenes Urteil auf gruen stellen. Die Ausnahme oben
+          # vergleicht nur die Workflow-Datei und faengt das nicht.
+          #
+          # Der Schritt holt die Fassung vom Default-Branch und fuehrt DIE aus.
+          # Ein PR, der das Urteil verbessert, wird also noch von der alten
+          # Fassung beurteilt - genau so, wie die Action es mit dem Workflow
+          # haelt. Faellt der Abruf aus, wird nicht geurteilt und nicht gruen
+          # getan: ohne vertrauenswuerdigen Richter gibt es kein Urteil.
+          BASIS_URTEIL="$RUNNER_TEMP/review-verdict-basis.mjs"
+          if ! gh api "repos/$REPO/contents/$URTEIL?ref=$BASIS" \
+               -H "Accept: application/vnd.github.raw" > "$BASIS_URTEIL" 2>/dev/null \
+             || [ ! -s "$BASIS_URTEIL" ]; then
+            echo "::error::Das Urteilsmodul liess sich nicht von $BASIS holen" \
+                 "($URTEIL). Es aus dem PR-Checkout auszufuehren kommt nicht in Frage" \
+                 "- das waere PR-eigener Code mit den Rechten dieses Jobs. Ohne" \
+                 "vertrauenswuerdige Fassung gibt es kein Urteil und kein Gruen."
+            exit 1
+          fi
+          node "$BASIS_URTEIL" \
             --seit "$SEIT" \
             --kopf "$HEAD_SHA" \
             --ergebnis "$EXECUTION_FILE" \

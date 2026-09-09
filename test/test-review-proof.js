@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
-import { beurteile, zaehleSeit } from '../.github/scripts/review-verdict.mjs';
+import { beurteile, bejaht, zaehleGepostet, zaehleSeit } from '../.github/scripts/review-verdict.mjs';
 
 const fixture = JSON.parse(
   readFileSync(new URL('./review-proof-fixture.json', import.meta.url), 'utf8')
@@ -317,37 +317,35 @@ test('der echte #1029-Wortlaut bleibt die Ausnahme', () => {
   );
 });
 
-test('eine Zusammenfassung ohne SHA braucht die Zusage DIESES Laufs', () => {
-  // Sie ist der einzige Beleg, den das Plugin bei einem sauberen PR
-  // hinterlaesst ("## Code review / No issues found") und traegt keine SHA. Der
-  // echte Wortlaut des Laufs, der sie gepostet hat, steht im Fixture.
-  const nur_frei = [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }];
+test('eine Zusammenfassung ohne SHA zaehlt ueber den Postbefehl des Laufs', () => {
+  // Sie ist der einzige Beleg, den das Plugin bei einem sauberen PR am PR
+  // hinterlaesst, und traegt keine SHA. Die Zuordnung kommt deshalb aus dem
+  // Strom des Laufs: dort steht der Postbefehl mitsamt der URL, die er
+  // zurueckbekam. Der echte Ausschnitt liegt im Fixture.
   const urteil = beurteile({
     seit: seit(ABBRUCH_LAUF),
     kopf: kopf(ABBRUCH_LAUF),
     ergebnis: fixture.ergebnisse['saubere-review'],
-    aeusserungen: nur_frei
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }],
+    gepostet: zaehleGepostet(fixture.strom.gepostet)
   });
   assert.equal(urteil.ausgang, 'geprueft');
-  assert.equal(urteil.grund, 'ungebunden');
+  assert.equal(urteil.grund, 'postbefehl');
 });
 
 test('ZUORDNUNG AUS ABWESENHEIT TRAEGT NICHT: "Done." bleibt rot', () => {
-  // Der Befund aus der zweiten Codex-Runde zu #1073. Vorher genuegte es, dass
-  // KEINES der bekannten Fehlermuster passte - dann galt jede ungebundene
-  // Aeusserung als Antwort dieses Laufs. Ein Lauf, der still mit "Done." endet,
-  // faellt in kein Muster, und eine fremde Zusammenfassung (Mention-Pfad oder
-  // Nachzuegler eines abgebrochenen Vorgaengers) haette ihn gruen gefaerbt.
-  const fremd = [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }];
+  // Der Befund aus der zweiten Codex-Runde. Ein Lauf, der still mit "Done."
+  // endet, hat nichts gepostet - eine fremde Zusammenfassung (Mention-Pfad oder
+  // Nachzuegler eines abgebrochenen Vorgaengers) darf ihn nicht gruen faerben.
   const urteil = beurteile({
     seit: seit(ABBRUCH_LAUF),
     kopf: kopf(ABBRUCH_LAUF),
     ergebnis: fixture.ergebnisse['stumm-unbekannt'],
-    aeusserungen: fremd
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }],
+    gepostet: zaehleGepostet(fixture.strom.nichts_gepostet)
   });
   assert.equal(urteil.ausgang, 'stumm');
   assert.equal(urteil.grund, 'nicht-zuzuordnen');
-  assert.match(urteil.meldung, /nicht zuzuordnen/);
 });
 
 test('ohne jede Aeusserung bleibt der stille Lauf schlicht unbekannt', () => {
@@ -365,22 +363,79 @@ test('ohne jede Aeusserung bleibt der stille Lauf schlicht unbekannt', () => {
   );
 });
 
-test('die drei gemessenen Wortlaute eines fertigen Laufs zaehlen alle', () => {
-  // Alle drei stammen aus echten Laeufen an #1066. Faellt einer heraus, wird ein
-  // sauberer PR grundlos rot - deshalb stehen sie hier namentlich.
-  const nur_frei = [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: null }];
-  const wortlaute = [
-    'Review complete for ulsklyc/yuvomi#1066.',
-    'The review is posted. Summary: ...',
-    'Review posted. Summary: ...'
-  ];
-  for (const result of wortlaute) {
-    const urteil = beurteile({
-      seit: seit(ABBRUCH_LAUF),
-      kopf: kopf(ABBRUCH_LAUF),
-      ergebnis: { num_turns: 9, subtype: 'success', is_error: false, permission_denials: [], result },
-      aeusserungen: nur_frei
-    });
-    assert.equal(urteil.ausgang, 'geprueft', `nicht erkannt: ${result}`);
-  }
+
+// ---------------------------------------------------------------------------
+// Fuenf Befunde aus der dritten Codex-Runde zu PR #1073.
+// ---------------------------------------------------------------------------
+
+test('der Postbefehl ist der Beleg, nicht der Satz darueber', () => {
+  // Er steht im Strom des Laufs, den nur dieser Lauf schreibt - kein
+  // Mention-Pfad und kein abgebrochener Vorgaenger kommt da hinein.
+  assert.deepEqual(zaehleGepostet(fixture.strom.gepostet), { versuche: 1, erfolge: 1 });
+  assert.deepEqual(zaehleGepostet(fixture.strom.nichts_gepostet), { versuche: 0, erfolge: 0 });
+  // Ein Postbefehl, der FEHLSCHLAEGT, ist kein Beleg. Genau das war die alte
+  // Ursache: ohne `Bash(gh pr comment:*)` prueft die Review vollstaendig und
+  // kann ihr Ergebnis nicht abliefern.
+  assert.deepEqual(zaehleGepostet(fixture.strom.post_gescheitert), { versuche: 1, erfolge: 0 });
+});
+
+test('ein Beleg fuer Unvollstaendigkeit schlaegt den Postbefehl', () => {
+  // Ein Lauf, der EINE Anmerkung postet und dann auf seine Agenten wartet, ist
+  // nicht fertig - dasselbe gilt fuer eine Anmerkung, die ein abgebrochener
+  // Vorgaenger am selben Head hinterlassen hat. Stuende der Beleg davor, waere
+  // der Haken gruen ueber einer abgebrochenen Pruefung.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 9, subtype: 'success', is_error: false, permission_denials: [],
+      result: "I'll wait for both background agents to complete before continuing."
+    },
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: kopf(ABBRUCH_LAUF) }],
+    gepostet: zaehleGepostet(fixture.strom.gepostet)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'agenten');
+});
+
+test('ein bewiesener Postbefehl schlaegt eine harmlose Verweigerung', () => {
+  // Die saubere Review hat KEINEN gebundenen Beleg - nur die Zusammenfassung.
+  // Stuende die Sperrpruefung vor dem Postbefehl, waere jeder saubere PR mit
+  // einer belanglosen verweigerten Abfrage rot. Das ist nicht hypothetisch: die
+  // echte Review an #1066 verweigerte vier `gh api`-Aufrufe auf ein CLAUDE.md.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: { ...fixture.ergebnisse['saubere-review'], permission_denials: [{ tool_name: 'Bash' }] },
+    aeusserungen: [],
+    gepostet: zaehleGepostet(fixture.strom.gepostet)
+  });
+  assert.equal(urteil.ausgang, 'geprueft');
+  assert.equal(urteil.grund, 'postbefehl');
+});
+
+test('eine VERNEINTE Abbruchbehauptung faerbt eine gueltige Review nicht rot', () => {
+  // Modellprosa verneint: "Claude has not already commented on this PR."
+  // Ohne Verneinungspruefung trug dieser Satz den Abbruchgrund.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 14, subtype: 'success', is_error: false, permission_denials: [],
+      result: 'Claude has not already commented on this PR. Review posted.'
+    },
+    aeusserungen: [],
+    gepostet: zaehleGepostet(fixture.strom.gepostet)
+  });
+  assert.equal(urteil.ausgang, 'geprueft');
+});
+
+test('der echte Abbruchtext bleibt trotz Verneinungspruefung erkannt', () => {
+  // Die Gegenrichtung: das geschaerfte Muster darf den Fall nicht verlieren,
+  // fuer den es gebaut ist.
+  assert.equal(bejaht(ABBRUCH.result, /already\s+(?:left\s+a\s+comment|commented|posted|reviewed)/i), true);
+  assert.equal(
+    bejaht('Claude has not already commented on this PR.', /already\s+commented/i),
+    false
+  );
 });

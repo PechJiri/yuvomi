@@ -153,6 +153,35 @@ test('der Nachweis bindet Aeusserungen an die Commit-SHA', () => {
   assert.match(workflow, /commit: null/);
 });
 
+test('das Urteil laeuft aus einer vertrauenswuerdigen Fassung', () => {
+  // SICHERHEIT, NICHT NUR SAUBERKEIT. Hier stand `node .github/scripts/...` aus
+  // dem Checkout - also Code, den der PR selbst schreibt, ausgefuehrt in einem
+  // Job mit CLAUDE_CODE_OAUTH_TOKEN, einem GH_TOKEN mit Schreibrecht auf Pull
+  // Requests und OIDC. Ein PR haette damit beliebiges JavaScript mit diesen
+  // Rechten laufen lassen und nebenbei sein eigenes Urteil auf gruen stellen
+  // koennen; die Selbst-Uebersprung-Ausnahme vergleicht nur die Workflow-Datei
+  // und faengt das nicht.
+  // Der Anker ist der ZEILENANFANG: der Kommentar im Workflow zitiert den alten
+  // Aufruf absichtlich, und eine Probe, die blosses Vorkommen misst, waere an
+  // dieser Erklaerung haengen geblieben statt an der Ausfuehrung.
+  assert.doesNotMatch(workflow, /^\s*node \.github\/scripts\/review-verdict\.mjs/m);
+  assert.match(workflow, /contents\/\$URTEIL\?ref=\$BASIS/);
+  assert.match(workflow, /node "\$BASIS_URTEIL"/);
+  // Und ohne vertrauenswuerdige Fassung gibt es kein Urteil und kein Gruen.
+  assert.match(workflow, /\[ ! -s "\$BASIS_URTEIL" \]; then\n\s*echo "::error/);
+});
+
+test('show_full_output ist tragend, nicht bequem', () => {
+  // Der Nachweis liest den Postbefehl aus dem Strom des Laufs - das ist der
+  // einzige Beleg, der nicht auf Prosa beruht. Ohne diesen Schalter enthaelt
+  // der Strom die Werkzeugbloecke nicht, und der Nachweis faellt auf den
+  // schwaecheren, an die Commit-SHA gebundenen Beleg zurueck.
+  // Wieder der ZEILENANFANG: ein Kommentar weiter oben nennt den Schalter im
+  // Fliesstext, und eine lose Probe blieb daran gruen haengen, waehrend die
+  // Einstellung selbst schon auf false stand.
+  assert.match(workflow, /^\s*show_full_output:\s*true\s*$/m);
+});
+
 test('Entwurf und Bot-PR sind vom Nachweis ausgenommen', () => {
   // Bei beiden bricht das Plugin zugesichert ab. Sie stehen im Workflow und
   // nicht im Urteil, weil der Workflow sie sicher weiss, waehrend das Urteil

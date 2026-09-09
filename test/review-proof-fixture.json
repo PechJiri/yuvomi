@@ -393,5 +393,99 @@
       "permission_denials": [],
       "result": "Done."
     }
+  },
+  "strom": {
+    "quelle": "https://github.com/ulsklyc/yuvomi/actions/runs/34316389826, Zeilen 6050-6115 des Job-Logs",
+    "gepostet": [
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01N3fDbYoXJmz8pDpJHhcPM5",
+              "name": "Bash",
+              "input": {
+                "command": "gh pr comment 1066 --repo ulsklyc/yuvomi --body \"$(cat <<'EOF'\n## Code review\n\nNo issues found.\nEOF\n)\"",
+                "description": "Post no-issues review comment to PR 1066"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_01N3fDbYoXJmz8pDpJHhcPM5",
+              "content": "https://github.com/ulsklyc/yuvomi/pull/1066#issuecomment-5596556584",
+              "is_error": false
+            }
+          ]
+        }
+      }
+    ],
+    "nichts_gepostet": [
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_lesen",
+              "name": "Bash",
+              "input": {
+                "command": "gh pr diff 1066"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_lesen",
+              "content": "diff ...",
+              "is_error": false
+            }
+          ]
+        }
+      }
+    ],
+    "post_gescheitert": [
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_fehl",
+              "name": "Bash",
+              "input": {
+                "command": "gh pr comment 1066 --body \"x\""
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_fehl",
+              "content": "permission denied",
+              "is_error": true
+            }
+          ]
+        }
+      }
+    ]
   }
 }
