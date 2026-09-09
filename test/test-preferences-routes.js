@@ -189,17 +189,56 @@ test('PUT timezone: Mitglied -> 403, ungültig -> 400, gültig -> persist, null 
   assert.equal(cleared.timezone, null);
   assert.ok(cleared.timezone_effective, 'timezone_effective ist nie leer');
 });
+
+/* Die Beispielzone darf nicht die Rueckfallzone sein.
+ *
+ * Hier stand fest `'Pacific/Auckland'` auf beiden Seiten: erst als gewaehlte
+ * Zone, dann als das, was `timezone_effective` nach dem Loeschen NICHT sein
+ * darf. Auf einer Maschine in Auckland ist der Rueckfall aber genau dieser
+ * Wert - die Behauptung war dort unerfuellbar, und die Suite fiel mit
+ * `Expected "actual" to be strictly unequal to: 'Pacific/Auckland'`. Gemessen
+ * auf main: `TZ=UTC` und `TZ=Europe/Berlin` gruen, `TZ=Pacific/Auckland` rot.
+ *
+ * Die Beispielzone wird deshalb zur Laufzeit gewaehlt, und zwar so, dass sie
+ * garantiert eine ANDERE ist als der Rueckfall. Erst dann trennt die Probe die
+ * beiden Faelle, um die es geht: "richtig auf den Rueckfall zurueckgefallen"
+ * und "die geloeschte Wahl klebt noch".
+ *
+ * Und die Verneinung allein war ohnehin zu schwach: "nicht die zuletzt
+ * gewaehlte Zone" liesse eine beliebige DRITTE Zone durch. Was
+ * `timezone_effective` ohne Einstellung sein soll, steht in
+ * `householdTimeZone()` - es faellt auf `serverTimeZone()` zurueck. Das ist
+ * jetzt die Aussage; die Verneinung darunter folgt daraus und bleibt nur
+ * stehen, um den Fehlerfall zu benennen.
+ *
+ * Gemessen, dass das nicht bloss anders aussieht: gibt `householdTimeZone()`
+ * im RUECKFALL eine dritte Zone zurueck (die gesetzte bleibt korrekt), ist die
+ * neue Fassung unter UTC, Europe/Berlin und Pacific/Auckland rot - die alte
+ * gruen.
+ */
 test('GET timezone: gewählter Wert und geltender Wert sind zwei Felder', async () => {
-  await put({ timezone: 'Pacific/Auckland' });
+  const { serverTimeZone } = await import('../server/utils/timezone.js');
+  const rueckfall = serverTimeZone();
+  const gewaehlt = ['Pacific/Auckland', 'America/Los_Angeles'].find((zone) => zone !== rueckfall);
+
+  await put({ timezone: gewaehlt });
   const body = (await get()).body.data;
-  assert.equal(body.timezone, 'Pacific/Auckland');
-  assert.equal(body.timezone_effective, 'Pacific/Auckland');
+  assert.equal(body.timezone, gewaehlt);
+  assert.equal(body.timezone_effective, gewaehlt);
+
   await put({ timezone: null });
   const fallback = (await get()).body.data;
   assert.equal(fallback.timezone, null);
-  // Ohne Einstellung nennt `timezone_effective` den Rueckfall - nicht null, und
-  // nicht die zuletzt gewaehlte Zone.
-  assert.notEqual(fallback.timezone_effective, 'Pacific/Auckland');
+  // Die eigentliche Pruefung: ohne Einstellung nennt `timezone_effective` den
+  // Rueckfall - nicht null, nicht die zuletzt gewaehlte Zone, und auch keine
+  // dritte.
+  assert.equal(fallback.timezone_effective, rueckfall,
+    `timezone_effective muss ohne Einstellung den Serverrueckfall nennen (${rueckfall})`);
+  // Aus der Zeile darueber und `gewaehlt !== rueckfall` folgt das hier schon.
+  // Es steht trotzdem da, weil es den Fehlerfall BENENNT, um den es historisch
+  // ging - eine klebende Wahl liest sich sonst nur als "falsche Zone".
+  assert.notEqual(fallback.timezone_effective, gewaehlt,
+    `die geloeschte Wahl (${gewaehlt}) darf nicht als geltender Wert stehenbleiben`);
   assert.ok(fallback.timezone_effective);
 });
 
