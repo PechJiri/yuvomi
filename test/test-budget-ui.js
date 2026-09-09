@@ -715,9 +715,29 @@ test('nur der Trenner der Region wird zum Dezimalpunkt', () => {
   // falsche liegt bei Geld um den Faktor tausend daneben.
   assert.match(impl, /groupSep/, 'die Gruppierung muss erkannt werden');
   assert.match(impl, /\\\\d\{3\}/, 'erkannt wird das Muster (drei Ziffern), nicht das blosse Zeichen');
+
+  // Die Gruppierungspruefung steht ZWISCHEN den beiden Umschrift-Schritten, und
+  // sie hat auf beiden Seiten eine Kante:
+  //   - davor sieht `\d` (ASCII) die oestlichen Ziffern hinter dem Trenner nicht,
+  //     ar-EG "٢٬٠٠٠" kaeme unerkannt durch (gemessen: als "2٬000", woraus eine
+  //     Mengenangabe die 2 las);
+  //   - danach ist der Dezimaltrenner schon ein Punkt, und in de-DE IST der Punkt
+  //     das Gruppierungszeichen - "1,000" (also eins) floege raus.
+  // Beide Faelle sind in test-shopping-ux.js verhaltensgetrieben gepinnt; hier
+  // steht die Reihenfolge selbst, weil ein Textguard sie zeigt und ein
+  // Verhaltenstest nur ihre Folgen.
+  const ziffernSchritt = impl.search(/digits\.has\(char\)/);
+  const gruppenSchritt = impl.search(/groupSep &&/);
+  const trennerSchritt = impl.search(/char === decimalSep/);
+  assert.ok(ziffernSchritt >= 0 && gruppenSchritt >= 0 && trennerSchritt >= 0,
+    'die drei Schritte von toDecimalString sind nicht mehr erkennbar');
+  assert.ok(ziffernSchritt < gruppenSchritt,
+    'die Ziffern muessen VOR der Gruppierungspruefung nach ASCII - sonst sieht `\\d` sie nicht');
+  assert.ok(gruppenSchritt < trennerSchritt,
+    'die Gruppierung muss VOR dem Ersetzen des Dezimaltrenners geprueft werden - sonst ist der Trenner in de-DE ununterscheidbar vom Gruppierungszeichen');
 });
 
-test('die Cent-Umrechnung nutzt dieselbe Umschrift wie die Betragsfelder', () => {
+test('keine Seite schreibt einen Dezimaltrenner von Hand um', () => {
   // Der Einkauf speichert Preise als ganze Cent (#1003) und brauchte dafuer
   // zwei Umrechnungen. Als sie in pages/shopping.js standen, war die eine ein
   // `replace(',', '.')`: unter en-US wird "1,000" damit zur Zahl 1, unter ar/fa
@@ -737,13 +757,94 @@ test('die Cent-Umrechnung nutzt dieselbe Umschrift wie die Betragsfelder', () =>
   const raus = clean.match(/export function centsToAmountInput[\s\S]*?\n\}/)[0];
   assert.match(raus, /useGrouping:\s*false/, 'der Ausgabewert darf nicht gruppiert sein');
 
-  // Gemessen wird der Preispfad, nicht jedes Komma der Datei: shopping.js
-  // zerlegt auch Mengenangaben ("1,5 kg"), und das ist kein Geldbetrag.
+  // Gemessen wird die GANZE Datei, nicht mehr nur der Preispfad. Die Einschraenkung
+  // stand bis 09.09.2026 hier, weil shopping.js daneben Mengenangaben zerlegt
+  // ("1,5 kg") und das kein Geldbetrag ist - aber der Trenner haengt an der Region
+  // und nicht daran, wofuer die Zahl steht. Die Mengenzeile hatte denselben Fehler,
+  // nur ungesehen: unter en-US wurde "1,000 g" zur Menge 1 (Faktor 1000), unter ar-EG
+  // oder fa kam eine Eingabe in oestlichen Ziffern gar nicht erst an, weil `\d` ASCII
+  // ist. Ein Guard, der eine bekannte Fundstelle ausnimmt, haelt genau sie offen.
   const einkauf = withoutComments(read('../public/pages/shopping.js'));
   assert.doesNotMatch(einkauf, /function (centsToInput|inputToCents)\b/,
     'shopping.js rechnet Preise wieder selbst um');
   assert.match(einkauf, /amountInputToCents\(priceRoh/,
     'der Preis muss durch amountInputToCents laufen');
+
+  // Und die Mengenangabe laeuft positiv durch dieselbe Umschrift. Das Verhalten
+  // dahinter (de "1.000 g", en-US "1,000 g", fa/ar-EG in oestlichen Ziffern) misst
+  // test-shopping-ux.js an der echten Funktion - hier steht nur die Sperre gegen
+  // den Rueckfall.
+  const menge = einkauf.match(/function parseShoppingQuantity[\s\S]*?\n\}/);
+  assert.ok(menge, 'parseShoppingQuantity nicht gefunden');
+  assert.match(menge[0], /toDecimalString\(/,
+    'die Mengenangabe muss durch dieselbe Umschrift laufen wie der Preis');
+
+  // Dasselbe fuer das Skalieren einer Zutatenmenge (pages/meals.js): es LIEST eine
+  // Zahl und SCHREIBT sie wieder, und beide Richtungen haengen an der Region. Die
+  // Ausgabe schaute sich den Trenner vorher aus der Eingabe ab (`useComma`) - eine
+  // aus Mealie gespiegelte "1.5" blieb damit auch in einer deutschen Oberflaeche
+  // eine "1.5". Verhalten in test-meals.js.
+  const rezept = withoutComments(read('../public/pages/meals.js'));
+  const skalieren = rezept.match(/function scaleQuantityText[\s\S]*?\n\}/);
+  assert.ok(skalieren, 'scaleQuantityText nicht gefunden');
+  assert.match(skalieren[0], /toDecimalString\(/,
+    'die gelesene Menge muss durch dieselbe Umschrift laufen');
+  assert.doesNotMatch(skalieren[0], /useComma/,
+    'der Trenner der Ausgabe darf nicht aus der Eingabe abgeschaut werden - getNumberFormat nutzen');
+  assert.match(rezept, /function formatScaledQuantity[\s\S]*?toStoredNumber\(/,
+    'die skalierte Menge muss ueber toStoredNumber geschrieben werden');
+
+  // toStoredNumber selbst: Trenner aus der Region, Ziffern in ASCII, ohne
+  // Gruppierung. Die drei haengen zusammen und stehen deshalb hier beieinander:
+  //  - `getNumberFormat` liefert den Trenner der Region (sonst zeigte eine
+  //    deutsche Oberflaeche "4.5");
+  //  - `numberingSystem: 'latn'` haelt die ZIFFERN in ASCII, weil dieser Text
+  //    gespeichert und von parseQuantity (server/services/shopping-import.js)
+  //    mit einer ASCII-Regex wieder gelesen wird - "۲۰۰۰ g" kaeme dort nicht an
+  //    und fiele aus der Summierung der Einkaufsliste. Es stellt Ziffern UND
+  //    Symbole gemeinsam um, und genau das ist hier richtig: fa/ar fuehren mit
+  //    `٫` einen Trenner, den parseQuantity ebenfalls nicht kennt. Die Grenze
+  //    der Zusicherung ist in test-money-utils.js gemessen;
+  //  - ohne `useGrouping: false` schriebe sie einen Wert, den toDecimalString
+  //    beim naechsten Skalieren abweist.
+  const gespeichert = clean.match(/export function toStoredNumber[\s\S]*?\n\}/);
+  assert.ok(gespeichert, 'toStoredNumber fehlt in utils/money.js');
+  assert.match(gespeichert[0], /getNumberFormat\(/, 'der Trenner muss aus der Region kommen');
+  assert.match(gespeichert[0], /numberingSystem:\s*'latn'/,
+    'die Ziffern muessen ASCII bleiben - der Server liest den Wert mit einer ASCII-Regex');
+  assert.match(gespeichert[0], /useGrouping:\s*false/, 'der gespeicherte Wert darf nicht gruppiert sein');
+
+  // Die Abschneide-Pruefung liegt geteilt in money.js und kennt die Trennzeichen
+  // der waehlbaren Regionen. Eine Zeichenklasse „alles ausser Leerraum und
+  // Ziffer" war zu breit und traf die Multiplikator-Schreibweise „2x500 g" mit.
+  const abbruch = clean.match(/export function breaksOffAtSeparator[\s\S]*?\n\}/);
+  assert.ok(abbruch, 'breaksOffAtSeparator fehlt in utils/money.js');
+  assert.doesNotMatch(abbruch[0], /\[\^\\s\\d\]/,
+    'die Trennzeichen duerfen nicht als „alles ausser Leerraum und Ziffer" geraten werden');
+  assert.match(clean, /function numberSeparators[\s\S]*?REGION_CODES/,
+    'die Trennzeichen muessen aus den waehlbaren Regionen abgeleitet werden');
+  // `\d` waere hier ASCII - genau die Falle, gegen die diese Datei angelegt ist.
+  assert.match(abbruch[0], /\\p\{Nd\}/u,
+    'die Ziffernpruefung muss Unicode-Ziffern kennen, nicht nur ASCII');
+  for (const [datei, quelle] of [['shopping.js', einkauf], ['meals.js', rezept]]) {
+    assert.match(quelle, /breaksOffAtSeparator\(/,
+      `pages/${datei} muss die geteilte Abschneide-Pruefung nutzen`);
+    assert.doesNotMatch(quelle, /\[\^\\s\\d\]\\d/,
+      `pages/${datei} hat wieder eine eigene, zu breite Trennerpruefung`);
+  }
+
+  // Und die Regel gilt fuer JEDE Seite, nicht fuer die drei, die bisher aufgefallen
+  // sind: weder `replace(',', '.')` noch `replace(/,/g, '.')`. Genau das Auslassen
+  // einer bekannten Fundstelle hat die Mengenzeile des Einkaufs offengehalten.
+  const seiten = readdirSync(new URL('../public/pages/', import.meta.url)).filter((f) => f.endsWith('.js'));
+  assert.ok(seiten.length > 10, `zu wenige Seiten gefunden (${seiten.length})`);
+  for (const datei of seiten) {
+    assert.doesNotMatch(
+      withoutComments(read(`../public/pages/${datei}`)),
+      /\.replace\(\s*(?:'[,.]'|"[,.]"|\/[,.]\/[a-z]*)\s*,\s*(?:'[,.]'|"[,.]")\s*\)/,
+      `pages/${datei} schreibt einen Trenner von Hand um - toDecimalString aus utils/money.js nutzen`,
+    );
+  }
 });
 
 test('ein Abo darf null kosten', () => {

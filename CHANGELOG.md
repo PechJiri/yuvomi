@@ -139,6 +139,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   items themselves. The list only reloaded its categories, leaving the affected entries under their
   old heading at the bottom of the list. It now reloads the items with them.
 
+- **Scaling a recipe now reads and writes ingredient quantities in the region that is actually
+  set.** Applying a recipe to a meal and changing the servings factor rescales every ingredient, and
+  that step parsed the number itself with the comma hard-wired as a decimal point. Under a region
+  that groups thousands with a comma, "1,000 g" was therefore scaled up from **1**, putting an
+  ingredient in the recipe a thousandfold too small with nothing to show for it. Under Persian or
+  Egyptian Arabic the number was not recognised at all, so that line stayed at its original amount
+  between correctly scaled siblings - the recipe was simply wrong.
+
+  The result was written the same way it was read: the separator was copied off the input, so a "1.5"
+  mirrored in from Mealie or Tandoor stayed "1.5" in a German kitchen. Both directions now follow the
+  set region - the reading side through the same transliteration as prices and shopping quantities,
+  the writing side through the same number format - so a scaled quantity comes back out in the
+  notation the household reads, and the app can read its own output again the next time. The digits
+  of a scaled amount stay ASCII on purpose: the text is saved into the ingredient row and read back
+  when the meal moves to the shopping list, and a quantity in native digits would not arrive there
+  and would drop out of the totals. The separator is presentation and follows the region wherever
+  the region uses one the server reads - a comma in German, French or Czech, a dot in US English or
+  Swiss German. Persian and Arabic use a third one, and there readability wins and the dot is
+  written.
+
+  A grouped quantity is refused rather than guessed, and refusing here means the line is left exactly
+  as it was: the quantity is the ingredient's own text, and the original is the only answer that
+  invents nothing. The same applies to a number that breaks off mid-separator - "1,5 kg" under a
+  region where the comma separates nothing would otherwise have been read as 1. Fractions ("1 1/2
+  cups"), plain amounts and free text like "a pinch" keep behaving as they did.
+
+- **A quantity like "1,000 g" on the shopping list is no longer read as 1 before it goes into the
+  pantry.** Taking a checked item over to the pantry pre-fills the quantity field from the free text
+  on the row, and that step parsed the number itself, with the comma hard-wired as a decimal point.
+  Under a region that groups thousands with a comma - en-US among them - "1,000 g" therefore arrived
+  as **1 g**, off by a factor of a thousand, and nothing said so. Under Persian or Egyptian Arabic
+  the number was not recognised at all: the field shows the region's own digits, and a quantity typed
+  in them fell back to "1 piece" no matter what it said.
+
+  The number now goes through the same transliteration as the price fields (#1003): the digits and
+  the decimal separator come from the region that is actually set, and a grouped number is refused
+  rather than guessed - "1,000 g" could mean one gram or a thousand, both readings are defensible,
+  and the wrong one is off by a factor of a thousand. Refused means the row falls back to "1 piece",
+  which says visibly that nothing was understood, in a dialog where the quantity sits in a field you
+  can correct before it is saved. The same applies to a number that breaks off mid-separator, which a
+  grouping check cannot catch: "٢٬٥٠" has only two digits after the separator, and under Persian the
+  ASCII comma separates nothing at all. Only the leading number decides: "6 x 1.000 ml" is six bottles
+  of a litre each, and the 1.000 further along - which is never read - does not make the line
+  unreadable. "1,5 kg", "250 g" and "6 x 1 l" keep reading exactly as they
+  did.
+
 - **Paying extra on a loan now shortens the remaining term, not only the balance** (#964). Since
   #954 the remaining principal follows the money you actually paid, but the remaining term beside it
   stayed plan-based and still said 100 installments after you had doubled a payment - the exact
