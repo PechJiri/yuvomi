@@ -8,7 +8,8 @@
 import { nextOccurrence, parseRRule, matchesRRuleByday } from './recurrence.js';
 import { visibilityWhere } from './visibility.js';
 import {
-  householdTimeZone, localToUTC, shiftDateKey, storedToInstantMs, todayKey, utcToWall,
+  hasExplicitZone, householdTimeZone, localToUTC, shiftDateKey, storedToInstantMs, todayKey,
+  utcToWall,
 } from '../utils/timezone.js';
 
 // Zugewiesene Personen eines Events als JSON-Array (Multi-Assignment).
@@ -189,7 +190,31 @@ export function expandRecurringEvents(events, from, to, exceptionsByEvent = null
             newEnd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
           } else {
             const endDate = new Date(new Date(newStart).getTime() + durationMs);
-            if (timeSuffix.includes('Z')) {
+            /* DAS ENDE MUSS DIE SPEICHERFORM DES STARTS TRAGEN, DEN ES BEGLEITET.
+             *
+             * Gefragt wird `newStart`, nicht `timeSuffix`: der Suffix beschreibt
+             * den Start des MASTERS, `newStart` ist der dieses Vorkommens - und
+             * die beiden haben nicht dieselbe Form. Bei bekannter TZID baut
+             * `instantFuer()` den Start ueber `localToUTC()`, also mit `Z`,
+             * waehrend der Master seinen urspruenglichen Offset traegt
+             * (`T15:25:00-04:00` aus Google). Die alte Frage traf auf beides
+             * nicht zu und schickte das Ende in den Wanduhr-Zweig darunter, der
+             * mit `getHours()` in der SERVERZONE formatiert.
+             *
+             * Ergebnis war eine Zeile mit ZWEI Speicherformen: der Start ein
+             * Instant, das Ende zonenlose Wanduhrzeit. Der Browser rechnet nur
+             * den Instant um (`hasExplicitZone`, siehe utils/timezone.js) und
+             * liess das Ende stehen, also standen dort zwei Uhren nebeneinander.
+             * Auf einem UTC-Server sah ein Nutzer in New York aus 15:25-15:30
+             * ein 15:25-19:30 (#1089) - der Fehler ist genau der Offset zwischen
+             * Server- und Anzeigezone und faellt deshalb nur auf, wo die beiden
+             * auseinandergehen.
+             *
+             * Der Wanduhr-Zweig bleibt fuer zonenlose Starts richtig: dort lesen
+             * `new Date()` und `getHours()` DIESELBE Serverzone, die Umrechnung
+             * hebt sich auf. Falsch wird es erst, wenn nur eine Seite eine Zone
+             * traegt. */
+            if (hasExplicitZone(newStart)) {
               newEnd = endDate.toISOString().replace('.000Z', 'Z');
             } else {
               const p = n => String(n).padStart(2, '0');

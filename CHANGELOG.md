@@ -134,6 +134,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A recurring event synced from Google no longer shows an end time hours after its start**
+  (#1089). Every occurrence of a series is generated from the master, and its end was derived by
+  adding the duration to the new start. Which format that end was written in depended on a test
+  that asked the wrong value: it looked for a `Z` in the master's start, while the occurrence's own
+  start may well carry a numeric offset (`15:25:00-04:00`, as Google sends it) or be rebuilt as UTC
+  from the series timezone. Neither matched, so the end went down the wall-clock branch and was
+  formatted with the SERVER's local getters. The row then held two storage formats at once: an
+  instant for the start, a zoneless wall-clock time for the end. The browser converts only the
+  first, so the two stood side by side on different clocks - off by exactly the offset between the
+  server and the viewer, which is why it stayed invisible wherever the two agree. Reported from a
+  UTC server viewed in New York: 3:25pm to 3:30pm was displayed as 3:25pm to 7:30pm. The end now
+  follows the storage format of the start it belongs to. Locally created series are unaffected:
+  there both sides read the same server zone and the conversion cancels out.
+
 - **A failing test in the three suites that start the server now turns the run red.** Those suites
   import `server/index.js` as a program rather than reading it as a file, which opens a real HTTP
   socket and starts the background schedulers. Their handles kept the process alive, so each suite
