@@ -1,6 +1,6 @@
 import { recipeProviders } from '/api.js';
 import { formatDate, formatTime, t } from '/i18n.js';
-import { closeModal, confirmModal, openModal } from '/components/modal.js';
+import { closeModal, confirmModal, openModal, refocusAfterRender } from '/components/modal.js';
 import {
   createInlineError,
   createRetryState,
@@ -379,6 +379,7 @@ function bindProviderAddButton(container) {
             closeModal({ force: true });
             showToast(t('settings.recipeProviderAccountAdded'), 'success');
             await loadProviderAccounts(container);
+            refocusAfterRender();
           } catch (err) {
             errorEl.textContent = err.message || t('common.errorGeneric');
             errorEl.hidden = false;

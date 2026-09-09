@@ -22,7 +22,7 @@ import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { AVATAR_COLORS } from '/utils/color.js';
 import { prefersInkText } from '/utils/contrast.js';
-import { openModal, closeModal, confirmOverModal, reportFieldError, btnError } from '/components/modal.js';
+import { openModal, closeModal, confirmOverModal, reportFieldError, btnError, refocusAfterRender } from '/components/modal.js';
 import { normalizeQuickLinkUrl, quickLinkHost } from '/utils/quick-link-url.js';
 import { iconElement } from '/utils/lucide-icons.js';
 import { makeSortable } from '/utils/sortable.js';
@@ -380,6 +380,7 @@ function openQuickLinkForm(link, onDone) {
           closeModal({ force: true });
           window.yuvomi?.showToast(isEdit ? t('quickLinks.saved') : t('quickLinks.added'), 'success');
           await onDone();
+          refocusAfterRender();
         } catch (err) {
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
           btnError(saveBtn);

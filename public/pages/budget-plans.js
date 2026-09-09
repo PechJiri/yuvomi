@@ -6,7 +6,7 @@
  */
 import { api } from '/api.js';
 import { t } from '/i18n.js';
-import { openModal, closeModal, reportFieldError } from '/components/modal.js';
+import { openModal, closeModal, reportFieldError, refocusAfterRender } from '/components/modal.js';
 import { vibrate } from '/utils/ux.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { emptyStateHTML, mountLoadError } from '/utils/empty-state.js';
@@ -309,6 +309,7 @@ async function savePlan(panel, category, original = null) {
     vibrate(10);
     closeModal({ force: true });
     await load();
+    refocusAfterRender();
     window.yuvomi?.showToast(t('budget.planSavedToast'), 'success');
   } catch (err) {
     console.error('[Budget] plan save error:', err);
@@ -330,11 +331,13 @@ async function deletePlan(category) {
     vibrate(10);
     closeModal({ force: true });
     await load();
+    refocusAfterRender();
     window.yuvomi?.showToast(t('budget.planRemovedToast'), 'default', 5000, async () => {
       if (previous == null) return;
       try {
         await api.put(`/budget/plans/${encodeURIComponent(category)}`, { amount: previous });
         await load();
+        refocusAfterRender();
       } catch (err) {
         console.error('[Budget] plan restore error:', err);
         window.yuvomi?.showToast(t('common.unknownError'), 'danger');

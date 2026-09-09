@@ -338,6 +338,232 @@ test('eine Zusammenfassung ohne SHA zaehlt ueber den Postbefehl des Laufs', () =
   assert.equal(urteil.grund, 'postbefehl');
 });
 
+/* Und dieselbe Vorfahrt gegen die ABBRUCHBEHAUPTUNG - der Fall aus #1082.
+ *
+ * Am 09.09. liefen an einem PR zwei Laeufe hintereinander:
+ *
+ *   Lauf 1  num_turns 21, Verweigerungen 8, Postbefehle 1 von 5 ohne Fehler
+ *   Rerun   num_turns 4,  Verweigerungen 0, Postbefehle 0 von 0
+ *
+ * Der Rerun ist der echte Abbruch und gehoert rot. Lauf 1 hatte geprueft und
+ * gepostet - der Kommentar steht bis heute am PR - und wurde trotzdem rot,
+ * weil sein result-Text nebenbei "already ... commented" sagte. Ein Abbruch im
+ * Tor hinterlaesst aber nichts; wer nachweislich gepostet hat, hat nicht im Tor
+ * abgebrochen.
+ */
+test('ein bewiesener Postbefehl schlaegt die Abbruchbehauptung (#1082)', () => {
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: ABBRUCH,                       // derselbe Text, der #1066 rot faerbt
+    aeusserungen: [],
+    gepostet: zaehleGepostet(fixture.strom.gepostet)
+  });
+  assert.equal(urteil.ausgang, 'geprueft',
+    'ein Lauf, der nachweislich gepostet hat, kann nicht im Tor abgebrochen sein');
+  assert.equal(urteil.grund, 'postbefehl');
+});
+
+/* Und ein Befehl, der zwar so AUSSIEHT, aber nichts angelegt hat (Review zu
+ * #1085). Die Erlaubnisliste im Workflow gibt `Bash(gh pr comment:*)` als
+ * Ganzes frei: `--help` endet mit 0 und postet nichts, `--delete-last --yes`
+ * endet mit 0 und loescht sogar einen. Beides zaehlte bis dahin als Beleg -
+ * und seit die Abbruchbehauptung davon geschlagen wird, waere das eine Tuer.
+ * Verlangt wird deshalb die Adresse des Angelegten im ERGEBNIS. */
+const stromMit = (befehl, inhalt) => [
+  { type: 'assistant', message: { content: [
+    { type: 'tool_use', id: 'toolu_probe', name: 'Bash', input: { command: befehl } }
+  ] } },
+  { type: 'user', message: { content: [
+    { type: 'tool_result', tool_use_id: 'toolu_probe', content: inhalt, is_error: false }
+  ] } }
+];
+
+test('ein Postbefehl OHNE Adresse im Ergebnis ist kein Beleg (#1085)', () => {
+  for (const [befehl, inhalt] of [
+    ['gh pr comment --help', 'Add a comment to a pull request\n\nUSAGE\n  gh pr comment ...'],
+    ['gh pr comment 1085 --repo ulsklyc/yuvomi --delete-last --yes', 'Deleted comment.']
+  ]) {
+    // Seit der zweiten Runde zaehlen sie nicht einmal mehr als VERSUCH: `--help`
+    // und `--delete-last` tragen kein `--body`, und die Form des Postbefehls ist
+    // eine Allowlist. Entscheidend bleibt `erfolge: 0`.
+    assert.deepEqual(zaehleGepostet(stromMit(befehl, inhalt)), { versuche: 0, erfolge: 0 },
+      `${befehl}: endet mit 0, legt aber nichts an`);
+
+    const urteil = beurteile({
+      seit: seit(ABBRUCH_LAUF),
+      kopf: kopf(ABBRUCH_LAUF),
+      ergebnis: ABBRUCH,
+      aeusserungen: [],
+      gepostet: zaehleGepostet(stromMit(befehl, inhalt))
+    });
+    assert.equal(urteil.ausgang, 'stumm', `${befehl} darf die Abbruchbehauptung nicht aushebeln`);
+    assert.equal(urteil.grund, 'schon-kommentiert');
+  }
+});
+
+/* Der Bypass aus der zweiten Runde zu #1085: der Befehl traegt den Namen, das
+ * ERGEBNIS traegt eine fremde Adresse - gepostet hat er nichts.
+ *
+ *   gh pr comment --help; gh pr view 1085 --json comments --jq '.comments[-1].url'
+ *
+ * endet mit 0 und druckt die Adresse eines laengst vorhandenen Kommentars.
+ * Beide Haelften sind von `Bash(gh pr comment:*)` gedeckt. Ein Postbefehl
+ * braucht keine Kette; wer eine baut, bekommt hier keinen Beleg. */
+test('eine Befehlskette ist kein Postbefehl (#1085, zweite Runde)', () => {
+  const ketten = [
+    // Der gemeldete Fall: die erste Haelfte traegt den Namen, die zweite die
+    // fremde Adresse. Faengt schon die Form ab - `--help` hat kein `--body`.
+    "gh pr comment --help; gh pr view 1085 --json comments --jq '.comments[-1].url'",
+    // Und der Fall, den NUR die Kettenpruefung faengt: `--body` ist da, `--help`
+    // bricht trotzdem vor dem Posten ab, und der zweite Befehl druckt die
+    // Adresse eines fremden Kommentars.
+    "gh pr comment 1085 --body x --help; gh pr view 1085 --json comments --jq '.comments[-1].url'",
+    // Dasselbe ueber && und ||.
+    "gh pr comment 1085 --body x --help && gh pr view 1085 --jq '.comments[-1].url'",
+    "gh pr comment 1085 --body x --help || gh pr view 1085 --jq '.comments[-1].url'"
+  ];
+  for (const befehl of ketten) {
+    const strom = stromMit(befehl, 'https://github.com/ulsklyc/yuvomi/pull/1085#issuecomment-5596556584');
+    assert.deepEqual(zaehleGepostet(strom), { versuche: 0, erfolge: 0 }, befehl);
+
+    const urteil = beurteile({
+      seit: seit(ABBRUCH_LAUF), kopf: kopf(ABBRUCH_LAUF),
+      ergebnis: ABBRUCH, aeusserungen: [], gepostet: zaehleGepostet(strom)
+    });
+    assert.equal(urteil.ausgang, 'stumm', befehl);
+    assert.equal(urteil.grund, 'schon-kommentiert', befehl);
+  }
+});
+
+test('der echte Postbefehl mit Heredoc bleibt ein Beleg', () => {
+  // Die Gegenrichtung: die Fassung aus #1066 traegt Zeilenumbrueche im Body und
+  // darf nicht als Kette gelten.
+  assert.deepEqual(zaehleGepostet(fixture.strom.gepostet), { versuche: 1, erfolge: 1 });
+});
+
+/* Nur der eigene Strom traegt die Aussage "DIESER Lauf hat gepostet" (#1085,
+ * zweite Runde). Eine Aeusserung mit der SHA dieses Stands sagt nicht, WER sie
+ * geschrieben hat - der Mention-Pfad antwortet als derselbe Bot, und ein
+ * abgebrochener Vorgaenger kann noch posten. Bei einem gescheiterten Lauf wies
+ * die Meldung sie sonst diesem Lauf zu. */
+test('eine SHA-gebundene Aeusserung wird einem gescheiterten Lauf nicht zugeschrieben', () => {
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: { num_turns: 3, subtype: 'error_during_execution', is_error: true, permission_denials: [] },
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: kopf(ABBRUCH_LAUF) }],
+    gepostet: zaehleGepostet(fixture.strom.nichts_gepostet)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'lauf-fehler');
+  assert.ok(!/zwar gepostet/.test(urteil.meldung),
+    'ohne eigenen Beleg darf die Meldung diesem Lauf keinen Post zuschreiben');
+  assert.match(urteil.meldung, /wer sie geschrieben hat, sagt der Strom DIESES Laufs aber nicht/);
+});
+
+test('die Adresse zaehlt auch aus einer JSON-Antwort', () => {
+  // `gh api .../comments` gibt ein Objekt zurueck, keine nackte Adresse.
+  const strom = stromMit(
+    'gh api repos/ulsklyc/yuvomi/pulls/1066/comments -f body=x',
+    { html_url: 'https://github.com/ulsklyc/yuvomi/pull/1066#discussion_r3968998598' }
+  );
+  assert.deepEqual(zaehleGepostet(strom), { versuche: 1, erfolge: 1 });
+});
+
+/* Die Meldung darf nur behaupten, was der Aufrufer ihr mitgegeben hat (Review
+ * zu #1085). Fuenf Rueckgaben in `beurteile` fallen, BEVOR `zahl.gebunden`
+ * geprueft wird - "keine davon belegt DIESEN Lauf" waere dort ins Blaue
+ * gesprochen. Bei einem Lauf, der gepostet hat und danach auf seine Agenten
+ * wartet, ist es sogar falsch: der bleibt rot, aber weil er UNFERTIG ist, nicht
+ * weil nichts zuzuordnen waere. */
+test('ein Lauf, der gepostet hat und dann wartet, wird richtig benannt', () => {
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 9, subtype: 'success', is_error: false, permission_denials: [],
+      result: "I'll wait for both background agents to complete before continuing."
+    },
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: kopf(ABBRUCH_LAUF) }],
+    gepostet: zaehleGepostet(fixture.strom.gepostet)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'agenten', 'der Grund bleibt die Unvollstaendigkeit');
+  assert.match(urteil.meldung, /zwar gepostet/);
+  assert.match(urteil.meldung, /ABGESCHLOSSENE Pruefung/);
+  assert.ok(!/keine davon belegt DIESEN Lauf/.test(urteil.meldung),
+    'das waere falsch: die Aeusserung traegt die SHA dieses Laufs');
+});
+
+/* Und der Fallback muss bei einer Abbruchbehauptung ueberhaupt erreichbar sein
+ * (Review zu #1085, dritte Runde). Ohne `zahl.gebunden === 0` in der Bedingung
+ * kehrt der Abbruchzweig vorher zurueck - und der Kommentar bei POSTADRESSE
+ * widerspraeche seinem eigenen Code, denn der begruendet die verschaerfte
+ * Adresspruefung genau damit, dass `zahl.gebunden` Reviews und
+ * Inline-Anmerkungen "ohnehin" auffaengt.
+ *
+ * Der Fall: eine Inline-Anmerkung, deren tool_result keine Adresse traegt (oder
+ * ein Lauf ohne `show_full_output: true`), plus Prosa, die nebenbei "already
+ * commented" sagt. Die Frage dieses Moduls ist "wurde DIESER STAND geprueft" -
+ * eine Aeusserung mit der SHA des Kopfes beantwortet sie mit ja. */
+test('eine SHA-gebundene Aeusserung macht den Fallback auch bei Abbruchprosa erreichbar', () => {
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: ABBRUCH,
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: kopf(ABBRUCH_LAUF) }],
+    gepostet: zaehleGepostet(fixture.strom.nichts_gepostet)
+  });
+  assert.equal(urteil.ausgang, 'geprueft');
+  assert.equal(urteil.grund, 'gebunden');
+});
+
+test('OHNE gebundene Aeusserung bleibt die Abbruchbehauptung rot', () => {
+  // Die Gegenrichtung, damit die zweite Haelfte der Bedingung nicht zur Tuer
+  // wird: der Fall aus #1066 hat keine Aeusserung mit der SHA dieses Kopfes.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: ABBRUCH,
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z', commit: 'ein-anderer-stand' }],
+    gepostet: zaehleGepostet(fixture.strom.nichts_gepostet)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'schon-kommentiert');
+});
+
+test('ein GESCHEITERTER Postbefehl rettet die Abbruchbehauptung nicht', () => {
+  // Die Gegenrichtung, damit die Ausnahme oben nicht zur Tuer wird: `erfolge`
+  // zaehlt nur `tool_result` ohne `is_error`. Ein Versuch allein genuegt nicht.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: ABBRUCH,
+    aeusserungen: [],
+    gepostet: zaehleGepostet(fixture.strom.post_gescheitert)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'schon-kommentiert');
+});
+
+test('die Meldung nennt die Zahl, die der Schritt darueber ausgegeben hat', () => {
+  // Hier stand pauschal "nichts hinterlassen", waehrend der Job-Log zwei Zeilen
+  // hoeher "Aeusserungen von claude seit dem Laufbeginn: 1" ausgab. Zwei Zeilen
+  // desselben Logs widersprachen sich, und der Leser sucht dann falsch.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    ergebnis: fixture.ergebnisse['stumm-unbekannt'],
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T06:41:00Z' }],
+    gepostet: zaehleGepostet(fixture.strom.nichts_gepostet)
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.neu, 1);
+  assert.match(urteil.meldung, /1 Aeusserung\(en\) nach dem Laufbeginn/);
+  assert.ok(!/in diesem Lauf nichts hinterlassen/.test(urteil.meldung),
+    'die Meldung darf nicht behaupten, es sei gar nichts gesagt worden');
+});
+
 test('ZUORDNUNG AUS ABWESENHEIT TRAEGT NICHT: "Done." bleibt rot', () => {
   // Der Befund aus der zweiten Codex-Runde. Ein Lauf, der still mit "Done."
   // endet, hat nichts gepostet - eine fremde Zusammenfassung (Mention-Pfad oder

@@ -14,6 +14,14 @@
 
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 process.env.DB_PATH = ':memory:';
+// Die Zone gehoert festgenagelt wie DB_PATH darueber. Ohne Vorgabe faellt
+// `serverTimeZone()` auf die Zone des Rechners zurueck, und dann prueft jede
+// Maschine etwas anderes: die Probe zu `timezone_effective` weiter unten stand
+// fest auf 'Pacific/Auckland' und war auf einer Maschine in Auckland
+// unerfuellbar ("Expected actual to be strictly unequal to: 'Pacific/Auckland'").
+// Genauso halten es test-household-timezone.js, test-display-timezone.js,
+// test-countdown.js und test-tasks-recurrence.js.
+process.env.TZ = 'UTC';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -189,18 +197,43 @@ test('PUT timezone: Mitglied -> 403, ungültig -> 400, gültig -> persist, null 
   assert.equal(cleared.timezone, null);
   assert.ok(cleared.timezone_effective, 'timezone_effective ist nie leer');
 });
+
+/* Der geltende Wert wird POSITIV geprueft, nicht per Verneinung.
+ *
+ * Hier stand `assert.notEqual(fallback.timezone_effective, 'Pacific/Auckland')`
+ * - dieselbe Zone, die zwei Zeilen darueber gesetzt wurde. Zwei Schwaechen in
+ * einer Zeile: auf einer Maschine in Auckland ist der Rueckfall genau dieser
+ * Wert, die Behauptung dort also unerfuellbar (das `process.env.TZ` am
+ * Dateikopf raeumt das aus); und eine Verneinung liesse eine beliebige DRITTE
+ * Zone durch.
+ *
+ * Was `timezone_effective` ohne Einstellung sein soll, steht in
+ * `householdTimeZone()`: der Rueckfall auf `serverTimeZone()`, und der ist hier
+ * auf 'UTC' genagelt.
+ *
+ * DER SOLLWERT IST DESHALB EIN LITERAL UND NICHT `serverTimeZone()`. Stuende
+ * dort der Aufruf, bildete dieselbe Funktion beide Seiten der Zusicherung, und
+ * ein falscher Rueckfallwert verschoebe beide gleichzeitig. Nachgemessen mit
+ * `serverTimeZone()` auf einen festen Fremdwert sabotiert:
+ *
+ *   Sollwert = serverTimeZone()  -> gruen unter UTC, Europe/Berlin, Auckland
+ *   Sollwert = 'UTC' (so wie es jetzt dasteht) -> rot unter allen dreien
+ *
+ * (Eine Sabotage, die nur das Lesen von `TZ` ausbaut, taugt hier NICHT als
+ * Gegenprobe: mit gepinntem `TZ` liefern beide Zweige von `serverTimeZone()`
+ * denselben Wert, sie ist also wirkungslos. Auch gemessen.)
+ */
 test('GET timezone: gewählter Wert und geltender Wert sind zwei Felder', async () => {
   await put({ timezone: 'Pacific/Auckland' });
   const body = (await get()).body.data;
   assert.equal(body.timezone, 'Pacific/Auckland');
   assert.equal(body.timezone_effective, 'Pacific/Auckland');
+
   await put({ timezone: null });
   const fallback = (await get()).body.data;
   assert.equal(fallback.timezone, null);
-  // Ohne Einstellung nennt `timezone_effective` den Rueckfall - nicht null, und
-  // nicht die zuletzt gewaehlte Zone.
-  assert.notEqual(fallback.timezone_effective, 'Pacific/Auckland');
-  assert.ok(fallback.timezone_effective);
+  assert.equal(fallback.timezone_effective, 'UTC',
+    'ohne Einstellung nennt timezone_effective den Serverrueckfall (process.env.TZ am Dateikopf)');
 });
 
 // --------------------------------------------------------

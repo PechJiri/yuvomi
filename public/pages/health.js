@@ -20,7 +20,7 @@ import { toLocalDateKey, parseLocalDateKey, addLocalDays, todayKey} from '/utils
 import { zonedDateKey } from '/utils/timezone.js';
 import { nowFields } from '/utils/timezone.js';
 import { trendMarkup } from '/utils/metric-card.js';
-import { openModal, closeModal, confirmModal, confirmOverModal, reportFieldError, advancedSection } from '/components/modal.js';
+import { openModal, closeModal, confirmModal, confirmOverModal, reportFieldError, advancedSection, refocusAfterRender } from '/components/modal.js';
 import { createPageFab, setPageFabAction } from '/utils/fab.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
 import {
@@ -1171,6 +1171,7 @@ function openVitalModal(opts = {}) {
           window.yuvomi?.showToast(t('health.vitals.saved'), 'success');
           await reloadAfterSave(body.type);
           await opts.onSaved?.();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] vitals save error:', err);
           submitBtn.disabled = false;
@@ -2012,6 +2013,7 @@ function openMedLogModal(logId) {
           closeModal({ force: true });
           window.yuvomi?.showToast(t('health.meds.log.saved'), 'success');
           await reloadMedViews();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] med log save error:', err);
           submitBtn.disabled = false;
@@ -2030,6 +2032,7 @@ async function deleteMedLog(entry) {
     closeModal({ force: true });
     window.yuvomi?.showToast(t('health.meds.log.deleted'), 'success');
     await reloadMedViews();
+    refocusAfterRender();
   } catch (err) {
     console.error('[Health] med log delete error:', err);
     window.yuvomi?.showToast(err?.data?.error || t('health.meds.log.saveError'), 'danger');
@@ -2302,6 +2305,7 @@ function openMedModal(med) {
           closeModal({ force: true });
           window.yuvomi?.showToast(t('health.meds.saved'), 'success');
           await reloadMedViews();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] med save error:', err);
           submitBtn.disabled = false;
@@ -2947,6 +2951,7 @@ function openLabModal(report) {
           closeModal({ force: true });
           window.yuvomi?.showToast(t('health.labs.saved'), 'success');
           await reloadLabs();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] lab save error:', err);
           submitBtn.disabled = false;
@@ -3519,6 +3524,7 @@ function openActivityModal(row, opts = {}) {
           window.yuvomi?.showToast(t('health.activity.saved'), 'success');
           await reloadActivity();
           await opts.onSaved?.();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] activity save error:', err);
           submitBtn.disabled = false;
@@ -5192,6 +5198,7 @@ function openPeriodModal(period) {
           closeModal({ force: true });
           window.yuvomi?.showToast(t('health.cycle.saved'), 'success');
           await reloadCycle();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] cycle period save error:', err);
           submitBtn.disabled = false;
@@ -5344,6 +5351,7 @@ function openDayLogModal(dateKey) {
           closeModal({ force: true });
           window.yuvomi?.showToast(t('health.cycle.saved'), 'success');
           await reloadCycle();
+          refocusAfterRender();
         } catch (err) {
           console.error('[Health] cycle log save error:', err);
           submitBtn.disabled = false;

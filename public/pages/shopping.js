@@ -9,7 +9,7 @@ import { stagger, vibrate, scheduleUndoableDelete } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
-import { promptModal, openModal, closeModal, confirmModal, reportFieldError } from '/components/modal.js';
+import { promptModal, openModal, closeModal, confirmModal, reportFieldError, refocusAfterRender } from '/components/modal.js';
 import { DEFAULT_CATEGORY_NAME, categoryLabel } from '/utils/shopping-categories.js';
 import { addLocalDays, todayKey } from '/utils/date.js';
 import { renderKitchenTabsBar, refreshKitchenBadges } from '/utils/kitchen-tabs.js';
@@ -2673,6 +2673,7 @@ async function openCategoryManager(container, { fromDeepLink = false } = {}) {
       renderListContent(container);
       wireListContentEvents(container);
     }
+    refocusAfterRender();
   };
 
   openModal({
