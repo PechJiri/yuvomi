@@ -212,6 +212,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still matches it returns none and falls back to the page root, because a wrong focus target puts
   the reader somewhere they did not choose.
 
+  The scanners look through wrappers as well: a handler that awaits `reload()` rebuilds the page just
+  as much as one that calls `renderContent()` directly, and the name says nothing about it. Counting
+  only names beginning with `render` left 25 places uncovered across six more modules.
+
   Measured across the seven callers of the category manager, exactly one - the budget page - puts
   its button inside the very section it re-renders while the dialog is open. The others keep theirs
   in a toolbar their handler does not touch, and the shopping menu turned out to be a non-case: the

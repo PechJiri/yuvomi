@@ -15728,6 +15728,43 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
 });
 
 /**
+ * Die modul-lokalen Funktionen, die die Seite neu aufbauen.
+ *
+ * Ein Guard, der nur `render…()` und `update…List()` als Neuaufbau zaehlt,
+ * uebersieht den WRAPPER: `saveSubscription()` schliesst den Dialog und
+ * `await reload()`, und `reload()` laedt und ruft dann `renderFilters()` und
+ * `renderContent()`. Der Name verraet nichts davon (Review zu #1070).
+ *
+ * Gesammelt wird eine Ebene tief: Funktionen, die selbst eine render-Funktion
+ * aufrufen. Ein reiner HTML-Baustein faellt heraus - er gibt ein Template
+ * zurueck (`return \``) und schreibt nirgends ins Dokument. Kein transitiver
+ * Abschluss: der zog im Versuch 539 Namen ein, darunter jeden String-Bauer,
+ * und ein Guard, der alles fuer einen Renderer haelt, sagt nichts mehr aus.
+ */
+function rendererIn(lines) {
+  const defs = [];
+  lines.forEach((l, i) => {
+    const m = l.match(/^(?:async )?function ([A-Za-z_]\w*)/);
+    if (m) defs.push({ i, name: m[1] });
+  });
+  const namen = new Set();
+  defs.forEach((d, k) => {
+    const text = lines.slice(d.i, k + 1 < defs.length ? defs[k + 1].i : lines.length).join('\n');
+    if (RENDER_DIREKT.test(text) && !/\breturn\s+`/.test(text)) namen.add(d.name);
+  });
+  return namen;
+}
+
+/** Rendert diese Zeile - direkt oder ueber einen modul-lokalen Wrapper? */
+function istNeuaufbau(zeile, wrapper) {
+  if (RENDER_DIREKT.test(zeile)) return true;
+  for (const w of wrapper) if (new RegExp(`\\b${w}\\s*\\(`).test(zeile)) return true;
+  return false;
+}
+
+const RENDER_DIREKT = /\b(render[A-Z]\w*|update[A-Z]\w*List)\s*\(/;
+
+/**
  * Die Zeilen vom Anker bis zum Ende seines Blocks.
  *
  * Ein festes Fenster von n Zeilen reicht nicht: der Gast-Anlegen-Pfad in
@@ -15784,13 +15821,12 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
     for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
       // Neutralisieren, sonst zaehlt ein auskommentierter Aufruf als vorhanden.
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const wrapper = rendererIn(lines);
       lines.forEach((zeile, i) => {
         if (!/closeModal\s*\(/.test(zeile)) return;
         const fenster = blockAb(lines, i);
         let letzte = -1;
-        fenster.forEach((x, k) => {
-          if (/\b(render[A-Z]\w*|load[A-Z]\w*|update[A-Z]\w*List)\s*\(/.test(x)) letzte = k;
-        });
+        fenster.forEach((x, k) => { if (istNeuaufbau(x, wrapper)) letzte = k; });
         if (letzte === -1) return;
         // Ohne `await` davor rendert die Seite synchron - das deckt der Frame ab.
         if (!fenster.slice(0, letzte + 1).some((x) => /\bawait\b/.test(x))) return;
@@ -15835,6 +15871,7 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
     const basis = new URL(`${dir}/`, import.meta.url);
     for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
+      const wrapper = rendererIn(lines);
       const starts = [];
       lines.forEach((l, i) => { if (/^(async )?function [A-Za-z_]/.test(l)) starts.push(i); });
       starts.forEach((s, k) => {
@@ -15844,7 +15881,7 @@ test('ein Handler, der bei offenem Dialog asynchron rendert, zieht den Fokus nac
         for (let j = s; j < e; j++) {
           if (!/\bawait\s+(load|refresh)[A-Z]\w*\s*\(/.test(lines[j])) continue;
           const fenster = blockAb(lines, j);
-          if (!fenster.some((x) => /\b(render[A-Z]\w*|update[A-Z]\w*List)\s*\(/.test(x))) continue;
+          if (!fenster.some((x) => istNeuaufbau(x, wrapper))) continue;
           // closeModal dazwischen: der synchrone Fall, den der Frame abdeckt.
           if (fenster.some((x) => /closeModal\s*\(/.test(x))) continue;
           if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) continue;

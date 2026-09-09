@@ -2472,6 +2472,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
       panel.querySelector('#bm-delete')?.addEventListener('click', async () => {
         closeModal({ force: true });
         await deleteEntry(entry.id);
+        refocusAfterRender();
       });
 
       panel.querySelector('#bm-save').addEventListener('click', async () => {
