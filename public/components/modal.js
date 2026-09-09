@@ -641,7 +641,14 @@ function _findAgain(memo) {
   // Die Reihenfolge ist wichtig: wo alle Felder passen, ist es sicher dasselbe
   // Element; die zweite Runde ist der Rueckfall, nicht die Regel. Und weil
   // beide Runden auf Eindeutigkeit bestehen, wird dabei nichts geraten.
-  const identitaet = alle.filter((k) => k === 'id' || k === 'action');
+  // IDENTITAET HEISST NICHT IMMER `id`. Das Repo fuehrt ein Dutzend eigener
+  // Schluesselfelder - `data-meal-id`, `data-entry-id`, `data-expense-id` und
+  // weitere -, die als `dataset.mealId` ankommen. Ein Filter, der nur `id`
+  // kennt, haelt eine Mahlzeitenkarte fuer identitaetslos und laesst den
+  // Rueckfall auf die Wurzel laufen, obwohl der Knopf eindeutig bestimmt waere
+  // (Review zu #1070).
+  const istIdentitaet = (k) => k === 'action' || k === 'id' || /Id$/.test(k);
+  const identitaet = alle.filter(istIdentitaet);
   const engerAlsAlle = identitaet.length && identitaet.length < alle.length;
   // DIE KLASSE IST DARSTELLUNG, KEINE IDENTITAET - im dritten Anlauf faellt sie
   // weg. Eine Mahlzeitenkarte traegt `meal-card__open--with-thumb`, sobald das
@@ -652,11 +659,13 @@ function _findAgain(memo) {
   const runden = [
     { keys: alle, mitKlasse: true },
     ...(engerAlsAlle ? [{ keys: identitaet, mitKlasse: true }] : []),
-    // Der klassenlose Anlauf nur bei STARKER Identitaet - `action` UND `id`.
-    // Eine `data-id` allein reicht nicht: dieselbe Nummer steht in einer
-    // anderen Liste fuer etwas anderes, und ohne die Klasse waeren die beiden
-    // nicht mehr zu unterscheiden.
-    ...(identitaet.length === 2 ? [{ keys: identitaet, mitKlasse: false }] : []),
+    // Der klassenlose Anlauf nur bei STARKER Identitaet: eine Aktion UND ein
+    // Schluesselfeld. Ein Schluessel allein reicht nicht - dieselbe Nummer steht
+    // in einer anderen Liste fuer etwas anderes, und ohne die Klasse waeren die
+    // beiden nicht mehr zu unterscheiden.
+    ...(identitaet.includes('action') && identitaet.some((k) => k !== 'action')
+      ? [{ keys: identitaet, mitKlasse: false }]
+      : []),
   ];
   for (const { keys, mitKlasse } of runden) {
     const treffer = _kandidaten(memo, keys, mitKlasse);

@@ -785,8 +785,12 @@ test('closeDetailView verwirft den Merker, wenn es am Modal vorbei schliesst', (
  * data-Feld, nur eine Ebene weiter.
  */
 test('eine geaenderte Modifier-Klasse verhindert das Wiederfinden nicht', () => {
-  const alt = makeNode('button', { cls: 'meal-card__open', data: { action: 'edit-meal', id: '9' }, connected: false });
-  const neu = makeNode('button', { cls: 'meal-card__open meal-card__open--with-thumb', data: { action: 'edit-meal', id: '9' } });
+  // `data-meal-id`, wie das echte Markup es schreibt - NICHT `data-id`. Die
+  // erste Fassung dieser Sonde erfand `{ action, id }` und prueste damit einen
+  // Fall, den es nicht gibt; der Produktivknopf waere durchgefallen (Review zu
+  // #1070). Das Repo fuehrt 24 solcher Schluesselfelder.
+  const alt = makeNode('button', { cls: 'meal-card__open', data: { action: 'edit-meal', mealId: '9' }, connected: false });
+  const neu = makeNode('button', { cls: 'meal-card__open meal-card__open--with-thumb', data: { action: 'edit-meal', mealId: '9' } });
   const wurzel = makeNode('main', { id: 'main-content' });
   withDom({ byTag: { BUTTON: [neu] }, byId: { 'main-content': wurzel } }, () => {
     assert.equal(focusRestoreTarget(rememberFocus(alt)), neu,
@@ -800,9 +804,9 @@ test('eine geaenderte Modifier-Klasse verhindert das Wiederfinden nicht', () => 
 test('der Anlauf ohne Klasse besteht weiter auf Eindeutigkeit', () => {
   // Keiner der beiden traegt die Klasse des Ausloesers - erst der dritte Anlauf
   // sieht sie, und dort sind sie nicht zu unterscheiden.
-  const alt = makeNode('button', { cls: 'meal-card__open', data: { action: 'edit-meal', id: '9' }, connected: false });
-  const a = makeNode('button', { cls: 'meal-card__open--with-thumb', data: { action: 'edit-meal', id: '9' } });
-  const b = makeNode('button', { cls: 'meal-card__open--compact', data: { action: 'edit-meal', id: '9' } });
+  const alt = makeNode('button', { cls: 'meal-card__open', data: { action: 'edit-meal', mealId: '9' }, connected: false });
+  const a = makeNode('button', { cls: 'meal-card__open--with-thumb', data: { action: 'edit-meal', mealId: '9' } });
+  const b = makeNode('button', { cls: 'meal-card__open--compact', data: { action: 'edit-meal', mealId: '9' } });
   const wurzel = makeNode('main', { id: 'main-content' });
   withDom({ byTag: { BUTTON: [a, b] }, byId: { 'main-content': wurzel } }, () => {
     assert.equal(focusRestoreTarget(rememberFocus(alt)), wurzel,
