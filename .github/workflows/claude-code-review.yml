@@ -364,14 +364,20 @@ jobs:
           # tragen ihn, eine Zusammenfassung nicht - die bekommt `null`, und das
           # Urteil weiss dann, dass sie nur zaehlt, wenn das result-Objekt des
           # Laufs keinen Abbruch zeigt.
+          # `anker` ist die Adresse, unter der eine Aeusserung selbst steht: das
+          # Fragment ihrer `html_url` (issuecomment-..., pullrequestreview-...,
+          # discussion_r...). Das Urteil haelt sie gegen die Adressen im Strom
+          # des Laufs - ein Beleg ist eine Adresse, die dieser Lauf zurueckbekam
+          # UND die hier als claude-Aeusserung nach dem Laufbeginn steht. Wie der
+          # Befehl dazu geschrieben war, zaehlt dann nicht mehr (#1096).
           gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq '.[] | {login: .user.login, zeit: .created_at, commit: null}' \
+            --jq '.[] | {login: .user.login, zeit: .created_at, commit: null, anker: (.html_url // "" | split("#") | .[1] // null)}' \
             > "$RUNNER_TEMP/zusammenfassungen.jsonl"
           gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
-            --jq '.[] | {login: .user.login, zeit: (.submitted_at // ""), commit: .commit_id}' \
+            --jq '.[] | {login: .user.login, zeit: (.submitted_at // ""), commit: .commit_id, anker: (.html_url // "" | split("#") | .[1] // null)}' \
             > "$RUNNER_TEMP/reviews.jsonl"
           gh api "repos/$REPO/pulls/$PR/comments" --paginate \
-            --jq '.[] | {login: .user.login, zeit: .created_at, commit: (.original_commit_id // .commit_id)}' \
+            --jq '.[] | {login: .user.login, zeit: .created_at, commit: (.original_commit_id // .commit_id), anker: (.html_url // "" | split("#") | .[1] // null)}' \
             > "$RUNNER_TEMP/inline.jsonl"
           # DAS URTEIL KOMMT VOM DEFAULT-BRANCH, NICHT AUS DEM PR. Hier stand
           # `node .github/scripts/review-verdict.mjs` aus dem Checkout - also

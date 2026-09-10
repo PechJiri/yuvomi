@@ -101,206 +101,107 @@ export function bejaht(text, muster) {
 }
 
 /**
- * Werkzeugaufrufe, mit denen dieser Lauf etwas an den PR geschrieben hat.
+ * DER BELEG IST EINE ADRESSE, DIE ES WIRKLICH GIBT - NICHT DIE FORM DES BEFEHLS.
  *
- * DAS IST DIE EINZIGE ZUORDNUNG, DIE NICHT AUF PROSA BERUHT. Der Strom in
- * `execution_file` gehoert diesem Lauf allein - kein Mention-Pfad und kein
- * abgebrochener Vorgaenger schreibt hinein. Ein `tool_use` mit dem Postbefehl
- * und ein `tool_result` ohne Fehler dazu sind ein Beleg, den der Text daneben
- * weder herbeireden noch wegreden kann. An #1066 gemessen:
+ * Bis zur dritten Review-Runde zu #1096 las dieses Modul die Befehlszeile: ist
+ * das ein Postbefehl, ist er gekettet, schreibt `gh api` oder liest es, steht ein
+ * Schalter im Quote oder im Befehl? Jede Runde fand darin neue Luecken, und jede
+ * hatte die vorige Reparatur eingebaut. Der mehrzeilige `--body` galt als Kette,
+ * ein lesender GET als Post, `-XGET` ohne Leerzeichen als Schreibbefehl, ein
+ * unquotiertes `<<EOF` als sicheres Heredoc, ein Backtick in einfachen Quotes als
+ * Substitution, ein quotierter Endpunkt als unsichtbar. Das ist dieselbe Leiter
+ * wie bei der Prosa-Heuristik auf result-Texten (#1073): wer Shell-Text mit
+ * Mustern klassifiziert, baut einen Shell-Parser in Raten.
  *
- *   tool_use    { name: "Bash", input.command: "gh pr comment 1066 --repo ..." }
- *   tool_result { tool_use_id: ..., is_error: false,
- *                 content: ".../pull/1066#issuecomment-5596556584" }
+ * Gefragt wird deshalb nach einer TATSACHE statt nach einer Schreibweise. Wer
+ * etwas angelegt hat, bekommt dessen Adresse zurueck - an #1066 gemessen gibt
+ * `gh pr comment` `.../pull/1066#issuecomment-5596556584` aus. Und die GitHub-API
+ * sagt unabhaengig davon, welche Aeusserung unter welcher Adresse steht, von wem
+ * und seit wann. Ein Beleg ist eine Adresse, die BEIDES erfuellt:
  *
- * Das setzt voraus, dass `show_full_output: true` im Workflow steht - sonst
- * enthaelt der Strom diese Bloecke nicht. Der Schalter ist damit tragend, und
- * eine Probe in test-claude-review-workflow.js haelt ihn fest.
+ *   1. sie steht in einem `tool_result` DIESES Laufs, das nicht als Fehler
+ *      zurueckkam. Der Strom gehoert diesem Lauf allein; kein Mention-Pfad und
+ *      kein abgebrochener Vorgaenger schreibt hinein.
+ *   2. die API kennt unter genau dieser Adresse eine Aeusserung von claude, die
+ *      NACH dem Laufbeginn angelegt wurde.
+ *
+ * Wie der Befehl geschrieben war, spielt dann keine Rolle mehr. Ein Lesebefehl
+ * druckt Adressen, die es vor dem Lauf schon gab. `gh pr comment --help; gh pr
+ * view --jq '.comments[-1].url'` (#1085) druckt eine fremde, alte, eine
+ * Substitution, die eine Adresse ausgibt, ebenso - keine davon hat claude nach
+ * dem Laufbeginn angelegt. Ein echter Post zaehlt dagegen, ob sein Body
+ * mehrzeilig, einfach quotiert oder per `gh api -f` geschickt ist.
+ *
+ * Der Preis steht im Workflow: die drei Kommentarlisten tragen `anker`, das
+ * Fragment der `html_url`. Fehlt es, etwa bei einem Workflow, der aelter ist als
+ * dieses Modul, gibt es aus dem Strom keinen Beleg - rot oder der Fallback ueber
+ * die Commit-Bindung, nie ein Gruen aus dem Nichts.
+ *
+ * RESTRISIKO, BEWUSST STEHEN GELASSEN: liest ein Lauf, der selbst nichts liefert,
+ * eine NEUE claude-Aeusserung zurueck, die ein anderer Pfad waehrend des Laufs
+ * angelegt hat (ein Nachzuegler des per cancel-in-progress abgebrochenen
+ * Vorgaengers, ein Mention-Lauf), zaehlt ihre Adresse. Das braucht zwei Dinge
+ * zugleich - die fremde Aeusserung nach dem Laufbeginn und einen Befehl, der
+ * genau sie mit Adresse ausgibt - und ist damit enger als jede Luecke der
+ * Befehlstext-Pruefung. Den Mention-Pfad hat in den letzten 100 Laeufen keiner
+ * genommen.
+ *
+ * Das setzt `show_full_output: true` im Workflow voraus - sonst enthaelt der
+ * Strom die Werkzeugbloecke nicht. Eine Probe in test-claude-review-workflow.js
+ * haelt den Schalter fest.
  */
-/**
- * Ein Befehl, der NUR posten kann - keine Kette, kein Nebenbei.
- *
- * Der Befehl muss am Anfang stehen (`^`), damit `irgendwas; gh pr comment ...`
- * nicht durchrutscht, und er muss die Form eines echten Postbefehls haben statt
- * nur dessen Namen zu tragen. Bei `gh pr comment` heisst das `--body` oder
- * `--body-file`: das ist eine ALLOWLIST der liefernden Form, keine Denylist von
- * `--help` und `--delete-last` - eine Denylist sagt zu jedem unbekannten
- * Schalter ja.
- */
-const POSTBEFEHL =
-  /^\s*gh\s+pr\s+comment\b(?=[\s\S]*--body(?:-file)?[\s=])|^\s*gh\s+pr\s+review\b(?=[\s\S]*--(?:body|body-file|comment|approve|request-changes)\b)/i;
-const POSTWERKZEUG = /inline_comment|create_.*comment/i;
-
-/**
- * `gh api` AUF EINEM KOMMENTARPFAD IST PER DEFAULT EIN GET, ALSO EIN LESEBEFEHL.
- *
- * Hier stand `^\s*gh\s+api\b[^"']*\/(?:comments|reviews)\b` - der Pfad allein,
- * ohne jede Frage nach der Methode. Damit zaehlte
- * `gh api repos/x/y/pulls/1/comments --jq '.[]'` als Postversuch, und weil die
- * Antwort eines solchen GET die `html_url` BESTEHENDER Kommentare traegt
- * (`.../pull/1#discussion_r123456`), bestand sie auch noch die Adresspruefung.
- * Ein Lauf, der die vorhandenen Kommentare nur DURCHLIEST und selbst nie etwas
- * postet, bekam so `erfolge > 0` und damit einen gruenen Haken - im Waechter
- * gegen genau dieses stille Gruen. Am Lauf 34410944562 (#1094) gemessen: drei
- * solcher GETs auf `/reviews` standen als "0 von 3 Postbefehlen" im Log, ohne
- * dass einer davon je etwas geschrieben haette.
- *
- * `gh api` schreibt nur, wenn die Methode es sagt (`-X POST`, `--method PATCH`)
- * oder wenn ein Feld mitgeht (`-f`, `-F`, `--field`, `--raw-field`, `--input`) -
- * dann schaltet gh implizit auf POST. Ein ausdrueckliches `-X GET` gewinnt
- * dagegen auch mit Feldern: gh haengt sie dann als Query-Parameter an.
- */
-const API_PFAD = /\/(?:comments|reviews)\b/;
-const API_SCHREIBT = /(?:-X|--method)[\s=]+(?:POST|PATCH|PUT)\b|(?:^|\s)(?:-f|-F|--field|--raw-field|--input)[\s=]/i;
-const API_LIEST = /(?:-X|--method)[\s=]+GET\b/i;
+const ADRESSE = /\/(?:pull|issues)\/\d+#((?:issuecomment-|discussion_r|pullrequestreview-)\d+)/gi;
 
 /**
- * ZWEI FRAGEN, ZWEI MASKIERUNGEN - und der Unterschied ist nicht kosmetisch.
+ * Alle Adressen aus Ergebnissen dieses Laufs.
  *
- * "Welche OPTIONEN traegt der Befehl?" und "laeuft hier mehr als EIN Befehl?"
- * sehen denselben Text an und muessen Verschiedenes daraus lesen. Beide
- * Antworten waren in der ersten Fassung dieses PR falsch, und beide Male hat
- * der quotierte Inhalt als Struktur gegolten (Review zu #1096).
+ * Nur aus `tool_result`, nie aus dem Befehl selbst: eine Adresse, die jemand in
+ * seine Befehlszeile schreibt, belegt nichts. Und nur aus Ergebnissen, die nicht
+ * als Fehler zurueckkamen - ein gescheiterter Versuch rettet nichts, auch wenn
+ * seine Ausgabe eine Adresse enthaelt.
  */
-const HEREDOC = /"\$\(cat <<'?EOF'?[\s\S]*?EOF\s*\)"/g;
-const SUBSTITUTION = /\$\(|`/;
-
-/**
- * Ein ESCAPTES Zeichen substituiert nichts. Der echte Postbefehl aus #1094
- * schreibt `\`CLAUDE.md\`` in seinen Kommentartext, und ein `\`` ist innerhalb
- * doppelter Anfuehrungszeichen ein literaler Backtick - keine Substitution. Ohne
- * diesen Schritt haette die Verschaerfung genau den Beleg wieder verworfen, um
- * den es in diesem PR geht: die erste Fassung des Fixes liess beide
- * #1094-Proben fallen.
- */
-function hatSubstitution(text) {
-  return SUBSTITUTION.test(String(text).replace(/\\[\s\S]/g, ''));
-}
-
-/** Fuer die Frage nach OPTIONEN: quotierter Inhalt ist nie eine Option. */
-function ohneQuotierten(befehl) {
-  return String(befehl ?? '').replace(HEREDOC, '"..."').replace(QUOTIERT, '"..."');
-}
-
-export function istPostbefehl(befehl) {
-  // GEPRUEFT WIRD DER BEFEHL, NICHT SEIN TEXT. `istGekettet` strippt die
-  // Quotes seit jeher, `istPostbefehl` tat es nicht - und las damit den
-  // Kommentartext als Schalter. Ein echter Post
-  //
-  //   gh api repos/x/y/issues/1/comments -f body="see -X GET example"
-  //
-  // traegt `-f`, ist also ein POST (gh schaltet bei Feldern um), aber `-X GET`
-  // im BODY liess `API_LIEST` treffen: der Beleg fiel weg, und ein Lauf, der
-  // wirklich gepostet hat, galt als stumm. Genau die Fehlerklasse, gegen die
-  // dieser PR angetreten ist. Nicht weit hergeholt: diese Datei enthaelt das
-  // Literal `-X GET` selbst, ein Review-Kommentar, der die Zeile zurueckzitiert,
-  // haette sich damit selbst entwertet.
-  const text = ohneQuotierten(befehl);
-  if (POSTBEFEHL.test(text)) return true;
-  if (!/^\s*gh\s+api\b/i.test(text)) return false;
-  return API_PFAD.test(text) && API_SCHREIBT.test(text) && !API_LIEST.test(text);
-}
-
-/**
- * Und keine Verkettung. Nach dem Review zu #1085, zweite Runde: die
- * Erlaubnisliste gibt `Bash(gh pr comment:*)` frei, und
- * `gh pr comment --help; gh pr view 1085 --json comments --jq '.comments[-1].url'`
- * endet mit 0 und DRUCKT die Adresse eines fremden, laengst vorhandenen
- * Kommentars. Der Befehl trug den Namen, das Ergebnis trug die Adresse - und
- * gepostet hat er nichts. Ein Postbefehl braucht keine Kette; wer eine baut,
- * bekommt hier keinen Beleg.
- */
-const KETTE = /;|&&|\|\||\n\s*\S/;
-
-/**
- * ABER QUOTIERTER TEXT IST KEINE KETTE, SONDERN INHALT.
- *
- * `\n\s*\S` sucht den zweiten Befehl auf der naechsten Zeile - und fand
- * stattdessen den Absatz im Kommentartext. Ein Review-Kommentar ist mehrzeilig,
- * also traf die Regel den echten Postbefehl:
- *
- *   gh pr comment 1094 --repo ulsklyc/yuvomi --body "## Code review
- *
- *   No issues found. ..."
- *
- * Der Lauf 34410944562 (#1094) hat damit vollstaendig geprueft, den Kommentar
- * gepostet - und der Nachweis verwarf seinen eigenen Beleg als "Kette", zaehlte
- * `erfolge: 0` und faerbte rot. Aufgefallen ist es nicht frueher, weil die
- * Fixture die HEREDOC-Form traegt, und fuer die gab es unten schon eine
- * Ausnahme; das Modell waehlt aber mal die eine und mal die andere Form.
- *
- * Neutralisiert wird deshalb JEDER quotierte Abschnitt, nicht nur das Heredoc.
- * Ein unbalanciertes Quote laesst den Rest ungeschuetzt stehen und wird eher als
- * Kette gelesen - das ist die sichere Richtung: dieses Modul faerbt im Zweifel
- * rot.
- */
-const QUOTIERT = /"(?:\\[\s\S]|[^"\\])*"|'[^']*'/g;
-
-export function istGekettet(befehl) {
-  const ohneHeredoc = String(befehl ?? '').replace(HEREDOC, '"..."');
-  // EINE KOMMANDO-SUBSTITUTION IST SELBST EIN BEFEHL, auch im Quote.
-  //
-  // Die erste Fassung strich jeden quotierten Abschnitt - und mit ihm die
-  // Trenner DARIN. Damit stand der Bypass aus #1085 wieder offen, den `KETTE`
-  // gerade schliessen soll (Review zu #1096):
-  //
-  //   gh pr comment 1085 --body "$(echo <adresse> >&2; true)" --help
-  //
-  // gilt so als ungekettet, `--help` beendet sich mit 0 ohne zu posten, und die
-  // Substitution druckt die Adresse eines fremden Kommentars: ein Beleg aus dem
-  // Nichts. Erlaubt bleibt allein das bekannte Heredoc oben - eine Allowlist,
-  // keine Denylist, denn ein echter Postbefehl braucht keine Substitution.
-  if (hatSubstitution(ohneHeredoc)) return true;
-  return KETTE.test(ohneHeredoc.replace(QUOTIERT, '"..."'));
-}
-
-/**
- * Der Beleg im ERGEBNIS, nicht nur im Befehl.
- *
- * Ein zweiter Blick nach dem Review zu #1085: die Erlaubnisliste im Workflow
- * gibt `Bash(gh pr comment:*)` als GANZES frei, und bis hierher genuegte der
- * Befehlsanfang plus ein `tool_result` ohne Fehler. `gh pr comment --help`
- * endet mit 0 und postet nichts; `gh pr comment --delete-last --yes` endet mit
- * 0 und LOESCHT sogar einen. Beides haette `erfolge` erhoeht - und seit die
- * Abbruchbehauptung von diesem Zaehler geschlagen wird, waere das eine Tuer.
- *
- * Ein echter Postbefehl gibt die Adresse dessen zurueck, was er angelegt hat
- * (an #1066 gemessen: `.../pull/1066#issuecomment-5596556584`); auch die
- * JSON-Antwort von `gh api .../comments` traegt sie als `html_url`. Genau das
- * wird verlangt. Faellt eine echte Lieferung ohne Adresse durch, ist das die
- * SICHERE Richtung: dieses Modul faerbt im Zweifel rot, und der Fallback ueber
- * `zahl.gebunden` faengt Reviews und Inline-Anmerkungen ohnehin ab.
- */
-const POSTADRESSE = /\/(?:pull|issues)\/\d+#(?:issuecomment-\d+|discussion_r\d+|pullrequestreview-\d+)/i;
-
-export function zaehleGepostet(eintraege) {
-  const versuche = new Set();
-  const bloecke = [];
+export function adressenImStrom(eintraege) {
+  const adressen = new Set();
   for (const eintrag of eintraege) {
     const inhalt = eintrag?.message?.content ?? eintrag?.content;
-    if (Array.isArray(inhalt)) bloecke.push(...inhalt);
-  }
-  for (const block of bloecke) {
-    if (block?.type !== 'tool_use') continue;
-    const name = String(block.name ?? '');
-    const befehl = String(block.input?.command ?? '');
-    if (POSTWERKZEUG.test(name) || (istPostbefehl(befehl) && !istGekettet(befehl))) {
-      versuche.add(block.id);
+    if (!Array.isArray(inhalt)) continue;
+    for (const block of inhalt) {
+      if (block?.type !== 'tool_result' || block.is_error === true) continue;
+      const text = typeof block.content === 'string'
+        ? block.content
+        : JSON.stringify(block.content ?? '');
+      for (const treffer of text.matchAll(ADRESSE)) adressen.add(treffer[1].toLowerCase());
     }
   }
-  let erfolge = 0;
-  for (const block of bloecke) {
-    if (block?.type !== 'tool_result') continue;
-    if (!versuche.has(block.tool_use_id)) continue;
-    if (block.is_error === true) continue;
-    // Kein Exit-Code, sondern die Adresse des Angelegten - siehe POSTADRESSE.
-    const inhalt = typeof block.content === 'string'
-      ? block.content
-      : JSON.stringify(block.content ?? '');
-    if (!POSTADRESSE.test(inhalt)) continue;
-    erfolge += 1;
+  return adressen;
+}
+
+/** Die Aeusserungen von claude, die NACH dem Laufbeginn angelegt wurden. */
+function claudeSeit(aeusserungen, seit) {
+  return aeusserungen.filter((eintrag) => {
+    const login = String(eintrag?.login ?? '').toLowerCase();
+    if (!login.includes('claude')) return false;
+    const zeit = String(eintrag?.zeit ?? '');
+    return zeit !== '' && zeit > seit;
+  });
+}
+
+/**
+ * Belegte Lieferungen: Adressen im Strom, die die API als claude-Aeusserung nach
+ * dem Laufbeginn kennt. Jede Adresse zaehlt einmal, auch wenn der Lauf sie
+ * mehrfach zurueckbekam. `adressen` ist die Zahl aller Adressen im Strom - fuer
+ * die Log-Zeile, damit ein Lauf, der nur Altes gelesen hat, als solcher
+ * erkennbar ist.
+ */
+export function zaehleBelege(eintraege, aeusserungen, seit) {
+  const imStrom = adressenImStrom(eintraege);
+  if (!ZEITSTEMPEL.test(String(seit ?? ''))) return { adressen: imStrom.size, erfolge: 0 };
+  const belegt = new Set();
+  for (const eintrag of claudeSeit(aeusserungen, seit)) {
+    const anker = String(eintrag?.anker ?? '').toLowerCase();
+    if (anker && imStrom.has(anker)) belegt.add(anker);
   }
-  return { versuche: versuche.size, erfolge };
+  return { adressen: imStrom.size, erfolge: belegt.size };
 }
 
 /**
@@ -313,12 +214,7 @@ export function zaehleGepostet(eintraege) {
  * lehnt `beurteile` einen solchen Stand von vornherein ab.
  */
 export function zaehleSeit(aeusserungen, seit, kopf = '') {
-  const meine = aeusserungen.filter((eintrag) => {
-    const login = String(eintrag?.login ?? '').toLowerCase();
-    if (!login.includes('claude')) return false;
-    const zeit = String(eintrag?.zeit ?? '');
-    return zeit !== '' && zeit > seit;
-  });
+  const meine = claudeSeit(aeusserungen, seit);
   // GEBUNDEN heisst: die Aeusserung nennt selbst den Commit, um den es geht.
   // Reviews und Inline-Anmerkungen tragen diese SHA, eine Zusammenfassung
   // ("## Code review / No issues found") traegt sie nicht - am 09.09. an #1066
@@ -359,7 +255,7 @@ export function beurteile({
   ergebnis,
   aeusserungen = [],
   kopf = '',
-  gepostet = { versuche: 0, erfolge: 0 },
+  gepostet = { adressen: 0, erfolge: 0 },
   kaputt = 0
 }) {
   // Ohne belastbaren Stand gibt es nichts zu vergleichen. Der leere Fallback
@@ -388,9 +284,9 @@ export function beurteile({
     return stumm('lauf-fehler', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
   }
   // ... MIT EINER AUSNAHME, und nur mit dieser einen: hat DIESER Lauf
-  // nachweislich gepostet, kann er nicht im Tor abgebrochen sein. Der Abbruch
+  // nachweislich geliefert, kann er nicht im Tor abgebrochen sein. Der Abbruch
   // heisst "ich hoere auf, bevor ich anfange" - er hinterlaesst nichts, und der
-  // Strom eines solchen Laufs traegt entsprechend keinen Postbefehl. Gemessen
+  // Strom eines solchen Laufs traegt entsprechend keine neue Adresse. Gemessen
   // an #1082 am 09.09., zwei Laeufe am selben PR:
   //
   //   Lauf 1  num_turns 21, Verweigerungen 8, Postbefehle 1 von 5 ohne Fehler
@@ -401,9 +297,8 @@ export function beurteile({
   //
   // Die Prosa gegen den eigenen Strom des Laufs zu stellen ist genau die
   // Abwaegung, die dieses Modul sonst ueberall zugunsten des Stroms trifft
-  // ("DER EINE BELEG, DER NICHT AUF PROSA BERUHT", weiter unten). Ein
-  // gescheiterter Postbefehl rettet nichts: `erfolge` zaehlt nur `tool_result`
-  // ohne `is_error`.
+  // ("DER BELEG IST EINE ADRESSE", weiter oben). Ein gescheiterter Versuch
+  // rettet nichts: gezaehlt werden nur Ergebnisse ohne `is_error`.
   //
   // NICHT verallgemeinern: `WARTET_AUF_AGENTEN` bleibt bewusst VOR den Belegen
   // stehen. Dort sagt der Lauf, dass er noch nicht fertig ist, und eine
@@ -412,20 +307,23 @@ export function beurteile({
   //
   // Und `zahl.gebunden` gehoert genauso dazu (Review zu #1085, dritte Runde).
   // Ohne diese Haelfte kann der Fallback darunter bei einer Abbruchbehauptung
-  // NIE greifen - dieser Zweig kehrt vorher zurueck. Damit widerspraeche der
-  // Kommentar bei POSTADRESSE seinem eigenen Code: er begruendet die
-  // verschaerfte Adresspruefung ausgerechnet damit, dass `zahl.gebunden`
-  // Reviews und Inline-Anmerkungen "ohnehin" auffaengt.
+  // NIE greifen - dieser Zweig kehrt vorher zurueck, und eine Inline-Anmerkung,
+  // deren Ergebnis keine Adresse traegt, bliebe ohne jeden Beleg.
   //
   // Es passt auch zur Frage, die dieses Modul stellt: nicht "hat DIESER LAUF
   // geprueft", sondern "wurde DIESER STAND geprueft". Eine Aeusserung, die die
   // SHA des Kopfes traegt und nach dem Laufbeginn kam, beantwortet das mit ja -
   // auch wenn sie von einem abgebrochenen Vorgaenger zu demselben Stand stammt.
+  //
+  // UND DAS AUFHOEREN MUSS BEJAHT SEIN (Review zu #1096, dritte Runde).
+  // `HOERT_AUF.test` traf auch "I did not stop here". Ein Lauf, der den neuen
+  // Stand geprueft hat und am Posten scheiterte, galt damit als Abbruch im Tor,
+  // und die Meldung schickte den Leser zum Prompt statt zur Werkzeugsperre.
   if (
     gepostet.erfolge === 0 &&
     zahl.gebunden === 0 &&
     bejaht(text, SCHON_KOMMENTIERT) &&
-    HOERT_AUF.test(text)
+    bejaht(text, HOERT_AUF)
   ) {
     return stumm('schon-kommentiert', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
   }
@@ -437,19 +335,21 @@ export function beurteile({
   // einzelne Inline-Anmerkung eines abgebrochenen Laufs den Haken gruen.
   if (WARTET_AUF_AGENTEN.test(text)) return stumm('agenten', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
 
-  // DER EINE BELEG, DER NICHT AUF PROSA BERUHT: dieser Lauf hat den Postbefehl
-  // ausgefuehrt, und er kam ohne Fehler zurueck. Er schlaegt auch die
-  // Verweigerungen - die echte Review an #1066 lief in vier verweigerte
-  // `gh api`-Versuche auf ein CLAUDE.md, das es nicht gibt, und postete danach.
+  // DER BELEG, DER NICHT AUF PROSA BERUHT: eine Adresse aus dem Strom dieses
+  // Laufs, die die API als claude-Aeusserung nach dem Laufbeginn kennt. Er
+  // schlaegt auch die Verweigerungen - die echte Review an #1066 lief in vier
+  // verweigerte `gh api`-Versuche auf ein CLAUDE.md, das es nicht gibt, und
+  // postete danach.
   if (gepostet.erfolge > 0) {
     return {
       ausgang: 'geprueft',
-      grund: 'postbefehl',
+      grund: 'adresse',
       neu,
       meldung:
-        `Die Review hat in diesem Lauf gepostet: ${gepostet.erfolge} von ` +
-        `${gepostet.versuche} Postbefehl(en) kam ohne Fehler zurueck. Das steht in ` +
-        'ihrem eigenen Strom und laesst sich von aussen nicht herbeifuehren.'
+        `Die Review hat in diesem Lauf geliefert: ${gepostet.erfolge} Aeusserung(en), ` +
+        'deren Adresse in ihrem eigenen Strom steht und die laut API nach dem ' +
+        `Laufbeginn ${seit} von claude angelegt wurde(n). Wie der Befehl dazu ` +
+        'geschrieben war, spielt dafuer keine Rolle.'
     };
   }
 
@@ -561,10 +461,11 @@ const DIAGNOSE = {
     'ihm damit nicht zuzuordnen: als derselbe Bot antwortet auch der Mention-Pfad ' +
     '(.github/workflows/claude.yml), und ein per cancel-in-progress abgebrochener ' +
     'Vorgaenger kann noch posten. Lies den result-Text im Job-Log - sagt er, die ' +
-    'Review sei fertig, obwohl kein Postbefehl im Strom steht, dann fehlt vermutlich ' +
-    '`show_full_output: true` im Workflow - ohne den Schalter enthaelt der Strom die ' +
-    'Werkzeugbloecke nicht. Sagt er etwas anderes, hat dieser Lauf wirklich nichts ' +
-    'geliefert.',
+    'Review sei fertig, obwohl keine neue Adresse im Strom steht, dann fehlt ' +
+    'vermutlich `show_full_output: true` im Workflow (ohne den Schalter enthaelt der ' +
+    'Strom die Werkzeugbloecke nicht), oder die Kommentar-Listen tragen kein `anker` ' +
+    '(Workflow aelter als dieses Modul). Sagt er etwas anderes, hat dieser Lauf ' +
+    'wirklich nichts geliefert.',
   unbekannt:
     'Die Review ist durchgelaufen und hat zu diesem Stand nichts hinterlassen, ohne eines ' +
     'der bekannten Muster zu zeigen. Zuerst den result-Text im Job-Log lesen: er sagt ' +
@@ -625,11 +526,11 @@ function stumm(grund, neu, seit, ergebnis, gebunden = 0, erfolge = 0) {
  * Urteil steht im letzten Eintrag mit `"type": "result"`.
  */
 export function leseLauf(pfad) {
-  const eintraege = leseStrom(pfad);
-  const ergebnisse = eintraege.filter((e) => e && e.type === 'result');
+  const strom = leseStrom(pfad);
+  const ergebnisse = strom.filter((e) => e && e.type === 'result');
   return {
     ergebnis: ergebnisse.length ? ergebnisse[ergebnisse.length - 1] : null,
-    gepostet: zaehleGepostet(eintraege)
+    strom
   };
 }
 
@@ -711,13 +612,14 @@ function main() {
     process.argv.slice(2)
   );
   const { eintraege, kaputt } = leseAeusserungen(pfade);
-  const { ergebnis, gepostet } = leseLauf(ergebnisPfad);
+  const { ergebnis, strom } = leseLauf(ergebnisPfad);
+  const gepostet = zaehleBelege(strom, eintraege, seit);
   const urteil = beurteile({ seit, kopf, ergebnis, aeusserungen: eintraege, gepostet, kaputt });
 
   console.log(`Laufbeginn: ${seit || '(unbekannt)'}`);
   console.log(`Aktueller Stand: ${kopf || '(unbekannt)'}`);
   console.log(`Aeusserungen von claude seit dem Laufbeginn: ${urteil.neu}`);
-  console.log(`Postbefehle dieses Laufs: ${gepostet.erfolge} von ${gepostet.versuche} ohne Fehler`);
+  console.log(`Belegte Lieferungen dieses Laufs: ${gepostet.erfolge} (Adressen in seinem Strom: ${gepostet.adressen})`);
   console.log('');
   console.log(urteil.meldung);
 
