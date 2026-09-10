@@ -11444,6 +11444,58 @@ test('wer sein Label verliert, bleibt ein volles Ziel', () => {
 });
 
 /**
+ * DIE ANDERE HAELFTE DER LABEL-VERLUST-REGEL: WER SEIN LABEL VERLIEREN KANN,
+ * TRAEGT SEINEN NAMEN AM KNOPF (#1068).
+ *
+ * Der Guard darueber prueft, was ein Element beim Label-Verlust an GROESSE
+ * behaelt. Was es an NAMEN behaelt, stand nirgends - und genau das ging
+ * verloren: die Personenauswahl im Aufgaben-Verlauf bestand nur aus
+ * `<span class="group-toggle__label">Name</span>`, und unter 640px nimmt die
+ * Regel dieses Kind weg. Auf dem Telefon stand dort eine Reihe leerer Flaechen.
+ *
+ * `display: none` nimmt den Text auch aus dem Accessibility-Tree. Der Knopf war
+ * also nicht nur fuers Auge namenlos, sondern ebenso fuer eine Vorlesehilfe -
+ * der Verlust sah nach einem reinen Anzeigefehler aus und war keiner.
+ *
+ * Deshalb die Zusage: der Name gehoert an den TRAEGER, nicht in ein Kind, das
+ * eine Media-Query entfernen darf. Geprueft wird `.group-toggle__btn`, weil
+ * genau dessen Label die beiden Regeln in tasks.css ausblenden. Der Guard bleibt
+ * bewusst bei dieser einen Familie statt jedes `__label` im Haus zu verfolgen:
+ * dafuer muesste er CSS und Markup verbinden und raet, sobald eine Klasse
+ * dynamisch zusammengesetzt wird. Eine enge Zusage, die haelt, ist mehr wert als
+ * eine weite, die auf Vermutungen steht.
+ */
+test('ein Umschalt-Knopf traegt seinen Namen selbst, nicht in einem Kind', () => {
+  const dateien = [];
+  const sammle = (verzeichnis) => {
+    for (const eintrag of readdirSync(verzeichnis, { withFileTypes: true })) {
+      const pfad = new URL(`${eintrag.name}${eintrag.isDirectory() ? '/' : ''}`, verzeichnis);
+      if (eintrag.isDirectory()) {
+        if (eintrag.name === 'vendor') continue;
+        sammle(pfad);
+      } else if (/\.(?:js|html)$/.test(eintrag.name)) {
+        dateien.push(pfad);
+      }
+    }
+  };
+  sammle(new URL('../public/', import.meta.url));
+
+  const namenlos = [];
+  for (const datei of dateien) {
+    const quelle = readFileSync(datei, 'utf8');
+    for (const treffer of quelle.matchAll(/<button\b[^>]*group-toggle__btn[^>]*>/g)) {
+      const tag = treffer[0];
+      if (/aria-label(?:ledby)?[=\s]/.test(tag)) continue;
+      const zeile = quelle.slice(0, treffer.index).split('\n').length;
+      namenlos.push(`${datei.pathname.split('/public/')[1]}:${zeile}`);
+    }
+  }
+
+  assert.deepEqual(namenlos, [],
+    `Umschalt-Knopf ohne eigenen Namen - unter 640px faellt sein Label und mit ihm die Beschriftung: ${namenlos.join(', ')}`);
+});
+
+/**
  * REGEL (Redesign Runde 6, Phase 3c): Die Groesse des Icon-Knopfs gehoert der
  * SHELL, und sie schaltet nach der ZEIGERFAEHIGKEIT.
  *
