@@ -89,7 +89,10 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const source = readFileSync(new URL('../server/db.js', import.meta.url), 'utf8');
+// Zeilenenden vereinheitlicht: `git show` liefert den Blob mit LF, ein Checkout mit
+// `core.autocrlf` (Git fuer Windows) liest `server/db.js` mit CRLF - ohne das waere der
+// Basis-Vergleich unten schon bei Version 1 rot, obwohl nichts geaendert ist.
+const source = readFileSync(new URL('../server/db.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 /**
