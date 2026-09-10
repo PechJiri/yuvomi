@@ -2262,7 +2262,7 @@
         "pageKitchen": "Mutfak",
         "pageKitchenDescription": "Yemek planında hangi öğünlerin görüneceğini seçin.",
         "pageModuleOptions": "Modül seçenekleri",
-        "pageModuleOptionsDescription": "Bütçe, Sağlık ve Ev yardımı için tek tek seçenekleri belirleme.",
+        "pageModuleOptionsDescription": "Birkaç modül için ek seçenekler.",
         "pageCalendarModule": "Takvim",
         "pageCalendarModuleDescription": "Tatilleri, hafta başlangıcını ve varsayılan etkinlik süresini belirleyin.",
         "pageSyncCalendar": "Takvim eşitleme",

@@ -2262,7 +2262,7 @@
         "pageKitchen": "Kök",
         "pageKitchenDescription": "Välj vilka måltider som visas i måltidsplanen.",
         "pageModuleOptions": "Modulalternativ",
-        "pageModuleOptionsDescription": "Ange enskilda alternativ för Budget, Hälsa och Hushållshjälp.",
+        "pageModuleOptionsDescription": "Extra alternativ för några moduler.",
         "pageCalendarModule": "Kalender",
         "pageCalendarModuleDescription": "Ange helgdagar, veckostart och standardlängd för en händelse.",
         "pageSyncCalendar": "Kalendersynkronisering",

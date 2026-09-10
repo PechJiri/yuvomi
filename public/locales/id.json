@@ -2274,7 +2274,7 @@
         "pageKitchen": "Dapur",
         "pageKitchenDescription": "Pilih makanan mana yang tampil di rencana makan.",
         "pageModuleOptions": "Opsi modul",
-        "pageModuleOptionsDescription": "Menetapkan opsi tersendiri untuk Anggaran, Kesehatan, dan Bantuan rumah tangga.",
+        "pageModuleOptionsDescription": "Opsi tambahan untuk beberapa modul.",
         "pageCalendarModule": "Kalender",
         "pageCalendarModuleDescription": "Tetapkan hari libur, awal pekan, dan durasi acara default.",
         "pageSyncCalendar": "Sinkronisasi Kalender",

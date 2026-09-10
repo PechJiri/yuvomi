@@ -2297,7 +2297,7 @@
         "pageKitchen": "Küche",
         "pageKitchenDescription": "Sichtbare Mahlzeiten im Essensplan auswählen.",
         "pageModuleOptions": "Modul-Optionen",
-        "pageModuleOptionsDescription": "Einzelne Optionen für Budget, Gesundheit und Haushaltshilfe festlegen.",
+        "pageModuleOptionsDescription": "Zusätzliche Optionen für einzelne Module.",
         "pageCalendarModule": "Kalender",
         "pageCalendarModuleDescription": "Feiertage, Wochenstart und Standard-Termindauer festlegen.",
         "pageSyncCalendar": "Kalender-Synchronisation",
