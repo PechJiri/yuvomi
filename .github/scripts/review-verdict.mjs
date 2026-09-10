@@ -154,8 +154,48 @@ const API_PFAD = /\/(?:comments|reviews)\b/;
 const API_SCHREIBT = /(?:-X|--method)[\s=]+(?:POST|PATCH|PUT)\b|(?:^|\s)(?:-f|-F|--field|--raw-field|--input)[\s=]/i;
 const API_LIEST = /(?:-X|--method)[\s=]+GET\b/i;
 
+/**
+ * ZWEI FRAGEN, ZWEI MASKIERUNGEN - und der Unterschied ist nicht kosmetisch.
+ *
+ * "Welche OPTIONEN traegt der Befehl?" und "laeuft hier mehr als EIN Befehl?"
+ * sehen denselben Text an und muessen Verschiedenes daraus lesen. Beide
+ * Antworten waren in der ersten Fassung dieses PR falsch, und beide Male hat
+ * der quotierte Inhalt als Struktur gegolten (Review zu #1096).
+ */
+const HEREDOC = /"\$\(cat <<'?EOF'?[\s\S]*?EOF\s*\)"/g;
+const SUBSTITUTION = /\$\(|`/;
+
+/**
+ * Ein ESCAPTES Zeichen substituiert nichts. Der echte Postbefehl aus #1094
+ * schreibt `\`CLAUDE.md\`` in seinen Kommentartext, und ein `\`` ist innerhalb
+ * doppelter Anfuehrungszeichen ein literaler Backtick - keine Substitution. Ohne
+ * diesen Schritt haette die Verschaerfung genau den Beleg wieder verworfen, um
+ * den es in diesem PR geht: die erste Fassung des Fixes liess beide
+ * #1094-Proben fallen.
+ */
+function hatSubstitution(text) {
+  return SUBSTITUTION.test(String(text).replace(/\\[\s\S]/g, ''));
+}
+
+/** Fuer die Frage nach OPTIONEN: quotierter Inhalt ist nie eine Option. */
+function ohneQuotierten(befehl) {
+  return String(befehl ?? '').replace(HEREDOC, '"..."').replace(QUOTIERT, '"..."');
+}
+
 export function istPostbefehl(befehl) {
-  const text = String(befehl ?? '');
+  // GEPRUEFT WIRD DER BEFEHL, NICHT SEIN TEXT. `istGekettet` strippt die
+  // Quotes seit jeher, `istPostbefehl` tat es nicht - und las damit den
+  // Kommentartext als Schalter. Ein echter Post
+  //
+  //   gh api repos/x/y/issues/1/comments -f body="see -X GET example"
+  //
+  // traegt `-f`, ist also ein POST (gh schaltet bei Feldern um), aber `-X GET`
+  // im BODY liess `API_LIEST` treffen: der Beleg fiel weg, und ein Lauf, der
+  // wirklich gepostet hat, galt als stumm. Genau die Fehlerklasse, gegen die
+  // dieser PR angetreten ist. Nicht weit hergeholt: diese Datei enthaelt das
+  // Literal `-X GET` selbst, ein Review-Kommentar, der die Zeile zurueckzitiert,
+  // haette sich damit selbst entwertet.
+  const text = ohneQuotierten(befehl);
   if (POSTBEFEHL.test(text)) return true;
   if (!/^\s*gh\s+api\b/i.test(text)) return false;
   return API_PFAD.test(text) && API_SCHREIBT.test(text) && !API_LIEST.test(text);
@@ -197,10 +237,20 @@ const KETTE = /;|&&|\|\||\n\s*\S/;
 const QUOTIERT = /"(?:\\[\s\S]|[^"\\])*"|'[^']*'/g;
 
 export function istGekettet(befehl) {
-  const ohneHeredoc = String(befehl ?? '').replace(
-    /"\$\(cat <<'?EOF'?[\s\S]*?EOF\s*\)"/g,
-    '"..."'
-  );
+  const ohneHeredoc = String(befehl ?? '').replace(HEREDOC, '"..."');
+  // EINE KOMMANDO-SUBSTITUTION IST SELBST EIN BEFEHL, auch im Quote.
+  //
+  // Die erste Fassung strich jeden quotierten Abschnitt - und mit ihm die
+  // Trenner DARIN. Damit stand der Bypass aus #1085 wieder offen, den `KETTE`
+  // gerade schliessen soll (Review zu #1096):
+  //
+  //   gh pr comment 1085 --body "$(echo <adresse> >&2; true)" --help
+  //
+  // gilt so als ungekettet, `--help` beendet sich mit 0 ohne zu posten, und die
+  // Substitution druckt die Adresse eines fremden Kommentars: ein Beleg aus dem
+  // Nichts. Erlaubt bleibt allein das bekannte Heredoc oben - eine Allowlist,
+  // keine Denylist, denn ein echter Postbefehl braucht keine Substitution.
+  if (hatSubstitution(ohneHeredoc)) return true;
   return KETTE.test(ohneHeredoc.replace(QUOTIERT, '"..."'));
 }
 
@@ -419,7 +469,36 @@ export function beurteile({
 
   if (sperren > 0) return stumm('werkzeugsperre', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
 
-  if (bejaht(text, TOR_STOPP) && TRIVIAL.test(text) && !VERNEINT.test(text)) {
+  // ... UND DIE GEFAEHRLICHERE LESART GEWINNT WEITER, auch wenn oben der
+  // Aufhoer-Satz gefehlt hat.
+  //
+  // Der `HOERT_AUF`-Zusatz im Zweig ganz oben hat diesen hier zur Hintertuer
+  // gemacht (Review zu #1096, von beiden Reviewern unabhaengig gefunden). Ein
+  // Text wie
+  //
+  //   "This matches the step 1 stop condition - Claude has already reviewed
+  //    this PR, and the remaining diff is a trivial change that is obviously
+  //    correct."
+  //
+  // sagt "schon geprueft" UND "trivial", nennt aber keine der Aufhoer-Formeln
+  // ("stop CONDITION" ist keine). Er rutschte damit an `schon-kommentiert`
+  // vorbei und wurde hier GRUEN - fuer einen Lauf, der woertlich sagt, dass er
+  // den PR schon kommentiert hat. Der Kommentar oben behauptete derweil, ein so
+  // durchgefallener Abbruch bleibe rot; das stimmte nur, solange dieser Zweig
+  // ihn nicht auffing.
+  //
+  // Die Bedingung steht deshalb hier ein zweites Mal: der triviale Abbruch ist
+  // die EINZIGE Kategorie, die stumm gruen sein darf, und wer "schon
+  // kommentiert" sagt, gehoert nie hinein. Der bestehende Test dazu ("nennt ein
+  // Text beides, gilt die gefaehrlichere Lesart") blieb gruen, weil sein
+  // Fixture-Text zufaellig auf "Stopping here." endet - eine Probe ohne diesen
+  // Satz steht jetzt daneben.
+  if (
+    bejaht(text, TOR_STOPP) &&
+    TRIVIAL.test(text) &&
+    !VERNEINT.test(text) &&
+    !bejaht(text, SCHON_KOMMENTIERT)
+  ) {
     return {
       ausgang: 'ausgesetzt',
       grund: 'trivial',

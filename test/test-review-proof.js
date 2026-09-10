@@ -852,3 +852,103 @@ test('erwaehnt und NICHT geliefert: die Diagnose muss die richtige sein (#1094)'
   assert.doesNotMatch(urteil.meldung, /IM TOR ABGEBROCHEN/,
     'ein Lauf, der 29 Turns lang geprueft hat, hat nicht im Tor abgebrochen');
 });
+
+/* ===================================================================
+ * ZWEITE RUNDE (Review zu #1096)
+ *
+ * Beide Reviewer haben unabhaengig dieselben drei Stellen gefunden. Alle
+ * drei sind Fehler, die die ERSTE Fassung dieses Fixes eingebaut hat -
+ * das Muster, das an pruefendem Code jedes Mal wiederkommt: ein Fix baut
+ * den naechsten ein.
+ * =================================================================== */
+
+test('SCHON KOMMENTIERT SCHLAEGT TRIVIAL AUCH OHNE AUFHOER-SATZ (#1096)', () => {
+  // Der `HOERT_AUF`-Zusatz oben hatte den trivialen Zweig zur Hintertuer
+  // gemacht: dieser Text nennt beides, aber keine der Aufhoer-Formeln - "stop
+  // CONDITION" ist keine. Er rutschte an `schon-kommentiert` vorbei und wurde
+  // im trivialen Zweig gruen, fuer einen Lauf, der woertlich sagt, er habe den
+  // PR schon geprueft.
+  //
+  // Die bestehende Probe daneben fing das nicht: ihr Text endet zufaellig auf
+  // "Stopping here." und erfuellt `HOERT_AUF` damit doch.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 3, subtype: 'success', is_error: false, permission_denials: [],
+      result:
+        'This matches the step 1 stop condition - Claude has already reviewed ' +
+        'this PR, and the remaining diff is a trivial change that is obviously ' +
+        'correct.'
+    },
+    aeusserungen: [],
+    gepostet: { versuche: 0, erfolge: 0 }
+  });
+  assert.notEqual(urteil.ausgang, 'ausgesetzt',
+    'die gefaehrlichere Lesart gewinnt, egal wie das Aufhoeren formuliert ist');
+  assert.equal(urteil.ausgang, 'stumm');
+
+  // Der GRUND ist bewusst `unbekannt` und nicht `schon-kommentiert`. Rot sind
+  // beide; der Unterschied liegt in dem, was die Meldung BEHAUPTET.
+  // `schon-kommentiert` sagt "DER LAUF HAT IM TOR ABGEBROCHEN" - genau die
+  // Behauptung, die an #1094 falsch war und die Suche einen halben Tag lang an
+  // die falsche Stelle geschickt hat. Ohne Aufhoer-Satz weiss dieses Modul
+  // nicht, ob abgebrochen wurde, und `unbekannt` schickt den Leser richtig:
+  // "zuerst den result-Text im Job-Log lesen".
+  assert.equal(urteil.grund, 'unbekannt');
+  assert.doesNotMatch(urteil.meldung, /IM TOR ABGEBROCHEN/,
+    'was nicht belegt ist, wird nicht behauptet');
+});
+
+test('ein Schalter im KOMMENTARTEXT ist kein Schalter (#1096)', () => {
+  // `-f` macht aus dem GET einen POST (gh schaltet bei Feldern um). Dass der
+  // Body die Zeichenfolge `-X GET` zitiert, aendert daran nichts - aber
+  // `API_LIEST` las den Text mit und verwarf den Beleg eines Laufs, der
+  // wirklich gepostet hat.
+  //
+  // Diese Datei enthaelt das Literal `-X GET` selbst; ein Review-Kommentar, der
+  // die Zeile zurueckzitiert, haette sich damit selbst entwertet.
+  const befehl = 'gh api repos/x/y/issues/1/comments -f body="see -X GET example"';
+  const strom = stromMit(befehl, 'https://github.com/x/y/pull/1#issuecomment-42');
+  assert.deepEqual(zaehleGepostet(strom), { versuche: 1, erfolge: 1 },
+    'der Body ist Inhalt, keine Option');
+
+  // Und die Gegenrichtung bleibt: ein WIRKLICH lesender GET zaehlt nicht.
+  const lesend = stromMit(
+    "gh api repos/x/y/issues/1/comments -X GET -f per_page=5",
+    'https://github.com/x/y/pull/1#issuecomment-42'
+  );
+  assert.deepEqual(zaehleGepostet(lesend), { versuche: 0, erfolge: 0 },
+    'ein ausdruecklicher GET bleibt ein GET, auch mit Feldern');
+});
+
+test('eine Kommando-Substitution im Quote ist eine Kette (#1096)', () => {
+  // Der Bypass aus #1085, von der ersten Fassung dieses Fixes wieder
+  // geoeffnet: die Quote-Maskierung strich den Trenner INNERHALB der
+  // Substitution mit weg. `--help` beendet sich mit 0 ohne zu posten, und die
+  // Substitution druckt die Adresse eines fremden Kommentars - ein Beleg aus
+  // dem Nichts.
+  const bypass =
+    'gh pr comment 1085 --body "$(echo https://github.com/o/r/pull/1085#issuecomment-123 >&2; true)" --help';
+  const strom = stromMit(bypass, 'https://github.com/o/r/pull/1085#issuecomment-123');
+  assert.deepEqual(zaehleGepostet(strom), { versuche: 0, erfolge: 0 },
+    'wer eine Substitution baut, bekommt hier keinen Beleg');
+
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF), kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: ABBRUCH, aeusserungen: [], gepostet: zaehleGepostet(strom)
+  });
+  assert.equal(urteil.grund, 'schon-kommentiert', 'die Abbruchbehauptung steht');
+});
+
+test('ein ESCAPTER Backtick ist keine Substitution (#1096)', () => {
+  // Die Verschaerfung darf den Fall nicht mitreissen, um den es hier geht: der
+  // echte #1094-Kommentar schreibt \`CLAUDE.md\` in seinen Text, und innerhalb
+  // doppelter Anfuehrungszeichen ist das ein literaler Backtick. Die erste
+  // Fassung dieses Fixes liess daran beide #1094-Proben fallen.
+  const befehl = zaehleGepostet(fixture.strom.gepostet_mehrzeilig);
+  assert.deepEqual(befehl, { versuche: 1, erfolge: 1 });
+
+  const roh = fixture.strom.gepostet_mehrzeilig[0].message.content[0].input.command;
+  assert.ok(roh.includes('\\`'), 'die Fixture traegt den escapten Backtick wirklich');
+});
