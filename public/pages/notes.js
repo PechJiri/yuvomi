@@ -853,6 +853,36 @@ function openNoteModal({ mode, note = null }) {
       let noteSavePending = false;
 
       const editorIsCurrent = () => !editorClosed && panel.isConnected;
+      const editorOverlay = panel.closest('.modal-overlay');
+      const editorOwnsModalSlot = () => (
+        editorIsCurrent()
+        && !editorOverlay?.inert
+        && document.getElementById('shared-modal-overlay') === editorOverlay
+      );
+
+      function closeSavedEditorWhenActive() {
+        if (!editorIsCurrent()) return;
+        if (editorOwnsModalSlot()) {
+          closeModal({ force: true });
+          return;
+        }
+
+        // The dirty guard parks this editor as an inert, still-connected
+        // overlay while its confirmation owns the shared slot. A completed
+        // save must not answer that question for the user. If they cancel the
+        // discard, close the now-saved editor only after it becomes active
+        // again; confirming the discard closes it through the normal path.
+        if (!editorOverlay?.inert) return;
+        const resumeObserver = new MutationObserver(() => {
+          if (!editorIsCurrent()) {
+            resumeObserver.disconnect();
+          } else if (editorOwnsModalSlot()) {
+            resumeObserver.disconnect();
+            closeModal({ force: true });
+          }
+        });
+        resumeObserver.observe(editorOverlay, { attributes: true, attributeFilter: ['id', 'inert'] });
+      }
 
       const selectedCreationScope = () => categoryScopeSelect?.value || 'personal';
 
@@ -1070,12 +1100,12 @@ function openNoteModal({ mode, note = null }) {
             if (idx !== -1) state.notes[idx] = res.data;
             state.notes.sort((a, b) => b.pinned - a.pinned);
           }
-          closeModal({ force: true });
+          closeSavedEditorWhenActive();
           renderNotesAndFilters();
           window.yuvomi?.showToast(mode === 'create' ? t('notes.createdToast') : t('notes.savedToast'), 'success');
         } catch (err) {
-          if (!editorIsCurrent()) return;
           window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
+          if (!editorIsCurrent()) return;
           btnError(saveBtn);
           noteSavePending = false;
           categoryCreateButton.disabled = false;

@@ -282,382 +282,6 @@ after(async () => {
   await harness?.close();
 });
 
-function holdNextNoteCategoryCreate(page) {
-  let request = null;
-  let settled = false;
-  let markSeen;
-  const captured = new Promise((resolve) => { markSeen = resolve; });
-  page.__yuvomiRequestInterceptor = (candidate) => {
-    if (
-      !request
-      && candidate.method() === 'POST'
-      && new URL(candidate.url()).pathname === '/api/v1/notes/categories'
-    ) {
-      request = candidate;
-      markSeen();
-      return true;
-    }
-    return false;
-  };
-  const waitForCapture = async () => {
-    let timeout;
-    try {
-      return await Promise.race([
-        captured,
-        new Promise((_, reject) => {
-          timeout = setTimeout(
-            () => reject(new Error('note category POST was not captured within 5 seconds')),
-            5000,
-          );
-        }),
-      ]);
-    } finally {
-      clearTimeout(timeout);
-    }
-  };
-  const finish = async (action, ...args) => {
-    if (settled) return;
-    if (!request) await waitForCapture();
-    settled = true;
-    page.__yuvomiRequestInterceptor = null;
-    await request[action](...args);
-  };
-  return {
-    get seen() { return waitForCapture(); },
-    release: () => finish('continue'),
-    reject: () => finish('respond', {
-      status: 500,
-      contentType: 'application/json',
-      body: JSON.stringify({ error: 'Sonde 22 delayed failure' }),
-    }),
-    async dispose() {
-      page.__yuvomiRequestInterceptor = null;
-      if (settled) return;
-      settled = true;
-      if (request) await request.abort();
-    },
-  };
-}
-
-test('eine unbenutzte Request-Sperre laesst sich ohne Warten entsorgen', async () => {
-  const page = {};
-  const hold = holdNextNoteCategoryCreate(page);
-  const disposed = await Promise.race([
-    hold.dispose().then(() => true),
-    new Promise((resolve) => setTimeout(() => resolve(false), 50)),
-  ]);
-
-  assert.equal(disposed, true, 'dispose must not wait for a request that never started');
-  assert.equal(page.__yuvomiRequestInterceptor, null);
-});
-
-async function removeNoteProbeRecords(page, { titles, categoryNames }) {
-  await page.evaluate(async (fixture) => {
-    const { api } = await import('/api.js');
-    const notes = (await api.get('/notes')).data;
-    for (const note of notes.filter(({ title }) => fixture.titles.includes(title))) {
-      await api.delete(`/notes/${note.id}`);
-    }
-    const categories = (await api.get('/notes/categories')).data;
-    for (const category of categories.filter(({ name }) => fixture.categoryNames.includes(name))) {
-      await api.delete(`/notes/categories/${category.id}`);
-    }
-  }, { titles, categoryNames });
-}
-
-test('Sonde 21 - Notiz-Kategorien behalten Fokus, Gruppenrolle und Reader-Icons', async () => {
-  const page = await openPage(harness, { device: 'desktop', locale: 'en' });
-  const fixtureName = `Sonde 21 ${randomUUID()}`;
-  const categoryIds = [];
-  let noteId = null;
-  let probeError = null;
-  try {
-    const first = await page.evaluate(async (name) => {
-      const { api } = await import('/api.js');
-      return (await api.post('/notes/categories', {
-        name: `${name} one`,
-        scope: 'personal',
-      })).data;
-    }, fixtureName);
-    categoryIds.push(first.id);
-    const second = await page.evaluate(async (name) => {
-      const { api } = await import('/api.js');
-      return (await api.post('/notes/categories', {
-        name: `${name} two`,
-        scope: 'personal',
-      })).data;
-    }, fixtureName);
-    categoryIds.push(second.id);
-    const note = await page.evaluate(async ({ name, ids }) => {
-      const { api } = await import('/api.js');
-      return (await api.post('/notes', {
-        title: name,
-        content: 'Reader icons survive repeated pane replacement.',
-        category_ids: ids,
-      })).data;
-    }, { name: fixtureName, ids: categoryIds });
-    noteId = note.id;
-
-    await gotoRoute(page, '/notes');
-    await page.waitForSelector(`[data-category-id="${first.id}"]`);
-    await page.$eval(`[data-category-id="${first.id}"]`, (chip) => {
-      chip.focus();
-      chip.click();
-    });
-    await page.waitForFunction(
-      (id) => document.activeElement?.dataset.categoryId === String(id),
-      {},
-      first.id,
-    );
-    const focusState = await page.evaluate(() => ({
-      focusedCategory: document.activeElement?.dataset.categoryId ?? null,
-      categoryPressed: document.activeElement?.getAttribute('aria-pressed') ?? null,
-    }));
-
-    await page.click(`.note-card[data-id="${noteId}"] .note-card__open`);
-    await page.waitForSelector('.note-modal[data-view="read"]');
-    const readTurns = [];
-    for (let turn = 0; turn < 2; turn += 1) {
-      await page.click('.note-mode-switch [data-view="edit"]');
-      await page.click('.note-mode-switch [data-view="read"]');
-      readTurns.push(await page.evaluate(() => ({
-        icons: document.querySelectorAll('.note-read__categories svg').length,
-        placeholders: document.querySelectorAll('.note-read__categories i[data-lucide]').length,
-      })));
-    }
-
-    const actual = await page.evaluate(({ noteId }) => ({
-      outerFilterLabel: document.querySelector('#notes-filters')?.getAttribute('aria-label'),
-      cardRole: document.querySelector(`.note-card[data-id="${noteId}"] .note-card__categories`)?.getAttribute('role'),
-      readRole: document.querySelector('.note-read__categories')?.getAttribute('role'),
-    }), { noteId });
-
-    assert.deepEqual({ ...focusState, ...actual, readTurns }, {
-      focusedCategory: String(first.id),
-      categoryPressed: 'true',
-      outerFilterLabel: null,
-      cardRole: 'group',
-      readRole: 'group',
-      readTurns: [
-        { icons: 2, placeholders: 0 },
-        { icons: 2, placeholders: 0 },
-      ],
-    });
-  } catch (err) {
-    probeError = err;
-  } finally {
-    const cleanupErrors = [];
-    if (noteId !== null) {
-      try {
-        await page.evaluate(async (id) => {
-          const { api } = await import('/api.js');
-          await api.delete(`/notes/${id}`);
-        }, noteId);
-      } catch (err) {
-        cleanupErrors.push(err);
-      }
-    }
-    for (const id of categoryIds) {
-      try {
-        await page.evaluate(async (categoryId) => {
-          const { api } = await import('/api.js');
-          await api.delete(`/notes/categories/${categoryId}`);
-        }, id);
-      } catch (err) {
-        cleanupErrors.push(err);
-      }
-    }
-    try {
-      await page.evaluate(async ({ expectedNoteId, expectedCategoryIds }) => {
-        const { api } = await import('/api.js');
-        const [notes, categories] = await Promise.all([
-          api.get('/notes'),
-          api.get('/notes/categories'),
-        ]);
-        if (expectedNoteId !== null && notes.data.some(({ id }) => id === expectedNoteId)) {
-          throw new Error(`note ${expectedNoteId} survived Sonde 21 cleanup`);
-        }
-        const survivors = categories.data
-          .filter(({ id }) => expectedCategoryIds.includes(id))
-          .map(({ id }) => id);
-        if (survivors.length) {
-          throw new Error(`categories ${survivors.join(', ')} survived Sonde 21 cleanup`);
-        }
-      }, { expectedNoteId: noteId, expectedCategoryIds: categoryIds });
-    } catch (err) {
-      cleanupErrors.push(err);
-    }
-    try {
-      await page.close();
-    } catch (err) {
-      cleanupErrors.push(err);
-    }
-    if (cleanupErrors.length) {
-      throw new AggregateError(
-        probeError ? [probeError, ...cleanupErrors] : cleanupErrors,
-        'Sonde 21 cleanup failed',
-      );
-    }
-  }
-  if (probeError) throw probeError;
-});
-
-test('Sonde 22 - Anlegen einer Kategorie blockiert Speichern und beruehrt keinen Ersatzdialog', async () => {
-  const page = await openPage(harness, { device: 'desktop', locale: 'en' });
-  const suffix = randomUUID();
-  const savedTitle = `Sonde 22 saved ${suffix}`;
-  const savedCategory = `Sonde 22 assigned ${suffix}`;
-  const failedCategory = `Sonde 22 failed ${suffix}`;
-  const closedCategory = `Sonde 22 closed ${suffix}`;
-  const replacementTitle = `Sonde 22 replacement ${suffix}`;
-  let heldRequest = null;
-  let probeError = null;
-  try {
-    await gotoRoute(page, '/notes');
-    await page.click('#notes-add-btn');
-    await page.type('#note-title', savedTitle);
-    await page.type('#note-content', 'The delayed category must be assigned before this note is saved.');
-    await page.type('#note-category-search', savedCategory);
-    await page.waitForSelector('#note-category-create:not([hidden])');
-
-    heldRequest = holdNextNoteCategoryCreate(page);
-    await page.click('#note-category-create');
-    await heldRequest.seen;
-    assert.deepEqual(await page.evaluate(() => ({
-      createDisabled: document.querySelector('#note-category-create')?.disabled,
-      saveDisabled: document.querySelector('#note-modal-save')?.disabled,
-    })), { createDisabled: true, saveDisabled: true });
-
-    await page.$eval('#note-modal-save', (button) => {
-      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.equal(await page.evaluate(async (title) => {
-      const { api } = await import('/api.js');
-      return (await api.get('/notes')).data.some((note) => note.title === title);
-    }, savedTitle), false, 'a programmatic Save must not bypass the pending category create');
-
-    await heldRequest.release();
-    heldRequest = null;
-    await page.waitForSelector(`[data-selected-category-id] .note-category-selection__name`);
-    await page.waitForFunction(() => !document.querySelector('#note-modal-save')?.disabled);
-    await page.click('#note-modal-save');
-    await page.waitForSelector('#shared-modal-overlay', { hidden: true });
-
-    const persisted = await page.evaluate(async ({ title, categoryName }) => {
-      const { api } = await import('/api.js');
-      const note = (await api.get('/notes')).data.find((item) => item.title === title);
-      const category = (await api.get('/notes/categories')).data.find((item) => item.name === categoryName);
-      return {
-        noteFound: !!note,
-        categoryFound: !!category,
-        assigned: !!note?.categories?.some(({ id }) => id === category?.id),
-      };
-    }, { title: savedTitle, categoryName: savedCategory });
-    assert.deepEqual(persisted, { noteFound: true, categoryFound: true, assigned: true });
-
-    await page.click('#notes-add-btn');
-    await page.type('#note-content', 'A failed category request must unlock this editor.');
-    await page.type('#note-category-search', failedCategory);
-    await page.waitForSelector('#note-category-create:not([hidden])');
-    heldRequest = holdNextNoteCategoryCreate(page);
-    await page.click('#note-category-create');
-    await heldRequest.seen;
-    await heldRequest.reject();
-    heldRequest = null;
-    await page.waitForFunction(() => (
-      !document.querySelector('#note-category-create')?.disabled
-      && !document.querySelector('#note-modal-save')?.disabled
-    ));
-    assert.equal(await page.evaluate(async (name) => {
-      const { api } = await import('/api.js');
-      return (await api.get('/notes/categories')).data.some((category) => category.name === name);
-    }, failedCategory), false);
-    await page.evaluate(async () => {
-      const { closeModal } = await import('/components/modal.js');
-      await closeModal({ force: true });
-    });
-
-    await page.click('#notes-add-btn');
-    await page.type('#note-content', 'This editor will close while its category request is pending.');
-    await page.type('#note-category-search', closedCategory);
-    await page.waitForSelector('#note-category-create:not([hidden])');
-    await page.evaluate(() => {
-      const choices = document.querySelector('#note-category-choices');
-      window.__sonde22DetachedMutations = 0;
-      new MutationObserver((records) => {
-        window.__sonde22DetachedMutations += records.length;
-      }).observe(choices, { childList: true, subtree: true });
-    });
-
-    heldRequest = holdNextNoteCategoryCreate(page);
-    await page.click('#note-category-create');
-    await heldRequest.seen;
-    await page.evaluate(async () => {
-      const { closeModal } = await import('/components/modal.js');
-      await closeModal({ force: true });
-    });
-    await page.click('#notes-add-btn');
-    // openModal setzt seinen kanonischen Erstfokus zeitversetzt. Erst danach
-    // gehoert jede weitere Fokusbewegung diesem Ersatzdialog und der Sonde.
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    await page.type('#note-title', replacementTitle);
-    await page.focus('#note-content');
-    const replacementBefore = await page.evaluate(() => ({
-      markup: document.querySelector('.note-modal')?.outerHTML,
-      focus: document.activeElement?.id,
-    }));
-
-    await heldRequest.release();
-    heldRequest = null;
-    await page.waitForFunction(async (name) => {
-      const { api } = await import('/api.js');
-      return (await api.get('/notes/categories')).data.some((category) => category.name === name);
-    }, {}, closedCategory);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const replacementAfter = await page.evaluate(() => ({
-      markup: document.querySelector('.note-modal')?.outerHTML,
-      focus: document.activeElement?.id,
-      detachedMutations: window.__sonde22DetachedMutations,
-    }));
-    assert.deepEqual(replacementAfter, {
-      ...replacementBefore,
-      detachedMutations: 0,
-    });
-  } catch (err) {
-    probeError = err;
-  } finally {
-    const cleanupErrors = [];
-    if (heldRequest) {
-      try {
-        await heldRequest.dispose();
-      } catch (err) {
-        cleanupErrors.push(err);
-      }
-    }
-    try {
-      await removeNoteProbeRecords(page, {
-        titles: [savedTitle, replacementTitle],
-        categoryNames: [savedCategory, closedCategory],
-      });
-    } catch (err) {
-      cleanupErrors.push(err);
-    }
-    try {
-      await page.close();
-    } catch (err) {
-      cleanupErrors.push(err);
-    }
-    if (cleanupErrors.length) {
-      throw new AggregateError(
-        probeError ? [probeError, ...cleanupErrors] : cleanupErrors,
-        'Sonde 22 cleanup failed',
-      );
-    }
-  }
-  if (probeError) throw probeError;
-});
-
 test('PR2 #975 - das zusammengesetzte Kalenderformular und seine Seriennamen bleiben wahr', async () => {
   const page = await openPage(harness, { device: 'desktop', locale: 'de' });
   const title = 'PR2 Serienprobe 975';
@@ -4243,4 +3867,710 @@ describe('Sonde 20 - ein Werkzeug des Kopfs ist sichtbar oder sichtbar angeschni
         + findings.join('\n  '));
     });
   }
+});
+// Notes probes deliberately live at the existing end-of-file boundary. #1055
+// also adds a browser block immediately after the shared after() hook; keeping
+// this complete independent block here avoids a placement-only merge conflict.
+function holdNextRequest(page, { method, pathname, label }) {
+  let request = null;
+  let settled = false;
+  let markSeen;
+  const captured = new Promise((resolve) => { markSeen = resolve; });
+  page.__yuvomiRequestInterceptor = (candidate) => {
+    if (
+      !request
+      && candidate.method() === method
+      && new URL(candidate.url()).pathname === pathname
+    ) {
+      request = candidate;
+      markSeen();
+      return true;
+    }
+    return false;
+  };
+  const waitForCapture = async () => {
+    let timeout;
+    try {
+      return await Promise.race([
+        captured,
+        new Promise((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error(`${label} was not captured within 5 seconds`)),
+            5000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+  const finish = async (action, ...args) => {
+    if (settled) return;
+    if (!request) await waitForCapture();
+    settled = true;
+    page.__yuvomiRequestInterceptor = null;
+    // Register before releasing the intercepted request: `request.continue()`
+    // only starts the network operation and does not mean its response reached
+    // the browser. Sonde 22 used to compensate with an rAF-paced API GET loop,
+    // spending the server's complete per-minute request budget.
+    const responseCompleted = page.waitForResponse(
+      (response) => response.request() === request,
+      { timeout: 5000 },
+    );
+    await request[action](...args);
+    return responseCompleted;
+  };
+  return {
+    get seen() { return waitForCapture(); },
+    release: () => finish('continue'),
+    reject: () => finish('respond', {
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: `${label} delayed failure` }),
+    }),
+    async dispose() {
+      page.__yuvomiRequestInterceptor = null;
+      if (settled) return;
+      settled = true;
+      if (request) await request.abort();
+    },
+  };
+}
+
+function holdNextNoteCategoryCreate(page) {
+  return holdNextRequest(page, {
+    method: 'POST',
+    pathname: '/api/v1/notes/categories',
+    label: 'note category POST',
+  });
+}
+
+function holdNextNoteSave(page, { method = 'POST', noteId = null } = {}) {
+  return holdNextRequest(page, {
+    method,
+    pathname: noteId === null ? '/api/v1/notes' : `/api/v1/notes/${noteId}`,
+    label: `${method} note save`,
+  });
+}
+
+async function openReadyNoteModal(page) {
+  await page.click('#notes-add-btn');
+  await page.waitForSelector('#note-content');
+  // Shared-modal initialization applies its first focus after 50 ms and takes
+  // the dirty baseline after 150 ms. The 300 ms barrier includes both timers
+  // before Puppeteer's real keyboard events start moving through the fields.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+}
+
+async function typeExactly(page, selector, value) {
+  await page.type(selector, value);
+  assert.equal(await page.$eval(selector, (field) => field.value), value);
+}
+
+async function replaceExactly(page, selector, value) {
+  await page.focus(selector);
+  await page.keyboard.down('Control');
+  await page.keyboard.press('KeyA');
+  await page.keyboard.up('Control');
+  await page.type(selector, value);
+  assert.equal(await page.$eval(selector, (field) => field.value), value);
+}
+
+async function openExistingNoteEditor(page, noteId) {
+  await page.click(`.note-card[data-id="${noteId}"] .note-card__open`);
+  await page.waitForSelector('#note-content');
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await page.click('.note-mode-switch [data-view="edit"]');
+  await page.waitForSelector('#note-pane-edit:not([hidden])');
+}
+
+async function discardOpenNoteEditor(page) {
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('#confirm-modal-ok');
+  await page.click('#confirm-modal-ok');
+  await page.waitForFunction(() => !document.querySelector('.note-modal'));
+}
+
+test('eine unbenutzte Request-Sperre laesst sich ohne Warten entsorgen', async () => {
+  const page = {};
+  const hold = holdNextNoteCategoryCreate(page);
+  const disposed = await Promise.race([
+    hold.dispose().then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 50)),
+  ]);
+
+  assert.equal(disposed, true, 'dispose must not wait for a request that never started');
+  assert.equal(page.__yuvomiRequestInterceptor, null);
+});
+
+async function removeNoteProbeRecords(page, { titles, categoryNames }) {
+  await page.evaluate(async (fixture) => {
+    const { api } = await import('/api.js');
+    const notes = (await api.get('/notes')).data;
+    for (const note of notes.filter(({ title }) => fixture.titles.includes(title))) {
+      await api.delete(`/notes/${note.id}`);
+    }
+    const categories = (await api.get('/notes/categories')).data;
+    for (const category of categories.filter(({ name }) => fixture.categoryNames.includes(name))) {
+      await api.delete(`/notes/categories/${category.id}`);
+    }
+  }, { titles, categoryNames });
+}
+
+test('Sonde 21 - Notiz-Kategorien behalten Fokus, Gruppenrolle und Reader-Icons', async () => {
+  const page = await openPage(harness, { device: 'desktop', locale: 'en' });
+  const fixtureName = `Sonde 21 ${randomUUID()}`;
+  const categoryIds = [];
+  let noteId = null;
+  let probeError = null;
+  try {
+    const first = await page.evaluate(async (name) => {
+      const { api } = await import('/api.js');
+      return (await api.post('/notes/categories', {
+        name: `${name} one`,
+        scope: 'personal',
+      })).data;
+    }, fixtureName);
+    categoryIds.push(first.id);
+    const second = await page.evaluate(async (name) => {
+      const { api } = await import('/api.js');
+      return (await api.post('/notes/categories', {
+        name: `${name} two`,
+        scope: 'personal',
+      })).data;
+    }, fixtureName);
+    categoryIds.push(second.id);
+    const note = await page.evaluate(async ({ name, ids }) => {
+      const { api } = await import('/api.js');
+      return (await api.post('/notes', {
+        title: name,
+        content: 'Reader icons survive repeated pane replacement.',
+        category_ids: ids,
+      })).data;
+    }, { name: fixtureName, ids: categoryIds });
+    noteId = note.id;
+
+    await gotoRoute(page, '/notes');
+    await page.waitForSelector(`[data-category-id="${first.id}"]`);
+    await page.$eval(`[data-category-id="${first.id}"]`, (chip) => {
+      chip.focus();
+      chip.click();
+    });
+    await page.waitForFunction(
+      (id) => document.activeElement?.dataset.categoryId === String(id),
+      {},
+      first.id,
+    );
+    const focusState = await page.evaluate(() => ({
+      focusedCategory: document.activeElement?.dataset.categoryId ?? null,
+      categoryPressed: document.activeElement?.getAttribute('aria-pressed') ?? null,
+    }));
+
+    await page.click(`.note-card[data-id="${noteId}"] .note-card__open`);
+    await page.waitForSelector('.note-modal[data-view="read"]');
+    const readTurns = [];
+    for (let turn = 0; turn < 2; turn += 1) {
+      await page.click('.note-mode-switch [data-view="edit"]');
+      await page.click('.note-mode-switch [data-view="read"]');
+      readTurns.push(await page.evaluate(() => ({
+        icons: document.querySelectorAll('.note-read__categories svg').length,
+        placeholders: document.querySelectorAll('.note-read__categories i[data-lucide]').length,
+      })));
+    }
+
+    const actual = await page.evaluate(({ noteId }) => ({
+      outerFilterLabel: document.querySelector('#notes-filters')?.getAttribute('aria-label'),
+      cardRole: document.querySelector(`.note-card[data-id="${noteId}"] .note-card__categories`)?.getAttribute('role'),
+      readRole: document.querySelector('.note-read__categories')?.getAttribute('role'),
+    }), { noteId });
+
+    assert.deepEqual({ ...focusState, ...actual, readTurns }, {
+      focusedCategory: String(first.id),
+      categoryPressed: 'true',
+      outerFilterLabel: null,
+      cardRole: 'group',
+      readRole: 'group',
+      readTurns: [
+        { icons: 2, placeholders: 0 },
+        { icons: 2, placeholders: 0 },
+      ],
+    });
+  } catch (err) {
+    probeError = err;
+  } finally {
+    const cleanupErrors = [];
+    if (noteId !== null) {
+      try {
+        await page.evaluate(async (id) => {
+          const { api } = await import('/api.js');
+          await api.delete(`/notes/${id}`);
+        }, noteId);
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+    }
+    for (const id of categoryIds) {
+      try {
+        await page.evaluate(async (categoryId) => {
+          const { api } = await import('/api.js');
+          await api.delete(`/notes/categories/${categoryId}`);
+        }, id);
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+    }
+    try {
+      await page.evaluate(async ({ expectedNoteId, expectedCategoryIds }) => {
+        const { api } = await import('/api.js');
+        const [notes, categories] = await Promise.all([
+          api.get('/notes'),
+          api.get('/notes/categories'),
+        ]);
+        if (expectedNoteId !== null && notes.data.some(({ id }) => id === expectedNoteId)) {
+          throw new Error(`note ${expectedNoteId} survived Sonde 21 cleanup`);
+        }
+        const survivors = categories.data
+          .filter(({ id }) => expectedCategoryIds.includes(id))
+          .map(({ id }) => id);
+        if (survivors.length) {
+          throw new Error(`categories ${survivors.join(', ')} survived Sonde 21 cleanup`);
+        }
+      }, { expectedNoteId: noteId, expectedCategoryIds: categoryIds });
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    try {
+      await page.close();
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    if (cleanupErrors.length) {
+      throw new AggregateError(
+        probeError ? [probeError, ...cleanupErrors] : cleanupErrors,
+        'Sonde 21 cleanup failed',
+      );
+    }
+  }
+  if (probeError) throw probeError;
+});
+test('Sonde 22 - Anlegen einer Kategorie blockiert Speichern und beruehrt keinen Ersatzdialog', async () => {
+  const page = await openPage(harness, { device: 'desktop', locale: 'en' });
+  const suffix = randomUUID();
+  const savedTitle = `Sonde 22 saved ${suffix}`;
+  const savedCategory = `Sonde 22 assigned ${suffix}`;
+  const failedCategory = `Sonde 22 failed ${suffix}`;
+  const closedCategory = `Sonde 22 closed ${suffix}`;
+  const replacementTitle = `Sonde 22 replacement ${suffix}`;
+  const replacementContent = 'Replacement content must keep its exact value and focus.';
+  const noteApiResponses = [];
+  const recordNoteApiResponse = (response) => {
+    const url = new URL(response.url());
+    if (url.pathname.startsWith('/api/v1/notes')) {
+      noteApiResponses.push({ method: response.request().method(), path: url.pathname, status: response.status() });
+    }
+  };
+  page.on('response', recordNoteApiResponse);
+  let heldRequest = null;
+  let probeError = null;
+  try {
+    await gotoRoute(page, '/notes');
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-title', savedTitle);
+    await typeExactly(page, '#note-content', 'The delayed category must be assigned before this note is saved.');
+    await typeExactly(page, '#note-category-search', savedCategory);
+    await page.waitForSelector('#note-category-create:not([hidden])');
+
+    heldRequest = holdNextNoteCategoryCreate(page);
+    await page.click('#note-category-create');
+    await heldRequest.seen;
+    assert.deepEqual(await page.evaluate(() => ({
+      createDisabled: document.querySelector('#note-category-create')?.disabled,
+      saveDisabled: document.querySelector('#note-modal-save')?.disabled,
+    })), { createDisabled: true, saveDisabled: true });
+
+    await page.$eval('#note-modal-save', (button) => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(await page.evaluate(async (title) => {
+      const { api } = await import('/api.js');
+      return (await api.get('/notes')).data.some((note) => note.title === title);
+    }, savedTitle), false, 'a programmatic Save must not bypass the pending category create');
+
+    await heldRequest.release();
+    heldRequest = null;
+    await page.waitForSelector(`[data-selected-category-id] .note-category-selection__name`);
+    await page.waitForFunction(() => !document.querySelector('#note-modal-save')?.disabled);
+    await page.click('#note-modal-save');
+    await page.waitForSelector('#shared-modal-overlay', { hidden: true });
+
+    const persisted = await page.evaluate(async ({ title, categoryName }) => {
+      const { api } = await import('/api.js');
+      const note = (await api.get('/notes')).data.find((item) => item.title === title);
+      const category = (await api.get('/notes/categories')).data.find((item) => item.name === categoryName);
+      return {
+        noteFound: !!note,
+        categoryFound: !!category,
+        assigned: !!note?.categories?.some(({ id }) => id === category?.id),
+      };
+    }, { title: savedTitle, categoryName: savedCategory });
+    assert.deepEqual(persisted, { noteFound: true, categoryFound: true, assigned: true });
+
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-content', 'A failed category request must unlock this editor.');
+    await typeExactly(page, '#note-category-search', failedCategory);
+    await page.waitForSelector('#note-category-create:not([hidden])');
+    heldRequest = holdNextNoteCategoryCreate(page);
+    await page.click('#note-category-create');
+    await heldRequest.seen;
+    await heldRequest.reject();
+    heldRequest = null;
+    await page.waitForFunction(() => (
+      !document.querySelector('#note-category-create')?.disabled
+      && !document.querySelector('#note-modal-save')?.disabled
+    ));
+    assert.equal(await page.evaluate(async (name) => {
+      const { api } = await import('/api.js');
+      return (await api.get('/notes/categories')).data.some((category) => category.name === name);
+    }, failedCategory), false);
+    await page.evaluate(async () => {
+      const { closeModal } = await import('/components/modal.js');
+      await closeModal({ force: true });
+    });
+
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-content', 'This editor will close while its category request is pending.');
+    await typeExactly(page, '#note-category-search', closedCategory);
+    await page.waitForSelector('#note-category-create:not([hidden])');
+    await page.evaluate(() => {
+      const choices = document.querySelector('#note-category-choices');
+      window.__sonde22DetachedMutations = 0;
+      new MutationObserver((records) => {
+        window.__sonde22DetachedMutations += records.length;
+      }).observe(choices, { childList: true, subtree: true });
+    });
+
+    heldRequest = holdNextNoteCategoryCreate(page);
+    await page.click('#note-category-create');
+    await heldRequest.seen;
+    await page.evaluate(async () => {
+      const { closeModal } = await import('/components/modal.js');
+      await closeModal({ force: true });
+    });
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-title', replacementTitle);
+    await typeExactly(page, '#note-content', replacementContent);
+    await page.focus('#note-content');
+    const replacementBefore = await page.evaluate(() => ({
+      open: document.querySelector('.note-modal')?.isConnected ?? false,
+      title: document.querySelector('#note-title')?.value,
+      content: document.querySelector('#note-content')?.value,
+      focus: document.activeElement?.id,
+    }));
+
+    await heldRequest.release();
+    heldRequest = null;
+    const closedCategoryPersisted = await page.evaluate(async (name) => {
+      const { api } = await import('/api.js');
+      return (await api.get('/notes/categories')).data.some((category) => category.name === name);
+    }, closedCategory);
+    assert.equal(closedCategoryPersisted, true);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const replacementAfter = await page.evaluate(() => ({
+      open: document.querySelector('.note-modal')?.isConnected ?? false,
+      title: document.querySelector('#note-title')?.value,
+      content: document.querySelector('#note-content')?.value,
+      focus: document.activeElement?.id,
+      detachedMutations: window.__sonde22DetachedMutations,
+    }));
+    assert.deepEqual(replacementAfter, {
+      ...replacementBefore,
+      detachedMutations: 0,
+    });
+  } catch (err) {
+    probeError = err;
+  } finally {
+    const cleanupErrors = [];
+    if (heldRequest) {
+      try {
+        await heldRequest.dispose();
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+    }
+    try {
+      await removeNoteProbeRecords(page, {
+        titles: [savedTitle, replacementTitle],
+        categoryNames: [savedCategory, closedCategory],
+      });
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    try {
+      const rateLimited = noteApiResponses.filter(({ status }) => status === 429);
+      const categoryReads = noteApiResponses.filter(({ method, path }) => (
+        method === 'GET' && path === '/api/v1/notes/categories'
+      ));
+      if (process.env.SONDE_REQUEST_COUNTS === '1') {
+        console.log(`Sonde 22 request counts: total=${noteApiResponses.length}, categoryGET=${categoryReads.length}, 429=${rateLimited.length}`);
+      }
+      assert.deepEqual(rateLimited, [], `Sonde 22 received 429 responses: ${JSON.stringify(rateLimited)}`);
+      assert.ok(categoryReads.length <= 6,
+        `Sonde 22 used ${categoryReads.length} category GETs; bounded budget is 6`);
+      assert.ok(noteApiResponses.length <= 24,
+        `Sonde 22 used ${noteApiResponses.length} Notes API responses; bounded budget is 24`);
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    page.off('response', recordNoteApiResponse);
+    try {
+      await page.close();
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    if (cleanupErrors.length) {
+      throw new AggregateError(
+        probeError ? [probeError, ...cleanupErrors] : cleanupErrors,
+        'Sonde 22 cleanup failed',
+      );
+    }
+  }
+  if (probeError) throw probeError;
+});
+
+test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdialoge', async () => {
+  const page = await openPage(harness, { device: 'desktop', locale: 'en' });
+  const suffix = randomUUID();
+  const successTitle = `Sonde 23 late success ${suffix}`;
+  const successContent = 'A completed delayed POST must persist without closing a replacement.';
+  const successReplacementTitle = `Sonde 23 success replacement ${suffix}`;
+  const failureFixtureTitle = `Sonde 23 PUT fixture ${suffix}`;
+  const failureReplacementTitle = `Sonde 23 failure replacement ${suffix}`;
+  const replacementContent = 'Unrelated replacement content must stay exact and focused.';
+  const retryContent = 'An in-place failed PUT can be retried without losing these exact characters.';
+  const confirmationTitle = `Sonde 23 confirmation ${suffix}`;
+  const confirmationContent = 'A delayed success must not answer the discard question for the user.';
+  const cleanupTitles = [
+    successTitle,
+    successReplacementTitle,
+    failureFixtureTitle,
+    failureReplacementTitle,
+    confirmationTitle,
+  ];
+  const noteApiResponses = [];
+  const recordNoteApiResponse = (response) => {
+    const url = new URL(response.url());
+    if (url.pathname.startsWith('/api/v1/notes')) {
+      noteApiResponses.push({ method: response.request().method(), path: url.pathname, status: response.status() });
+    }
+  };
+  page.on('response', recordNoteApiResponse);
+  let heldRequest = null;
+  let probeError = null;
+  try {
+    await gotoRoute(page, '/notes');
+
+    // A late successful POST belongs to this original editor, not to whichever
+    // modal occupies the shared slot when the response finally arrives.
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-title', successTitle);
+    await typeExactly(page, '#note-content', successContent);
+    heldRequest = holdNextNoteSave(page);
+    await page.click('#note-modal-save');
+    await heldRequest.seen;
+    await discardOpenNoteEditor(page);
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-title', successReplacementTitle);
+    await typeExactly(page, '#note-content', replacementContent);
+    await page.focus('#note-content');
+    await heldRequest.release();
+    heldRequest = null;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const afterLateSuccess = await page.evaluate(() => ({
+      replacementOpen: document.querySelector('.note-modal')?.isConnected ?? false,
+      title: document.querySelector('#note-title')?.value,
+      content: document.querySelector('#note-content')?.value,
+      focus: document.activeElement?.id,
+    }));
+    assert.deepEqual(afterLateSuccess, {
+      replacementOpen: true,
+      title: successReplacementTitle,
+      content: replacementContent,
+      focus: 'note-content',
+    });
+    const savedPost = await page.evaluate(async (title) => {
+      const { api } = await import('/api.js');
+      return (await api.get('/notes')).data.find((note) => note.title === title) ?? null;
+    }, successTitle);
+    assert.equal(savedPost?.content, successContent);
+
+    await page.evaluate(async () => {
+      const { closeModal } = await import('/components/modal.js');
+      await closeModal({ force: true });
+    });
+    await page.waitForFunction(() => !document.querySelector('.note-modal'));
+
+    // Exercise the PUT path independently. Its late failure must remain globally
+    // visible after the originating editor was discarded, without mutating the
+    // replacement editor's values, focus, or controls.
+    const failureFixture = await page.evaluate(async ({ title, content }) => {
+      const { api } = await import('/api.js');
+      return (await api.post('/notes', { title, content })).data;
+    }, { title: failureFixtureTitle, content: 'Original PUT fixture content.' });
+    await gotoRoute(page, '/notes');
+    await openExistingNoteEditor(page, failureFixture.id);
+    await replaceExactly(page, '#note-content', 'This PUT is expected to fail after its editor closes.');
+    heldRequest = holdNextNoteSave(page, { method: 'PUT', noteId: failureFixture.id });
+    await page.click('#note-modal-save');
+    await heldRequest.seen;
+    await discardOpenNoteEditor(page);
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-title', failureReplacementTitle);
+    await typeExactly(page, '#note-content', replacementContent);
+    await page.focus('#note-content');
+    await heldRequest.reject();
+    heldRequest = null;
+    await page.waitForSelector('.toast--danger');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const afterLateFailure = await page.evaluate((errorText) => ({
+      replacementOpen: document.querySelector('.note-modal')?.isConnected ?? false,
+      title: document.querySelector('#note-title')?.value,
+      content: document.querySelector('#note-content')?.value,
+      focus: document.activeElement?.id,
+      errorVisible: [...document.querySelectorAll('.toast--danger')]
+        .some((toast) => toast.textContent.includes(errorText)),
+    }), 'PUT note save delayed failure');
+    assert.deepEqual(afterLateFailure, {
+      replacementOpen: true,
+      title: failureReplacementTitle,
+      content: replacementContent,
+      focus: 'note-content',
+      errorVisible: true,
+    });
+    const afterRejectedPut = await page.evaluate(async (id) => {
+      const { api } = await import('/api.js');
+      return (await api.get('/notes')).data.find((note) => note.id === id) ?? null;
+    }, failureFixture.id);
+    assert.equal(afterRejectedPut?.content, 'Original PUT fixture content.');
+
+    await page.evaluate(async () => {
+      const { closeModal } = await import('/components/modal.js');
+      await closeModal({ force: true });
+    });
+    await page.waitForFunction(() => !document.querySelector('.note-modal'));
+
+    // Preserve the established in-place recovery contract as the stale-editor
+    // guards get stricter: the same editor unlocks and a real retry persists.
+    await gotoRoute(page, '/notes');
+    await openExistingNoteEditor(page, failureFixture.id);
+    await replaceExactly(page, '#note-content', retryContent);
+    heldRequest = holdNextNoteSave(page, { method: 'PUT', noteId: failureFixture.id });
+    await page.click('#note-modal-save');
+    await heldRequest.seen;
+    await heldRequest.reject();
+    heldRequest = null;
+    await page.waitForFunction(() => !document.querySelector('#note-modal-save')?.disabled);
+    assert.deepEqual(await page.evaluate(() => ({
+      open: document.querySelector('.note-modal')?.isConnected ?? false,
+      content: document.querySelector('#note-content')?.value,
+      saveDisabled: document.querySelector('#note-modal-save')?.disabled,
+    })), { open: true, content: retryContent, saveDisabled: false });
+
+    heldRequest = holdNextNoteSave(page, { method: 'PUT', noteId: failureFixture.id });
+    await page.click('#note-modal-save');
+    await heldRequest.seen;
+    await heldRequest.release();
+    heldRequest = null;
+    await page.waitForFunction(() => !document.querySelector('.note-modal'));
+    const afterRetry = await page.evaluate(async (id) => {
+      const { api } = await import('/api.js');
+      return (await api.get('/notes')).data.find((note) => note.id === id) ?? null;
+    }, failureFixture.id);
+    assert.equal(afterRetry?.content, retryContent);
+
+    // A dirty-close confirmation temporarily parks the editor without detaching
+    // it. A successful response must not force-close that active question. If
+    // the user cancels the discard, normal successful-save closure resumes only
+    // after the editor owns the shared modal slot again.
+    await gotoRoute(page, '/notes');
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-title', confirmationTitle);
+    await typeExactly(page, '#note-content', confirmationContent);
+    heldRequest = holdNextNoteSave(page);
+    await page.click('#note-modal-save');
+    await heldRequest.seen;
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#confirm-modal-cancel');
+    assert.deepEqual(await page.evaluate(() => ({
+      confirmationOpen: document.querySelector('#confirm-modal-cancel')?.isConnected ?? false,
+      originalConnected: document.querySelector('.note-modal')?.isConnected ?? false,
+      originalInert: document.querySelector('.note-modal')?.closest('.modal-overlay')?.inert ?? false,
+    })), { confirmationOpen: true, originalConnected: true, originalInert: true });
+
+    await heldRequest.release();
+    heldRequest = null;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.deepEqual(await page.evaluate(() => ({
+      confirmationOpen: document.querySelector('#confirm-modal-cancel')?.isConnected ?? false,
+      originalConnected: document.querySelector('.note-modal')?.isConnected ?? false,
+      originalInert: document.querySelector('.note-modal')?.closest('.modal-overlay')?.inert ?? false,
+    })), { confirmationOpen: true, originalConnected: true, originalInert: true });
+    await page.click('#confirm-modal-cancel');
+    await page.waitForFunction(() => !document.querySelector('.note-modal'));
+    const confirmationSave = await page.evaluate(async (title) => {
+      const { api } = await import('/api.js');
+      return (await api.get('/notes')).data.find((note) => note.title === title) ?? null;
+    }, confirmationTitle);
+    assert.equal(confirmationSave?.content, confirmationContent);
+  } catch (err) {
+    probeError = err;
+  } finally {
+    const cleanupErrors = [];
+    if (heldRequest) {
+      try {
+        await heldRequest.dispose();
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+    }
+    try {
+      await page.evaluate(async () => {
+        const { closeModal } = await import('/components/modal.js');
+        await closeModal({ force: true });
+      });
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    try {
+      await removeNoteProbeRecords(page, { titles: cleanupTitles, categoryNames: [] });
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    try {
+      const rateLimited = noteApiResponses.filter(({ status }) => status === 429);
+      if (process.env.SONDE_REQUEST_COUNTS === '1') {
+        console.log(`Sonde 23 request counts: total=${noteApiResponses.length}, 429=${rateLimited.length}`);
+      }
+      assert.deepEqual(rateLimited, [], `Sonde 23 received 429 responses: ${JSON.stringify(rateLimited)}`);
+      assert.ok(noteApiResponses.length <= 32,
+        `Sonde 23 used ${noteApiResponses.length} Notes API responses; bounded budget is 32`);
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    page.off('response', recordNoteApiResponse);
+    try {
+      await page.close();
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    if (cleanupErrors.length) {
+      throw new AggregateError(
+        probeError ? [probeError, ...cleanupErrors] : cleanupErrors,
+        'Sonde 23 cleanup failed',
+      );
+    }
+  }
+  if (probeError) throw probeError;
 });

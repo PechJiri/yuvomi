@@ -286,7 +286,7 @@ test('all supported locales contain every note-category translation', () => {
     'moreAction', 'moreAction_one', 'personalManagementHint',
   ];
   const files = readdirSync(directory).filter((file) => file.endsWith('.json'));
-  assert.ok(files.length >= 24);
+  assert.equal(files.length, 24);
   for (const file of files) {
     const locale = JSON.parse(readFileSync(new URL(file, directory), 'utf8'));
     for (const key of keys) {

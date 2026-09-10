@@ -172,6 +172,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the suite itself and would otherwise have reported all three for setting it through the shared
   helper - which sets it earlier and more strictly than the form the guard knew.
 
+- **Late Notes saves no longer close a replacement dialog or hide a failed save.** A save response
+  now belongs to the editor that started it. If that editor has already closed or is waiting behind
+  a discard confirmation, the current dialog and its unsaved fields stay intact; network failures
+  remain visible in the global error toast.
+
 - **An ingredient written in the household's own digits now counts towards the shopping list.**
   Moving a meal plan to the shopping list adds up the same ingredient across meals. The server read
   the quantity with an ASCII-only pattern, so a Persian, Arabic, Hindi or Thai amount - "۲۵۰ g" -
