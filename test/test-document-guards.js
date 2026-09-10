@@ -3999,9 +3999,18 @@ async function typeExactly(page, selector, value) {
 
 async function replaceExactly(page, selector, value) {
   await page.focus(selector);
-  await page.keyboard.down('Control');
-  await page.keyboard.press('KeyA');
-  await page.keyboard.up('Control');
+  // Puppeteer's keyboard shortcuts do not select all on macOS; the editing
+  // command does on every platform.
+  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  await page.keyboard.down(modifier);
+  await page.keyboard.press('KeyA', { commands: ['SelectAll'] });
+  await page.keyboard.up(modifier);
+  const length = await page.$eval(selector, (field) => field.value.length);
+  assert.deepEqual(
+    await page.$eval(selector, (field) => [field.selectionStart, field.selectionEnd]),
+    [0, length],
+    `select-all did not select the whole value of ${selector}`,
+  );
   await page.type(selector, value);
   assert.equal(await page.$eval(selector, (field) => field.value), value);
 }
