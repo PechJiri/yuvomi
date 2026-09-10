@@ -101,6 +101,30 @@ export function bejaht(text, muster) {
 }
 
 /**
+ * Sagt der Text, dass er aufhoert - und verneint er das NICHT?
+ *
+ * Nicht ueber `bejaht`, und der Unterschied ist Absicht. Zwei der Aufhoer-Formeln
+ * verneinen selbst: "I will not proceed", "No review is needed". `bejaht` nimmt
+ * den Treffer mit ins Fenster und las ihr eigenes "not"/"no" als Verneinung - ein
+ * echter Abbruch fiel damit aus `schon-kommentiert` heraus und landete bei
+ * `unbekannt` (Codex zu #1096, nach der dritten Runde; die dritte Runde hatte
+ * `bejaht` hier erst eingefuehrt). Hier endet das Fenster deshalb VOR dem Treffer,
+ * und es beginnt nach dem letzten Satzende: das "No" aus einem zitierten
+ * "No issues found" im Satz davor gehoert nicht zum Aufhoeren.
+ *
+ * Lockerer als `bejaht` darf das sein, weil es nie ueber gruen entscheidet:
+ * `HOERT_AUF` waehlt nur zwischen roten Diagnosen. Die Tor-Ausnahme, die gruen
+ * machen kann, bleibt bei `bejaht` mit dem Treffer im Fenster.
+ */
+export function hoertAuf(text) {
+  const roh = String(text ?? '');
+  const treffer = HOERT_AUF.exec(roh);
+  if (!treffer) return false;
+  const fenster = roh.slice(Math.max(0, treffer.index - FENSTER), treffer.index);
+  return !VERNEINER.test(fenster.split(/[.!?\n]/).pop());
+}
+
+/**
  * DER BELEG IST EINE ADRESSE, DIE ES WIRKLICH GIBT - NICHT DIE FORM DES BEFEHLS.
  *
  * Bis zur dritten Review-Runde zu #1096 las dieses Modul die Befehlszeile: ist
@@ -319,11 +343,12 @@ export function beurteile({
   // `HOERT_AUF.test` traf auch "I did not stop here". Ein Lauf, der den neuen
   // Stand geprueft hat und am Posten scheiterte, galt damit als Abbruch im Tor,
   // und die Meldung schickte den Leser zum Prompt statt zur Werkzeugsperre.
+  // Geprueft ueber `hoertAuf` und nicht ueber `bejaht` - warum, steht dort.
   if (
     gepostet.erfolge === 0 &&
     zahl.gebunden === 0 &&
     bejaht(text, SCHON_KOMMENTIERT) &&
-    bejaht(text, HOERT_AUF)
+    hoertAuf(text)
   ) {
     return stumm('schon-kommentiert', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
   }

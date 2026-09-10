@@ -1018,3 +1018,39 @@ test('ein VERNEINTES Aufhoeren ist kein Abbruch im Tor (#1096, Codex P2)', () =>
     'die Sperre ist der Grund, nicht ein Abbruch, den der Text verneint');
   assert.doesNotMatch(urteil.meldung, /IM TOR ABGEBROCHEN/);
 });
+
+test('ein Aufhoeren, das SELBST verneint, bleibt ein Abbruch (#1096, Codex nach Runde 3)', () => {
+  // "I will not proceed" und "No review is needed" tragen ihr "not"/"no" im
+  // eigenen Wortlaut. Die dritte Runde pruefte das Aufhoeren ueber `bejaht`, und
+  // dessen Fenster schliesst den Treffer ein: ein echter Abbruch landete bei
+  // `unbekannt`. Die Reparatur der Verneinung hatte die naechste Luecke gebaut.
+  for (const result of [
+    'Claude has already commented on this PR, so I will not proceed.',
+    'Claude has already commented on this PR. No review is needed.',
+    // Das "No" des zitierten Befunds steht im Satz DAVOR und gehoert nicht zum Aufhoeren.
+    'Claude has already left a comment on this PR (a "No issues found" review). No review is needed.'
+  ]) {
+    const urteil = beurteile({
+      seit: seit(ABBRUCH_LAUF),
+      kopf: kopf(ABBRUCH_LAUF),
+      ergebnis: { num_turns: 3, subtype: 'success', is_error: false, permission_denials: [], result },
+      aeusserungen: [],
+      gepostet: NICHTS
+    });
+    assert.equal(urteil.grund, 'schon-kommentiert', result);
+  }
+
+  // Die Gegenrichtung: doppelt verneint heisst weitermachen, und die Sperre
+  // bleibt der Grund.
+  const weiter = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 20, subtype: 'success', is_error: false, permission_denials: [{ tool_name: 'Bash' }],
+      result: 'Claude has already reviewed older commits. I did not want to not proceed, so the review continued.'
+    },
+    aeusserungen: [],
+    gepostet: NICHTS
+  });
+  assert.equal(weiter.grund, 'werkzeugsperre');
+});
