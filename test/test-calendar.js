@@ -20,6 +20,22 @@ function test(name, fn) {
 }
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'Assertion fehlgeschlagen'); }
 
+test('Kalender-Speicherbestätigungen halten beide Editor-Save-Gates offen', () => {
+  const source = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
+  for (const [name, nextName] of [
+    ['confirmCalendarOverrideOrphans', 'confirmLocalWholeSeriesEdit'],
+    ['confirmLocalWholeSeriesEdit', 'confirmLocalWholeSeriesDelete'],
+  ]) {
+    const start = source.indexOf(`function ${name}(`);
+    assert(start >= 0, `${name} muss auffindbar bleiben`);
+    const end = source.indexOf(`function ${nextName}(`, start);
+    assert(end > start, `${name} muss vor ${nextName} stehen`);
+    const body = source.slice(start, end);
+    assert(/confirmOverModal\([\s\S]*closeOnConfirm:\s*false/.test(body),
+      `${name} darf das Editor-Modal vor dem Save-Lauf nicht schließen`);
+  }
+});
+
 test('Kalenderanhänge verwenden Dokument-Endpunkte und behalten Legacy-Data-URLs lesbar', () => {
   const linked = {
     attachment_document_id: 42,

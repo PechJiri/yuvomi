@@ -1144,8 +1144,45 @@ test('local outbound targets retain legacy exception scopes without linked overr
     const event = (await call('GET', `/${id}`)).body.data;
     assert.equal(event.is_local_recurring_series, true);
     assert.equal(event.can_override_occurrence, false);
+    assert.equal(event.can_detach_occurrence, true);
     assert.equal((await call('POST', `/${id}/exceptions`, { body: { date: '2042-02-03' } })).status, 201);
     assert.equal((await call('PUT', `/${id}/occurrences/2042-02-04`, { body: { title: 'Must stay legacy' } })).status, 400);
+  }
+});
+
+test('generated local series retain legacy per-occurrence detach capability', async () => {
+  const generatedOwners = [
+    ['birthday', (id) => db.prepare(`
+      INSERT INTO birthdays (name, birth_date, calendar_event_id, created_by)
+      VALUES ('Legacy birthday scope', '2000-02-02', ?, 1)
+    `).run(id)],
+    ['name day', (id) => db.prepare(`
+      INSERT INTO birthdays (name, birth_date, name_day, name_day_calendar_event_id, created_by)
+      VALUES ('Legacy name-day scope', '2000-02-02', '02-02', ?, 1)
+    `).run(id)],
+    ['housekeeping', (id) => db.prepare(`
+      INSERT INTO housekeeping_work_sessions
+        (check_in, daily_rate, extras, calendar_event_id, created_by)
+      VALUES ('2047-02-02T09:00:00', 0, 0, ?, 1)
+    `).run(id)],
+  ];
+
+  for (const [label, configure] of generatedOwners) {
+    const id = insertEvent({
+      title: `Generated ${label}`,
+      start_datetime: '2047-02-02T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+    });
+    configure(id);
+
+    const event = (await call('GET', `/${id}`)).body.data;
+    assert.equal(event.is_local_recurring_series, true, label);
+    assert.equal(event.can_override_occurrence, false, label);
+    assert.equal(event.can_detach_occurrence, true, label);
+    const detached = await call('POST', `/${id}/exceptions`, {
+      body: { date: '2047-02-03' },
+    });
+    assert.equal(detached.status, 201, label);
   }
 });
 
@@ -2578,7 +2615,11 @@ test('whole-series rule update requires the exact orphan count and detaches conf
   assert.deepEqual(db.prepare(`
     SELECT exception_date FROM calendar_event_exceptions
     WHERE event_id = ? ORDER BY exception_date
-  `).all(seriesId).map((row) => row.exception_date), ['2046-10-04', '2046-10-08']);
+  `).all(seriesId).map((row) => row.exception_date), [
+    '2046-10-02',
+    '2046-10-04',
+    '2046-10-08',
+  ]);
 });
 
 test('visible non-owner keeps generic whole-series edit and delete authorization after children exist', async () => {

@@ -483,11 +483,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for fields that were not deliberately changed, and keeps its original recurrence slot even when
   moved to another date. The replacement and its skipped original slot are saved atomically, and
   the read-only ICS feed now exports the replacement with standard `RECURRENCE-ID` semantics.
-  Imported and generated series keep their existing whole-series behavior; local series targeted
-  for outbound sync retain their previous standalone-edit and deletion scopes. Historic detached
-  edits are left unchanged rather than guessed back into a series. iCloud auto-sync excludes
+  Imported series keep their existing whole-series behavior. Generated local series and local
+  series targeted for outbound sync retain their previous standalone-edit and deletion scopes.
+  Historic detached edits are left unchanged rather than guessed back into a series. iCloud auto-sync excludes
   linked replacements and their masters, without excluding ordinary deletion-only exceptions.
-  Changing a whole-series recurrence rule no longer forgets previously deleted occurrences.
+  Detaching a linked replacement retains its original-slot exception, so outbound targeting or a
+  recurrence-rule round trip cannot resurrect a duplicate master occurrence. Changing a whole-series
+  recurrence rule no longer forgets previously deleted occurrences.
   Save confirmations preserve entered values on validation or server errors. Outlook checks actual
   writable push targets before accepting linked-series auto-sync, and MCP upcoming results retain
   their unrestricted future horizon while recurrence generation stops at the requested result count.

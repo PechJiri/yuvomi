@@ -460,7 +460,6 @@ export function classifyLocalSeriesBatch(database, rows) {
   const ids = candidates.map((row) => Number(row.id));
   const placeholders = ids.map(() => '?').join(',');
   const disqualified = new Set();
-  const generated = new Set();
   const generatedOwnerColumns = [
     ['birthdays', 'calendar_event_id'],
     ['birthdays', 'name_day_calendar_event_id'],
@@ -472,7 +471,6 @@ export function classifyLocalSeriesBatch(database, rows) {
     const params = generatedOwnerColumns.flatMap(() => ids);
     for (const row of database.prepare(unions.join('\nUNION\n')).all(...params)) {
       disqualified.add(Number(row.event_id));
-      generated.add(Number(row.event_id));
     }
   }
   if (hasColumn(database, 'outlook_event_links', 'event_id')) {
@@ -501,9 +499,12 @@ export function classifyLocalSeriesBatch(database, rows) {
   }
 
   for (const row of candidates) {
-    const local = !generated.has(Number(row.id));
     const eligible = !structurallyIneligible(row) && !disqualified.has(Number(row.id));
-    result.set(Number(row.id), { eligible, reason: eligible ? null : 'ineligible_series', local });
+    result.set(Number(row.id), {
+      eligible,
+      reason: eligible ? null : 'ineligible_series',
+      local: true,
+    });
   }
   return result;
 }
@@ -1792,10 +1793,6 @@ function materializeDetachedChild(database, child, master, {
       effectiveAssignments,
     );
   }
-  database.prepare(`
-    DELETE FROM calendar_event_exceptions
-    WHERE event_id = ? AND exception_date = ?
-  `).run(master.id, child.recurrence_id);
 }
 
 function applySeriesChanges(database, seriesId, changes) {
@@ -1997,8 +1994,8 @@ export function updateSeriesWithOverrides(database, {
       }
     }
 
-    // A deleted slot stays deleted even if a temporary rule change cannot reach
-    // it. Only detaching a linked replacement removes its own paired EXDATE.
+    // A deleted or detached slot stays suppressed even if a temporary rule
+    // cannot reach it; a later rule change must not resurrect the master slot.
 
     return {
       series: loadProjectedEvent(database, master.id),

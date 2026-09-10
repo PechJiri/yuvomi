@@ -7598,7 +7598,8 @@ const MIGRATIONS = [
       -- verschwindet.
       ALTER TABLE shopping_items ADD COLUMN price_cents INTEGER;
       ALTER TABLE shopping_items ADD COLUMN store_id INTEGER REFERENCES shopping_stores(id) ON DELETE SET NULL;
-      CREATE INDEX idx_shopping_items_store ON shopping_items(store_id);    `,
+      CREATE INDEX idx_shopping_items_store ON shopping_items(store_id);
+    `,
   },
   {
     version: 194,

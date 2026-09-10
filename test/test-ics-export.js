@@ -278,6 +278,36 @@ test('buildFeed: naiver Override nutzt Master-UID und Feed-Zonen-Slot ohne gepaa
   assert(!child.includes('RRULE:'), 'Replacement darf keine RRULE tragen: ' + child);
 });
 
+test('buildFeed: verschobener Monats-Override behält sein eigenes DTSTART', () => {
+  const masterId = d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,recurrence_rule,tzid,created_by)
+    VALUES ('OverrideMonthEndMaster','2026-07-31T07:00:00Z','2026-07-31T08:00:00Z',0,
+      'local','FREQ=MONTHLY;BYMONTHDAY=-1','Europe/Madrid',?)
+  `).run(u1).lastInsertRowid;
+  d2.prepare(`
+    INSERT INTO calendar_events
+      (title,start_datetime,end_datetime,all_day,external_source,tzid,created_by,
+       recurrence_parent_id,recurrence_id,overridden_fields)
+    VALUES ('OverrideMonthEndMoved','2026-08-03T07:00:00Z','2026-08-03T08:00:00Z',0,
+      'local','Europe/Madrid',?,?,?,?)
+  `).run(u1, masterId, '2026-07-31', JSON.stringify(['title', 'start_datetime', 'end_datetime']));
+  d2.prepare(`INSERT INTO calendar_event_exceptions (event_id,exception_date)
+    VALUES (?, '2026-07-31')`).run(masterId);
+
+  const ics = buildFeed(d2, u1, NOW, FEED_TZ);
+  const child = eventBlock(ics, 'OverrideMonthEndMoved');
+  assert(child, 'Replacement-VEVENT fehlt: ' + ics);
+  assert(child.includes('RECURRENCE-ID;TZID=Europe/Madrid:20260731T090000'),
+    'RECURRENCE-ID muss den ursprünglichen Juli-Slot behalten: ' + child);
+  assert(child.includes('DTSTART;TZID=Europe/Madrid:20260803T090000'),
+    'DTSTART muss das verschobene Datum behalten: ' + child);
+  assert(child.includes('DTEND;TZID=Europe/Madrid:20260803T100000'),
+    'DTEND muss mit dem verschobenen Datum erhalten bleiben: ' + child);
+  assert(!child.includes('20260831T090000'),
+    'Die Master-Regel darf das Replacement nicht auf das Monatsende setzen: ' + child);
+});
+
 test('buildFeed: TZID-Override nutzt Master-UID und zonengleichen Slot ohne gepaarte EXDATE', () => {
   const masterId = d2.prepare(`
     INSERT INTO calendar_events

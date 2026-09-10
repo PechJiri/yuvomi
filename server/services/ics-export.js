@@ -200,7 +200,10 @@ function buildVEvent(
   // Begruendung in services/outbound-dtstart.js. DAS ENDE WANDERT MIT: es ist
   // ein absoluter Zeitstempel, kein Abstand - bliebe es stehen, endete der
   // Termin vor seinem Beginn.
-  const { start_datetime: dtstart, end_datetime: dtende } = outboundDateRange(ev);
+  // A replacement inherits the master's rule for effective reads, but its own
+  // DTSTART/DTEND are concrete moves and must never be snapped to that rule.
+  const outboundEvent = recurrenceMaster ? { ...ev, recurrence_rule: null } : ev;
+  const { start_datetime: dtstart, end_datetime: dtende } = outboundDateRange(outboundEvent);
 
   if (recurrenceMaster) {
     lines.push(recurrenceSlotProp(

@@ -2632,12 +2632,20 @@ test('rule changes detach confirmed orphans but retain deleted slots across a ro
   assert.deepEqual(database.prepare(`
     SELECT exception_date FROM calendar_event_exceptions
     WHERE event_id = ? ORDER BY exception_date
-  `).all(seriesId).map((row) => row.exception_date), ['2026-10-04', '2026-10-08']);
+  `).all(seriesId).map((row) => row.exception_date), [
+    '2026-10-02',
+    '2026-10-04',
+    '2026-10-08',
+  ]);
   updateSeriesWithOverrides(database, {
     seriesId, actorId: 1, changes: { recurrence_rule: 'FREQ=DAILY' },
   });
   const rows = database.prepare('SELECT * FROM calendar_events').all();
   const restored = expandAndResolveEventRows(database, rows, '2026-10-01', '2026-10-10');
+  const detachedSlot = restored.filter((event) =>
+    event.start_datetime.startsWith('2026-10-02'));
+  assert.equal(detachedSlot.length, 1);
+  assert.equal(detachedSlot[0].title, 'Override 2026-10-02');
   assert.equal(restored.some((event) => event.start_datetime.startsWith('2026-10-04')), false);
 });
 
@@ -2719,6 +2727,14 @@ test('outbound target detachment uses the same exact-count confirmation', () => 
     SELECT COUNT(*) AS count FROM calendar_events
     WHERE title LIKE 'Target override %' AND recurrence_parent_id IS NULL
   `).get().count, 2);
+  const rows = database.prepare('SELECT * FROM calendar_events').all();
+  const expanded = expandAndResolveEventRows(database, rows, '2026-10-01', '2026-10-05');
+  for (const recurrenceId of ['2026-10-02', '2026-10-03']) {
+    const detachedSlot = expanded.filter((event) =>
+      event.start_datetime.startsWith(recurrenceId));
+    assert.equal(detachedSlot.length, 1, recurrenceId);
+    assert.equal(detachedSlot[0].title, `Target override ${recurrenceId}`, recurrenceId);
+  }
 });
 
 test('non-first following target selection persists on the successor and detaches only future children', () => {

@@ -10,7 +10,14 @@ import { readFileSync } from 'node:fs';
 import { eachRule } from './css-rules.js';
 
 // /i18n.js wird durch test-browser-loader.mjs gemockt (--loader Flag)
-const { wireBlurValidation, btnSuccess, btnError, focusRestoreTarget, rememberFocus } = await import('../public/components/modal.js');
+const {
+  wireBlurValidation,
+  btnSuccess,
+  btnError,
+  focusRestoreTarget,
+  rememberFocus,
+  __test: modalTest,
+} = await import('../public/components/modal.js');
 
 // matchMedia und document.createElementNS werden von btnSuccess/btnError benötigt
 global.matchMedia = () => ({ matches: false });
@@ -130,6 +137,34 @@ function makeBtn({ textContent = 'Speichern' } = {}) {
 // --------------------------------------------------------
 // wireBlurValidation
 // --------------------------------------------------------
+
+test('confirmOverModal finalisiert das geparkte Modal gemäß closeOnConfirm', async () => {
+  const suspended = { id: 'editor' };
+  const resumed = [];
+  const closed = [];
+  const dependencies = {
+    resume: (token) => resumed.push(token),
+    close: async (options) => closed.push(options),
+  };
+
+  assert.equal(await modalTest.finishSuspendedConfirmation(
+    false, true, suspended, dependencies
+  ), false);
+  assert.deepEqual(resumed, [suspended]);
+  assert.deepEqual(closed, []);
+
+  assert.equal(await modalTest.finishSuspendedConfirmation(
+    true, false, suspended, dependencies
+  ), true);
+  assert.deepEqual(resumed, [suspended, suspended]);
+  assert.deepEqual(closed, []);
+
+  assert.equal(await modalTest.finishSuspendedConfirmation(
+    true, true, suspended, dependencies
+  ), true);
+  assert.deepEqual(resumed, [suspended, suspended, suspended]);
+  assert.deepEqual(closed, [{ force: true }]);
+});
 
 test('wireBlurValidation: registriert blur-Listener auf required inputs', () => {
   const input = makeInput();

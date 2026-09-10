@@ -17,7 +17,7 @@ const calendarOccurrenceProperties = {
   is_occurrence_override: { type: 'boolean' },
   is_local_recurring_series: { type: 'boolean' },
   can_override_occurrence: { type: 'boolean' },
-  can_detach_occurrence: { type: 'boolean', description: 'Legacy occurrence scopes for locally owned outbound-synced series; linked overrides remain unavailable.' },
+  can_detach_occurrence: { type: 'boolean', description: 'Legacy occurrence scopes for locally owned series that cannot use linked overrides, including outbound-synced and generated series.' },
   assignment_owner_id: { type: 'integer', minimum: 1 },
   attachment_owner_id: { type: 'integer', minimum: 1 },
   reminder_owner_id: { type: 'integer', minimum: 1 },

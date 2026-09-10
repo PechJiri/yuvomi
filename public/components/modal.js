@@ -1371,6 +1371,17 @@ export function confirmModal(message, { confirmLabel, cancelLabel, danger = fals
   });
 }
 
+async function finishSuspendedConfirmation(
+  confirmed,
+  closeOnConfirm,
+  suspended,
+  { resume = _resumeSuspendedModal, close = closeModal } = {},
+) {
+  resume(suspended);
+  if (confirmed && closeOnConfirm) await close({ force: true });
+  return confirmed;
+}
+
 /**
  * Bestätigung ÜBER einem offenen Modal, ohne es zu verdrängen.
  *
@@ -1406,10 +1417,10 @@ export async function confirmOverModal(message, { closeOnConfirm = true, ...opts
   // Erst zurückholen, dann ggf. schließen: das Abräumen soll durch die reguläre
   // Schließ-Logik laufen, nicht an ihrem 'closing'-Wächter vorbei. Der Fokus
   // kehrt dabei auf den auslösenden Knopf zurück (siehe _resumeSuspendedModal).
-  _resumeSuspendedModal(suspended);
-  if (confirmed && closeOnConfirm) await closeModal({ force: true });
-  return confirmed;
+  return finishSuspendedConfirmation(confirmed, closeOnConfirm, suspended);
 }
+
+export const __test = { finishSuspendedConfirmation };
 
 // --------------------------------------------------------
 // Validation & Feedback
