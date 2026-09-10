@@ -378,12 +378,23 @@ export async function startHarness() {
  * Listener daran) - die Seite blieb dann leer und die Sonden massen ein
  * Dokument ohne Modul. Hier bleibt der Container, nur `register()` lehnt ab,
  * und `sw-register.js` faengt das selbst.
+ *
+ * `ready` LEHNT EBENFALLS AB, SONST HAENGT ES. Laut Spezifikation erfuellt
+ * sich `ready` erst mit einer aktiven Registrierung - lehnt `register()` ab,
+ * bliebe es fuer immer offen, und kein `try/catch` hilft gegen ein Promise,
+ * das sich nie entscheidet. `pushStatus()` in push.js wartet darauf, das
+ * Benachrichtigungs-Blatt blieb dann auf "wird geprueft" mit gesperrten
+ * Knoepfen stehen, und die Sonden massen diesen Zwischenstand. Als der Worker
+ * noch wirklich installierte, erreichte das Blatt "nicht abonniert"; ein
+ * abgelehntes `ready` landet in genau diesem catch. Die uebrigen Leser in
+ * push.js laufen nur nach einem Klick oder mit erteilter Berechtigung.
  */
 async function disableServiceWorker(page) {
   await page.evaluateOnNewDocument(() => {
     if (typeof ServiceWorkerContainer === 'undefined') return;
-    ServiceWorkerContainer.prototype.register = () =>
-      Promise.reject(new Error('document-guards: Service Worker abgeschaltet'));
+    const abgeschaltet = () => Promise.reject(new Error('document-guards: Service Worker abgeschaltet'));
+    ServiceWorkerContainer.prototype.register = abgeschaltet;
+    Object.defineProperty(ServiceWorkerContainer.prototype, 'ready', { configurable: true, get: abgeschaltet });
   });
 }
 
