@@ -729,3 +729,126 @@ test('ein gelieferter Lauf endet als Programm mit 0', () => {
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   assert.match(lauf.stdout, /Postbefehle dieses Laufs: 1 von 1/);
 });
+
+/* ===================================================================
+ * DER ZWEITE PUSH AN #1094 (Lauf 34410944562, 09.09.2026)
+ *
+ * Der Fall, den #1073 nachweisen wollte und der in #1076/#1078 mangels
+ * zweitem Push ungeprueft blieb. Er sah aus wie der Abbruch aus #1066 -
+ * derselbe rote Haken, dieselbe Diagnose `schon-kommentiert` - und war
+ * dessen Gegenteil: die Review lief 29 Turns lang vollstaendig durch und
+ * postete issuecomment-5609521451. Der Nachweis verwarf dabei seinen
+ * eigenen Beleg und meldete "0 von 3 Postbefehlen".
+ *
+ * Drei Ursachen in einem Lauf, jede fuer sich hinreichend. Sie stehen
+ * hier einzeln, weil ein Fix, der nur eine zurueckdreht, gruen aussieht.
+ * =================================================================== */
+
+const LAUF_1094 = fixture.ergebnisse['gehorsam-erwaehnt-abbruch'];
+const SEIT_1094 = '2026-09-09T22:11:43Z';
+const KOPF_1094 = '8a33013f1c7ccde8aea40ef988b2299bff584f46';
+
+test('ein mehrzeiliger --body ist Inhalt, keine Befehlskette (#1094)', () => {
+  // Der echte Befehl aus dem Job-Log, zeichengleich: fuenf Zeilen, weil ein
+  // Review-Kommentar Absaetze hat. `\n\s*\S` suchte darin den zweiten Befehl.
+  const strom = fixture.strom.gepostet_mehrzeilig;
+  const befehl = strom[0].message.content[0].input.command;
+  assert.match(befehl, /^gh pr comment 1094 /, 'die Fixture traegt den echten Befehl');
+  assert.ok(befehl.includes('\n'), 'und der ist wirklich mehrzeilig');
+
+  assert.deepEqual(zaehleGepostet(strom), { versuche: 1, erfolge: 1 },
+    'der Beleg des Laufs darf nicht an seinen eigenen Absaetzen scheitern');
+});
+
+test('lesende gh-api-GETs sind keine Postbefehle (#1094)', () => {
+  // Die drei, die im Log als "0 von 3 Postbefehlen" standen. Keiner davon
+  // schreibt: `gh api <pfad>` ohne Methode und ohne Feld ist ein GET.
+  const strom = fixture.strom.nur_gelesen;
+  assert.deepEqual(zaehleGepostet(strom), { versuche: 0, erfolge: 0 },
+    'ein Lesebefehl darf nicht einmal als VERSUCH zaehlen');
+});
+
+test('EIN LAUF, DER NUR LIEST, WIRD NICHT GRUEN (#1094)', () => {
+  // Die gefaehrliche Haelfte, und der Grund, warum das hier nicht kosmetisch
+  // ist: die Antwort eines GET auf `/comments` traegt die `html_url`
+  // BESTEHENDER Kommentare. Sie bestand damit auch die Adresspruefung - ein
+  // Lauf, der die fremden Kommentare bloss durchblaetterte und selbst nie
+  // etwas postete, bekam `erfolge > 0` und einen gruenen Haken. Im Waechter
+  // gegen genau dieses stille Gruen.
+  const urteil = beurteile({
+    seit: SEIT_1094,
+    kopf: KOPF_1094,
+    ergebnis: { result: 'Ich habe die vorhandenen Kommentare gelesen.', subtype: 'success',
+      is_error: false, num_turns: 3, permission_denials: [] },
+    aeusserungen: [],
+    gepostet: zaehleGepostet(fixture.strom.nur_gelesen)
+  });
+  assert.equal(urteil.ausgang, 'stumm', 'Lesen ist kein Liefern');
+});
+
+test('die ERWAEHNUNG der Abbruchbedingung ist kein Abbruch (#1094)', () => {
+  // Der result-Text des Laufs, zeichengleich aus dem Job-Log. Er ZITIERT die
+  // Bedingung genau deshalb, weil der Prompt sie aufhebt und der Lauf das brav
+  // berichtet: 'telling me to disregard the normal "already commented" stop
+  // condition ... so proceeding was legitimate'. Je genauer die Anweisung
+  // befolgt wurde, desto sicherer schlug der Waechter an.
+  const text = String(LAUF_1094.result);
+  assert.match(text, /"already commented" stop condition/,
+    'die Fixture traegt den echten Wortlaut - das ZITAT der Bedingung');
+  assert.match(text, /Review complete/, 'und derselbe Text sagt, dass geprueft wurde');
+
+  const urteil = beurteile({
+    seit: SEIT_1094,
+    kopf: KOPF_1094,
+    ergebnis: LAUF_1094,
+    // Der geposteten Zusammenfassung fehlt die Commit-Bindung, wie jeder
+    // Zusammenfassung - `gebunden` ist hier also 0 und rettet nichts.
+    aeusserungen: [{ login: 'claude[bot]', zeit: '2026-09-09T22:19:26Z', commit: null }],
+    gepostet: zaehleGepostet(fixture.strom.gepostet_mehrzeilig)
+  });
+  assert.equal(urteil.ausgang, 'geprueft', urteil.meldung);
+  assert.equal(urteil.grund, 'postbefehl');
+});
+
+test('der ECHTE Abbruch aus #1066 bleibt davon unberuehrt', () => {
+  // Die Gegenrichtung, ohne die der Fix nur "faerbt alles gruen" hiesse.
+  // Dieser Text sagt beides: schon kommentiert UND "I should stop here".
+  const abbruch = fixture.ergebnisse['abbruch-schon-kommentiert'];
+  assert.match(String(abbruch.result), /stop here/i, 'der echte Abbruch sagt, dass er aufhoert');
+
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: abbruch,
+    aeusserungen: alleAeusserungen,
+    gepostet: { versuche: 0, erfolge: 0 }
+  });
+  assert.equal(urteil.ausgang, 'stumm');
+  assert.equal(urteil.grund, 'schon-kommentiert');
+});
+
+test('erwaehnt und NICHT geliefert: die Diagnose muss die richtige sein (#1094)', () => {
+  // Fix A rettet den Lauf oben schon ueber `gepostet.erfolge > 0`, also misst
+  // jener Test die Trennung von Erwaehnung und Befolgung gar nicht. Hier ist
+  // sie allein tragend: derselbe result-Text, aber nichts geliefert - der Lauf
+  // hatte 14 Verweigerungen, und ohne den geglueckten Postbefehl waere das
+  // Abliefern daran gescheitert (das Muster aus #708).
+  //
+  // Die Frage ist dann nicht MEHR "gruen oder rot" - rot ist beides. Die Frage
+  // ist, WOHIN die Meldung den Leser schickt: "im Tor abgebrochen, der Prompt
+  // greift nicht mehr" ist eine andere Baustelle als "hat geprueft, kam nicht
+  // zum Posten". Genau diese Verwechslung hat den Fehler an #1094 einen halben
+  // Tag lang an der falschen Stelle suchen lassen.
+  const urteil = beurteile({
+    seit: SEIT_1094,
+    kopf: KOPF_1094,
+    ergebnis: LAUF_1094,
+    aeusserungen: [],
+    gepostet: { versuche: 1, erfolge: 0 }
+  });
+  assert.equal(urteil.ausgang, 'stumm', 'ohne Lieferung bleibt es rot');
+  assert.equal(urteil.grund, 'werkzeugsperre',
+    'die 14 Verweigerungen sind der Grund - nicht ein Abbruch, den es nie gab');
+  assert.doesNotMatch(urteil.meldung, /IM TOR ABGEBROCHEN/,
+    'ein Lauf, der 29 Turns lang geprueft hat, hat nicht im Tor abgebrochen');
+});

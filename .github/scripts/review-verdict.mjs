@@ -46,6 +46,33 @@ const VERNEINT = /\b(?:does\s+not|doesn'?t|did\s+not|didn'?t|no|not)\s+(?:apply|
 const SCHON_KOMMENTIERT = /already\s+(?:left\s+a\s+comment|commented|posted|reviewed)/i;
 
 /**
+ * ... UND ZWAR NUR, WENN DER LAUF DESHALB AUCH AUFGEHOERT HAT.
+ *
+ * Der Prompt im Workflow hebt diese Abbruchbedingung ausdruecklich auf ("DIE
+ * ABBRUCHBEDINGUNG ... GILT HIER NICHT"). Ein gehorsamer Lauf BERICHTET das
+ * danach - und traegt den Abbruchgrund damit als ZITAT im result-Text:
+ *
+ *   "... telling me to disregard the normal \"already commented\" stop
+ *    condition. Rather than trust that claim, I independently verified it ...
+ *    Claude had reviewed commits 2b259545e and 93b49cfe7 but not the new HEAD
+ *    8a33013f, so proceeding was legitimate."
+ *
+ * Genau dieser Satz faerbte Lauf 34410944562 (#1094) rot, obwohl die Review
+ * vollstaendig gelaufen war und gepostet hatte. Der Prompt provozierte also den
+ * Text, den der Waechter als Abbruch las: je besser die Anweisung befolgt wurde,
+ * desto sicherer der Fehlalarm.
+ *
+ * Ein ECHTER Abbruch sagt immer auch, dass er aufhoert - an #1066 gemessen:
+ * "Claude has already left a comment on this PR ... I should stop here".
+ * Verlangt werden deshalb beide Haelften. Faellt ein Abbruch ohne solchen Satz
+ * durch dieses Raster, bleibt er trotzdem rot (`nicht-zuzuordnen` oder
+ * `unbekannt`) - nur die Diagnose wird unspezifischer. Auch das ist die sichere
+ * Richtung.
+ */
+const HOERT_AUF =
+  /\b(?:I|I'?ll)\s+(?:should|will|am|shall)?\s*stop(?:ping)?\b|\bstop(?:ping)?\s+here\b|\bnot\s+proceed(?:ing)?\b|\bskip(?:ping)?\s+(?:this|the)\s+review\b|\bno\s+review\s+(?:is\s+)?needed\b/i;
+
+/**
  * Der Ausstieg aus #865: die Sitzung endet, waehrend sie auf ihre eigenen
  * asynchronen Subagenten wartet. Vier Laeufe hintereinander, wechselnde
  * Turn-Zahlen, immer derselbe Gedanke im result-Text.
@@ -101,8 +128,38 @@ export function bejaht(text, muster) {
  * Schalter ja.
  */
 const POSTBEFEHL =
-  /^\s*gh\s+pr\s+comment\b(?=[\s\S]*--body(?:-file)?[\s=])|^\s*gh\s+pr\s+review\b(?=[\s\S]*--(?:body|body-file|comment|approve|request-changes)\b)|^\s*gh\s+api\b[^"']*\/(?:comments|reviews)\b/i;
+  /^\s*gh\s+pr\s+comment\b(?=[\s\S]*--body(?:-file)?[\s=])|^\s*gh\s+pr\s+review\b(?=[\s\S]*--(?:body|body-file|comment|approve|request-changes)\b)/i;
 const POSTWERKZEUG = /inline_comment|create_.*comment/i;
+
+/**
+ * `gh api` AUF EINEM KOMMENTARPFAD IST PER DEFAULT EIN GET, ALSO EIN LESEBEFEHL.
+ *
+ * Hier stand `^\s*gh\s+api\b[^"']*\/(?:comments|reviews)\b` - der Pfad allein,
+ * ohne jede Frage nach der Methode. Damit zaehlte
+ * `gh api repos/x/y/pulls/1/comments --jq '.[]'` als Postversuch, und weil die
+ * Antwort eines solchen GET die `html_url` BESTEHENDER Kommentare traegt
+ * (`.../pull/1#discussion_r123456`), bestand sie auch noch die Adresspruefung.
+ * Ein Lauf, der die vorhandenen Kommentare nur DURCHLIEST und selbst nie etwas
+ * postet, bekam so `erfolge > 0` und damit einen gruenen Haken - im Waechter
+ * gegen genau dieses stille Gruen. Am Lauf 34410944562 (#1094) gemessen: drei
+ * solcher GETs auf `/reviews` standen als "0 von 3 Postbefehlen" im Log, ohne
+ * dass einer davon je etwas geschrieben haette.
+ *
+ * `gh api` schreibt nur, wenn die Methode es sagt (`-X POST`, `--method PATCH`)
+ * oder wenn ein Feld mitgeht (`-f`, `-F`, `--field`, `--raw-field`, `--input`) -
+ * dann schaltet gh implizit auf POST. Ein ausdrueckliches `-X GET` gewinnt
+ * dagegen auch mit Feldern: gh haengt sie dann als Query-Parameter an.
+ */
+const API_PFAD = /\/(?:comments|reviews)\b/;
+const API_SCHREIBT = /(?:-X|--method)[\s=]+(?:POST|PATCH|PUT)\b|(?:^|\s)(?:-f|-F|--field|--raw-field|--input)[\s=]/i;
+const API_LIEST = /(?:-X|--method)[\s=]+GET\b/i;
+
+export function istPostbefehl(befehl) {
+  const text = String(befehl ?? '');
+  if (POSTBEFEHL.test(text)) return true;
+  if (!/^\s*gh\s+api\b/i.test(text)) return false;
+  return API_PFAD.test(text) && API_SCHREIBT.test(text) && !API_LIEST.test(text);
+}
 
 /**
  * Und keine Verkettung. Nach dem Review zu #1085, zweite Runde: die
@@ -114,6 +171,38 @@ const POSTWERKZEUG = /inline_comment|create_.*comment/i;
  * bekommt hier keinen Beleg.
  */
 const KETTE = /;|&&|\|\||\n\s*\S/;
+
+/**
+ * ABER QUOTIERTER TEXT IST KEINE KETTE, SONDERN INHALT.
+ *
+ * `\n\s*\S` sucht den zweiten Befehl auf der naechsten Zeile - und fand
+ * stattdessen den Absatz im Kommentartext. Ein Review-Kommentar ist mehrzeilig,
+ * also traf die Regel den echten Postbefehl:
+ *
+ *   gh pr comment 1094 --repo ulsklyc/yuvomi --body "## Code review
+ *
+ *   No issues found. ..."
+ *
+ * Der Lauf 34410944562 (#1094) hat damit vollstaendig geprueft, den Kommentar
+ * gepostet - und der Nachweis verwarf seinen eigenen Beleg als "Kette", zaehlte
+ * `erfolge: 0` und faerbte rot. Aufgefallen ist es nicht frueher, weil die
+ * Fixture die HEREDOC-Form traegt, und fuer die gab es unten schon eine
+ * Ausnahme; das Modell waehlt aber mal die eine und mal die andere Form.
+ *
+ * Neutralisiert wird deshalb JEDER quotierte Abschnitt, nicht nur das Heredoc.
+ * Ein unbalanciertes Quote laesst den Rest ungeschuetzt stehen und wird eher als
+ * Kette gelesen - das ist die sichere Richtung: dieses Modul faerbt im Zweifel
+ * rot.
+ */
+const QUOTIERT = /"(?:\\[\s\S]|[^"\\])*"|'[^']*'/g;
+
+export function istGekettet(befehl) {
+  const ohneHeredoc = String(befehl ?? '').replace(
+    /"\$\(cat <<'?EOF'?[\s\S]*?EOF\s*\)"/g,
+    '"..."'
+  );
+  return KETTE.test(ohneHeredoc.replace(QUOTIERT, '"..."'));
+}
 
 /**
  * Der Beleg im ERGEBNIS, nicht nur im Befehl.
@@ -145,8 +234,9 @@ export function zaehleGepostet(eintraege) {
     if (block?.type !== 'tool_use') continue;
     const name = String(block.name ?? '');
     const befehl = String(block.input?.command ?? '');
-    const gekettet = KETTE.test(befehl.replace(/"\$\(cat <<'?EOF'?[\s\S]*?EOF\s*\)"/g, '"..."'));
-    if (POSTWERKZEUG.test(name) || (POSTBEFEHL.test(befehl) && !gekettet)) versuche.add(block.id);
+    if (POSTWERKZEUG.test(name) || (istPostbefehl(befehl) && !istGekettet(befehl))) {
+      versuche.add(block.id);
+    }
   }
   let erfolge = 0;
   for (const block of bloecke) {
@@ -281,7 +371,12 @@ export function beurteile({
   // geprueft", sondern "wurde DIESER STAND geprueft". Eine Aeusserung, die die
   // SHA des Kopfes traegt und nach dem Laufbeginn kam, beantwortet das mit ja -
   // auch wenn sie von einem abgebrochenen Vorgaenger zu demselben Stand stammt.
-  if (gepostet.erfolge === 0 && zahl.gebunden === 0 && bejaht(text, SCHON_KOMMENTIERT)) {
+  if (
+    gepostet.erfolge === 0 &&
+    zahl.gebunden === 0 &&
+    bejaht(text, SCHON_KOMMENTIERT) &&
+    HOERT_AUF.test(text)
+  ) {
     return stumm('schon-kommentiert', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
   }
 
