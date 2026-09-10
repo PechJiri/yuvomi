@@ -114,14 +114,20 @@ export function bejaht(text, muster) {
  *
  * Lockerer als `bejaht` darf das sein, weil es nie ueber gruen entscheidet:
  * `HOERT_AUF` waehlt nur zwischen roten Diagnosen. Die Tor-Ausnahme, die gruen
- * machen kann, bleibt bei `bejaht` mit dem Treffer im Fenster.
+ * machen kann, prueft die Tor-Formel weiter ueber `bejaht` und die Erwaehnung
+ * von "schon kommentiert" ganz ohne Verneinung.
+ *
+ * JEDER Treffer zaehlt, nicht nur der erste (Codex zu #1096, nach `8dc12582`):
+ * "I did not stop here at the first check ... so I should stop here" verneint
+ * das erste Aufhoeren und bejaht das zweite - der Lauf hat aufgehoert.
  */
 export function hoertAuf(text) {
   const roh = String(text ?? '');
-  const treffer = HOERT_AUF.exec(roh);
-  if (!treffer) return false;
-  const fenster = roh.slice(Math.max(0, treffer.index - FENSTER), treffer.index);
-  return !VERNEINER.test(fenster.split(/[.!?\n]/).pop());
+  for (const treffer of roh.matchAll(new RegExp(HOERT_AUF.source, 'gi'))) {
+    const fenster = roh.slice(Math.max(0, treffer.index - FENSTER), treffer.index);
+    if (!VERNEINER.test(fenster.split(/[.!?\n]/).pop())) return true;
+  }
+  return false;
 }
 
 /**
@@ -418,11 +424,24 @@ export function beurteile({
   // Text beides, gilt die gefaehrlichere Lesart") blieb gruen, weil sein
   // Fixture-Text zufaellig auf "Stopping here." endet - eine Probe ohne diesen
   // Satz steht jetzt daneben.
+  //
+  // UND HIER OHNE VERNEINUNGSPRUEFUNG (Codex zu #1096, nach `8dc12582`).
+  // `bejaht` sieht nur den ERSTEN Treffer: "Claude has not already reviewed the
+  // new HEAD ... Claude has already commented on this PR ... trivial ... matches
+  // the step 1 stop condition" war verneint im ersten und bejaht im zweiten
+  // Satz, und die Ausnahme wurde GRUEN. Eine fuenfte Regel, welche Verneinung
+  // welche Erwaehnung aufhebt, waere die naechste Sprosse derselben Leiter.
+  // Stattdessen gilt fuer den einzigen stillen Gruen-Pfad die grobe Regel:
+  // erwaehnt der Text "schon kommentiert/geprueft" UEBERHAUPT, gibt es keine
+  // Ausnahme. Ein trivialer Lauf, der das nur verneinend erwaehnt, wird dadurch
+  // rot statt gruen - die Richtung, in der dieses Modul im Zweifel irrt.
+  // Der echte #1029-Wortlaut sagt "has not previously commented" und trifft das
+  // Muster nicht; er bleibt die Ausnahme.
   if (
     bejaht(text, TOR_STOPP) &&
     TRIVIAL.test(text) &&
     !VERNEINT.test(text) &&
-    !bejaht(text, SCHON_KOMMENTIERT)
+    !SCHON_KOMMENTIERT.test(text)
   ) {
     return {
       ausgang: 'ausgesetzt',

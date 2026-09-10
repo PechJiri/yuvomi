@@ -1054,3 +1054,44 @@ test('ein Aufhoeren, das SELBST verneint, bleibt ein Abbruch (#1096, Codex nach 
   });
   assert.equal(weiter.grund, 'werkzeugsperre');
 });
+
+test('eine VERNEINTE erste Erwaehnung oeffnet die Gruen-Ausnahme nicht (#1096, Codex P1 nach 8dc12582)', () => {
+  // `bejaht` sieht nur den ersten Treffer. Verneint im ersten Satz, bejaht im
+  // zweiten, dazu "trivial" und die Tor-Formel: das wurde GRUEN, fuer einen
+  // Lauf, der sagt, dass er den PR schon kommentiert hat. Fuer den einzigen
+  // stillen Gruen-Pfad gilt deshalb: jede Erwaehnung sperrt ihn.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 3, subtype: 'success', is_error: false, permission_denials: [],
+      result:
+        'Claude has not already reviewed the new HEAD. Claude has already commented on this PR, ' +
+        'and the remaining diff is a trivial change that is obviously correct, so this matches ' +
+        'the step 1 stop condition.'
+    },
+    aeusserungen: [],
+    gepostet: NICHTS
+  });
+  assert.notEqual(urteil.ausgang, 'ausgesetzt',
+    'eine Erwaehnung von "schon kommentiert" oeffnet den stillen Gruen-Pfad nie');
+  assert.equal(urteil.ausgang, 'stumm');
+});
+
+test('ein spaeteres bejahtes Aufhoeren zaehlt auch nach einem verneinten (#1096, Codex P2 nach 8dc12582)', () => {
+  // Der erste Treffer ist verneint, der zweite nicht. Nur den ersten zu lesen
+  // schickte den Leser zu `unbekannt`, obwohl der Lauf im Tor aufgehoert hat.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 4, subtype: 'success', is_error: false, permission_denials: [],
+      result:
+        'I did not stop here at the first check. Claude has already left a comment on this PR, ' +
+        'so I should stop here.'
+    },
+    aeusserungen: [],
+    gepostet: NICHTS
+  });
+  assert.equal(urteil.grund, 'schon-kommentiert');
+});
