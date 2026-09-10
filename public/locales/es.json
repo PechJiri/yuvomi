@@ -2262,7 +2262,7 @@
         "pageKitchen": "Cocina",
         "pageKitchenDescription": "Elige qué comidas se ven en el plan de comidas.",
         "pageModuleOptions": "Opciones de módulos",
-        "pageModuleOptionsDescription": "Definir opciones concretas de Presupuesto, Salud y Ayuda doméstica.",
+        "pageModuleOptionsDescription": "Opciones adicionales para algunos módulos.",
         "pageCalendarModule": "Calendario",
         "pageCalendarModuleDescription": "Define festivos, inicio de semana y la duración predeterminada del evento.",
         "pageSyncCalendar": "Sincronización de calendarios",

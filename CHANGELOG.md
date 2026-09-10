@@ -134,6 +134,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Module options settings page describes what it actually contains.** Its description named
+  only Budget, Health and Housekeeping - accurate when it was written, but Tasks and Schedule have
+  since grown their own sections on the same page without the sentence ever being updated. Reworded
+  to describe the page's purpose instead of enumerating its sections, so it can't go stale the same
+  way again the next time a module gains a section here.
+
 - **The person filter in the task history is no longer a row of blank buttons on a phone** (#1068).
   Below 640px the label-loss rule removes every `.group-toggle__label`; it is built on the
   assumption that an icon stays behind, which is true for the view switcher next to it. These chips

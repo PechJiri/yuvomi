@@ -2262,7 +2262,7 @@
         "pageKitchen": "Cuisine",
         "pageKitchenDescription": "Choisir les repas visibles dans le planificateur de repas.",
         "pageModuleOptions": "Options des modules",
-        "pageModuleOptionsDescription": "Définir des options ponctuelles pour Budget, Santé et Aide ménagère.",
+        "pageModuleOptionsDescription": "Options supplémentaires pour quelques modules.",
         "pageCalendarModule": "Calendrier",
         "pageCalendarModuleDescription": "Définissez les jours fériés, le début de semaine et la durée par défaut d’un événement.",
         "pageSyncCalendar": "Synchronisation des calendriers",
