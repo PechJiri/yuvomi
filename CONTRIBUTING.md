@@ -413,7 +413,9 @@ This is a promise the project can keep because it is not a promise: it is a cond
 
 **It is required for any release that carries the weekly train**, that is, any release whose diff touches `public/pages`, `public/styles`, `public/utils`, `public/components` or `public/settings`. A release on the other track does not need it: those probes measure the rendered document, and a change that never reaches the document cannot move them.
 
-Treat the path list as a heuristic rather than a boundary. What the probes see also depends on how full the test instance is, and that comes from `scripts/seed-demo.js` and from the shape of server responses: a fuller instance makes header filters wider, which is how one probe stayed green in isolation and failed in a full run. If you change the seed or a response shape substantially, run the handrail even when no interface path is in your diff.
+Treat the path list as a heuristic rather than a boundary. What the probes see also depends on how full the test instance is, and that comes from `scripts/seed-demo.js` and from the shape of server responses: a fuller instance makes header filters wider. If you change the seed or a response shape substantially, run the handrail even when no interface path is in your diff.
+
+Every probe starts from the same state ([#1104](https://github.com/ulsklyc/yuvomi/issues/1104)). Before each probe the harness opens a fresh browser context and restarts the server on a snapshot taken after seeding and signing in, so nothing carries over from one probe to the next: not the API rate limit, not rows a probe created and never cleaned up, not its browser storage. A targeted run (`--test-name-pattern`) therefore measures the same preconditions as the full run. The other side of that is deliberate: a probe no longer sees what earlier probes left behind, so a probe that needs a fuller instance gets it from the seed, where every run has the same data.
 
 Read its exit code from a file, never from a pipe:
 
