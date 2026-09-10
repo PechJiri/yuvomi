@@ -205,11 +205,17 @@ function assertRuleUsesToken(css, selector, property, token, file) {
 // `outerHTML =` gehoert dazu: es parst denselben String als Markup, nur ersetzt
 // es das Element selbst statt seines Inhalts. Die zwei Stellen, die es gab
 // (schedule.js), laufen seitdem ueber insertAdjacentHTML('afterend') + remove().
+//
+// Verbundzuweisungen (`+=`, `||=`, `??=` ...) rufen denselben Setter auf und
+// zaehlen deshalb mit. Lucide ist Vendor-Code, liegt aber aus historischen
+// Gruenden als public/lucide.min.js ausserhalb von vendor/ (siehe
+// public/vendor/lucide/README.md) und ist deshalb einzeln ausgenommen.
 const VENDOR_PREFIX = '../public/vendor/';
-const HTML_STRING_WRITE = /\.(?:innerHTML|outerHTML)\s*=[^=]/;
+const VENDOR_FILES = new Set(['../public/lucide.min.js']);
+const HTML_STRING_WRITE = /\.(?:innerHTML|outerHTML)\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?!=)/;
 
 test('kein innerHTML- oder outerHTML-Schreibzugriff irgendwo unter public/ (ausser vendor/)', () => {
-  const files = walkJsFiles('../public/').filter((f) => !f.startsWith(VENDOR_PREFIX));
+  const files = walkJsFiles('../public/').filter((f) => !f.startsWith(VENDOR_PREFIX) && !VENDOR_FILES.has(f));
   const offenders = files.filter((file) => HTML_STRING_WRITE.test(read(file)));
   assert.deepEqual(offenders, [],
     'anhaengen mit insertAdjacentHTML oder ueber die DOM-API, User-Daten durch esc()');
@@ -224,7 +230,11 @@ test('der innerHTML-Guard erkennt das Muster, das er verbietet', () => {
   assert.ok(pattern.test('root.innerHTML = `<div>`;'), 'Zuweisung wird nicht erkannt');
   assert.ok(pattern.test('el.innerHTML=""'), 'Zuweisung ohne Leerzeichen wird nicht erkannt');
   assert.ok(pattern.test('existing.outerHTML = html;'), 'outerHTML-Zuweisung wird nicht erkannt');
+  assert.ok(pattern.test('list.innerHTML += row;'), 'Verbundzuweisung += wird nicht erkannt');
+  assert.ok(pattern.test('el.outerHTML ||= html;'), 'logische Zuweisung ||= wird nicht erkannt');
+  assert.ok(pattern.test('el.innerHTML ??= html;'), 'logische Zuweisung ??= wird nicht erkannt');
   assert.ok(!pattern.test('if (el.innerHTML === x)'), 'ein Vergleich wird faelschlich beanstandet');
+  assert.ok(!pattern.test('if (el.innerHTML !== x)'), 'eine Ungleichheit wird faelschlich beanstandet');
   assert.ok(!pattern.test('return emptyStateEl(opts).outerHTML;'), 'ein Lesezugriff wird faelschlich beanstandet');
 });
 
