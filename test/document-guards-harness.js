@@ -508,12 +508,22 @@ export async function gotoRoute(page, path) {
  * Grund - es wartet auf `#main-content` mit Kindern, und `offline.html` ist
  * kein SPA-Dokument. Stattdessen wird auf den ersten stabilen Aufbau gewartet.
  */
-export async function openAnonPage(harness, { device = 'mobile', theme = 'light' } = {}) {
+export async function openAnonPage(harness, { device = 'mobile', theme = 'light', locale = 'de' } = {}) {
   harness.touched = true;
   const page = await harness.context.newPage();
   await page.setViewport(DEVICES[device]);
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: theme }]);
   await disableServiceWorker(page);
+  // DIE SPRACHE STEHT FEST, BEVOR EIN SKRIPT DER SEITE LAEUFT. Ohne
+  // `yuvomi-locale` greifen lang-init.js und i18n.js auf `navigator.languages`
+  // zurueck, und das ist im headless Chrome Englisch. Solange alle Sonden einen
+  // Kontext teilten, hatte ein frueheres `openPage()` den Schluessel schon
+  // gesetzt; mit einem frischen Kontext je Sonde ist er weg, und Sonde 10 mass
+  // die Seiten vor der Anmeldung auf Englisch - bei Ueberlauf und Zielgroessen,
+  // die an der Textlaenge haengen.
+  await page.evaluateOnNewDocument((l) => {
+    try { localStorage.setItem('yuvomi-locale', l); } catch { /* undurchsichtiger Ursprung */ }
+  }, locale);
   await page.setRequestInterception(true);
   page.on('request', (req) => req.continue());
   page.__yuvomiBase = harness.baseUrl;
