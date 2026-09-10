@@ -14,7 +14,7 @@ import { getCountdowns } from '../services/countdowns.js';
 import { listQuickLinksFor } from './quick-links.js';
 import { visibilityWhere } from '../services/visibility.js';
 import { resolveBudgetMode } from '../services/budget-visibility.js';
-import { deniedModules } from '../permissions.js';
+import { hiddenModulesFor } from '../permissions.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
 
 const log = createLogger('Dashboard');
@@ -208,7 +208,11 @@ router.get('/', (req, res) => {
   // unbeschränkte Mitglieder. Was gesperrt ist, steht vor der ersten Abfrage
   // fest und wird gar nicht erst geholt - ein nachgelagerter Filter hätte die
   // Daten erst gelesen und dann weggeworfen.
-  const denied = deniedModules(req.sessionModuleAccess);
+  //
+  // Dazu die Scopes eines API-Tokens: `dashboard:read` öffnet die Übersicht,
+  // nicht die Module darin. Eine Kachel, deren Modul das Token nicht lesen darf,
+  // kommt in derselben leeren Fassung wie bei einer Rollensperre.
+  const denied = hiddenModulesFor(req, Object.keys(DENIED_PAYLOAD));
   for (const key of denied) Object.assign(result, DENIED_PAYLOAD[key]?.({ month: currentMonth }));
   const allows = (moduleKey) => !denied.has(moduleKey);
 
