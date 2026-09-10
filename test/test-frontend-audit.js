@@ -206,13 +206,16 @@ function assertRuleUsesToken(css, selector, property, token, file) {
 // es das Element selbst statt seines Inhalts. Die zwei Stellen, die es gab
 // (schedule.js), laufen seitdem ueber insertAdjacentHTML('afterend') + remove().
 //
-// Verbundzuweisungen (`+=`, `||=`, `??=` ...) rufen denselben Setter auf und
-// zaehlen deshalb mit. Lucide ist Vendor-Code, liegt aber aus historischen
+// Verbundzuweisungen (`+=`, `||=`, `??=` ...) und die Klammerschreibweise
+// (`el['outerHTML'] =`) rufen denselben Setter auf und zaehlen deshalb mit.
+// Die Grenze eines Text-Guards: einen Namen aus einer Variablen,
+// `Object.assign(el, { innerHTML })` oder `Reflect.set` sieht er nicht - das
+// bleibt beim Review. Lucide ist Vendor-Code, liegt aber aus historischen
 // Gruenden als public/lucide.min.js ausserhalb von vendor/ (siehe
 // public/vendor/lucide/README.md) und ist deshalb einzeln ausgenommen.
 const VENDOR_PREFIX = '../public/vendor/';
 const VENDOR_FILES = new Set(['../public/lucide.min.js']);
-const HTML_STRING_WRITE = /\.(?:innerHTML|outerHTML)\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?!=)/;
+const HTML_STRING_WRITE = /(?:\.(?:innerHTML|outerHTML)|\[\s*(['"`])(?:innerHTML|outerHTML)\1\s*\])\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?!=)/;
 
 test('kein innerHTML- oder outerHTML-Schreibzugriff irgendwo unter public/ (ausser vendor/)', () => {
   const files = walkJsFiles('../public/').filter((f) => !f.startsWith(VENDOR_PREFIX) && !VENDOR_FILES.has(f));
@@ -233,6 +236,9 @@ test('der innerHTML-Guard erkennt das Muster, das er verbietet', () => {
   assert.ok(pattern.test('list.innerHTML += row;'), 'Verbundzuweisung += wird nicht erkannt');
   assert.ok(pattern.test('el.outerHTML ||= html;'), 'logische Zuweisung ||= wird nicht erkannt');
   assert.ok(pattern.test('el.innerHTML ??= html;'), 'logische Zuweisung ??= wird nicht erkannt');
+  assert.ok(pattern.test("el['outerHTML'] = html;"), 'Klammerschreibweise wird nicht erkannt');
+  assert.ok(pattern.test('el["innerHTML"] += row;'), 'Klammerschreibweise mit += wird nicht erkannt');
+  assert.ok(!pattern.test("const html = el['outerHTML'];"), 'ein Lesezugriff in Klammern wird faelschlich beanstandet');
   assert.ok(!pattern.test('if (el.innerHTML === x)'), 'ein Vergleich wird faelschlich beanstandet');
   assert.ok(!pattern.test('if (el.innerHTML !== x)'), 'eine Ungleichheit wird faelschlich beanstandet');
   assert.ok(!pattern.test('return emptyStateEl(opts).outerHTML;'), 'ein Lesezugriff wird faelschlich beanstandet');
