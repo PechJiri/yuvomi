@@ -994,11 +994,11 @@ export function upsertOccurrenceOverride(database, {
       if (existing) {
         deleteEventReminders(database, [existing.id]);
         database.prepare('DELETE FROM calendar_events WHERE id = ?').run(existing.id);
+        database.prepare(`
+          DELETE FROM calendar_event_exceptions
+          WHERE event_id = ? AND exception_date = ?
+        `).run(master.id, recurrenceId);
       }
-      database.prepare(`
-        DELETE FROM calendar_event_exceptions
-        WHERE event_id = ? AND exception_date = ?
-      `).run(master.id, recurrenceId);
       return { event: base, restored: true };
     }
 
@@ -1105,10 +1105,12 @@ export function upsertOccurrenceOverride(database, {
       fields = fields.filter((field) => field !== 'reminders');
       if (fields.length === 0) {
         database.prepare('DELETE FROM calendar_events WHERE id = ?').run(childId);
-        database.prepare(`
-          DELETE FROM calendar_event_exceptions
-          WHERE event_id = ? AND exception_date = ?
-        `).run(master.id, recurrenceId);
+        if (existing) {
+          database.prepare(`
+            DELETE FROM calendar_event_exceptions
+            WHERE event_id = ? AND exception_date = ?
+          `).run(master.id, recurrenceId);
+        }
         return { event: base, restored: true };
       }
       database.prepare('UPDATE calendar_events SET overridden_fields = ? WHERE id = ?')
@@ -1257,10 +1259,6 @@ export function truncateSeries(database, {
     database.prepare(`
       DELETE FROM calendar_events
       WHERE recurrence_parent_id = ? AND recurrence_id >= ?
-    `).run(master.id, recurrenceId);
-    database.prepare(`
-      DELETE FROM calendar_event_exceptions
-      WHERE event_id = ? AND exception_date >= ?
     `).run(master.id, recurrenceId);
     const recurrenceRule = truncateRuleBefore(master.recurrence_rule, recurrenceId);
     database.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
@@ -1502,22 +1500,13 @@ export function splitSeries(database, {
       throw orphanConflict(orphans.length);
     }
     const orphanIds = new Set(orphans.map((child) => Number(child.id)));
-    const orphanRecurrenceIds = new Set(orphans.map((child) => child.recurrence_id));
     const futureExceptions = database.prepare(`
       SELECT exception_date FROM calendar_event_exceptions
       WHERE event_id = ? AND exception_date >= ?
       ORDER BY exception_date
     `).all(master.id, recurrenceId);
-    const transferableExceptions = futureExceptions.filter((exception) => {
-      if (exception.exception_date === recurrenceId) return false;
-      if (orphanRecurrenceIds.has(exception.exception_date)) return false;
-      try {
-        baseOccurrenceFor(successorValues, exception.exception_date);
-        return true;
-      } catch {
-        return false;
-      }
-    });
+    const transferableExceptions = futureExceptions.filter((exception) =>
+      exception.exception_date !== recurrenceId);
 
     const inheritedDocumentId = !selectedFields.includes('attachment')
       ? Number(master.attachment_document_id)

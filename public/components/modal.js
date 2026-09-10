@@ -1406,21 +1406,38 @@ async function finishSuspendedConfirmation(
  * @param {Object} [opts] - confirmModal-Optionen plus closeOnConfirm (Default true)
  * @returns {Promise<boolean>}
  */
-export async function confirmOverModal(message, { closeOnConfirm = true, ...opts } = {}) {
-  // Nur ein regulär offenes Modal lässt sich parken: läuft gerade eine
-  // Schließ-Animation oder liegt schon ein Dialog im Slot, gibt es nichts zu
-  // schützen, und ein Suspend würde den laufenden Übergang zerlegen.
-  if (!activeOverlay || modalState !== 'open') return confirmModal(message, opts);
+function createConfirmOverModal({
+  getActiveOverlay = () => activeOverlay,
+  getModalState = () => modalState,
+  showConfirmation = confirmModal,
+  suspend = _suspendActiveModal,
+  confirmSuspended = _confirmOverSuspended,
+  resume = _resumeSuspendedModal,
+  close = closeModal,
+} = {}) {
+  return async function confirmOverModal(message, { closeOnConfirm = true, ...opts } = {}) {
+    // Nur ein regulär offenes Modal lässt sich parken: läuft gerade eine
+    // Schließ-Animation oder liegt schon ein Dialog im Slot, gibt es nichts zu
+    // schützen, und ein Suspend würde den laufenden Übergang zerlegen.
+    if (!getActiveOverlay() || getModalState() !== 'open') return showConfirmation(message, opts);
 
-  const suspended = _suspendActiveModal();
-  const confirmed = await _confirmOverSuspended(message, opts, suspended);
-  // Erst zurückholen, dann ggf. schließen: das Abräumen soll durch die reguläre
-  // Schließ-Logik laufen, nicht an ihrem 'closing'-Wächter vorbei. Der Fokus
-  // kehrt dabei auf den auslösenden Knopf zurück (siehe _resumeSuspendedModal).
-  return finishSuspendedConfirmation(confirmed, closeOnConfirm, suspended);
+    const suspended = suspend();
+    const confirmed = await confirmSuspended(message, opts, suspended);
+    // Erst zurückholen, dann ggf. schließen: das Abräumen soll durch die reguläre
+    // Schließ-Logik laufen, nicht an ihrem 'closing'-Wächter vorbei. Der Fokus
+    // kehrt dabei auf den auslösenden Knopf zurück (siehe _resumeSuspendedModal).
+    return finishSuspendedConfirmation(
+      confirmed,
+      closeOnConfirm,
+      suspended,
+      { resume, close },
+    );
+  };
 }
 
-export const __test = { finishSuspendedConfirmation };
+export const confirmOverModal = createConfirmOverModal();
+
+export const __test = { createConfirmOverModal, finishSuspendedConfirmation };
 
 // --------------------------------------------------------
 // Validation & Feedback

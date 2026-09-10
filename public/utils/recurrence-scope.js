@@ -2,9 +2,11 @@
  * Reine Hilfslogik für scope-basiertes Bearbeiten/Löschen von Serienterminen (#532).
  *
  * „nur dieser Termin", „dieser und folgende", „ganze Serie" nutzen für lokale
- * verknüpfte Ausnahmen atomare Endpunkte. Lokal angelegte, ausgehend synchronisierte
- * Serien behalten den bisherigen mehrstufigen Ablauf (Einzeltermin + EXDATE bzw.
- * Kürzen + Folgeserie). Datumsarithmetik und Request-Auswahl bleiben DOM-frei testbar.
+ * verknüpfte Ausnahmen atomare Endpunkte. Lokal verwaltete Serien, die keine
+ * verknüpften Ausnahmen nutzen können - einschließlich ausgehend synchronisierter
+ * und generierter Serien - behalten den bisherigen mehrstufigen Ablauf
+ * (Einzeltermin + EXDATE bzw. Kürzen + Folgeserie). Datumsarithmetik und
+ * Request-Auswahl bleiben DOM-frei testbar.
  */
 
 import { parseLocalDateKey, addLocalDays } from './date.js';
@@ -133,7 +135,7 @@ export async function withCalendarOrphanConfirmation(request, confirmCount) {
   throw new Error('Calendar override conflict changed too many times; reload and try again.');
 }
 
-/** Selects linked deletion or the established outbound-local EXDATE/truncation path. */
+/** Selects linked deletion or the fallback for locally owned series without linked overrides. */
 export function requestCalendarOccurrenceDelete({ api, event, scope, keepalive = false }) {
   const target = calendarOccurrenceDeleteTarget(event, scope);
   if (event?.can_detach_occurrence && !canOverrideCalendarOccurrence(event)) {
@@ -151,7 +153,7 @@ export function requestCalendarOccurrenceDelete({ api, event, scope, keepalive =
   return api.delete(target.path, { keepalive });
 }
 
-/** Linked edits are atomic; outbound-local edits retain their legacy request sequence. */
+/** Linked edits are atomic; locally owned fallback edits retain their legacy request sequence. */
 export async function requestCalendarOccurrenceMutation({
   api,
   event,
@@ -160,7 +162,7 @@ export async function requestCalendarOccurrenceMutation({
   reminderOffsets = [],
   confirmCount,
 }) {
-  // Outbound-local series retain the pre-linked-override workflow (#532).
+  // Locally owned series that cannot use linked overrides retain the pre-#975 workflow (#532).
   // These separate requests intentionally retain its existing atomicity limits.
   if (event?.can_detach_occurrence && !canOverrideCalendarOccurrence(event) && scope !== 'series') {
     const path = `/calendar/${serverSeriesId(event)}`;

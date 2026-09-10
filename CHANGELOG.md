@@ -489,7 +489,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   linked replacements and their masters, without excluding ordinary deletion-only exceptions.
   Detaching a linked replacement retains its original-slot exception, so outbound targeting or a
   recurrence-rule round trip cannot resurrect a duplicate master occurrence. Changing a whole-series
-  recurrence rule no longer forgets previously deleted occurrences.
+  recurrence rule no longer forgets previously deleted occurrences. Truncating a series likewise
+  retains later exclusions, and splitting transfers every later exclusion except the new anchor even
+  when the successor rule cannot currently reach it, so a later extension cannot resurrect a deleted
+  slot or duplicate a detached replacement. A no-difference only-this save removes an exclusion only
+  when it also removes the linked replacement that owned that exclusion.
   Save confirmations preserve entered values on validation or server errors. Outlook checks actual
   writable push targets before accepting linked-series auto-sync, and MCP upcoming results retain
   their unrestricted future horizon while recurrence generation stops at the requested result count.
