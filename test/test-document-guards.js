@@ -3874,6 +3874,8 @@ describe('Sonde 20 - ein Werkzeug des Kopfs ist sichtbar oder sichtbar angeschni
 function holdNextRequest(page, { method, pathname, label }) {
   let request = null;
   let settled = false;
+  let actionInFlight = false;
+  let responseAbort = null;
   let markSeen;
   const captured = new Promise((resolve) => { markSeen = resolve; });
   page.__yuvomiRequestInterceptor = (candidate) => {
@@ -3906,19 +3908,45 @@ function holdNextRequest(page, { method, pathname, label }) {
   };
   const finish = async (action, ...args) => {
     if (settled) return;
+    if (actionInFlight) throw new Error(`${label} release is already in progress`);
     if (!request) await waitForCapture();
-    settled = true;
+    actionInFlight = true;
     page.__yuvomiRequestInterceptor = null;
     // Register before releasing the intercepted request: `request.continue()`
-    // only starts the network operation and does not mean its response reached
-    // the browser. Sonde 22 used to compensate with an rAF-paced API GET loop,
-    // spending the server's complete per-minute request budget.
+    // only starts the network operation. The async predicate also consumes the
+    // body, so fulfillment means the complete response reached Chromium rather
+    // than only its headers. Attach both handlers immediately: if continue() or
+    // respond() rejects, cancelling this waiter must never leave a later timeout
+    // as an unhandled rejection.
+    const controller = new AbortController();
+    responseAbort = controller;
     const responseCompleted = page.waitForResponse(
-      (response) => response.request() === request,
-      { timeout: 5000 },
+      async (response) => {
+        if (response.request() !== request) return false;
+        await response.buffer();
+        return true;
+      },
+      { timeout: 5000, signal: controller.signal },
+    ).then(
+      (response) => ({ response, error: null }),
+      (error) => ({ response: null, error }),
     );
-    await request[action](...args);
-    return responseCompleted;
+    try {
+      try {
+        await request[action](...args);
+      } catch (actionError) {
+        controller.abort();
+        await responseCompleted;
+        throw actionError;
+      }
+      const outcome = await responseCompleted;
+      if (outcome.error) throw outcome.error;
+      settled = true;
+      return outcome.response;
+    } finally {
+      actionInFlight = false;
+      responseAbort = null;
+    }
   };
   return {
     get seen() { return waitForCapture(); },
@@ -3930,9 +3958,10 @@ function holdNextRequest(page, { method, pathname, label }) {
     }),
     async dispose() {
       page.__yuvomiRequestInterceptor = null;
+      responseAbort?.abort();
       if (settled) return;
-      settled = true;
       if (request) await request.abort();
+      settled = true;
     },
   };
 }
@@ -3991,6 +4020,21 @@ async function discardOpenNoteEditor(page) {
   await page.waitForFunction(() => !document.querySelector('.note-modal'));
 }
 
+async function clearMatchingToast(page, { tone, text }) {
+  await page.evaluate(({ tone: expectedTone, text: expectedText }) => {
+    for (const toast of document.querySelectorAll(`.toast--${expectedTone}`)) {
+      if (toast.querySelector('span')?.textContent === expectedText) toast.remove();
+    }
+  }, { tone, text });
+}
+
+async function waitForMatchingToast(page, { tone, text }) {
+  await page.waitForFunction(({ tone: expectedTone, text: expectedText }) => (
+    [...document.querySelectorAll(`.toast--${expectedTone}`)]
+      .some((toast) => toast.querySelector('span')?.textContent === expectedText)
+  ), {}, { tone, text });
+}
+
 test('eine unbenutzte Request-Sperre laesst sich ohne Warten entsorgen', async () => {
   const page = {};
   const hold = holdNextNoteCategoryCreate(page);
@@ -4001,6 +4045,70 @@ test('eine unbenutzte Request-Sperre laesst sich ohne Warten entsorgen', async (
 
   assert.equal(disposed, true, 'dispose must not wait for a request that never started');
   assert.equal(page.__yuvomiRequestInterceptor, null);
+});
+
+for (const action of ['continue', 'respond']) {
+  test(`eine bei ${action} gescheiterte Request-Sperre bricht die gehaltene Anfrage ab`, async () => {
+    let aborted = false;
+    const page = {
+      waitForResponse: (_predicate, { signal }) => new Promise((_, reject) => {
+        const timeout = setTimeout(() => reject(new Error('response timeout')), 5000);
+        signal.addEventListener('abort', () => {
+          clearTimeout(timeout);
+          reject(new Error('response wait aborted'));
+        }, { once: true });
+      }),
+    };
+    const request = {
+      method: () => 'POST',
+      url: () => 'http://127.0.0.1/api/v1/notes/categories',
+      [action]: async () => { throw new Error(`${action} action failed`); },
+      abort: async () => { aborted = true; },
+    };
+    const hold = holdNextNoteCategoryCreate(page);
+    assert.equal(page.__yuvomiRequestInterceptor(request), true);
+
+    const startedAt = Date.now();
+    await assert.rejects(action === 'continue' ? hold.release() : hold.reject(), {
+      message: `${action} action failed`,
+    });
+    assert.ok(Date.now() - startedAt < 100, 'failed release must cancel its five-second response waiter');
+    await hold.dispose();
+
+    assert.equal(aborted, true, 'a failed release attempt must remain disposable');
+  });
+}
+
+test('eine freigegebene Request-Sperre wartet auf den vollstaendigen Response-Body', async () => {
+  let finishBody;
+  const bodyComplete = new Promise((resolve) => { finishBody = resolve; });
+  let request;
+  const page = {
+    waitForResponse: async (predicate) => {
+      const response = {
+        request: () => request,
+        buffer: () => bodyComplete,
+      };
+      return (await predicate(response)) ? response : null;
+    },
+  };
+  request = {
+    method: () => 'POST',
+    url: () => 'http://127.0.0.1/api/v1/notes/categories',
+    continue: async () => {},
+    abort: async () => {},
+  };
+  const hold = holdNextNoteCategoryCreate(page);
+  assert.equal(page.__yuvomiRequestInterceptor(request), true);
+
+  const released = hold.release().then(() => true);
+  assert.equal(await Promise.race([
+    released,
+    new Promise((resolve) => setTimeout(() => resolve(false), 20)),
+  ]), false, 'response headers alone must not complete release');
+
+  finishBody();
+  assert.equal(await released, true);
 });
 
 async function removeNoteProbeRecords(page, { titles, categoryNames }) {
@@ -4375,6 +4483,7 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
     await openReadyNoteModal(page);
     await typeExactly(page, '#note-title', successTitle);
     await typeExactly(page, '#note-content', successContent);
+    await clearMatchingToast(page, { tone: 'success', text: 'Note created' });
     heldRequest = holdNextNoteSave(page);
     await page.click('#note-modal-save');
     await heldRequest.seen;
@@ -4385,7 +4494,7 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
     await page.focus('#note-content');
     await heldRequest.release();
     heldRequest = null;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await waitForMatchingToast(page, { tone: 'success', text: 'Note created' });
 
     const afterLateSuccess = await page.evaluate(() => ({
       replacementOpen: document.querySelector('.note-modal')?.isConnected ?? false,
@@ -4421,6 +4530,7 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
     await gotoRoute(page, '/notes');
     await openExistingNoteEditor(page, failureFixture.id);
     await replaceExactly(page, '#note-content', 'This PUT is expected to fail after its editor closes.');
+    await clearMatchingToast(page, { tone: 'danger', text: 'PUT note save delayed failure' });
     heldRequest = holdNextNoteSave(page, { method: 'PUT', noteId: failureFixture.id });
     await page.click('#note-modal-save');
     await heldRequest.seen;
@@ -4431,8 +4541,7 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
     await page.focus('#note-content');
     await heldRequest.reject();
     heldRequest = null;
-    await page.waitForSelector('.toast--danger');
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await waitForMatchingToast(page, { tone: 'danger', text: 'PUT note save delayed failure' });
 
     const afterLateFailure = await page.evaluate((errorText) => ({
       replacementOpen: document.querySelector('.note-modal')?.isConnected ?? false,
@@ -4466,11 +4575,13 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
     await gotoRoute(page, '/notes');
     await openExistingNoteEditor(page, failureFixture.id);
     await replaceExactly(page, '#note-content', retryContent);
+    await clearMatchingToast(page, { tone: 'danger', text: 'PUT note save delayed failure' });
     heldRequest = holdNextNoteSave(page, { method: 'PUT', noteId: failureFixture.id });
     await page.click('#note-modal-save');
     await heldRequest.seen;
     await heldRequest.reject();
     heldRequest = null;
+    await waitForMatchingToast(page, { tone: 'danger', text: 'PUT note save delayed failure' });
     await page.waitForFunction(() => !document.querySelector('#note-modal-save')?.disabled);
     assert.deepEqual(await page.evaluate(() => ({
       open: document.querySelector('.note-modal')?.isConnected ?? false,
@@ -4478,11 +4589,13 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
       saveDisabled: document.querySelector('#note-modal-save')?.disabled,
     })), { open: true, content: retryContent, saveDisabled: false });
 
+    await clearMatchingToast(page, { tone: 'success', text: 'Note saved' });
     heldRequest = holdNextNoteSave(page, { method: 'PUT', noteId: failureFixture.id });
     await page.click('#note-modal-save');
     await heldRequest.seen;
     await heldRequest.release();
     heldRequest = null;
+    await waitForMatchingToast(page, { tone: 'success', text: 'Note saved' });
     await page.waitForFunction(() => !document.querySelector('.note-modal'));
     const afterRetry = await page.evaluate(async (id) => {
       const { api } = await import('/api.js');
@@ -4498,6 +4611,7 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
     await openReadyNoteModal(page);
     await typeExactly(page, '#note-title', confirmationTitle);
     await typeExactly(page, '#note-content', confirmationContent);
+    await clearMatchingToast(page, { tone: 'success', text: 'Note created' });
     heldRequest = holdNextNoteSave(page);
     await page.click('#note-modal-save');
     await heldRequest.seen;
@@ -4511,7 +4625,7 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
 
     await heldRequest.release();
     heldRequest = null;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await waitForMatchingToast(page, { tone: 'success', text: 'Note created' });
     assert.deepEqual(await page.evaluate(() => ({
       confirmationOpen: document.querySelector('#confirm-modal-cancel')?.isConnected ?? false,
       originalConnected: document.querySelector('.note-modal')?.isConnected ?? false,
