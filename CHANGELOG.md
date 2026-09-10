@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A scoped API token no longer reads other modules through global search or the dashboard
+  (GHSA-g4f2-x2jf-4mwx).** A token can be limited to single modules, which matters most for one
+  handed to an AI or MCP client. The search and the dashboard only checked their own scope: a
+  token allowed `search:read` got matching notes, contacts and medications back, and one allowed
+  `dashboard:read` got the data of every tile, although neither named those modules. Both now
+  leave out every part whose module the token cannot read, the same way they already left out a
+  module a member has no access to - `search:read` opens the search, and the modules behind it
+  need their own scopes. Tokens without scopes and browser sessions see no change; a token set up
+  with only `search` or `dashboard` returns empty results until its modules are added.
+
 ## [2.65.1] - 2026-09-08
 
 ### Security
