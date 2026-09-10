@@ -111,6 +111,12 @@ const STUBS = {
     export const reportFieldError = () => false;
     export const mountFooter = () => null;
     export const refreshDirtySnapshot = () => {};
+    export const captureModalContext = () => globalThis.__modalContextId?.() ?? 'test-modal-context';
+    export const isModalContextCurrent = (context) => (
+      globalThis.__modalContextId?.() === undefined
+        ? true
+        : globalThis.__modalContextId() === context
+    );
     export const focusFirstField = () => null;
     export const updateHeaderAction = () => null;
     export const validateAll = () => true;

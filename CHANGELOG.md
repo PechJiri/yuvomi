@@ -175,7 +175,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Late Notes saves no longer close a replacement dialog or hide a failed save.** A save response
   now belongs to the editor that started it. If that editor has already closed or is waiting behind
   a discard confirmation, the current dialog and its unsaved fields stay intact; network failures
-  remain visible in the global error toast.
+  remain visible in the global error toast. A late category-name conflict follows the same ownership
+  rule: it offers the rejected name again only while the page and dialog flow that requested the
+  rename are still current, and otherwise reports the conflict without replacing newer work.
 
 - **An ingredient written in the household's own digits now counts towards the shopping list.**
   Moving a meal plan to the shopping list adds up the same ingredient across meals. The server read

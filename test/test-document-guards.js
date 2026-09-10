@@ -3951,6 +3951,7 @@ function holdNextRequest(page, { method, pathname, label }) {
   return {
     get seen() { return waitForCapture(); },
     release: () => finish('continue'),
+    respond: (response) => finish('respond', response),
     reject: () => finish('respond', {
       status: 500,
       contentType: 'application/json',
@@ -4683,6 +4684,109 @@ test('Sonde 23 - spaete Notizantworten respektieren Ersatz- und Bestaetigungsdia
       throw new AggregateError(
         probeError ? [probeError, ...cleanupErrors] : cleanupErrors,
         'Sonde 23 cleanup failed',
+      );
+    }
+  }
+  if (probeError) throw probeError;
+});
+
+test('Sonde 24 - spaeter Umbenennungskonflikt ersetzt keinen neuen Notizeditor', async () => {
+  const page = await openPage(harness, { device: 'desktop', locale: 'en' });
+  const suffix = randomUUID();
+  const renamedCategory = `Sonde 24 renamed ${suffix}`;
+  const conflictingCategory = `Sonde 24 conflict ${suffix}`;
+  const replacementTitle = `Sonde 24 replacement ${suffix}`;
+  const replacementContent = 'A stale rename retry must not replace this unsaved note.';
+  const conflictError = 'Sonde 24 delayed rename conflict';
+  let heldRequest = null;
+  let probeError = null;
+  try {
+    await gotoRoute(page, '/notes');
+    const categoryIds = await page.evaluate(async ({ firstName, secondName }) => {
+      const { api } = await import('/api.js');
+      const first = await api.post('/notes/categories', { name: firstName, scope: 'personal' });
+      const second = await api.post('/notes/categories', { name: secondName, scope: 'personal' });
+      return [first.data.id, second.data.id];
+    }, { firstName: renamedCategory, secondName: conflictingCategory });
+    await gotoRoute(page, '/notes');
+
+    await page.click('#notes-manage-categories');
+    await page.waitForSelector(`yuvomi-category-manager .cat-row[data-key="${categoryIds[0]}"]`);
+    await page.click(`yuvomi-category-manager .cat-row[data-key="${categoryIds[0]}"] .cat-row__name`);
+    await page.waitForSelector('#prompt-modal-input');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await replaceExactly(page, '#prompt-modal-input', conflictingCategory);
+    await clearMatchingToast(page, { tone: 'danger', text: conflictError });
+    heldRequest = holdNextRequest(page, {
+      method: 'PUT',
+      pathname: `/api/v1/notes/categories/${categoryIds[0]}`,
+      label: 'note category rename PUT',
+    });
+    await page.click('#prompt-modal-ok');
+    await heldRequest.seen;
+
+    await openReadyNoteModal(page);
+    await typeExactly(page, '#note-title', replacementTitle);
+    await typeExactly(page, '#note-content', replacementContent);
+    await page.focus('#note-content');
+    const replacementBefore = await page.evaluate(() => ({
+      open: document.querySelector('.note-modal')?.isConnected ?? false,
+      title: document.querySelector('#note-title')?.value,
+      content: document.querySelector('#note-content')?.value,
+      focus: document.activeElement?.id,
+    }));
+
+    await heldRequest.respond({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: conflictError, code: 409 }),
+    });
+    heldRequest = null;
+    await waitForMatchingToast(page, { tone: 'danger', text: conflictError });
+
+    assert.deepEqual(await page.evaluate(() => ({
+      open: document.querySelector('.note-modal')?.isConnected ?? false,
+      title: document.querySelector('#note-title')?.value,
+      content: document.querySelector('#note-content')?.value,
+      focus: document.activeElement?.id,
+      renamePromptOpen: document.querySelector('#prompt-modal-input')?.isConnected ?? false,
+    })), { ...replacementBefore, renamePromptOpen: false });
+  } catch (err) {
+    probeError = err;
+  } finally {
+    const cleanupErrors = [];
+    if (heldRequest) {
+      try {
+        await heldRequest.dispose();
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+    }
+    try {
+      await page.evaluate(async () => {
+        const { closeModal } = await import('/components/modal.js');
+        await closeModal({ force: true });
+      });
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    try {
+      await removeNoteProbeRecords(page, {
+        titles: [replacementTitle],
+        categoryNames: [renamedCategory, conflictingCategory],
+      });
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    try {
+      await page.close();
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+    if (cleanupErrors.length) {
+      throw new AggregateError(
+        probeError ? [probeError, ...cleanupErrors] : cleanupErrors,
+        'Sonde 24 cleanup failed',
       );
     }
   }

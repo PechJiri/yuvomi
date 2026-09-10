@@ -725,12 +725,13 @@ class CategoryManagerElement extends HTMLElement {
   async _rename(key) {
     const cat = this._cats.find((c) => this._keyOf(c) === key);
     if (!cat) return;
-    const { promptModal } = await import('/components/modal.js');
+    const { promptModal, captureModalContext, isModalContextCurrent } = await import('/components/modal.js');
     const current = this._labelResolver(cat);
     let promptValue = current;
     while (true) {
       const newName = await promptModal(t('category.renamePrompt'), promptValue);
       if (!newName || newName === current) return;
+      const modalContext = captureModalContext();
       try {
         const res = await api.put(`${this._basePath}/${encodeURIComponent(key)}`, { name: newName });
         const idx = this._cats.findIndex((c) => this._keyOf(c) === key);
@@ -742,6 +743,11 @@ class CategoryManagerElement extends HTMLElement {
       } catch (err) {
         window.yuvomi?.showToast(this._errMsg(err), 'danger');
         if (err?.status !== 409) return;
+        // Der 409 darf nur den Prompt wiederholen, aus dem diese Anfrage kam.
+        // Ein inzwischen geoeffnetes (selbst schon wieder geschlossenes)
+        // Modal oder eine neue Seiteninstanz besitzt den Shared-Slot; dort
+        // wuerde promptModal() den fremden Dialog sonst mit force wegraeumen.
+        if (!isModalContextCurrent(modalContext)) return;
         promptValue = newName;
       }
     }

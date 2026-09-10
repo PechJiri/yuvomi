@@ -239,6 +239,40 @@ test('a successful retry persists the accepted rename', async () => {
   }
 });
 
+test('a stale 409 reports the error without reopening rename in a newer modal context', async () => {
+  const previousPut = api.put;
+  const previousShowToast = globalThis.window.yuvomi.showToast;
+  const defaults = [];
+  const toasts = [];
+  let contextId = 'rename-context';
+  let attempts = 0;
+  globalThis.__modalContextId = () => contextId;
+  globalThis.__promptModal = (_label, defaultValue) => {
+    defaults.push(defaultValue);
+    return defaults.length === 1 ? 'Rejected' : null;
+  };
+  globalThis.window.yuvomi.showToast = (message, tone) => { toasts.push({ message, tone }); };
+  api.put = async () => {
+    attempts += 1;
+    contextId = 'newer-modal-context';
+    throw Object.assign(new Error('exists'), { status: 409 });
+  };
+  try {
+    const manager = managerWithCategory();
+    await manager._rename('7');
+
+    assert.deepEqual(defaults, ['Old']);
+    assert.equal(attempts, 1);
+    assert.deepEqual(toasts, [{ message: 'exists', tone: 'danger' }]);
+    assert.equal(manager._cats[0].name, 'Old');
+  } finally {
+    api.put = previousPut;
+    globalThis.window.yuvomi.showToast = previousShowToast;
+    delete globalThis.__modalContextId;
+    delete globalThis.__promptModal;
+  }
+});
+
 test('cancelling rename sends no request and keeps the category', async () => {
   const previousPut = api.put;
   let attempts = 0;
