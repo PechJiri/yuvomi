@@ -201,11 +201,25 @@ function assertRuleUsesToken(css, selector, property, token, file) {
 // ueberall - die Liste war also nie eine Ausnahmegenehmigung, nur ein zu enger
 // Suchbereich. Vendor-Code ist ausgenommen: der wird von Hand kopiert und nicht
 // nach unseren Regeln geschrieben.
+//
+// `outerHTML =` gehoert dazu: es parst denselben String als Markup, nur ersetzt
+// es das Element selbst statt seines Inhalts. Die zwei Stellen, die es gab
+// (schedule.js), laufen seitdem ueber insertAdjacentHTML('afterend') + remove().
+//
+// Verbundzuweisungen (`+=`, `||=`, `??=` ...) und die Klammerschreibweise
+// (`el['outerHTML'] =`) rufen denselben Setter auf und zaehlen deshalb mit.
+// Die Grenze eines Text-Guards: einen Namen aus einer Variablen,
+// `Object.assign(el, { innerHTML })` oder `Reflect.set` sieht er nicht - das
+// bleibt beim Review. Lucide ist Vendor-Code, liegt aber aus historischen
+// Gruenden als public/lucide.min.js ausserhalb von vendor/ (siehe
+// public/vendor/lucide/README.md) und ist deshalb einzeln ausgenommen.
 const VENDOR_PREFIX = '../public/vendor/';
+const VENDOR_FILES = new Set(['../public/lucide.min.js']);
+const HTML_STRING_WRITE = /(?:\.(?:innerHTML|outerHTML)|\[\s*(['"`])(?:innerHTML|outerHTML)\1\s*\])\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?!=)/;
 
-test('kein innerHTML-Schreibzugriff irgendwo unter public/ (ausser vendor/)', () => {
-  const files = walkJsFiles('../public/').filter((f) => !f.startsWith(VENDOR_PREFIX));
-  const offenders = files.filter((file) => /\.innerHTML\s*=[^=]/.test(read(file)));
+test('kein innerHTML- oder outerHTML-Schreibzugriff irgendwo unter public/ (ausser vendor/)', () => {
+  const files = walkJsFiles('../public/').filter((f) => !f.startsWith(VENDOR_PREFIX) && !VENDOR_FILES.has(f));
+  const offenders = files.filter((file) => HTML_STRING_WRITE.test(read(file)));
   assert.deepEqual(offenders, [],
     'anhaengen mit insertAdjacentHTML oder ueber die DOM-API, User-Daten durch esc()');
 
@@ -215,10 +229,19 @@ test('kein innerHTML-Schreibzugriff irgendwo unter public/ (ausser vendor/)', ()
 });
 
 test('der innerHTML-Guard erkennt das Muster, das er verbietet', () => {
-  const pattern = /\.innerHTML\s*=[^=]/;
+  const pattern = HTML_STRING_WRITE;
   assert.ok(pattern.test('root.innerHTML = `<div>`;'), 'Zuweisung wird nicht erkannt');
   assert.ok(pattern.test('el.innerHTML=""'), 'Zuweisung ohne Leerzeichen wird nicht erkannt');
+  assert.ok(pattern.test('existing.outerHTML = html;'), 'outerHTML-Zuweisung wird nicht erkannt');
+  assert.ok(pattern.test('list.innerHTML += row;'), 'Verbundzuweisung += wird nicht erkannt');
+  assert.ok(pattern.test('el.outerHTML ||= html;'), 'logische Zuweisung ||= wird nicht erkannt');
+  assert.ok(pattern.test('el.innerHTML ??= html;'), 'logische Zuweisung ??= wird nicht erkannt');
+  assert.ok(pattern.test("el['outerHTML'] = html;"), 'Klammerschreibweise wird nicht erkannt');
+  assert.ok(pattern.test('el["innerHTML"] += row;'), 'Klammerschreibweise mit += wird nicht erkannt');
+  assert.ok(!pattern.test("const html = el['outerHTML'];"), 'ein Lesezugriff in Klammern wird faelschlich beanstandet');
   assert.ok(!pattern.test('if (el.innerHTML === x)'), 'ein Vergleich wird faelschlich beanstandet');
+  assert.ok(!pattern.test('if (el.innerHTML !== x)'), 'eine Ungleichheit wird faelschlich beanstandet');
+  assert.ok(!pattern.test('return emptyStateEl(opts).outerHTML;'), 'ein Lesezugriff wird faelschlich beanstandet');
 });
 
 /**
