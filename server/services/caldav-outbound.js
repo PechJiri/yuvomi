@@ -75,8 +75,17 @@ function settleOutbound(sent, handledMoveTo = null) {
   const now = outbound.reloadEvent(sent.id);
   if (!now) return;
   const edited = outbound.mirroredFieldsChanged(sent, now);
-  const moved  = (now.outbound_move_to ?? null) !== handledMoveTo;
-  if (!edited && !moved) {
+  let nextMove = (now.outbound_move_to ?? null) !== handledMoveTo ? now.outbound_move_to : null;
+  // Einen Zielwechsel während eines Umzugs hat die Route noch gegen die QUELLE
+  // gerechnet: calendar_ref_id wandert erst mit applyMove. Ein Rückweg dorthin
+  // sah wie "kein Umzug" aus und liess die alte Vormerkung stehen, die hier als
+  // erledigt gälte. Massgeblich ist dann das Ziel der Anfrage, gegen den Kalender,
+  // in dem der Termin jetzt liegt.
+  if (handledMoveTo && now.target_caldav_calendar_url !== sent.target_caldav_calendar_url) {
+    const target = now.target_caldav_calendar_url || null;
+    nextMove = target && target !== handledMoveTo ? target : null;
+  }
+  if (!edited && !nextMove) {
     outbound.clearOutbound(sent.id);
     return;
   }
@@ -84,7 +93,7 @@ function settleOutbound(sent, handledMoveTo = null) {
     UPDATE calendar_events
     SET outbound_dirty = ?, outbound_move_to = ?, outbound_attempts = 0
     WHERE id = ?
-  `).run(edited ? 1 : 0, moved ? now.outbound_move_to : null, sent.id);
+  `).run(edited ? 1 : 0, nextMove, sent.id);
 }
 
 /**

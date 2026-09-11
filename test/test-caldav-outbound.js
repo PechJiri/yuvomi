@@ -1242,6 +1242,47 @@ test('ein während des PUT vorgemerkter Umzug bleibt stehen', async () => {
   assert.equal(row.outbound_dirty, 0, 'die Feldänderung selbst ist angekommen');
 });
 
+test('ein Rückweg in die Quelle während des Umzugs wird als neuer Umzug vorgemerkt', async () => {
+  // Während das Anlegen im Ziel läuft, steht calendar_ref_id noch auf der Quelle.
+  // Die Route sieht im Rückweg dorthin deshalb keinen Umzug und lässt die alte
+  // Vormerkung stehen - nach dem Umzug läge der Termin im Ziel, gewählt ist die Quelle.
+  reset();
+  const event = seedMoved('mv13@t');
+
+  const client = fakeClient({
+    onCreate: () => {
+      const before = reload(event.id);
+      db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL_URL, event.id);
+      outbound.markEventOutbound(before, reload(event.id));
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv13@t'), calendars);
+
+  const row = reload(event.id);
+  assert.equal(row.calendar_ref_id, calRefFor(CAL2_URL), 'Vorbedingung: der Umzug ins Ziel ist ausgeführt');
+  assert.equal(row.outbound_move_to, CAL_URL, 'der Rückweg läuft im nächsten Durchgang');
+});
+
+test('ein Zielwechsel während des Umzugs zurück auf das Umzugsziel merkt nichts vor', async () => {
+  // Das Gegenstück: liegt das Ziel der Anfrage am Ende dort, wohin der Umzug
+  // gerade ging, gibt es nichts mehr zu tun - kein zweiter Umzug an denselben Ort.
+  reset();
+  const CAL3_URL = 'https://dav.example/cal/school/';
+  const event = seedMoved('mv14@t');
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL3_URL, event.id);
+
+  const client = fakeClient({
+    onCreate: () => {
+      db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL2_URL, event.id);
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv14@t'), calendars);
+
+  assert.equal(reload(event.id).outbound_move_to, null);
+});
+
 test('ohne Eintrag in der Kontoauswahl behält eine bestehende Kalenderzeile Name und Farbe', async () => {
   reset();
   db.prepare('DELETE FROM caldav_calendar_selection').run();
