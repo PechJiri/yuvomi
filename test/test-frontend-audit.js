@@ -16376,7 +16376,7 @@ function selbstNachziehend(lines) {
  * ohne den Fokus nachzuziehen. Eine eigene Funktion, damit die Sonden weiter
  * unten dieselbe Pruefung an kuenstlichen Quellen fahren wie der Guard am Repo.
  */
-const DEKLARATIONS_KOPF = /^\s*(?:export\s+)?(?:async\s+)?function\s*\*?\s*[A-Za-z_$][\w$]*\s*\(/;
+const DEKLARATIONS_KOPF = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*[A-Za-z_$][\w$]*\s*\(/;
 
 function fokusLuecken(datei, lines) {
   const fehlend = [];
@@ -17030,6 +17030,9 @@ test('Fokus-Guard: close-Parameter, Einzeiler, Signaturen, Dialog nach dem Neuau
   ];
   assert.deepEqual(stellen('deklaration.js', deklaration), [],
     'die Signatur von confirmModal ist kein Anker');
+  const standard = deklaration.map((l, k) => (k === 0 ? 'export default function confirmModal(frage) {' : l));
+  assert.deepEqual(stellen('standard.js', standard), [],
+    'auch nicht als Default-Export (Codex-Review zu #1131)');
   const gleichzeile = [
     'async function speichern() { closeModal({ force: true });',
     '  await api.put(url);',
