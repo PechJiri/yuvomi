@@ -2900,8 +2900,31 @@ function getRecentFilters() {
  * Achse dazukommt - und dann still.
  */
 function recentFilterKey(f) {
-  const axis = (values) => [...values].map((v) => String(v).toLowerCase()).sort().join(',');
-  return [f.status, f.priority, f.assigned_to, f.category, f.tags].map(axis).join('|');
+  // STRUKTURELL KODIERT, NICHT MIT TRENNZEICHEN VERKETTET.
+  //
+  // Hier stand `join(',')` INNERHALB einer Achse, und das Komma darf in einem
+  // Wert vorkommen: `normalizeTags` splittet nur eine STRING-Eingabe an
+  // Kommas, ein Array-Element behaelt seines (`normalizeTags(['a,b'])` ->
+  // `['a,b']`), und die Route nimmt Arrays. Damit ergaben der eine Tag `a,b`
+  // und die zwei Tags `a` und `b` denselben Schluessel: `getRecentFilters`
+  // verbarg den einen Chip als Dublette, und `saveRecentFilter` verdraengte
+  // beim Speichern den jeweils anderen.
+  //
+  // Das `join('|')` DARUEBER war dagegen in Ordnung, auch wenn ein Tag ein
+  // `|` tragen darf: die Achsenzahl ist fest, also bleibt jede Position
+  // eindeutig. Eine Probe dafuer stand hier kurz und wurde wieder entfernt -
+  // sie blieb gruen, wenn man den alten Trenner zuruecknahm, und maass damit
+  // nichts. Ersetzt wird er trotzdem mit, weil eine Formel mit zwei Regeln
+  // schwerer zu halten ist als eine ohne.
+  //
+  // Der Server hat dieselbe Frage schon beantwortet und begruendet
+  // (`tagsKey` in server/utils/task-tags.js trennt mit U+0000, "weil ein Tag
+  // Leerzeichen enthalten darf"). JSON braucht die Frage gar nicht erst zu
+  // stellen: es kodiert die Achsen als Struktur, also kann kein Wert seinen
+  // eigenen Trenner tragen. Der Schluessel wird bei jedem Aufruf neu gerechnet
+  // und nirgends gespeichert - die geaenderte Form braucht keine Migration.
+  const axis = (values) => [...values].map((v) => String(v).toLowerCase()).sort();
+  return JSON.stringify([f.status, f.priority, f.assigned_to, f.category, f.tags].map(axis));
 }
 
 function saveRecentFilter(filters) {

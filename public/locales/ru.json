@@ -2273,7 +2273,7 @@
         "pageKitchen": "Кухня",
         "pageKitchenDescription": "Выберите, какие приёмы пищи видны в плане питания.",
         "pageModuleOptions": "Параметры модулей",
-        "pageModuleOptionsDescription": "Задать отдельные параметры для Бюджета, Здоровья и Помощи по дому.",
+        "pageModuleOptionsDescription": "Дополнительные параметры для нескольких модулей.",
         "pageCalendarModule": "Календарь",
         "pageCalendarModuleDescription": "Задайте праздники, начало недели и длительность события по умолчанию.",
         "pageSyncCalendar": "Синхронизация календарей",

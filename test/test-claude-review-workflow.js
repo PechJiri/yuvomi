@@ -153,6 +153,19 @@ test('der Nachweis bindet Aeusserungen an die Commit-SHA', () => {
   assert.match(workflow, /commit: null/);
 });
 
+test('jede Kommentarliste traegt die Adresse ihrer Aeusserungen', () => {
+  // Der Beleg aus dem Strom zaehlt nur, wenn die API seine Adresse als
+  // claude-Aeusserung nach dem Laufbeginn kennt (#1096, dritte Runde). Fehlt
+  // `anker` in einer der drei Listen, gibt es aus ihr keinen Beleg: nie gruen,
+  // aber eine Lieferung ueber genau diesen Weg sieht der Nachweis dann nicht
+  // mehr, und der Haken wird rot, obwohl die Review gesprochen hat.
+  const holer = [...workflow.matchAll(/--jq '\.\[\] \| \{login: \.user\.login,[^']*\}'/g)].map((m) => m[0]);
+  assert.equal(holer.length, 3, 'drei Listen: Zusammenfassungen, Reviews, Inline-Anmerkungen');
+  for (const jq of holer) {
+    assert.match(jq, /anker: \(\.html_url \/\/ "" \| split\("#"\) \| \.\[1\] \/\/ null\)/, jq);
+  }
+});
+
 test('das Urteil laeuft aus einer vertrauenswuerdigen Fassung', () => {
   // SICHERHEIT, NICHT NUR SAUBERKEIT. Hier stand `node .github/scripts/...` aus
   // dem Checkout - also Code, den der PR selbst schreibt, ausgefuehrt in einem

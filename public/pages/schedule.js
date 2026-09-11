@@ -1258,8 +1258,10 @@ function renderShell() {
       const row = event.target.closest('[data-day-row]');
       const existing = row?.querySelector('[data-day-row-fields]');
       const html = dayRowFieldsHtml(event.target.value);
-      if (existing) existing.outerHTML = html;
-      else if (html) row.insertAdjacentHTML('beforeend', html);
+      if (existing) {
+        existing.insertAdjacentHTML('afterend', html);
+        existing.remove();
+      } else if (html) row.insertAdjacentHTML('beforeend', html);
       window.lucide?.createIcons({ el: row });
     }
   });
@@ -1402,8 +1404,10 @@ function wireOccurrenceFieldReactivity(scope) {
       const container = select.closest('fieldset') ?? select.closest('form');
       const existing = container?.querySelector('[data-day-row-fields]');
       const html = dayRowFieldsHtml(select.value);
-      if (existing) existing.outerHTML = html;
-      else if (html) select.closest('.form-field')?.insertAdjacentHTML('afterend', html);
+      if (existing) {
+        existing.insertAdjacentHTML('afterend', html);
+        existing.remove();
+      } else if (html) select.closest('.form-field')?.insertAdjacentHTML('afterend', html);
       window.lucide?.createIcons({ el: container });
     });
   });

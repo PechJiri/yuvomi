@@ -2296,7 +2296,7 @@
         "pageKitchen": "Kitchen",
         "pageKitchenDescription": "Choose which meals are visible in the meal planner.",
         "pageModuleOptions": "Module options",
-        "pageModuleOptionsDescription": "Set individual options for Budget, Health and Housekeeping.",
+        "pageModuleOptionsDescription": "Extra options for a few modules.",
         "pageCalendarModule": "Calendar",
         "pageCalendarModuleDescription": "Set holidays, week start, and the default event duration.",
         "pageSyncCalendar": "Calendar sync",

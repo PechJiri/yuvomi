@@ -2273,7 +2273,7 @@
         "pageKitchen": "Konyha",
         "pageKitchenDescription": "Válassza ki, mely étkezések láthatók az étrendben.",
         "pageModuleOptions": "Modulbeállítások",
-        "pageModuleOptionsDescription": "Egyedi beállítások megadása a Költségvetéshez, Egészséghez és Háztartási segítséghez.",
+        "pageModuleOptionsDescription": "Kiegészítő beállítások néhány modulhoz.",
         "pageCalendarModule": "Naptár",
         "pageCalendarModuleDescription": "Állítsa be az ünnepnapokat, a hét kezdetét és az alapértelmezett esemény-időtartamot.",
         "pageSyncCalendar": "Naptár szinkronizálás",

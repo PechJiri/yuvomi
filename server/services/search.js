@@ -77,6 +77,9 @@ const BUCKET_MODULE = Object.freeze({
   activities: 'health',
 });
 
+/** Die Module, aus denen die Suche liest - die Menge, gegen die Token-Scopes geprüft werden. */
+export const SEARCH_MODULES = Object.freeze([...new Set(Object.values(BUCKET_MODULE))]);
+
 /**
  * Die leere Antwort - eine Trefferart je Schlüssel, Form bleibt stabil.
  * Exportiert, damit die Route für „Suchbegriff zu kurz" dieselbe Form schreibt
@@ -122,9 +125,11 @@ export function resolveEventSearchRows(database, rows, from = null, to = null, o
  * @param {number} userId
  * @param {object} [opts]
  * @param {Set<string>|null} [opts.hiddenModules] Module, die dem Betrachter
- *        entzogen sind (`access_permissions`, #467). Nur `'none'` gehört
- *        hinein - `'read'` ist eine Leseberechtigung, keine Sperre. Ihre
- *        Trefferart wird gar nicht erst abgefragt und bleibt leer.
+ *        entzogen sind (`access_permissions`, #467) oder die sein API-Token
+ *        nicht lesen darf (`hiddenModulesFor` in permissions.js). Aus der
+ *        Rollenachse gehört nur `'none'` hinein - `'read'` ist eine
+ *        Leseberechtigung, keine Sperre. Ihre Trefferart wird gar nicht erst
+ *        abgefragt und bleibt leer.
  */
 export function runSearch(database, q, userId, { hiddenModules = null } = {}) {
   const match = buildMatchQuery(q);

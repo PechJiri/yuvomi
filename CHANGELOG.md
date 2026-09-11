@@ -134,6 +134,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Module options settings page describes what it actually contains.** Its description named
+  only Budget, Health and Housekeeping - accurate when it was written, but Tasks and Schedule have
+  since grown their own sections on the same page without the sentence ever being updated. Reworded
+  to describe the page's purpose instead of enumerating its sections, so it can't go stale the same
+  way again the next time a module gains a section here.
+
 - **The person filter in the task history is no longer a row of blank buttons on a phone** (#1068).
   Below 640px the label-loss rule removes every `.group-toggle__label`; it is built on the
   assumption that an icon stays behind, which is true for the view switcher next to it. These chips
@@ -499,6 +505,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their unrestricted future horizon while recurrence generation stops at the requested result count.
   ICS deletion exceptions keep the series' local time across daylight-saving changes even when
   the stored UTC day differs; each exception needs at most three local-date candidates, not a series scan.
+
+## [2.65.2] - 2026-09-11
+
+### Security
+
+- **A scoped API token no longer reads other modules through global search or the dashboard
+  (GHSA-g4f2-x2jf-4mwx).** A token can be limited to single modules, which matters most for one
+  handed to an AI or MCP client. The search and the dashboard only checked their own scope: a
+  token allowed `search:read` got matching notes, contacts and medications back, and one allowed
+  `dashboard:read` got the data of every tile, although neither named those modules. Both now
+  leave out every part whose module the token cannot read, the same way they already left out a
+  module a member has no access to - `search:read` opens the search, and the modules behind it
+  need their own scopes. Tokens without scopes and browser sessions see no change; a token set up
+  with only `search` or `dashboard` returns empty results until its modules are added.
 
 ## [2.65.1] - 2026-09-08
 

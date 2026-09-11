@@ -17,7 +17,7 @@
  * laufenden Preview-Server und spart Migration + Seed.
  */
 
-import { test, before, after, describe } from 'node:test';
+import { test, before, beforeEach, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import {
@@ -275,6 +275,19 @@ async function visitViews(page, where, visit) {
 
 before(async () => {
   harness = await startHarness();
+});
+
+// JEDE SONDE BEGINNT AUF DEMSELBEN STAND (#1104). Die Sonden teilen einen
+// Server, und bis hierher trug jede drei Dinge an die naechste weiter: das
+// API-Limit (300 Anfragen pro Minute je IP, und jede Sonde ist 127.0.0.1), ihre
+// liegengebliebenen Daten und - ueber einen 429 auf /auth/me - eine Seite, die
+// auf /login steht. Eine Sonde fiel dann fuer die Sonde vor ihr: in #1044 war
+// derselbe Probe-Code einmal gruen und einmal rot. `reset()` startet den Server
+// auf dem Stand nach Seed und Anmeldung neu und gibt jeder Sonde einen frischen
+// Browser-Kontext; eine Sonde ohne Seite kostet nur den Kontext. Damit misst ein
+// gezielter Lauf (`--test-name-pattern`) dieselben Vorbedingungen wie der volle.
+beforeEach(async () => {
+  await harness.reset();
 });
 
 after(async () => {
