@@ -310,8 +310,13 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
       } else {
         try {
           const filename = filenameFromUrl(url, event.external_calendar_id);
+          // tsdav löst den Dateinamen relativ zur Kalender-URL auf. Ohne Schrägstrich
+          // am Ende ersetzte er deren letztes Segment, und das Objekt landete neben
+          // der Collection statt darin - wie der Upload-Pfad als Collection behandeln.
+          const collectionUrl = String(destCal.url).replace(/\/?$/, '/');
+          const objectUrl = new URL(filename, collectionUrl).href;
           await client.createCalendarObject({
-            calendar:   destCal,
+            calendar:   { ...destCal, url: collectionUrl },
             filename,
             iCalString: patched,
           });
@@ -322,8 +327,18 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
           } catch (err) {
             log.error(`[${label(source)}] Event ${event.id} was copied to ${moveTo} but could not be removed from its old calendar:`, err.message);
           }
-          // Die URL so gebildet, wie tsdav sie für den PUT gebildet hat.
-          applyMove(event.id, source, moveTo, destCal, new URL(filename, destCal.url).href);
+          // Während der beiden awaits lokal gelöscht: die Route hat den Tombstone
+          // mit der alten Quelle angelegt, die Kopie im Ziel kennt sie nicht. Ohne
+          // eigenen Tombstone bliebe sie stehen, und der nächste Lauf importierte
+          // den Termin von dort neu.
+          if (!outbound.reloadEvent(event.id)) {
+            outbound.queueDeletion({
+              source, calendarExternalId: moveTo, eventExternalId: event.external_calendar_id, objectUrl,
+            });
+            log.warn(`[${label(source)}] Event ${event.id} was deleted during its move, queued the deletion of its copy in ${moveTo}.`);
+            continue;
+          }
+          applyMove(event.id, source, moveTo, destCal, objectUrl);
           outbound.clearOutbound(event.id);
           done++;
           continue; // der Patch ist mit dem Anlegen bereits geschrieben

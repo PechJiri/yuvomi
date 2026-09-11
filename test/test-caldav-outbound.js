@@ -1129,6 +1129,56 @@ test('der Umzug übernimmt Name und Farbe des Zielkalenders aus der Kontoauswahl
   assert.equal(cal.color, '#FF8800');
 });
 
+test('eine Ziel-URL ohne Schrägstrich am Ende wird als Collection behandelt', async () => {
+  // tsdav bildet die Objekt-URL mit new URL(filename, calendar.url). Ohne den
+  // Schrägstrich ersetzt das das letzte Segment: das Objekt käme nach /cal/ statt
+  // nach /cal/work/, und die gespeicherte URL zeigte auf dieselbe falsche Stelle.
+  reset();
+  const bare = 'https://dav.example/cal/work';
+  const calRefId = upsertCalendar(CAL_URL);
+  const before = insertSyncedEvent({ uid: 'mv10@t', calRefId, objectUrl: `${CAL_URL}mv10@t.ics`, target: CAL_URL });
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(bare, before.id);
+  outbound.markEventOutbound(before, reload(before.id));
+
+  const client = fakeClient();
+  const calendars = new Map([[bare, { url: bare, displayName: 'Arbeit' }]]);
+  assert.equal(await processPendingUpdates(client, 'caldav', indexFor('mv10@t'), calendars), 1);
+
+  assert.equal(client.creates[0].calendar.url, `${bare}/`, 'der PUT geht in die Collection');
+  const row = reload(before.id);
+  assert.equal(row.external_object_url, `${bare}/mv10@t.ics`);
+  assert.equal(row.calendar_ref_id, calRefFor(bare), 'die Kalenderzeile behält die URL der Auswahl');
+});
+
+test('wird der Termin während des Umzugs gelöscht, wird auch die Kopie im Ziel gelöscht', async () => {
+  // Der Sofortversuch läuft ohne await hinter der Antwort. Löscht jemand den
+  // Termin, während das Anlegen im Ziel noch unterwegs ist, legt die Route den
+  // Tombstone mit der alten Quelle an - die neue Kopie bliebe sonst stehen und
+  // käme mit dem nächsten Lauf zurück.
+  reset();
+  const event = seedMoved('mv11@t');
+
+  const client = fakeClient({
+    onCreate: () => {
+      outbound.queueEventDeletion(reload(event.id));
+      db.prepare('DELETE FROM calendar_events WHERE id = ?').run(event.id);
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv11@t'), calendars);
+
+  const target = tombstones().find((t) => t.calendar_external_id === CAL2_URL);
+  assert.ok(target, 'für die Kopie im Ziel steht ein Tombstone');
+  assert.equal(target.event_external_id, 'mv11@t');
+  assert.equal(target.object_url, `${CAL2_URL}mv11@t.ics`);
+  assert.ok(outbound.hasPendingDeletion('caldav', 'mv11@t'), 'der Inbound importiert die UID nicht neu');
+
+  const cleanup = fakeClient();
+  await processPendingDeletions(cleanup, 'caldav', new Map(), new Set([CAL_URL, CAL2_URL]));
+  assert.ok(cleanup.deletes.some((d) => d.calendarObject.url === `${CAL2_URL}mv11@t.ics`),
+    'der nächste Lauf räumt die Kopie im Ziel ab');
+});
+
 test('ohne Eintrag in der Kontoauswahl behält eine bestehende Kalenderzeile Name und Farbe', async () => {
   reset();
   db.prepare('DELETE FROM caldav_calendar_selection').run();
