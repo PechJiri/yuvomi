@@ -293,9 +293,11 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
     const fresh = outbound.reloadEvent(event.id);
     if (!fresh) continue; // parallel gelöscht - der Tombstone-Pfad übernimmt
 
+    // Das Ziel, auf dem der Umzug beruhte, steht in der Auswahl: `fresh` kommt erst
+    // nach events.move und kennt einen Zielwechsel währenddessen schon.
     if (!fresh.outbound_dirty) {
       if (movedTo) {
-        outbound.settleOutbound(fresh, movedTo);
+        outbound.settleOutbound(fresh, movedTo, event);
         done++;
       }
       continue;
@@ -305,7 +307,7 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
       const gEvent = localEventToGoogle(fresh, colorMap, activeMeta?.timeZone || householdTimeZone(db.get()));
       await calendar.events.patch({ calendarId, eventId, requestBody: gEvent });
       // Während des Patches Eingetroffenes bleibt vorgemerkt.
-      outbound.settleOutbound(fresh, movedTo);
+      outbound.settleOutbound(fresh, movedTo, event);
       done++;
     } catch (err) {
       handleError(err, event, 'update', clear);

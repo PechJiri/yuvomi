@@ -1216,3 +1216,54 @@ test('ein weiterer Umzug während des Umzugs bleibt vorgemerkt', async () => {
   assert.equal(__test.currentGoogleCalendarId(row), 'work@g');
   assert.equal(row.outbound_move_to, null);
 });
+
+test('ein Rückweg in die Quelle während des Umzugs wird als neuer Umzug vorgemerkt', async () => {
+  // Während events.move läuft, steht calendar_ref_id noch auf der Quelle. Die Route
+  // sieht im Rückweg dorthin deshalb keinen Umzug und lässt die alte Vormerkung
+  // stehen - nach dem Umzug läge der Termin im Ziel, gewählt ist die Quelle.
+  reset();
+  const event = seedMirrored('gev-move-back');
+  await put(event.id, { target_google_calendar_id: 'fam@g' });
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g']),
+    onMove: async (params) => {
+      await put(event.id, { target_google_calendar_id: 'primary' });
+      return { data: { id: params.eventId } };
+    },
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  let row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'fam@g', 'Vorbedingung: der Umzug ins Ziel ist ausgeführt');
+  assert.equal(row.outbound_move_to, 'primary', 'der Rückweg läuft im nächsten Durchgang');
+
+  const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) });
+  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.deepEqual(next.moves, [{ calendarId: 'fam@g', eventId: 'gev-move-back', destination: 'primary' }]);
+  row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'primary');
+  assert.equal(row.outbound_move_to, null);
+});
+
+test('ein Zielwechsel während des Umzugs zurück auf das Umzugsziel merkt nichts vor', async () => {
+  // Das Gegenstück: liegt das Ziel der Anfrage am Ende dort, wohin der Umzug gerade
+  // ging, gibt es nichts mehr zu tun - kein zweiter Umzug an denselben Ort.
+  reset();
+  const event = seedMirrored('gev-move-same');
+  await put(event.id, { target_google_calendar_id: 'fam@g' });
+  db.prepare("UPDATE calendar_events SET target_google_calendar_id = 'school@g' WHERE id = ?").run(event.id);
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g', 'school@g']),
+    onMove: (params) => {
+      db.prepare("UPDATE calendar_events SET target_google_calendar_id = 'fam@g' WHERE id = ?").run(event.id);
+      return { data: { id: params.eventId } };
+    },
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  const row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'fam@g');
+  assert.equal(row.outbound_move_to, null);
+});
