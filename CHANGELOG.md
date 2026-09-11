@@ -134,6 +134,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The event detail names the day a multi-day event ends** (#1102). The "When" row showed the
+  start date and, of the end, only the time: an event from 10 September 14:00 to 12 September 11:00
+  read as "14:00 - 11:00" on a single day that ends before it begins, and an all-day event across
+  three days named only the first. When an event ends on another day, the row now carries that day
+  as well - start date and time to end date and time, or first to last day for an all-day event.
+  "Another day" is the rule the calendar grid already uses rather than a second one: a timed event
+  that ends at 00:00 still belongs to the evening it started in (#804), and the end of an all-day
+  event stays inclusive. The range separator now comes from the same locale string as the day
+  view's date range, a hyphen where the time range used to carry an en dash.
+
 - **Dialog content on a phone scrolls again with Reduce Motion turned on** (#981). A freshly opened
   dialog stands at the top, so every swipe inside it began as a tracked swipe-to-close gesture, and
   on every upward frame that gesture wrote `translateY(0)` to the panel. Normally the sheet's

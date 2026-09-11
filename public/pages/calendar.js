@@ -3333,6 +3333,7 @@ export const __test = {
   passesPersonFilters,
   eventEndDate,
   isMultiDayEvent,
+  eventWhenText,
   isAllDayLike,
   agendaSegmentKind,
   deepLinkTargetDate,
@@ -3492,6 +3493,42 @@ function reminderSummary(ev, reminders) {
 }
 
 /**
+ * Die „Wann"-Zeile der Detailansicht (#1102).
+ *
+ * Sie nannte das Startdatum und vom Ende nur die Uhrzeit. Ein Termin vom 10.
+ * 14:00 bis zum 12. 11:00 las sich dadurch als „14:00 - 11:00" an einem Tag,
+ * der endet, bevor er beginnt, und ein Ganztags-Termin über drei Tage nannte
+ * nur den ersten. Endet der Termin an einem anderen Tag, steht dieser Tag jetzt
+ * mit da.
+ *
+ * „Anderer Tag" ist die Regel des Rasters, keine zweite: `isMultiDayEvent` über
+ * `eventEndDate`. Ein Zeit-Termin bis 00:00 gehört dem Abend, an dem er begann
+ * (#804), und das Ende eines Ganztags-Termins ist inklusiv. Der Trenner kommt
+ * aus demselben Locale-Key wie der Zeitraum im Tageskopf.
+ */
+function eventWhenText(ev) {
+  const multiDay = isMultiDayEvent(ev);
+  if (ev.all_day) {
+    const startDate = formatPreferredDate(localDate(ev.start_datetime));
+    const dates = multiDay
+      ? t('calendar.dayRangeLabel', { from: startDate, to: formatPreferredDate(eventEndDate(ev)) })
+      : startDate;
+    return `${dates} · ${t('calendar.allDay')}`;
+  }
+  const start = formatDateTime(ev.start_datetime);
+  if (!ev.end_datetime) return start;
+  // Das Ende ist der ZEITPUNKT, nicht der letzte Rastertag. Ein Termin vom 1.
+  // 14:00 bis zum 3. 00:00 steht im Raster am 1. und 2., endet aber am 3. um
+  // 00:00 - und genau das steht hier. Das Datum aus `eventEndDate` mit der
+  // rohen Uhrzeit ergaebe "2. 00:00", einen Tag zu frueh; rastertreu waere nur
+  // "2. 24:00", und das kann keine Locale formatieren (Review auf #1114).
+  const end = multiDay
+    ? formatDateTime(ev.end_datetime)
+    : `${formatTime(ev.end_datetime)} ${timeSuffix()}`.trimEnd();
+  return t('calendar.dayRangeLabel', { from: start, to: end });
+}
+
+/**
  * Die Leseinformationen eines Termins.
  *
  * Wiederholung, Erinnerungen und Sichtbarkeit standen bisher nur im
@@ -3499,14 +3536,9 @@ function reminderSummary(ev, reminders) {
  * wiederkehrt, musste ihn zum Bearbeiten öffnen.
  */
 function renderEventDetail(ev, reminders = []) {
-  const timeStr = ev.all_day
-    ? `${formatPreferredDate(localDate(ev.start_datetime))} · ${t('calendar.allDay')}`
-    : formatDateTime(ev.start_datetime)
-      + (ev.end_datetime ? ` – ${formatTime(ev.end_datetime)} ${timeSuffix()}`.trimEnd() : '');
-
   return [
     { icon: 'calendar', label: t('calendar.detailCalendar'), node: calendarChipNode(ev) },
-    { icon: 'clock', label: t('calendar.detailWhen'), value: timeStr },
+    { icon: 'clock', label: t('calendar.detailWhen'), value: eventWhenText(ev) },
     recurrenceRow(ev.recurrence_rule),
     { icon: 'map-pin', label: t('calendar.locationLabel'), value: ev.location ? fmtLocation(ev.location) : '' },
     assignedRow(ev.assigned_users, t('calendar.assignedLabel'), ev.assigned_name || ''),
