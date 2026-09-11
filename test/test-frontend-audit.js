@@ -16078,12 +16078,25 @@ function schliessNamen(lines) {
   if (block) {
     for (const m of block[1].matchAll(/closeModal\s+as\s+([A-Za-z_]\w*)/g)) namen.add(m[1]);
   }
+  // DAS `close` EINER DETAILANSICHT-AKTION (#1083). detail-view.js reicht jeder
+  // Aktion `closeDetailView` als `close` herein: `onClick: async ({ close }) => {
+  // await close({ force: true }); await removeItem(item); }`. Unter diesem Namen
+  // war es fuer den Guard kein Schliessen. Gezaehlt wird nur, was aus einem
+  // Parameterobjekt kommt - ein beliebiges `close` gehoert nicht dazu.
+  for (const m of quelle.matchAll(/\(\s*\{([^}]*)\}\s*\)\s*=>/g)) {
+    for (const p of m[1].matchAll(/\bclose\b(?:\s*:\s*([A-Za-z_]\w*))?/g)) namen.add(p[1] ?? 'close');
+  }
   return namen;
 }
 
-/** Schliesst diese Zeile den Dialog - unter welchem Namen auch immer? */
+/**
+ * Schliesst diese Zeile den Dialog - unter welchem Namen auch immer?
+ *
+ * Kein Methodenaufruf: seit `close` dazugehoert, waere `dialog.close()` oder
+ * `source.close()` sonst ein Schliessen dieser Schicht.
+ */
 function istSchliessen(zeile, namen) {
-  for (const n of namen) if (new RegExp(`\\b${n}\\s*\\(`).test(zeile)) return true;
+  for (const n of namen) if (new RegExp(`(?<![.\\w$])${n}\\s*\\(`).test(zeile)) return true;
   return false;
 }
 
@@ -16204,6 +16217,20 @@ function blockAb(lines, i, grenze = 40) {
 }
 
 /**
+ * Oeffnet diese Zeile den Rumpf einer Funktion - Pfeil oder `function`?
+ *
+ * Die Parameterliste darf selbst Klammern tragen: `export async function
+ * render(container, { user } = {}) {` und `function addSubtask(parentId, {
+ * onChanged = () => {} } = {}) {` sind im Projekt verbreitet. `[^{]*` hielt am
+ * ersten `{` der Signatur an und erkannte beide nicht; die Suche lief dann ueber
+ * die Funktion hinaus in die davor (Review zu #1123). `\([^)]*\)` scheitert am
+ * `()` eines Vorgabewerts. Deshalb bis zur LETZTEN schliessenden Klammer vor
+ * dem `{` am Zeilenende. `typeof x === 'function') {` trifft das nicht: nach
+ * `function` muss eine Klammer auf folgen.
+ */
+const OEFFNET_FUNKTION = /=>\s*\{\s*$|\bfunction\s*\w*\s*\(.*\)\s*\{\s*$/;
+
+/**
  * Die Zeilen, die nach dem Anker auf DEMSELBEN Weg folgen (#1083).
  *
  * `blockAb` endet am Ende des Blocks - und das ist zu frueh, sobald das Schliessen
@@ -16223,14 +16250,27 @@ function blockAb(lines, i, grenze = 40) {
  * Was in einem verschachtelten Rueckruf steht, sortiert der Aufrufer ueber
  * `inVerschachtelterFunktion` aus - und `baut` entscheidet, was ein Neuaufbau ist.
  * Mit Zeilennummer, weil genau diese Pruefung sie braucht.
+ *
+ * Die Grenze ist ein Notanker, kein Fenster (Review zu #1123). Bei 120 Zeilen
+ * brach der Klick-Handler in schedule.js ab, bevor er sein gemeinsames
+ * `renderPage()` erreichte: die ersten beiden Loeschrueckfragen darin waren
+ * ungeprueft, ihr `refocusAfterRender()` liess sich streichen, ohne dass etwas
+ * rot wurde. Wo das Fenster endet, entscheidet die Funktion um den Anker.
  */
-function rumpfAb(lines, i, baut, grenze = 120) {
+function rumpfAb(lines, i, baut, grenze = 2000) {
+  // EIN RUECKRUF IN EINER ZEILE ENDET IN DIESER ZEILE (Review zu #1123).
+  // `onClick: async ({ close }) => { await close({ force: true }); await
+  // requestDeleteEvent(ev); },` in calendar.js: was darunter steht, gehoert nicht
+  // mehr zu diesem Weg - das Fenster las dort `view.update(renderEventDetail(…))`
+  // mit und verlangte einen Aufruf fuer einen Neuaufbau, den der Knopf nie ausloest.
+  const einzeiler = lines[i].match(/=>\s*\{(.*)\}[\s,;)]*$/);
+  if (einzeiler) return [{ x: einzeiler[1], j: i }];
   const einzug = (j) => lines[j].match(/^\s*/)[0].length;
   let tiefe = einzug(i);
   let oeffner = -1;
   for (let j = i - 1; j >= 0; j--) {
     if (lines[j].trim() === '' || einzug(j) >= tiefe) continue;
-    if (/=>\s*\{\s*$|\bfunction\b[^{]*\{\s*$/.test(lines[j])) { oeffner = j; break; }
+    if (OEFFNET_FUNKTION.test(lines[j])) { oeffner = j; break; }
   }
   const ende = oeffner === -1 ? -1 : einzug(oeffner);
   const out = [];
@@ -16298,47 +16338,7 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
     for (const datei of readdirSync(basis).filter((f) => f.endsWith('.js'))) {
       // Neutralisieren, sonst zaehlt ein auskommentierter Aufruf als vorhanden.
       const lines = withoutCommentsKeepingLines(read(`${dir}/${datei}`)).split('\n');
-      const wrapper = rendererIn(lines);
-      const schliesst = schliessNamen(lines);
-      lines.forEach((zeile, i) => {
-        if (!istSchliessen(zeile, schliesst)) return;
-        // EIN VERZOEGERTES SCHLIESSEN IST HIER KEINES. `setTimeout(() =>
-        // closeModal(...), 700)` in tasks.js laeuft erst, wenn der Block
-        // laengst durch ist - der Merker, auf den `refocusAfterRender()`
-        // zurueckgreift, entsteht aber erst IN `_doClose`. Ein Aufruf im Block
-        // koennte dort also nichts bewirken, und ihn zu verlangen hiesse, toten
-        // Code zu fordern (Review zu #1070).
-        if (/\bsetTimeout\s*\(/.test(zeile)) return;
-        // NICHTS AUS EINEM VERSCHACHTELTEN RUECKRUF. Der steht auf diesem Weg gar
-        // nicht an - der Undo-Zweig eines Toasts etwa. Wer ihn mitzaehlt, haelt
-        // `deletePlan()` in budget-plans.js fuer gedeckt, weil im Undo-Callback ein
-        // Aufruf steht, waehrend der Hauptpfad ohne blieb (Review zu #1070).
-        //
-        // VERSCHACHTELUNG, NICHT EINRUECKUNG (#1083). Die fruehere Fassung las nur
-        // Zeilen auf der Ebene des Ankers und hielt damit jeden `try`- und
-        // `if`-Rumpf fuer einen Rueckruf: `const title = await promptModal(…);
-        // try { await api.put(…); await loadTasks(container); }` in tasks.js war
-        // unsichtbar. Dieselbe Unterscheidung wie im Guard darunter (#1087).
-        const fenster = rumpfAb(lines, i, (x) => istNeuaufbau(x, wrapper))
-          .filter(({ j }) => !inVerschachtelterFunktion(lines, i, j))
-          .map(({ x }) => x);
-        let letzte = -1;
-        fenster.forEach((x, k) => { if (istNeuaufbau(x, wrapper)) letzte = k; });
-        if (letzte === -1) return;
-        // Folgt dem Neuaufbau noch ein Schliessen, setzt DESSEN Restore den Fokus
-        // auf den frisch gebauten Knopf - so rendert `saveCreatedSchedule()` in
-        // schedule.js vor seinem `closeModal()`. Ein Aufruf davor waere tot, und
-        // der Guard darunter meldet ihn als solchen.
-        if (fenster.slice(letzte + 1).some((x) => istSchliessen(x, schliesst))) return;
-        // Ohne `await` davor rendert die Seite synchron - das deckt der Frame ab.
-        if (!fenster.slice(0, letzte + 1).some((x) => /\bawait\b/.test(x))) return;
-        // Der Aufruf muss auf der EBENE des Neuaufbaus liegen. Ein
-        // `refocusAfterRender()` tief in einem Undo-Callback deckt den Weg
-        // darueber nicht ab - genau so sah `deletePlan()` in budget-plans.js
-        // gedeckt aus, waehrend der Hauptpfad ohne Aufruf blieb (Review zu #1070).
-        if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) return;
-        fehlend.push(`${datei}:${i + 1} (${fenster[letzte].trim().slice(0, 48)})`);
-      });
+      fehlend.push(...fokusLuecken(datei, lines));
     }
   }
   assert.deepEqual(fehlend, [],
@@ -16346,6 +16346,98 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
     + 'der Focus-Restore aus closeModal() wird dort weggerendert und landet auf document.body. '
     + `Nach dem Rendern refocusAfterRender() rufen:\n  ${fehlend.join('\n  ')}`);
 });
+
+/**
+ * Funktionen, die nach ihrem Neuaufbau selbst `refocusAfterRender()` rufen (#1083).
+ *
+ * `removeItem()` in inventory.js fragt per `confirmModal()`, loescht, baut die
+ * Liste neu und zieht den Fokus nach. Die Detailansicht ruft sie nach ihrem
+ * eigenen Schliessen: `await close({ force: true }); await removeItem(item);`.
+ * Ein zweiter Aufruf dahinter taete nichts, was der erste nicht getan hat - beide
+ * greifen auf den Merker des Dialogs, der zuletzt schloss. Gezaehlt wird nur ein
+ * Aufruf auf der Ebene der Funktion; einer in einem Undo-Rueckruf deckt ihren
+ * Hauptweg nicht, dieselbe Regel wie im Guard selbst.
+ */
+function selbstNachziehend(lines) {
+  const namen = [];
+  let start = -1;
+  let name = null;
+  lines.forEach((l, j) => {
+    const m = l.match(/^(?:export )?(?:async )?function ([A-Za-z_]\w*)/);
+    if (m) { start = j; name = m[1]; return; }
+    if (name && !namen.includes(name) && /refocusAfterRender\s*\(/.test(l)
+      && !inVerschachtelterFunktion(lines, start, j)) namen.push(name);
+  });
+  return namen;
+}
+
+/**
+ * Die Stellen einer Datei, die nach dem Schliessen und einem `await` neu bauen,
+ * ohne den Fokus nachzuziehen. Eine eigene Funktion, damit die Sonden weiter
+ * unten dieselbe Pruefung an kuenstlichen Quellen fahren wie der Guard am Repo.
+ */
+function fokusLuecken(datei, lines) {
+  const fehlend = [];
+  const wrapper = rendererIn(lines);
+  const schliesst = schliessNamen(lines);
+  // Ein Schliessen ist kein Neuaufbau. `abgewarteteParameter` sammelt das
+  // `close` einer Detailansicht-Aktion als abgewarteten Rueckruf ein - im
+  // Einzeiler `async ({ close }) => { await close(…); … }` hielte der Guard das
+  // Schliessen selbst sonst fuer den Neuaufbau danach.
+  for (const n of schliesst) wrapper.delete(n);
+  const nachziehend = selbstNachziehend(lines);
+  lines.forEach((zeile, i) => {
+    if (!istSchliessen(zeile, schliesst)) return;
+    // EIN VERZOEGERTES SCHLIESSEN IST HIER KEINES. `setTimeout(() =>
+    // closeModal(...), 700)` in tasks.js laeuft erst, wenn der Block
+    // laengst durch ist - der Merker, auf den `refocusAfterRender()`
+    // zurueckgreift, entsteht aber erst IN `_doClose`. Ein Aufruf im Block
+    // koennte dort also nichts bewirken, und ihn zu verlangen hiesse, toten
+    // Code zu fordern (Review zu #1070).
+    if (/\bsetTimeout\s*\(/.test(zeile)) return;
+    // NICHTS AUS EINEM VERSCHACHTELTEN RUECKRUF. Der steht auf diesem Weg gar
+    // nicht an - der Undo-Zweig eines Toasts etwa. Wer ihn mitzaehlt, haelt
+    // `deletePlan()` in budget-plans.js fuer gedeckt, weil im Undo-Callback ein
+    // Aufruf steht, waehrend der Hauptpfad ohne blieb (Review zu #1070).
+    //
+    // VERSCHACHTELUNG, NICHT EINRUECKUNG (#1083). Die fruehere Fassung las nur
+    // Zeilen auf der Ebene des Ankers und hielt damit jeden `try`- und
+    // `if`-Rumpf fuer einen Rueckruf: `const title = await promptModal(…);
+    // try { await api.put(…); await loadTasks(container); }` in tasks.js war
+    // unsichtbar. Dieselbe Unterscheidung wie im Guard darunter (#1087).
+    const fenster = rumpfAb(lines, i, (x) => istNeuaufbau(x, wrapper))
+      .filter(({ j }) => !inVerschachtelterFunktion(lines, i, j))
+      .map(({ x }) => x);
+    let letzte = -1;
+    fenster.forEach((x, k) => { if (istNeuaufbau(x, wrapper)) letzte = k; });
+    if (letzte === -1) return;
+    // Folgt dem Neuaufbau noch ein Schliessen, setzt DESSEN Restore den Fokus
+    // auf den frisch gebauten Knopf - so rendert `saveCreatedSchedule()` in
+    // schedule.js vor seinem `closeModal()`. Ein Aufruf davor waere tot, und
+    // der Guard darunter meldet ihn als solchen.
+    //
+    // NUR EIN DIALOG, DER SCHON VOR DEM NEUAUFBAU OFFEN WAR (Review zu #1123).
+    // Sein Merker entstand vor dem Neuaufbau und findet den neuen Knopf wieder.
+    // Ein `confirmModal()` danach OEFFNET erst nach dem Neuaufbau - der Fokus
+    // liegt dann schon auf `body`, `rememberFocus()` merkt sich nichts, und sein
+    // Schliessen landet auf der Seitenwurzel. Als Anker bleiben die
+    // Ergebnis-Dialoge gezaehlt, als Entlastung hier nicht.
+    const schliesstOffenen = [...schliesst].filter((n) => !ERGEBNIS_DIALOGE.includes(n));
+    if (fenster.slice(letzte + 1).some((x) => istSchliessen(x, schliesstOffenen))) return;
+    // Ohne `await` davor rendert die Seite synchron - das deckt der Frame ab.
+    if (!fenster.slice(0, letzte + 1).some((x) => /\bawait\b/.test(x))) return;
+    // Der Aufruf muss auf der EBENE des Neuaufbaus liegen. Ein
+    // `refocusAfterRender()` tief in einem Undo-Callback deckt den Weg
+    // darueber nicht ab - genau so sah `deletePlan()` in budget-plans.js
+    // gedeckt aus, waehrend der Hauptpfad ohne Aufruf blieb (Review zu #1070).
+    if (fenster.some((x) => /refocusAfterRender\s*\(/.test(x))) return;
+    // EIN WRAPPER, DER SELBST NACHZIEHT, deckt seinen Neuaufbau: `await
+    // removeItem(item)` in inventory.js, siehe selbstNachziehend() (#1083).
+    if (nachziehend.some((n) => new RegExp(`(?<![.\\w$])${n}\\s*\\(`).test(fenster[letzte]))) return;
+    fehlend.push(`${datei}:${i + 1} (${fenster[letzte].trim().slice(0, 48)})`);
+  });
+  return fehlend;
+}
 
 /**
  * Steht `zeile` in einem Funktionsausdruck INNERHALB der Funktion ab `start`?
@@ -16364,7 +16456,7 @@ function inVerschachtelterFunktion(lines, start, zeile) {
     const t = l.match(/^\s*/)[0].length;
     if (t >= tiefe) continue;
     // Eine flachere Zeile: oeffnet sie einen Rueckruf?
-    if (/=>\s*\{\s*$|\bfunction\s*\w*\s*\([^)]*\)\s*\{\s*$/.test(l)) return true;
+    if (OEFFNET_FUNKTION.test(l)) return true;
     // Eine flachere Zeile, die keinen Rueckruf oeffnet (`try {`, `if (…) {`):
     // weitersuchen, aber ab jetzt auf ihrer Ebene.
   }
@@ -16826,6 +16918,118 @@ test('Ergebnis-Dialoge zaehlen als Schliessen, abgewartete Parameter als Neuaufb
   assert.ok(param.includes('refresh'), 'ein abgewarteter Parameter baut Unbekanntes um');
   assert.ok(!param.includes('save'), 'ein Parameter, der nie abgewartet aufgerufen wird, zaehlt nicht');
   assert.ok(istNeuaufbau('    await refresh();', rendererIn(quelle)));
+});
+
+/* DIE REGELN AUS DER REVIEW ZU #1123, AN KUENSTLICHEN QUELLEN.
+ *
+ * Am Repo hat keine davon gerade einen eigenen Treffer: die einzeilige Aktion in
+ * calendar.js ist inzwischen mehrzeilig, eine Signatur mit `{` fiel nur auf, wenn
+ * davor ein Rueckruf offen stand, und kein Ergebnis-Dialog folgt heute einem
+ * Neuaufbau. Ohne diese Sonden blieben die Regeln gruen, auch wenn jemand sie
+ * zuruecknaehme.
+ */
+test('Fokus-Guard: close-Parameter, Einzeiler, Signaturen, Dialog nach dem Neuaufbau, Wrapper (Review zu #1123)', () => {
+  const stellen = (datei, quelle) => fokusLuecken(datei, quelle).map((s) => s.split(' ')[0]);
+
+  // Das close einer Detailansicht-Aktion schliesst; ein Methodenaufruf close() nicht.
+  const detail = [
+    'function oeffne(item) {',
+    '  openDetailView({',
+    '    actions: [{',
+    '      onClick: async ({ close }) => {',
+    '        await close({ force: true });',
+    '        await api.delete(url);',
+    '        renderListe();',
+    '      },',
+    '    }],',
+    '  });',
+    '}',
+  ];
+  assert.deepEqual(stellen('detail.js', detail), ['detail.js:5'], 'das close einer Aktion ist ein Schliessen');
+  const methode = detail.map((l) => l.replace('await close({ force: true });', 'dialog.close();'));
+  assert.deepEqual(stellen('detail.js', methode), [], 'dialog.close() ist keines');
+
+  // Ein Rueckruf in einer Zeile endet in dieser Zeile.
+  const einzeiler = [
+    'function oeffne(ev) {',
+    '  const actions = [{',
+    '    onClick: async ({ close }) => { await close({ force: true }); await weg(ev); },',
+    '  }];',
+    '  if (spaeter) await nachladen();',
+    '  renderDetail();',
+    '}',
+  ];
+  assert.deepEqual(stellen('einzeiler.js', einzeiler), [],
+    'renderDetail() unter der Aktion loest der Knopf nie aus');
+
+  // Eine Signatur mit Klammern ist die Grenze - sonst endet das Fenster am if.
+  const signatur = [
+    'function vorher() {',
+    '  knopf.addEventListener("click", async () => {',
+    '    tu();',
+    '  });',
+    '}',
+    'export async function render(container, { user } = {}) {',
+    '  if (user) {',
+    '    closeModal();',
+    '    await api.put(url);',
+    '  }',
+    '  await laden();',
+    '  renderSeite();',
+    '}',
+  ];
+  assert.deepEqual(stellen('signatur.js', signatur), ['signatur.js:8'],
+    'das Fenster liest bis zum Neuaufbau nach dem if, nicht bis zum Rueckruf der Funktion davor');
+  for (const zeile of [
+    'export async function render(container, { user } = {}) {',
+    'async function addSubtask(parentId, { onChanged = () => {} } = {}) {',
+    '  el.addEventListener("click", async function (event) {',
+    '  const x = async () => {',
+  ]) assert.ok(OEFFNET_FUNKTION.test(zeile), `oeffnet eine Funktion: ${zeile}`);
+  assert.ok(!OEFFNET_FUNKTION.test("  if (typeof cb === 'function') {"), 'ein typeof-Vergleich oeffnet keine');
+
+  // Ein Ergebnis-Dialog NACH dem Neuaufbau oeffnet erst danach und entlastet nicht.
+  const danach = [
+    'async function loeschen() {',
+    '  closeModal({ force: true });',
+    '  await api.delete(url);',
+    '  renderListe();',
+    '  if (await confirmModal(frage)) tuNochWas();',
+    '}',
+  ];
+  assert.deepEqual(stellen('danach.js', danach), ['danach.js:2'], 'confirmModal danach findet den Knopf nicht wieder');
+  const offen = danach.map((l) => l.replace('if (await confirmModal(frage)) tuNochWas();', 'closeModal();'));
+  assert.deepEqual(stellen('danach.js', offen), [], 'ein Dialog, der schon offen war, setzt den Fokus beim Schliessen selbst');
+
+  // Ein Wrapper, der auf seiner eigenen Ebene nachzieht, deckt seinen Neuaufbau.
+  const wrapper = [
+    'async function entfernen(item) {',
+    '  if (!await confirmModal(frage)) return;',
+    '  await api.delete(url);',
+    '  renderListe();',
+    '  refocusAfterRender();',
+    '}',
+    'function oeffne(item) {',
+    '  openDetailView({ actions: [{',
+    '    onClick: async ({ close }) => {',
+    '      await close({ force: true });',
+    '      await entfernen(item);',
+    '    },',
+    '  }] });',
+    '}',
+  ];
+  assert.deepEqual(stellen('wrapper.js', wrapper), [], 'entfernen() zieht selbst nach');
+  const imUndo = [
+    ...wrapper.slice(0, 4),
+    '  zeigeToast({',
+    '    undo: () => {',
+    '      refocusAfterRender();',
+    '    },',
+    '  });',
+    ...wrapper.slice(5),
+  ];
+  assert.deepEqual(stellen('wrapper.js', imUndo), ['wrapper.js:2', 'wrapper.js:14'],
+    'ein Aufruf im Undo-Rueckruf deckt weder den Wrapper noch seinen Aufrufer');
 });
 
 /* VERSCHACHTELUNG, NICHT REIHENFOLGE - direkt geprueft.

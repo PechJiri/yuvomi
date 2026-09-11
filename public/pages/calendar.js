@@ -3606,7 +3606,14 @@ async function openEventDetail(ev, anchor = null) {
     // Entscheidung. Der await hält das Löschen zurück, bis der Overlay-Slot
     // wirklich frei ist - requestDeleteEvent öffnet bei Serien selbst einen
     // Dialog, und das Shared-Modal kennt kein Stacking.
-    onClick: async ({ close }) => { await close({ force: true }); await requestDeleteEvent(ev); },
+    onClick: async ({ close }) => {
+      await close({ force: true });
+      await requestDeleteEvent(ev);
+      // Mit dem Termin ist sein Chip weg, von dem aus die Ansicht aufging. Bei
+      // einer Serie fragt requestDeleteEvent erst nach; der Dialog verwirft den
+      // Merker beim Oeffnen, und der Aufruf tut dann nichts (#1083).
+      refocusAfterRender();
+    },
   }];
 
   // Ort in einer Karte öffnen (#1110) - als ausdrückliche Aktion, nicht als Link
