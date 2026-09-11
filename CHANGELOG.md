@@ -170,7 +170,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Expenses, the quick links and several Settings pages (API tokens, invitations, document storage,
   recipe providers, calendar subscriptions and accounts). On desktop, the calendar's detail popover
   now returns focus to the event it was opened from when it closes through Escape or one of its
-  actions; a click elsewhere still leaves focus where it went.
+  actions; a click elsewhere still leaves focus where it went. Deleting a contact or an event from
+  its detail view puts focus back on the page as well.
 
   Where a dialog appears on only some paths - rejecting a reward redemption asks, fulfilling it does
   not - focus is pulled back only on the path that asked. Otherwise it would land on the trigger of
