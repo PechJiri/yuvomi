@@ -16058,8 +16058,21 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
  */
 const SCHLIESS_FASSADEN = ['closeDetailView'];
 
+/**
+ * Dialoge, die ihr Ergebnis erst NACH dem Schliessen liefern (#1083).
+ *
+ * `promptModal`, `confirmModal` und `selectModal` rufen in `finish()` zuerst
+ * `closeModal({ force: true })` und loesen dann auf; `confirmOverModal` schliesst
+ * das geparkte Formular, bevor es `true` zurueckgibt. Wer danach etwas abwartet
+ * und neu baut, reisst den Fokus weg wie nach jedem anderen Schliessen - fuer den
+ * Guard sah das bis hierher nach gar keinem Schliessen aus: der Unterteil-Umbenennen-
+ * Weg in tasks.js und das Ablehnen einer Einloesung in rewards.js (Review zu
+ * #1070).
+ */
+const ERGEBNIS_DIALOGE = ['promptModal', 'confirmModal', 'selectModal', 'confirmOverModal'];
+
 function schliessNamen(lines) {
-  const namen = new Set(['closeModal', ...SCHLIESS_FASSADEN]);
+  const namen = new Set(['closeModal', ...SCHLIESS_FASSADEN, ...ERGEBNIS_DIALOGE]);
   const quelle = lines.join('\n');
   const block = quelle.match(/import\s*\{([\s\S]*?)\}\s*from\s*'\/components\/modal\.js'/);
   if (block) {
@@ -16118,7 +16131,31 @@ function rendererIn(lines) {
     }
     if (!gewachsen) break;
   }
+  for (const p of abgewarteteParameter(lines)) namen.add(p);
   return namen;
+}
+
+/**
+ * Rueckrufe, die als PARAMETER hereinkommen und abgewartet werden (#1083).
+ *
+ * `renderProviderAccount(container, account, refresh)` in modules-kitchen.js
+ * bekommt `loadProviderAccounts` unter dem Namen `refresh`, und der Link-Dialog
+ * schliesst und wartet dann `await refresh()` ab - das leert die Kontenliste und
+ * baut sie neu. `AWAIT_RUECKRUF` kennt nur `on…`-Namen und `opts.…`, ein
+ * gewoehnlicher Name fiel durch (Review zu #1070).
+ *
+ * Dieselbe Begruendung wie dort: wer einen hereingereichten Rueckruf abwartet,
+ * weiss nicht, was er umbaut. Gesammelt werden die Namen aus den Parameterlisten
+ * von Deklarationen und Pfeilfunktionen, die irgendwo in der Datei abgewartet
+ * aufgerufen werden.
+ */
+function abgewarteteParameter(lines) {
+  const quelle = lines.join('\n');
+  const params = new Set();
+  for (const m of quelle.matchAll(/function\s*\w*\s*\(([^)]*)\)|\(([^()]*)\)\s*=>/g)) {
+    for (const id of (m[1] ?? m[2] ?? '').matchAll(/[A-Za-z_]\w*/g)) params.add(id[0]);
+  }
+  return [...params].filter((p) => new RegExp(`\\bawait\\s+${p}\\s*\\(`).test(quelle));
 }
 
 /**
@@ -16166,6 +16203,69 @@ function blockAb(lines, i, grenze = 40) {
   return out;
 }
 
+/**
+ * Die Zeilen, die nach dem Anker auf DEMSELBEN Weg folgen (#1083).
+ *
+ * `blockAb` endet am Ende des Blocks - und das ist zu frueh, sobald das Schliessen
+ * selbst in einem `if` steht: `if (action === 'reject') { const ok = await
+ * confirmModal(…); if (!ok) return; }` und DANACH `await refreshActiveTab()` in
+ * rewards.js. Bis zum Ende der Funktion zu lesen ist dagegen zu weit: in
+ * shopping.js folgt auf den Umbenennen-Zweig `if (action === 'rename-list') {…}`
+ * der Loeschen-Zweig, und dessen Neuaufbau gehoert nicht zum Umbenennen.
+ *
+ * Deshalb waechst das Fenster von innen nach aussen: erst der eigene Block. Endet
+ * er, OHNE dass darin neu gebaut wurde, geht es im umgebenden Block weiter - bis
+ * zur Funktion um den Anker (eine Deklaration oder ein Rueckruf `=> {`). Hat es
+ * einen Neuaufbau gesehen, ist an der naechsten schliessenden Klammer auf der
+ * Ebene des Fensters Schluss; das faengt auch `} catch (err) {` und `} else {`,
+ * deren Zweige ein anderer Weg sind.
+ *
+ * Was in einem verschachtelten Rueckruf steht, sortiert der Aufrufer ueber
+ * `inVerschachtelterFunktion` aus - und `baut` entscheidet, was ein Neuaufbau ist.
+ * Mit Zeilennummer, weil genau diese Pruefung sie braucht.
+ */
+function rumpfAb(lines, i, baut, grenze = 120) {
+  const einzug = (j) => lines[j].match(/^\s*/)[0].length;
+  let tiefe = einzug(i);
+  let oeffner = -1;
+  for (let j = i - 1; j >= 0; j--) {
+    if (lines[j].trim() === '' || einzug(j) >= tiefe) continue;
+    if (/=>\s*\{\s*$|\bfunction\b[^{]*\{\s*$/.test(lines[j])) { oeffner = j; break; }
+  }
+  const ende = oeffner === -1 ? -1 : einzug(oeffner);
+  const out = [];
+  // Einrueckung des ersten Neuaufbaus; -1 heisst: noch keiner gesehen.
+  let gebautBei = -1;
+  for (let j = i + 1; j < lines.length && out.length < grenze; j++) {
+    const l = lines[j];
+    if (l.trim() === '') { out.push({ x: l, j }); continue; }
+    const t = einzug(j);
+    if (t <= ende) break;
+    if (/^\s*\}/.test(l)) {
+      if (t < tiefe) {
+        // Der Block, in dem das Fenster gerade liest, endet hier.
+        if (gebautBei !== -1) break;
+        // Endet er mit `return` oder `throw`, geht es danach auf diesem Weg
+        // nicht weiter: in documents.js kehrt der DMS-Zweig nach seiner Auswahl
+        // zurueck, und das `deleteDocuments()` darunter ist ein anderer Weg ohne
+        // jeden Dialog - ein Aufruf dort griffe ins Leere.
+        const davor = out.map(({ x }) => x).filter((x) => x.trim() !== '').pop() ?? lines[i];
+        if (/^\s*(?:return|throw)\b/.test(davor)) break;
+        tiefe = t;
+      } else if (/^\s*\}\s*(?:else|catch|finally)\b/.test(l) && gebautBei > t) {
+        // Im Zweig darueber wurde neu gebaut; was jetzt kommt, ist ein anderer
+        // Weg durch dasselbe `if`/`try`. Ein `} else {` einer Verzweigung, die
+        // erst NACH dem Anker aufging und in der noch nichts gebaut wurde, ist
+        // dagegen keine Grenze - so steht es in `openBudgetModal()` in budget.js.
+        break;
+      }
+    }
+    out.push({ x: l, j });
+    if (gebautBei === -1 && baut(l) && !inVerschachtelterFunktion(lines, i, j)) gebautBei = t;
+  }
+  return out;
+}
+
 /* WER NACH DEM SCHLIESSEN RENDERT, MUSS DEN FOKUS NACHZIEHEN.
  *
  * `closeModal()` gibt den Fokus an den Ausloeser zurueck. Rendert der Handler
@@ -16209,17 +16309,27 @@ test('jede Seite, die nach einem await neu rendert, zieht den Fokus nach', () =>
         // koennte dort also nichts bewirken, und ihn zu verlangen hiesse, toten
         // Code zu fordern (Review zu #1070).
         if (/\bsetTimeout\s*\(/.test(zeile)) return;
-        // NUR DIE EIGENE EBENE. Alles Tiefere steht in einem Callback, der auf
-        // diesem Weg gar nicht laeuft - der Undo-Zweig eines Toasts etwa. Wer
-        // ihn mitzaehlt, haelt `deletePlan()` in budget-plans.js fuer gedeckt,
-        // weil im Undo-Callback ein Aufruf steht, waehrend der Hauptpfad ohne
-        // blieb (Review zu #1070).
-        const ankerTiefe = zeile.match(/^\s*/)[0].length;
-        const fenster = blockAb(lines, i)
-          .filter((x) => x.trim() === '' || x.match(/^\s*/)[0].length <= ankerTiefe);
+        // NICHTS AUS EINEM VERSCHACHTELTEN RUECKRUF. Der steht auf diesem Weg gar
+        // nicht an - der Undo-Zweig eines Toasts etwa. Wer ihn mitzaehlt, haelt
+        // `deletePlan()` in budget-plans.js fuer gedeckt, weil im Undo-Callback ein
+        // Aufruf steht, waehrend der Hauptpfad ohne blieb (Review zu #1070).
+        //
+        // VERSCHACHTELUNG, NICHT EINRUECKUNG (#1083). Die fruehere Fassung las nur
+        // Zeilen auf der Ebene des Ankers und hielt damit jeden `try`- und
+        // `if`-Rumpf fuer einen Rueckruf: `const title = await promptModal(…);
+        // try { await api.put(…); await loadTasks(container); }` in tasks.js war
+        // unsichtbar. Dieselbe Unterscheidung wie im Guard darunter (#1087).
+        const fenster = rumpfAb(lines, i, (x) => istNeuaufbau(x, wrapper))
+          .filter(({ j }) => !inVerschachtelterFunktion(lines, i, j))
+          .map(({ x }) => x);
         let letzte = -1;
         fenster.forEach((x, k) => { if (istNeuaufbau(x, wrapper)) letzte = k; });
         if (letzte === -1) return;
+        // Folgt dem Neuaufbau noch ein Schliessen, setzt DESSEN Restore den Fokus
+        // auf den frisch gebauten Knopf - so rendert `saveCreatedSchedule()` in
+        // schedule.js vor seinem `closeModal()`. Ein Aufruf davor waere tot, und
+        // der Guard darunter meldet ihn als solchen.
+        if (fenster.slice(letzte + 1).some((x) => istSchliessen(x, schliesst))) return;
         // Ohne `await` davor rendert die Seite synchron - das deckt der Frame ab.
         if (!fenster.slice(0, letzte + 1).some((x) => /\bawait\b/.test(x))) return;
         // Der Aufruf muss auf der EBENE des Neuaufbaus liegen. Ein
@@ -16577,6 +16687,146 @@ test('wer refocusAfterRender importiert, ruft es auch', () => {
     `Diese Dateien importieren refocusAfterRender, ohne es zu rufen:\n  ${tot.join('\n  ')}`);
 });
 
+
+/* DAS FENSTER NACH DEM SCHLIESSEN FOLGT DEM WEG, NICHT DER EINRUECKUNG (#1083).
+ *
+ * An kuenstlichen Quellen, eine je Form, die im Repo vorkommt. So faellt die
+ * Sonde auch dann, wenn die echte Stelle umgebaut wird.
+ */
+test('rumpfAb liest bis zum Neuaufbau auf demselben Weg (#1083)', () => {
+  const baut = (x) => /\brender[A-Z]\w*\s*\(|\bawait\s+load[A-Z]\w*\s*\(/.test(x);
+  const zeilen = (quelle, anker) => {
+    const i = quelle.findIndex((l) => l.includes(anker));
+    assert.ok(i !== -1, `Anker ${anker} fehlt in der Probe`);
+    return rumpfAb(quelle, i, baut)
+      .filter(({ j }) => !inVerschachtelterFunktion(quelle, i, j))
+      .map(({ x }) => x.trim());
+  };
+
+  // tasks.js: der Neuaufbau steht im try-Rumpf, der catch-Zweig ist ein anderer Weg.
+  const imTry = zeilen([
+    'async function umbenennen(id) {',
+    '  const titel = await promptModal(label);',
+    '  if (!titel) return;',
+    '  try {',
+    '    await api.put(url, { titel });',
+    '    await loadTasks(container);',
+    '  } catch (err) {',
+    '    renderFehler(err);',
+    '  }',
+    '}',
+  ], 'promptModal');
+  assert.ok(imTry.includes('await loadTasks(container);'), 'ein try-Rumpf ist kein Rueckruf');
+  assert.ok(!imTry.includes('renderFehler(err);'), 'der catch-Zweig gehoert nicht zum Weg nach dem Speichern');
+
+  // rewards.js: das Schliessen steht in einem if, der Neuaufbau danach.
+  const nachDemIf = zeilen([
+    'async function entscheiden(action) {',
+    '  if (action === "reject") {',
+    '    const ok = await confirmModal(frage);',
+    '    if (!ok) return;',
+    '  }',
+    '  try {',
+    '    await api.patch(url, { action });',
+    '    renderTab();',
+    '  } catch (err) {',
+    '    zeige(err);',
+    '  }',
+    '}',
+  ], 'confirmModal');
+  assert.ok(nachDemIf.includes('renderTab();'), 'nach dem if geht derselbe Weg weiter');
+
+  // shopping.js: der naechste if-Zweig ist ein anderer Weg.
+  const geschwister = zeilen([
+    'function verdrahten() {',
+    '  root.addEventListener("click", async () => {',
+    '    if (action === "rename") {',
+    '      const name = await promptModal(label);',
+    '      if (!name) return;',
+    '      renderTabs(container);',
+    '    }',
+    '    if (action === "delete") {',
+    '      renderLeer(container);',
+    '    }',
+    '  });',
+    '}',
+  ], 'promptModal');
+  assert.ok(geschwister.includes('renderTabs(container);'));
+  assert.ok(!geschwister.includes('renderLeer(container);'), 'der Loeschen-Zweig gehoert nicht zum Umbenennen');
+
+  // documents.js: ein Zweig, der mit return endet, fuehrt nicht weiter.
+  const mitReturn = zeilen([
+    'async function aktion(action) {',
+    '  if (action === "push") {',
+    '    const konto = await selectModal(label, optionen);',
+    '    if (!konto) return;',
+    '    await api.post(url, { konto });',
+    '    return;',
+    '  }',
+    '  if (action === "delete") renderListe();',
+    '}',
+  ], 'selectModal');
+  assert.ok(!mitReturn.includes('if (action === "delete") renderListe();'), 'nach return endet der Weg');
+
+  // budget.js: ein if/else, das erst nach dem Anker aufgeht, beendet das Fenster nicht.
+  const elseDanach = zeilen([
+    'async function speichern() {',
+    '  if (serie) {',
+    '    closeModal({ force: true });',
+    '    const scope = await frageScope();',
+    '    if (scope === "series") {',
+    '      await api.put(serienUrl, body);',
+    '    } else {',
+    '      await api.put(url, body);',
+    '    }',
+    '    await loadMonth(monat);',
+    '    renderBody();',
+    '    refocusAfterRender();',
+    '  } else {',
+    '    renderAnders();',
+    '  }',
+    '}',
+  ], 'closeModal');
+  assert.ok(elseDanach.includes('refocusAfterRender();'), 'das else der Scope-Frage ist keine Grenze');
+  assert.ok(!elseDanach.includes('renderAnders();'), 'das else des aeusseren if schon');
+
+  // Ein verschachtelter Rueckruf nach dem Schliessen steht auf diesem Weg nicht an.
+  const rueckruf = zeilen([
+    'async function loeschen() {',
+    '  if (!await confirmModal(frage)) return;',
+    '  zeigeToast({',
+    '    undo: async () => {',
+    '      renderUndo();',
+    '    },',
+    '  });',
+    '}',
+  ], 'confirmModal');
+  assert.ok(!rueckruf.includes('renderUndo();'), 'der Undo-Rueckruf ist ein anderer Weg');
+});
+
+test('Ergebnis-Dialoge zaehlen als Schliessen, abgewartete Parameter als Neuaufbau (#1083)', () => {
+  const namen = schliessNamen(['import { promptModal } from \'/components/modal.js\';']);
+  for (const n of ['promptModal', 'confirmModal', 'selectModal', 'confirmOverModal']) {
+    assert.ok(namen.has(n), `${n} schliesst den Dialog, bevor es aufloest`);
+  }
+  assert.ok(istSchliessen('  if (!await confirmModal(frage)) return;', namen));
+
+  const quelle = [
+    'function renderKonto(container, konto, refresh) {',
+    '  knopf.addEventListener("click", async () => {',
+    '    closeModal({ force: true });',
+    '    await refresh();',
+    '  });',
+    '}',
+    'function speichern(save) {',
+    '  return save;',
+    '}',
+  ];
+  const param = abgewarteteParameter(quelle);
+  assert.ok(param.includes('refresh'), 'ein abgewarteter Parameter baut Unbekanntes um');
+  assert.ok(!param.includes('save'), 'ein Parameter, der nie abgewartet aufgerufen wird, zaehlt nicht');
+  assert.ok(istNeuaufbau('    await refresh();', rendererIn(quelle)));
+});
 
 /* VERSCHACHTELUNG, NICHT REIHENFOLGE - direkt geprueft.
  *

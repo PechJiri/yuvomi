@@ -159,7 +159,7 @@ test('nachgereichte Zeilen landen nie in einer fremden Ansicht', async () => {
   assert.doesNotMatch(popoverHead, /closeDetailView\(\)/, 'openAsPopover darf sich nicht selbst die Nummer löschen');
 
   const api = src.slice(src.indexOf('export function openDetailView'));
-  const close = api.indexOf('closeDetailView()');
+  const close = api.indexOf('closeDetailView(');
   const assign = api.indexOf('activeViewToken = token');
   assert.ok(close > -1 && assign > close, 'erst die alte Ansicht schließen, dann nummerieren');
 });
@@ -196,7 +196,10 @@ test('das Popover ist bedienbar ohne Maus und gibt den Fokus zurück', async () 
   assert.match(popover, /aria-labelledby/, 'mit dem Titel verknüpft');
   assert.match(popover, /'Escape'/, 'Escape schließt');
   assert.match(popover, /e\.key !== 'Tab'|'Tab'/, 'Tab bleibt im Popover');
-  assert.match(popover, /opts\.anchor\?\.focus\?\.\(\)/, 'Fokus kehrt zum Auslöser zurück');
+  // Der Fokus kehrt zum Auslöser zurück - über den Merker der Modal-Schicht, damit
+  // er auch nach einem Neuaufbau wiedergefunden wird (#1083).
+  assert.match(popover, /merker: rememberFocus\(opts\.anchor\)/, 'der Auslöser wird beim Öffnen gemerkt');
+  assert.match(popover, /restoreFocusAfterClose\(merker\)/, 'und beim Schließen zurückgegeben');
 });
 
 test('die Detailansicht öffnet ohne Autofokus', async () => {
