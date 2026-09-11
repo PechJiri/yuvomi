@@ -830,3 +830,77 @@ test('_tryRefocus schreibt das tatsaechlich gesetzte Ziel in den Merker zurueck'
   assert.match(fn, /_lastRestore\.ziel = gesetzt/,
     'ohne das Zurueckschreiben urteilt der naechste Lauf ueber ein Ziel, das es nicht mehr gibt');
 });
+
+// --------------------------------------------------------
+// Sheet-Swipe (#981): eine Aufwaertsbewegung, bevor das Sheet gezogen wurde, ist
+// Scrollen des Inhalts. Die Geste darf das Panel dann nicht anfassen - vorher
+// schrieb sie bei jedem Aufwaerts-Frame `translateY(0)`, und ein frisch
+// geoeffneter Dialog steht immer oben, also begann jede Wischgeste so.
+// --------------------------------------------------------
+const { __test: modalInternals } = await import('../public/components/modal.js');
+
+function fakeSheet() {
+  const handlers = {};
+  const writes = [];
+  let transform = '';
+  const panel = {
+    addEventListener: (type, fn) => { handlers[type] = fn; },
+    querySelector: () => ({ scrollTop: 0 }),
+    getBoundingClientRect: () => ({ top: 100 }),
+    style: {
+      get transform() { return transform; },
+      set transform(v) { writes.push(v); transform = v; },
+    },
+  };
+  modalInternals.wireSheetSwipe(panel);
+  const at = (y) => ({ touches: [{ clientY: y }], changedTouches: [{ clientY: y }] });
+  return {
+    writes,
+    get transform() { return transform; },
+    start: (y) => handlers.touchstart(at(y)),
+    move: (y) => handlers.touchmove(at(y)),
+    end: (y) => handlers.touchend(at(y)),
+  };
+}
+
+test('Sheet-Swipe: aufwaerts im Inhalt schreibt nichts ans Panel (#981)', () => {
+  const sheet = fakeSheet();
+  sheet.start(600); // Inhalt steht oben, der Finger weit unter der Griffzone
+  for (const y of [590, 560, 500, 420, 330]) sheet.move(y);
+  sheet.end(330);
+  assert.deepEqual(sheet.writes, [], 'kein Stil-Schreibzugriff, waehrend eine Aufwaertsgeste den Inhalt scrollt');
+});
+
+test('Sheet-Swipe: ein Zittern nach oben verwirft eine Schliessgeste nicht', () => {
+  // Die erste Fassung der Sperre griff beim ersten Pixel nach oben: eine
+  // gewollte Abwaertsgeste mit unruhigem Aufsetzen blieb danach tot. Nach oben
+  // gilt dieselbe Schwelle wie nach unten.
+  const sheet = fakeSheet();
+  sheet.start(600);
+  sheet.move(598);
+  sheet.move(592); // 8px nach oben: innerhalb der Schwelle
+  assert.deepEqual(sheet.writes, [], 'innerhalb der Schwelle kein Schreibzugriff');
+  sheet.move(650);
+  assert.equal(sheet.transform, 'translateY(24px)', 'die Geste zieht das Sheet trotz des Zitterns');
+});
+
+test('Sheet-Swipe: ein begonnener Zug bleibt verfolgt und setzt das Panel einmal zurueck', () => {
+  global.requestAnimationFrame = (fn) => fn();
+  try {
+    const sheet = fakeSheet();
+    sheet.start(600);
+    sheet.move(650); // 50px nach unten: das Sheet folgt
+    assert.equal(sheet.transform, 'translateY(24px)');
+    sheet.move(590); // der Finger kehrt ueber den Start zurueck
+    assert.equal(sheet.transform, '', 'zurueckgesetzt, sobald der Finger ueber dem Start steht (b7c0312c)');
+    const writesAfterReset = sheet.writes.length;
+    sheet.move(570);
+    sheet.move(550);
+    assert.equal(sheet.writes.length, writesAfterReset, 'zurueckgesetzt wird einmal, nicht in jedem Frame');
+    sheet.move(640);
+    sheet.end(640); // 40px: kein Schliessen, zurueck in die Ruhelage
+    assert.equal(sheet.transform, '', 'touchend raeumt den Zug ab');
+  } finally {
+    delete global.requestAnimationFrame;
+  }
+});
