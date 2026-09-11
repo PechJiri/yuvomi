@@ -59,6 +59,35 @@ function applyMove(eventId, source, calendarUrl, destCal, objectUrl) {
 }
 
 /**
+ * Schliesst die ausgehende Arbeit eines Termins nach dem Provider-Aufruf ab.
+ *
+ * Zwischen dem Nachladen vor dem Aufruf und hier liegen awaits. Trifft in dieser
+ * Zeit eine Bearbeitung ein, setzt die Route outbound_dirty erneut, und ein
+ * pauschales clearOutbound löschte genau diese Markierung: beim Server läge der
+ * ältere Stand, und der nächste Inbound überschriebe die neuere lokale Änderung.
+ * Erledigt ist deshalb nur, was hinausging - verglichen an den gespiegelten
+ * Feldern und an dem Umzug, den dieser Aufruf ausgeführt hat.
+ *
+ * @param {object}      sent           die Zeile, aus der der Patch gebaut wurde
+ * @param {string|null} handledMoveTo  der Umzug, den dieser Aufruf erledigt hat
+ */
+function settleOutbound(sent, handledMoveTo = null) {
+  const now = outbound.reloadEvent(sent.id);
+  if (!now) return;
+  const edited = outbound.mirroredFieldsChanged(sent, now);
+  const moved  = (now.outbound_move_to ?? null) !== handledMoveTo;
+  if (!edited && !moved) {
+    outbound.clearOutbound(sent.id);
+    return;
+  }
+  db.get().prepare(`
+    UPDATE calendar_events
+    SET outbound_dirty = ?, outbound_move_to = ?, outbound_attempts = 0
+    WHERE id = ?
+  `).run(edited ? 1 : 0, moved ? now.outbound_move_to : null, sent.id);
+}
+
+/**
  * Kalender-Properties eines lokalen Termins für patchICSEvent.
  *
  * Die Zeitangaben kommen seit #938 aus `eventDateTimeFields`: der Fall, den es
@@ -339,7 +368,7 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
             continue;
           }
           applyMove(event.id, source, moveTo, destCal, objectUrl);
-          outbound.clearOutbound(event.id);
+          settleOutbound(fresh, moveTo);
           done++;
           continue; // der Patch ist mit dem Anlegen bereits geschrieben
         } catch (err) {
@@ -357,7 +386,7 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
       await client.updateCalendarObject({
         calendarObject: { url, etag: known.etag, data: patched },
       });
-      outbound.clearOutbound(event.id);
+      settleOutbound(fresh);
       done++;
     } catch (err) {
       outbound.handleUpdateError(err, event, 'update', label(source));

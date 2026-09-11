@@ -1179,6 +1179,69 @@ test('wird der Termin während des Umzugs gelöscht, wird auch die Kopie im Ziel
     'der nächste Lauf räumt die Kopie im Ziel ab');
 });
 
+// ── Was während des Provider-Aufrufs eintrifft ──────────────────────────────────
+//
+// Der Patch wird vor den awaits aus der Zeile gebaut. Eine Bearbeitung, die in
+// dieser Zeit ankommt, setzt outbound_dirty erneut - ein pauschales Abräumen
+// danach löschte ihre Markierung, und der nächste Inbound überschriebe sie.
+
+test('eine Bearbeitung während des Umzugs bleibt für den nächsten Push vorgemerkt', async () => {
+  reset();
+  const event = seedMoved('mv12@t');
+
+  const client = fakeClient({
+    onCreate: () => {
+      const before = reload(event.id);
+      db.prepare("UPDATE calendar_events SET title = 'Während des Umzugs' WHERE id = ?").run(event.id);
+      outbound.markEventOutbound(before, reload(event.id));
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  assert.equal(await processPendingUpdates(client, 'caldav', indexFor('mv12@t'), calendars), 1);
+
+  assert.doesNotMatch(client.creates[0].iCalString, /Während des Umzugs/,
+    'Vorbedingung: das angelegte Objekt trägt noch den alten Stand');
+  const row = reload(event.id);
+  assert.equal(row.outbound_dirty, 1, 'die neuere Bearbeitung wartet auf ihren Push');
+  assert.equal(row.outbound_move_to, null, 'der Umzug selbst ist erledigt');
+  assert.equal(row.calendar_ref_id, calRefFor(CAL2_URL));
+});
+
+test('eine Bearbeitung während des PUT bleibt für den nächsten Push vorgemerkt', async () => {
+  reset();
+  const event = seedDirty('u7@t', { title: 'Erste Fassung' });
+
+  const client = fakeClient({
+    onUpdate: () => {
+      const before = reload(event.id);
+      db.prepare("UPDATE calendar_events SET title = 'Zweite Fassung' WHERE id = ?").run(event.id);
+      outbound.markEventOutbound(before, reload(event.id));
+    },
+  });
+  assert.equal(await processPendingUpdates(client, 'caldav', indexFor('u7@t')), 1);
+
+  assert.match(client.updates[0].calendarObject.data, /SUMMARY:Erste Fassung/);
+  assert.equal(reload(event.id).outbound_dirty, 1, 'die zweite Fassung ist noch nicht beim Server');
+});
+
+test('ein während des PUT vorgemerkter Umzug bleibt stehen', async () => {
+  reset();
+  const event = seedDirty('u8@t', { title: 'Neu' });
+
+  const client = fakeClient({
+    onUpdate: () => {
+      const before = reload(event.id);
+      db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL2_URL, event.id);
+      outbound.markEventOutbound(before, reload(event.id));
+    },
+  });
+  await processPendingUpdates(client, 'caldav', indexFor('u8@t'));
+
+  const row = reload(event.id);
+  assert.equal(row.outbound_move_to, CAL2_URL, 'der Umzug läuft im nächsten Durchgang');
+  assert.equal(row.outbound_dirty, 0, 'die Feldänderung selbst ist angekommen');
+});
+
 test('ohne Eintrag in der Kontoauswahl behält eine bestehende Kalenderzeile Name und Farbe', async () => {
   reset();
   db.prepare('DELETE FROM caldav_calendar_selection').run();

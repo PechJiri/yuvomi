@@ -149,7 +149,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   calendar. An edit was dropped the same way, and moving the event back to where it came from was
   not recognised as a move. The event now points at the new calendar and its new copy as soon as
   the move succeeds, as moves to Google calendars already did. An event deleted while its move is
-  still under way has its new copy deleted as well.
+  still under way has its new copy deleted as well, and an edit or a move made while a change is
+  still being sent to the server stays queued instead of being dropped.
 
 - **Keyboard focus comes back after a confirmation, an input dialog or the calendar's detail
   popover** (#1083). Confirm a delete, rename a list or a subtask, pick a folder to move to, and
