@@ -216,12 +216,15 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
   const clearMove = outbound.clearOutboundMove;
   // Nach dem Umzug zeigt die Zeile auf den Zielkalender. Ohne das ginge ein
   // späteres Löschen an den alten Kalender und liefe dort ins Leere, während der
-  // Termin in Google stehen bliebe. Die Umzugs-Vormerkung räumt erst
-  // settleOutbound ab: ein während des Aufrufs vorgemerkter weiterer Umzug gehört
-  // nicht zu diesem hier und muss stehen bleiben.
+  // Termin in Google stehen bliebe. Die Vormerkung dieses Umzugs fällt gleich mit,
+  // eine während des Aufrufs neu vorgemerkte bleibt stehen (über sie entscheidet
+  // settleOutbound). Bliebe die erledigte bis nach dem Patch liegen, räumte sie
+  // bei einem scheiternden Patch erst der nächste Lauf per clearOutboundMove ab -
+  // und der setzt dabei den Fehlversuchszähler des Patches zurück.
   const applyMove = db.get().prepare(`
     UPDATE calendar_events
-    SET calendar_ref_id = ?, external_calendar_id = ?
+    SET calendar_ref_id = ?, external_calendar_id = ?,
+        outbound_move_to = CASE WHEN outbound_move_to = ? THEN NULL ELSE outbound_move_to END
     WHERE id = ?
   `);
 
@@ -268,7 +271,7 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
           eventId    = moved?.data?.id || event.external_calendar_id;
           calendarId = moveTo;
           activeMeta = destMeta;
-          applyMove.run(destMeta.refId, eventId, event.id);
+          applyMove.run(destMeta.refId, eventId, moveTo, event.id);
           movedTo = moveTo;
         } catch (err) {
           // Der Umzug ist die Voraussetzung für den Patch im Zielkalender -

@@ -1267,3 +1267,30 @@ test('ein Zielwechsel während des Umzugs zurück auf das Umzugsziel merkt nicht
   assert.equal(__test.currentGoogleCalendarId(row), 'fam@g');
   assert.equal(row.outbound_move_to, null);
 });
+
+test('ein nach dem Umzug scheiternder Patch gibt nach MAX_OUTBOUND_ATTEMPTS auf', async () => {
+  // Der Umzug ist erledigt, der Patch im Zielkalender scheitert wiederholt. Bliebe
+  // die Umzugs-Vormerkung stehen, setzte jeder Lauf über clearOutboundMove den
+  // Zähler zurück, und der Patch ginge bei jedem Sync für immer erneut hinaus.
+  reset();
+  const { before } = seedMove('primary', 'fam@g', 'gev-move-patch-dead');
+  db.prepare("UPDATE calendar_events SET title = 'Umgezogen, Patch scheitert' WHERE id = ?").run(before.id);
+  __test.markEventOutbound(before, reload(before.id));
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g']),
+    onPatch: () => { throw apiError(500); },
+  });
+  await __test.processPendingUpdates(calendar, {});
+  let row = reload(before.id);
+  assert.equal(row.outbound_move_to, null, 'der Umzug selbst ist erledigt');
+  assert.equal(row.outbound_attempts, 1);
+
+  for (let i = 1; i < __test.MAX_OUTBOUND_ATTEMPTS; i++) {
+    await __test.processPendingUpdates(calendar, {});
+  }
+  assert.equal(calendar.moves.length, 1);
+  assert.equal(calendar.patches.length, __test.MAX_OUTBOUND_ATTEMPTS);
+  row = reload(before.id);
+  assert.equal(row.outbound_dirty, 0, 'der Push ist aufgegeben');
+});
