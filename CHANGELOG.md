@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the loaded range, each with its colour and a switch. Hiding one removes its events from all
   four views and the agenda, remembered on the device like the layers. A hidden calendar stays in
   the list under its name even when none of its events is on screen, so it can always be switched
-  back on. The person axis gains "Unassigned": on its own it shows only the events and tasks nobody
+  back on. A new event created for a hidden calendar stays out right away, not only once it has
+  synced. The person axis gains "Unassigned": on its own it shows only the events and tasks nobody
   is assigned to, together with people it adds them. A person filter saved before this update keeps
   its behaviour - it does not contain the new entry, so unassigned events stay out, as they did.
 

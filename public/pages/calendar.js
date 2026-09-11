@@ -1062,10 +1062,16 @@ function passesPersonFilters(item) {
  * CalDAV-, Google- und Apple-Kalender haengen ueber `calendar_ref_id` an
  * `external_calendars`, ICS-Abos ueber `subscription_id`. Outlook schreibt nur
  * hinaus und bringt keine Termine mit, die eine Quelle haetten.
+ *
+ * `source_calendar_ref_id` loest der Server auf: `calendar_ref_id`, sonst der
+ * gewaehlte Zielkalender. Ein neuer Termin fuer einen ausgeblendeten Kalender
+ * traegt `calendar_ref_id` erst nach dem Hochladen - ohne das Ziel bliebe er
+ * bis dahin stehen, bei scheiterndem Sync auf Dauer.
  */
 function eventSourceKey(ev) {
   if (ev?.subscription_id) return `sub:${ev.subscription_id}`;
-  if (ev?.calendar_ref_id) return `cal:${ev.calendar_ref_id}`;
+  const ref = ev?.source_calendar_ref_id ?? ev?.calendar_ref_id;
+  if (ref) return `cal:${ref}`;
   return null;
 }
 
@@ -1088,11 +1094,26 @@ function calendarSources() {
   const quellen = new Map();
   for (const ev of state.events ?? []) {
     const key = eventSourceKey(ev);
-    if (!key || quellen.has(key)) continue;
+    if (!key) continue;
+    const bekannt = quellen.get(key);
+    // Ein noch nicht hochgeladener Termin kennt Name und Farbe seines Ziels
+    // nicht (`cal_name` folgt `calendar_ref_id`); ein anderer Termin derselben
+    // Quelle oder der Merker fuellt sie nach.
+    if (bekannt) {
+      bekannt.name ||= ev.cal_name || '';
+      bekannt.color ||= ev.cal_color || null;
+      continue;
+    }
     quellen.set(key, { key, name: ev.cal_name || '', color: ev.cal_color || null });
   }
   for (const [key, merk] of state.hiddenSources ?? []) {
-    if (!quellen.has(key)) quellen.set(key, { key, name: merk.name || '', color: merk.color || null });
+    const bekannt = quellen.get(key);
+    if (!bekannt) {
+      quellen.set(key, { key, name: merk.name || '', color: merk.color || null });
+    } else {
+      bekannt.name ||= merk.name || '';
+      bekannt.color ||= merk.color || null;
+    }
   }
   return [...quellen.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

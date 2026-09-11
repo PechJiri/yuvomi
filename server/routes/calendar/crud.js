@@ -16,6 +16,7 @@ import {
   stageDocumentUpload,
 } from '../../services/document-storage.js';
 import { queueEventDeletion, markEventOutbound, flushOutbound } from '../../services/calendar-outbound.js';
+import { SOURCE_CALENDAR_REF_SQL } from '../../services/calendar-events.js';
 import {
   ASSIGNED_USERS_SQL,
   getUserId,
@@ -56,6 +57,7 @@ router.get('/:id', (req, res) => {
              -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_REF_SQL},
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,
              nd.name_day   AS name_day,
@@ -210,6 +212,7 @@ router.post('/', async (req, res) => {
              -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_REF_SQL},
              ${ASSIGNED_USERS_SQL}
       FROM calendar_events e
       LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
@@ -571,6 +574,7 @@ router.put('/:id', async (req, res) => {
              -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_REF_SQL},
              ${ASSIGNED_USERS_SQL}
       FROM calendar_events e
       LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to

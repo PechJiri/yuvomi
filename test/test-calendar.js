@@ -1972,6 +1972,33 @@ test('#1064: eine ausgeblendete Quelle fehlt in jeder Ansicht, und Quelle UND Pe
   });
 });
 
+// Codex-Befund auf PR #1124: ein neuer Termin fuer einen Google- oder
+// CalDAV-Kalender traegt `calendar_ref_id` erst nach dem Hochladen. Der Server
+// loest die Quelle deshalb ueber das Ziel auf (`source_calendar_ref_id`, siehe
+// test-calendar-routes.js), und der Filter muss genau dieses Feld lesen.
+test('#1064: ein Termin fuer einen ausgeblendeten Kalender fehlt schon vor dem Hochladen', () => {
+  const { eventSourceKey, calendarSources } = calendarHelpers;
+  const unterwegs = {
+    id: 5, title: 'Neu im Arbeitskalender', start_datetime: `${FILTER_TAG}T12:00:00`, assigned_users: [{ id: 1 }],
+    calendar_ref_id: null, source_calendar_ref_id: 5, cal_name: null, cal_color: null,
+  };
+  assert(eventSourceKey(unterwegs) === 'cal:5', 'die aufgeloeste Quelle zaehlt, auch ohne calendar_ref_id');
+  const termine = [unterwegs, ...FILTER_TERMINE];
+  const basis = { events: termine, users: NUTZER, assignedToMe: false, people: new Set(), layerBirthdays: true };
+  mitFilterzustand({ ...basis, hiddenSources: new Map([['cal:5', { name: 'Arbeit', color: '#3366cc' }]]) }, () => {
+    assert(tagesIds() === '1,3,4', `der neue Termin geht mit seinem Kalender, war ${tagesIds()}`);
+  });
+  mitFilterzustand({ ...basis, hiddenSources: new Map() }, () => {
+    const arbeit = calendarSources().find((q) => q.key === 'cal:5');
+    assert(arbeit.name === 'Arbeit' && arbeit.color === '#3366cc',
+      `Name und Farbe kommen vom synchronisierten Termin derselben Quelle, auch wenn der neue zuerst steht, war ${JSON.stringify(arbeit)}`);
+  });
+  mitFilterzustand({ ...basis, events: [unterwegs], hiddenSources: new Map([['cal:5', { name: 'Arbeit', color: '#3366cc' }]]) }, () => {
+    const arbeit = calendarSources().find((q) => q.key === 'cal:5');
+    assert(arbeit.name === 'Arbeit', `steht nur der neue im Zeitraum, nennt der Merker den Kalender, war ${JSON.stringify(arbeit)}`);
+  });
+});
+
 test('#1064: das Blatt kennt jede Quelle aus den Terminen und jede ausgeblendete, auch ohne Termin', () => {
   const { calendarSources } = calendarHelpers;
   mitFilterzustand({ events: FILTER_TERMINE, hiddenSources: new Map([['cal:9', { name: 'Urlaub', color: '#aa5500' }]]) }, () => {

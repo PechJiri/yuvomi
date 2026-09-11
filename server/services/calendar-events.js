@@ -23,6 +23,26 @@ const ASSIGNED_USERS_SQL = `(
 ) AS assigned_users_json`;
 
 /**
+ * Die Quelle eines Termins fuer den Kalenderfilter (#1064), als ID in
+ * `external_calendars`. Ein synchronisierter Termin haengt ueber
+ * `calendar_ref_id` daran. Ein frisch angelegter mit Google- oder CalDAV-Ziel
+ * bekommt diese Spalte erst, wenn der Ausgang ihn hochgeladen hat - bis dahin,
+ * und bei scheiterndem Sync auf Dauer, sagt nur das Ziel, wohin er gehoert.
+ * Ohne diesen Rueckfall bliebe er stehen, obwohl sein Kalender ausgeblendet ist.
+ *
+ * Bewusst nicht im Join fuer `cal_name`/`cal_color`: die geerbte Farbe folgt
+ * weiter dem, was der Sync bestaetigt hat. Jeder Lesepfad, der Termine an die
+ * Kalenderseite liefert, waehlt dieses Feld mit aus.
+ */
+export const SOURCE_CALENDAR_REF_SQL = `COALESCE(
+  e.calendar_ref_id,
+  (SELECT tg.id FROM external_calendars tg
+    WHERE tg.source = 'google' AND tg.external_id = e.target_google_calendar_id),
+  (SELECT tc.id FROM external_calendars tc
+    WHERE tc.source = 'caldav' AND tc.external_id = e.target_caldav_calendar_url)
+) AS source_calendar_ref_id`;
+
+/**
  * Lädt die Instanz-Ausnahmen (EXDATE, #489) für die gegebenen Event-IDs als Map.
  * @param {import('node:sqlite').DatabaseSync} d  Geöffnete DB-Verbindung
  * @param {Array<number>} eventIds  IDs wiederkehrender Events
@@ -303,6 +323,7 @@ export function getUpcomingEvents(d, {
            -- am Abo-Termin NULL, obwohl dessen Farbe schon herauskam (#1064).
            COALESCE(ec.name, isub.name)   AS cal_name,
            COALESCE(ec.color, isub.color) AS cal_color,
+           ${SOURCE_CALENDAR_REF_SQL},
            COALESCE(bd.name, nd.name) AS birthday_name,
            bd.birth_date AS birthday_date,
            nd.name_day   AS name_day,

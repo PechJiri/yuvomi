@@ -699,6 +699,54 @@ test('POST / — CalDAV-Ziel wird gespeichert', async () => {
   assert.equal(res.body.data.target_caldav_calendar_url, 'https://dav.test/cal/');
 });
 
+// Codex-Befund auf PR #1124 (#1064): ein neuer Termin fuer einen Google- oder
+// CalDAV-Kalender traegt calendar_ref_id erst, wenn der Ausgang ihn hochgeladen
+// hat. Bis dahin entging er dem Kalenderfilter, der ihn fuer einen eigenen hielt.
+// `source_calendar_ref_id` loest die Quelle ueber das Ziel auf - und JEDER
+// Lesepfad, der Termine an die Kalenderseite gibt, muss es liefern.
+test('source_calendar_ref_id - das Ziel vertritt die Quelle, bis der Sync sie setzt (#1064)', async () => {
+  const google = db.prepare("INSERT INTO external_calendars (source, external_id, name) VALUES ('google', 'ziel-1064@group.calendar.google.com', 'Arbeit 1064') RETURNING id").get().id;
+  const caldav = db.prepare("INSERT INTO external_calendars (source, external_id, name) VALUES ('caldav', 'https://dav.test/ziel-1064/', 'Verein 1064') RETURNING id").get().id;
+
+  const neu = await call('POST', '/', { body: {
+    title: 'Quellziel Gribbelnock', start_datetime: '2035-06-01T09:00',
+    target_google_calendar_id: 'ziel-1064@group.calendar.google.com',
+  } });
+  assert.equal(neu.status, 201);
+  assert.equal(neu.body.data.calendar_ref_id, null, 'vor dem Hochladen ohne calendar_ref_id - der Fall aus dem Befund');
+  assert.equal(neu.body.data.source_calendar_ref_id, google, 'POST /');
+  const id = neu.body.data.id;
+
+  assert.equal((await call('GET', `/${id}`)).body.data.source_calendar_ref_id, google, 'GET /:id');
+  const liste = await call('GET', '/?from=2035-06-01&to=2035-06-01');
+  assert.equal(liste.body.data.find((e) => e.id === id)?.source_calendar_ref_id, google, 'GET /');
+  const suche = await call('GET', '/search?q=Gribbelnock');
+  assert.equal(suche.body.data.find((e) => e.id === id)?.source_calendar_ref_id, google, 'GET /search');
+  const { getUpcomingEvents } = await import('../server/services/calendar-events.js');
+  const kommend = getUpcomingEvents(db, { userId: ADMIN.id, limit: 200, now: new Date(Date.UTC(2035, 4, 31, 12)) });
+  assert.equal(kommend.find((e) => e.id === id)?.source_calendar_ref_id, google, 'getUpcomingEvents (Dashboard, /upcoming)');
+
+  const perCaldav = await call('POST', '/', { body: {
+    title: 'Quellziel CalDAV', start_datetime: '2035-06-01T10:00',
+    target_caldav_account_id: 7, target_caldav_calendar_url: 'https://dav.test/ziel-1064/',
+  } });
+  assert.equal(perCaldav.body.data.source_calendar_ref_id, caldav, 'ein CalDAV-Ziel ueber die Kalender-URL');
+
+  // Synchronisiert gewinnt calendar_ref_id: dort liegt der Termin tatsaechlich.
+  const synchron = insertEvent({ title: 'Quellziel synchron', start_datetime: '2035-06-02T09:00', external_source: 'google', calendar_ref_id: caldav });
+  db.prepare('UPDATE calendar_events SET target_google_calendar_id = ? WHERE id = ?').run('ziel-1064@group.calendar.google.com', synchron);
+  const geaendert = await call('PUT', `/${synchron}`, { body: { title: 'Quellziel synchron 2' } });
+  assert.equal(geaendert.status, 200);
+  assert.equal(geaendert.body.data.source_calendar_ref_id, caldav, 'PUT /:id - calendar_ref_id vor dem Ziel');
+
+  const eigen = insertEvent({ title: 'Quellziel eigen', start_datetime: '2035-06-02T10:00' });
+  assert.equal((await call('GET', `/${eigen}`)).body.data.source_calendar_ref_id, null, 'ein eigener Termin hat keine Quelle');
+  const unbekannt = await call('POST', '/', { body: {
+    title: 'Quellziel unbekannt', start_datetime: '2035-06-02T11:00', target_google_calendar_id: 'nie-synchronisiert@example.com',
+  } });
+  assert.equal(unbekannt.body.data.source_calendar_ref_id, null, 'ein Ziel ohne bekannten Kalender erfindet keine Quelle');
+});
+
 // ════════════════════════════════════════════════════════════════════════════════
 // PUT /:id
 // ════════════════════════════════════════════════════════════════════════════════

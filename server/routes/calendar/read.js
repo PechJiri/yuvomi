@@ -7,7 +7,7 @@ import { createLogger } from '../../logger.js';
 import express from 'express';
 import * as db from '../../db.js';
 import { DATE_RE } from '../../middleware/validate.js';
-import { expandRecurringEvents, getUpcomingEvents, loadEventExceptions } from '../../services/calendar-events.js';
+import { expandRecurringEvents, getUpcomingEvents, loadEventExceptions, SOURCE_CALENDAR_REF_SQL } from '../../services/calendar-events.js';
 import { buildMatchQuery } from '../../services/search.js';
 import { visibilityWhere } from '../../services/visibility.js';
 import { VALID_SOURCES, ASSIGNED_USERS_SQL, getUserId, serializeEvent } from './helpers.js';
@@ -52,6 +52,7 @@ router.get('/', (req, res) => {
              -- sichtbar die Farbe seiner Quelle und konnte sie nirgends nennen.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_REF_SQL},
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,
              nd.name_day   AS name_day,
@@ -178,6 +179,7 @@ router.get('/search', (req, res) => {
              -- sichtbar die Farbe seiner Quelle und konnte sie nirgends nennen.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_REF_SQL},
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,
              nd.name_day   AS name_day,
