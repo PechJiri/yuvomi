@@ -111,13 +111,18 @@ export function bejaht(text, muster) {
  *
  * NICHT fuer die Tor-Ausnahme. Die kann gruen machen, und dort ist die engere
  * Lesart die sichere Richtung - diese hier waehlt nur zwischen roten Diagnosen.
+ *
+ * DAS FENSTER ENDET AM SATZENDE DAVOR, wie in `hoertAuf` (Codex zu #1121). Ein
+ * kurzer verneinter Satz liegt sonst noch in den 30 Zeichen vor der naechsten
+ * Erwaehnung: "Claude has not already reviewed. Has already reviewed, so I
+ * should stop here." verneinte beide.
  */
 export function bejahtIrgendwo(text, muster) {
   const roh = String(text ?? '');
   const flags = muster.flags.includes('g') ? muster.flags : `${muster.flags}g`;
   for (const treffer of roh.matchAll(new RegExp(muster.source, flags))) {
-    const von = Math.max(0, treffer.index - FENSTER);
-    if (!VERNEINER.test(roh.slice(von, treffer.index + treffer[0].length))) return true;
+    const davor = roh.slice(Math.max(0, treffer.index - FENSTER), treffer.index).split(/[.!?\n]/).pop();
+    if (!VERNEINER.test(davor + treffer[0])) return true;
   }
   return false;
 }

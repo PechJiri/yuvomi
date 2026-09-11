@@ -1125,4 +1125,21 @@ test('bejahtIrgendwo liest jede Erwaehnung, bejaht weiter nur die erste (#1101)'
   assert.equal(bejahtIrgendwo('Claude has not already commented. It has never already posted.', muster), false);
   assert.equal(bejahtIrgendwo('', muster), false);
   assert.equal(bejahtIrgendwo(undefined, muster), false);
+  // Das Fenster endet am Satzende davor (Codex zu #1121): ein kurzer verneinter
+  // Satz lag sonst noch in den 30 Zeichen vor der naechsten Erwaehnung.
+  assert.equal(bejahtIrgendwo('Claude has not already reviewed. Has already reviewed, so I should stop here.', muster), true);
+});
+
+test('ein kurzer verneinter Satz verneint die naechste Erwaehnung nicht mit (#1121, Codex P2)', () => {
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 4, subtype: 'success', is_error: false, permission_denials: [],
+      result: 'Claude has not already reviewed. Has already reviewed, so I should stop here.'
+    },
+    aeusserungen: [],
+    gepostet: NICHTS
+  });
+  assert.equal(urteil.grund, 'schon-kommentiert');
 });
