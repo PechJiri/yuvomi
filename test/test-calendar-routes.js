@@ -44,6 +44,7 @@ process.env.DB_PATH = ':memory:';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
+import { readFileSync } from 'node:fs';
 
 const dbmod = await import('../server/db.js');
 const { default: calendarRouter } = await import('../server/routes/calendar.js');
@@ -743,6 +744,20 @@ test('source_calendar_ref_id - das Ziel vertritt die Quelle, bis der Sync sie se
   const geaendert = await call('PUT', `/${synchron}`, { body: { title: 'Quellziel synchron 2' } });
   assert.equal(geaendert.status, 200);
   assert.equal(geaendert.body.data.source_calendar_ref_id, caldav, 'PUT /:id - calendar_ref_id vor dem Ziel');
+
+  // Ein vorgemerkter Umzug geht vor (Codex-Review zu #1124): bis der Ausgang ihn
+  // ausfuehrt, zeigt calendar_ref_id noch auf den alten Kalender. Die blosse
+  // Abweichung des Ziels oben zaehlt dagegen nicht (Migration 105).
+  db.prepare('UPDATE calendar_events SET outbound_move_to = ? WHERE id = ?').run('ziel-1064@group.calendar.google.com', synchron);
+  assert.equal((await call('GET', `/${synchron}`)).body.data.source_calendar_ref_id, google, 'ein vorgemerkter Umzug zaehlt vor calendar_ref_id');
+  assert.equal((await call('GET', `/${synchron}`)).body.data.source_calendar_name, 'Arbeit 1064', 'mit Name des Umzugsziels');
+  // Die PUT-Antwort traegt den Umzug nur, wenn er VOR ihrem Lesen vorgemerkt ist.
+  // Den Ausgang selbst faehrt diese Suite nicht (netzfrei), deshalb die Reihenfolge am Quelltext.
+  const crud = readFileSync(new URL('../server/routes/calendar/crud.js', import.meta.url), 'utf8');
+  const put = crud.slice(crud.indexOf("router.put('/:id'"));
+  assert.ok(crud.includes("router.put('/:id'"), 'PUT-Handler gefunden');
+  assert.ok(put.indexOf('markEventOutbound(') !== -1 && put.indexOf('markEventOutbound(') < put.indexOf('const updated = db.get().prepare('),
+    'PUT merkt den Umzug vor, bevor es die Antwort liest');
 
   const eigen = insertEvent({ title: 'Quellziel eigen', start_datetime: '2035-06-02T10:00' });
   assert.equal((await call('GET', `/${eigen}`)).body.data.source_calendar_ref_id, null, 'ein eigener Termin hat keine Quelle');

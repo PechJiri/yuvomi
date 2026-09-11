@@ -1461,7 +1461,7 @@ cdb.exec(`
     recurrence_rule TEXT,
     subscription_id INTEGER REFERENCES ics_subscriptions(id) ON DELETE CASCADE,
     calendar_ref_id INTEGER REFERENCES external_calendars(id) ON DELETE SET NULL,
-    target_google_calendar_id TEXT, target_caldav_calendar_url TEXT,
+    target_google_calendar_id TEXT, target_caldav_calendar_url TEXT, outbound_move_to TEXT,
     visibility TEXT NOT NULL DEFAULT 'all'
   );
   CREATE TABLE event_assignments (

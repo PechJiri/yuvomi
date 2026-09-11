@@ -37,8 +37,16 @@ const ASSIGNED_USERS_SQL = `(
  * namenloses „Kalender" - zwei davon waren nicht zu unterscheiden (Codex-Review
  * zu #1124). Jeder Lesepfad, der Termine an die Kalenderseite liefert, nimmt
  * den Join und die Spalten mit.
+ *
+ * Ein vorgemerkter Umzug (`outbound_move_to`, #593) geht vor: er ist der
+ * ausdrueckliche Wunsch, und bis der Ausgang ihn ausgefuehrt hat, zeigt
+ * `calendar_ref_id` noch auf den alten Kalender (Codex-Review zu #1124). Die
+ * blosse Abweichung zwischen Ziel und `calendar_ref_id` zaehlt dagegen nicht:
+ * Bestandsdaten tragen sie folgenlos, siehe Migration 105.
  */
 export const SOURCE_CALENDAR_JOIN = `LEFT JOIN external_calendars src ON src.id = COALESCE(
+  (SELECT tm.id FROM external_calendars tm
+    WHERE tm.source = e.external_source AND tm.external_id = e.outbound_move_to),
   e.calendar_ref_id,
   (SELECT tg.id FROM external_calendars tg
     WHERE tg.source = 'google' AND tg.external_id = e.target_google_calendar_id),
