@@ -947,7 +947,8 @@
         "filtersActive_one": "1 aktivní filtr",
         "filtersReset": "Zrušit všechny filtry",
         "filtersDisplay": "Zobrazení",
-        "agendaDayEmpty": "Nic naplánováno"
+        "agendaDayEmpty": "Nic naplánováno",
+        "openInMap": "Otevřít v Mapách"
     },
     "noteCategories": {
         "permissionLabel": "Spravovat domácí kategorie poznámek"

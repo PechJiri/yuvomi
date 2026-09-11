@@ -947,7 +947,8 @@
         "filtersActive_one": "1 bộ lọc đang bật",
         "filtersReset": "Xóa tất cả bộ lọc",
         "filtersDisplay": "Hiển thị",
-        "agendaDayEmpty": "Không có kế hoạch"
+        "agendaDayEmpty": "Không có kế hoạch",
+        "openInMap": "Mở trong Bản đồ"
     },
     "noteCategories": {
         "permissionLabel": "Quản lý danh mục ghi chú gia đình"

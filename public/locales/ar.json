@@ -947,7 +947,8 @@
         "filtersActive_one": "عامل تصفية واحد نشط",
         "filtersReset": "إزالة كل عوامل التصفية",
         "filtersDisplay": "العرض",
-        "agendaDayEmpty": "لا شيء مُخطط"
+        "agendaDayEmpty": "لا شيء مُخطط",
+        "openInMap": "فتح في الخرائط"
     },
     "noteCategories": {
         "permissionLabel": "إدارة فئات ملاحظات الأسرة"

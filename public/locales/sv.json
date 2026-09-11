@@ -947,7 +947,8 @@
         "filtersActive_one": "1 filter aktivt",
         "filtersReset": "Rensa alla filter",
         "filtersDisplay": "Visning",
-        "agendaDayEmpty": "Inget planerat"
+        "agendaDayEmpty": "Inget planerat",
+        "openInMap": "Öppna i Kartor"
     },
     "noteCategories": {
         "permissionLabel": "Hantera hushållets anteckningskategorier"

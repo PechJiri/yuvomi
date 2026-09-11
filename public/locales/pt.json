@@ -947,7 +947,8 @@
         "filtersActive_one": "1 filtro ativo",
         "filtersReset": "Limpar todos os filtros",
         "filtersDisplay": "Apresentação",
-        "agendaDayEmpty": "Nada planeado"
+        "agendaDayEmpty": "Nada planeado",
+        "openInMap": "Abrir no Maps"
     },
     "noteCategories": {
         "permissionLabel": "Gerir categorias de notas do agregado familiar"
