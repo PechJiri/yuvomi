@@ -949,6 +949,7 @@
         "filtersDisplay": "Zobrazení",
         "agendaDayEmpty": "Nic naplánováno",
         "openInMap": "Otevřít v Mapách",
+        "syncTargetAssigneeAmbiguous": "Tuto osobu má jako výchozí přiřazení více kalendářů. Vyber cíl sám.",
         "filtersSources": "Kalendáře",
         "filterUnassigned": "Nepřiřazeno"
     },
@@ -2457,7 +2458,8 @@
         "sync": {
             "defaultAssignee": "Výchozí přiřazení",
             "defaultAssigneeNone": "Žádné",
-            "defaultAssigneeHint": "Nově synchronizované události se automaticky přiřadí této osobě."
+            "defaultAssigneeHint": "Nově synchronizované události se automaticky přiřadí této osobě.",
+            "defaultAssigneeRoutingHint": "Výchozí přiřazení: události z kalendáře dostanou osobu zvolenou u něj a nová událost přiřazená jen této osobě se vytvoří v tomto kalendáři. Platí pro kalendáře Google a CalDAV, ne pro Apple ani Outlook."
         },
         "calendarDefaultsTitle": "Výchozí hodnoty pro nové události",
         "calendarDefaultsDescription": "Předvolby automaticky použité na nové události.",

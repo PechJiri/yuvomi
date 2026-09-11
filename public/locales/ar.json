@@ -949,6 +949,7 @@
         "filtersDisplay": "العرض",
         "agendaDayEmpty": "لا شيء مُخطط",
         "openInMap": "فتح في الخرائط",
+        "syncTargetAssigneeAmbiguous": "لدى عدة تقويمات هذا الشخص كإسناد افتراضي. اختر الوجهة بنفسك.",
         "filtersSources": "التقويمات",
         "filterUnassigned": "غير مُسندة"
     },
@@ -2457,7 +2458,8 @@
         "sync": {
             "defaultAssignee": "الإسناد الافتراضي",
             "defaultAssigneeNone": "بلا",
-            "defaultAssigneeHint": "تُسنَد الأحداث المُزامَنة حديثًا تلقائيًا إلى هذا الشخص."
+            "defaultAssigneeHint": "تُسنَد الأحداث المُزامَنة حديثًا تلقائيًا إلى هذا الشخص.",
+            "defaultAssigneeRoutingHint": "الإسناد الافتراضي: تحصل مواعيد التقويم على الشخص المختار له، والموعد الجديد المُسند إلى هذا الشخص وحده يُنشأ في ذلك التقويم. ينطبق ذلك على تقويمات Google وCalDAV، وليس على Apple أو Outlook."
         },
         "calendarDefaultsTitle": "الإعدادات الافتراضية للأحداث الجديدة",
         "calendarDefaultsDescription": "إعدادات مسبقة تُطبَّق تلقائيًا على الأحداث الجديدة.",

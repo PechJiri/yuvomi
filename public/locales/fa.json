@@ -961,6 +961,7 @@
         "filtersDisplay": "نمایش",
         "agendaDayEmpty": "چیزی برنامه‌ریزی نشده",
         "openInMap": "باز کردن در نقشه",
+        "syncTargetAssigneeAmbiguous": "چند تقویم این فرد را به‌عنوان واگذاری پیش‌فرض دارند. مقصد را خودت انتخاب کن.",
         "filtersSources": "تقویم‌ها",
         "filterUnassigned": "واگذارنشده"
     },
@@ -2469,7 +2470,8 @@
         "sync": {
             "defaultAssignee": "واگذاری پیش‌فرض",
             "defaultAssigneeNone": "هیچ‌کدام",
-            "defaultAssigneeHint": "رویدادهای تازه همگام‌سازی‌شده به‌طور خودکار به این شخص واگذار می‌شوند."
+            "defaultAssigneeHint": "رویدادهای تازه همگام‌سازی‌شده به‌طور خودکار به این شخص واگذار می‌شوند.",
+            "defaultAssigneeRoutingHint": "واگذاری پیش‌فرض: رویدادهای یک تقویم به فردی که آنجا انتخاب شده واگذار می‌شوند، و رویداد تازه‌ای که فقط به همان فرد واگذار شده در همان تقویم ساخته می‌شود. این برای تقویم‌های Google و CalDAV است، نه Apple یا Outlook."
         },
         "calendarDefaultsTitle": "مقادیر پیش‌فرض برای رویدادهای جدید",
         "calendarDefaultsDescription": "تنظیمات پیش‌فرضی که به‌طور خودکار روی رویدادهای جدید اعمال می‌شوند.",

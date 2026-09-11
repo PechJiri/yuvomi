@@ -961,6 +961,7 @@
         "filtersDisplay": "표시",
         "agendaDayEmpty": "예정된 일정 없음",
         "openInMap": "지도에서 열기",
+        "syncTargetAssigneeAmbiguous": "여러 캘린더에서 이 사람이 기본 할당으로 지정되어 있습니다. 대상을 직접 선택하세요.",
         "filtersSources": "캘린더",
         "filterUnassigned": "할당되지 않음"
     },
@@ -2469,7 +2470,8 @@
         "sync": {
             "defaultAssignee": "기본 담당자",
             "defaultAssigneeNone": "없음",
-            "defaultAssigneeHint": "새로 동기화된 일정은 자동으로 이 사람에게 할당됩니다."
+            "defaultAssigneeHint": "새로 동기화된 일정은 자동으로 이 사람에게 할당됩니다.",
+            "defaultAssigneeRoutingHint": "기본 담당자: 캘린더의 일정은 그곳에서 선택한 사람에게 할당되고, 그 사람에게만 할당된 새 일정은 해당 캘린더에 만들어집니다. Google 및 CalDAV 캘린더에 적용되며 Apple이나 Outlook에는 적용되지 않습니다."
         },
         "calendarDefaultsTitle": "새 일정 기본값",
         "calendarDefaultsDescription": "새 일정에 자동으로 적용되는 기본 설정입니다.",
