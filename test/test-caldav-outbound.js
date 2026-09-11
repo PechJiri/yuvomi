@@ -1340,6 +1340,32 @@ test('ein Zielwechsel während des Umzugs zurück auf das Umzugsziel merkt nicht
   assert.equal(reload(event.id).outbound_move_to, null);
 });
 
+test('ein während des PUT gewählter und wieder verworfener Umzug verfällt', async () => {
+  // Ohne Umzug in diesem Lauf: ein anderer Kalender wird vorgemerkt, dann wieder der
+  // gewählt, in dem der Termin liegt. Die Route kann die Vormerkung nicht zurücknehmen,
+  // der nächste Lauf verschöbe den Termin in den verworfenen Kalender.
+  reset();
+  const event = seedDirty('u9@t', { title: 'Neu' });
+
+  const retarget = (url) => {
+    const before = reload(event.id);
+    db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(url, event.id);
+    outbound.markEventOutbound(before, reload(event.id));
+  };
+  const client = fakeClient({
+    onUpdate: () => {
+      retarget(CAL2_URL);
+      assert.equal(reload(event.id).outbound_move_to, CAL2_URL, 'Vorbedingung: der Umweg ist vorgemerkt');
+      retarget(CAL_URL);
+    },
+  });
+  await processPendingUpdates(client, 'caldav', indexFor('u9@t'));
+
+  const row = reload(event.id);
+  assert.equal(row.outbound_move_to, null, 'gewählt ist der Kalender, in dem der Termin liegt');
+  assert.equal(row.outbound_dirty, 0);
+});
+
 test('ohne Eintrag in der Kontoauswahl behält eine bestehende Kalenderzeile Name und Farbe', async () => {
   reset();
   db.prepare('DELETE FROM caldav_calendar_selection').run();
