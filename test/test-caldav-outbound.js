@@ -1242,6 +1242,63 @@ test('ein während des PUT vorgemerkter Umzug bleibt stehen', async () => {
   assert.equal(row.outbound_dirty, 0, 'die Feldänderung selbst ist angekommen');
 });
 
+test('wird der Quellkalender während des Umzugs aufgeräumt, bleibt die Kopie im Ziel stehen', async () => {
+  // Abwählen mit "Termine löschen" entfernt die Zeilen lokal und fasst den Anbieter
+  // ausdrücklich nicht an (calendar-prune.js). Eine fehlende Zeile ist deshalb kein
+  // Löschwunsch: ein Tombstone hier löschte den Termin bei allen anderen Clients.
+  reset();
+  const { deleteMirroredEvents } = await import('../server/services/calendar-prune.js');
+  const event = seedMoved('mv15@t');
+
+  const client = fakeClient({ onCreate: () => { deleteMirroredEvents(db, [CAL_URL]); } });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv15@t'), calendars);
+
+  assert.equal(reload(event.id), undefined, 'Vorbedingung: das Aufräumen hat die Zeile entfernt');
+  assert.deepEqual(tombstones(), [], 'kein Tombstone - weder für die Quelle noch für das Ziel');
+});
+
+test('ein Tombstone derselben UID in einem fremden Kalender gilt nicht als Löschen dieses Termins', async () => {
+  reset();
+  const { deleteMirroredEvents } = await import('../server/services/calendar-prune.js');
+  const CAL3_URL = 'https://dav.example/cal/school/';
+  const event = seedMoved('mv16@t');
+  outbound.queueDeletion({
+    source: 'caldav', calendarExternalId: CAL3_URL, eventExternalId: 'mv16@t', objectUrl: `${CAL3_URL}mv16@t.ics`,
+  });
+
+  const client = fakeClient({ onCreate: () => { deleteMirroredEvents(db, [CAL_URL]); } });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv16@t'), calendars);
+
+  assert.equal(reload(event.id), undefined);
+  assert.equal(tombstones().filter((t) => t.calendar_external_id === CAL2_URL).length, 0);
+});
+
+test('auch Altbestand ohne gespeicherte URL erkennt das Löschen während des Umzugs', async () => {
+  // Ohne external_object_url trägt der Tombstone der Route keine URL, nur den
+  // Quellkalender. Daran muss das Löschen erkannt werden.
+  reset();
+  const calRefId = upsertCalendar(CAL_URL);
+  const before = insertSyncedEvent({ uid: 'mv17@t', calRefId, target: CAL_URL });
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL2_URL, before.id);
+  outbound.markEventOutbound(before, reload(before.id));
+
+  const client = fakeClient({
+    onCreate: () => {
+      outbound.queueEventDeletion(reload(before.id));
+      db.prepare('DELETE FROM calendar_events WHERE id = ?').run(before.id);
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv17@t'), calendars);
+
+  assert.equal(tombstones().find((t) => t.calendar_external_id === CAL_URL)?.object_url, null,
+    'Vorbedingung: der Tombstone der Route kennt keine URL');
+  const target = tombstones().find((t) => t.calendar_external_id === CAL2_URL);
+  assert.equal(target?.object_url, `${CAL2_URL}mv17@t.ics`);
+});
+
 test('ein Rückweg in die Quelle während des Umzugs wird als neuer Umzug vorgemerkt', async () => {
   // Während das Anlegen im Ziel läuft, steht calendar_ref_id noch auf der Quelle.
   // Die Route sieht im Rückweg dorthin deshalb keinen Umzug und lässt die alte

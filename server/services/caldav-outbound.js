@@ -59,6 +59,29 @@ function applyMove(eventId, source, calendarUrl, destCal, objectUrl) {
 }
 
 /**
+ * Hat der Nutzer den Termin gelöscht, während sein Umzug lief? Dann steht der
+ * Tombstone der Löschroute für genau das Objekt in der Quelle - über dessen URL,
+ * bei Altbestand ohne gespeicherte URL über den Quellkalender.
+ *
+ * Eine fehlende Zeile allein sagt das nicht. Das Aufräumen eines abgewählten
+ * Kalenders, das Trennen eines Kontos und der Prune löschen ebenfalls lokal, und
+ * zwar ausdrücklich, ohne den Anbieter anzufassen (calendar-prune.js). Ein
+ * Tombstone für die Kopie im Ziel löschte dort einen Termin, den andere Clients
+ * derselben Familie weiter sehen sollen.
+ *
+ * Offen bleibt: räumt ein paralleler Durchgang den Tombstone der Quelle ab, bevor
+ * der Umzug hier ankommt, fehlt das Signal, und die Kopie im Ziel bleibt stehen.
+ * Das schliesst erst eine Serialisierung der ausgehenden Arbeit.
+ */
+function deletedByUser(source, uid, sourceObjectUrl, sourceCalendarUrl) {
+  return !!db.get().prepare(`
+    SELECT 1 FROM calendar_pending_deletions
+    WHERE source = ? AND event_external_id = ?
+      AND (object_url = ? OR (object_url IS NULL AND calendar_external_id = ?))
+  `).get(source, uid, sourceObjectUrl, sourceCalendarUrl);
+}
+
+/**
  * Schliesst die ausgehende Arbeit eines Termins nach dem Provider-Aufruf ab.
  *
  * Zwischen dem Nachladen vor dem Aufruf und hier liegen awaits. Trifft in dieser
@@ -365,15 +388,17 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
           } catch (err) {
             log.error(`[${label(source)}] Event ${event.id} was copied to ${moveTo} but could not be removed from its old calendar:`, err.message);
           }
-          // Während der beiden awaits lokal gelöscht: die Route hat den Tombstone
-          // mit der alten Quelle angelegt, die Kopie im Ziel kennt sie nicht. Ohne
-          // eigenen Tombstone bliebe sie stehen, und der nächste Lauf importierte
-          // den Termin von dort neu.
+          // Während der beiden awaits lokal entfernt. Hat der Nutzer gelöscht, gilt
+          // der Tombstone der Route nur der Quelle; die Kopie im Ziel bliebe stehen,
+          // und der nächste Lauf importierte den Termin von dort neu. Ein Aufräumen
+          // dagegen soll den Anbieter nicht anfassen - siehe deletedByUser.
           if (!outbound.reloadEvent(event.id)) {
-            outbound.queueDeletion({
-              source, calendarExternalId: moveTo, eventExternalId: event.external_calendar_id, objectUrl,
-            });
-            log.warn(`[${label(source)}] Event ${event.id} was deleted during its move, queued the deletion of its copy in ${moveTo}.`);
+            if (deletedByUser(source, event.external_calendar_id, url, known.calendarUrl)) {
+              outbound.queueDeletion({
+                source, calendarExternalId: moveTo, eventExternalId: event.external_calendar_id, objectUrl,
+              });
+              log.warn(`[${label(source)}] Event ${event.id} was deleted during its move, queued the deletion of its copy in ${moveTo}.`);
+            }
             continue;
           }
           applyMove(event.id, source, moveTo, destCal, objectUrl);
