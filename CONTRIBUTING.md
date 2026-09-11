@@ -262,11 +262,14 @@ failed first - the job goes red for ordinary reasons too (checkout, the action i
 GitHub API call), and only one specific failure is about the review staying silent.
 
 That one is the step **"Die Review muss gesprochen haben"**. It exists because for five PRs
-the check was green over a review that never happened. The job log shows every tool call
-(`show_full_output` stays on for exactly this), and the step's message names the cause it
-found: refused tools, a run that stopped at the plugin's own gate, or agents it started but
-never waited for. A change the review declines as trivial stays green, with a notice that
-nothing was checked.
+the check was green over a review that never happened. Its message says what it saw - refused
+tools, a run that stopped at the plugin's own gate, agents it started but never waited for -
+and is a lead for the job log, not a proven cause: a run can hit a refusal on the way and still
+stop for another reason. The log shows every tool call because `show_full_output` stays on, and
+that setting is not only for reading: the step needs the same stream to find the comment the
+run posted. The exact rules - including every case in which the review is skipped or silence
+stays green - live in `.github/workflows/claude-code-review.yml` and
+`.github/scripts/review-verdict.mjs`, and are not repeated here.
 
 **Do not add the tool in the PR that failed.** A PR touching
 `.github/workflows/claude-code-review.yml` makes the action skip itself (it only runs when
@@ -283,22 +286,12 @@ branch: push to it, or merge `main` into the branch, or close and reopen it. A r
 when the refusal came from the path the review happened to take - reading earlier comments one
 way rather than another - because the next run may take a different one.
 
-**A later push is reviewed again, and a silent run is red.** The review does not stop because
-it already commented on an earlier push of the same PR: the workflow's prompt lifts that
-condition on purpose, since a green check over an unreviewed push is worse than a second
-review. Silence does not turn the check red where the review is skipped or its evidence is not
-checked: drafts until they are marked ready, pull requests from forks, pull requests opened by
-bots (the review action admits Dependabot, but the evidence step skips every bot author),
-changes the review declines as trivial, runs cancelled because a newer push arrived, and pull
-requests that change the review workflow or whose branch carries an older copy of it. The
-check counts only what
-the reviewer said after the run began - by preference a comment whose address this run itself
-received, otherwise a review or inline comment bound to the commit under review. So a comment
-on an earlier push cannot turn a later silent run green. What the check cannot tell apart is a
-comment on the same commit from another run during this one, such as a cancelled predecessor
-that still posted: then the commit was reviewed, only not by this run. A run that stops with
-"already reviewed this PR" is red - the push it was started for has not been reviewed, even
-when that push only merged `main` into the branch.
+**A later push is reviewed again.** The review does not stop because it already commented on
+an earlier push of the same PR: the workflow's prompt lifts that condition on purpose, since a
+green check over an unreviewed push is worse than a second review. A run that stops with
+"already reviewed this PR" has not reviewed the push it was started for, and the check turns red
+unless it finds that the push was reviewed some other way - also when that push only merged
+`main` into the branch.
 
 **If the maintainer stops.** There is one maintainer and no succession arrangement: nobody
 acquires rights to this repository automatically, and none are needed, because the MIT
