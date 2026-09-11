@@ -16376,6 +16376,8 @@ function selbstNachziehend(lines) {
  * ohne den Fokus nachzuziehen. Eine eigene Funktion, damit die Sonden weiter
  * unten dieselbe Pruefung an kuenstlichen Quellen fahren wie der Guard am Repo.
  */
+const DEKLARATIONS_KOPF = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*[A-Za-z_$][\w$]*\s*\(/;
+
 function fokusLuecken(datei, lines) {
   const fehlend = [];
   const wrapper = rendererIn(lines);
@@ -16387,7 +16389,15 @@ function fokusLuecken(datei, lines) {
   for (const n of schliesst) wrapper.delete(n);
   const nachziehend = selbstNachziehend(lines);
   lines.forEach((zeile, i) => {
-    if (!istSchliessen(zeile, schliesst)) return;
+    // EINE DEKLARATION SCHLIESST NICHTS. `export function confirmModal(` in
+    // modal.js traf den Namen aus ERGEBNIS_DIALOGE und wurde zum Anker - in
+    // Spalte 0, also ohne umschliessende Funktion, und das Fenster las damit
+    // bis weit in die Datei. Beim Merge von #1055 fand es dort das abgewartete
+    // `close` einer Hilfsfunktion und verlangte `refocusAfterRender()`, das die
+    // Wache darunter als tot gemeldet haette.
+    // Weg faellt nur der KOPF, nicht die Zeile: `async function save() {
+    // closeModal();` in einer Zeile bleibt ein Anker (Codex-Review zu #1131).
+    if (!istSchliessen(zeile.replace(DEKLARATIONS_KOPF, ''), schliesst)) return;
     // EIN VERZOEGERTES SCHLIESSEN IST HIER KEINES. `setTimeout(() =>
     // closeModal(...), 700)` in tasks.js laeuft erst, wenn der Block
     // laengst durch ist - der Merker, auf den `refocusAfterRender()`
@@ -17000,6 +17010,37 @@ test('Fokus-Guard: close-Parameter, Einzeiler, Signaturen, Dialog nach dem Neuau
   assert.deepEqual(stellen('danach.js', danach), ['danach.js:2'], 'confirmModal danach findet den Knopf nicht wieder');
   const offen = danach.map((l) => l.replace('if (await confirmModal(frage)) tuNochWas();', 'closeModal();'));
   assert.deepEqual(stellen('danach.js', offen), [], 'ein Dialog, der schon offen war, setzt den Fokus beim Schliessen selbst');
+
+  // Eine Deklaration ist kein Schliessen (Merge von #1055): `confirmModal(` in
+  // der eigenen Signatur liess das Fenster ohne umschliessende Funktion bis in
+  // die naechste lesen, und dort galt das abgewartete `close` als Neuaufbau.
+  const deklaration = [
+    'export function confirmModal(frage) {',
+    '  return new Promise((resolve) => {',
+    '    resolve(true);',
+    '  });',
+    '}',
+    'async function beenden(',
+    '  bestaetigt,',
+    '  { close = closeModal } = {},',
+    ') {',
+    '  if (bestaetigt) await close({ force: true });',
+    '  return bestaetigt;',
+    '}',
+  ];
+  assert.deepEqual(stellen('deklaration.js', deklaration), [],
+    'die Signatur von confirmModal ist kein Anker');
+  const standard = deklaration.map((l, k) => (k === 0 ? 'export default function confirmModal(frage) {' : l));
+  assert.deepEqual(stellen('standard.js', standard), [],
+    'auch nicht als Default-Export (Codex-Review zu #1131)');
+  const gleichzeile = [
+    'async function speichern() { closeModal({ force: true });',
+    '  await api.put(url);',
+    '  renderListe();',
+    '}',
+  ];
+  assert.deepEqual(stellen('gleichzeile.js', gleichzeile), ['gleichzeile.js:1'],
+    'ein Schliessen hinter dem Kopf in derselben Zeile bleibt ein Anker');
 
   // Ein Wrapper, der auf seiner eigenen Ebene nachzieht, deckt seinen Neuaufbau.
   const wrapper = [
