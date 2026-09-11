@@ -1343,3 +1343,27 @@ test('eine Bearbeitung während des Umzugs bekommt beim scheiternden Patch ihre 
   assert.equal(row.outbound_dirty, 1, 'die Bearbeitung darf nach einem Fehlversuch nicht verworfen sein');
   assert.equal(row.outbound_attempts, 1);
 });
+
+test('ein während des Patches gewählter und wieder verworfener Umzug verfällt', async () => {
+  // Ohne Umzug in diesem Lauf: work@g wird vorgemerkt, dann wieder der Kalender
+  // gewählt, in dem der Termin liegt. Die Route kann die Vormerkung nicht zurücknehmen.
+  reset();
+  const event = seedMirrored('gev-patch-detour');
+  await put(event.id, { title: 'Umbenannt' });
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'work@g']),
+    onPatch: async () => {
+      await put(event.id, { target_google_calendar_id: 'work@g' });
+      await put(event.id, { target_google_calendar_id: 'primary' });
+    },
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.moves.length, 0);
+  assert.equal(calendar.patches.length, 1);
+  const row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'primary');
+  assert.equal(row.outbound_move_to, null, 'gewählt ist der Kalender, in dem der Termin liegt');
+  assert.equal(row.outbound_dirty, 0);
+});

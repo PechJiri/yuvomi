@@ -275,6 +275,13 @@ function targetFieldFor(source) {
   return null;
 }
 
+/** Externe Kennung des Kalenders, in dem der Termin laut calendar_ref_id liegt. */
+function currentCalendarId(event) {
+  if (!event.calendar_ref_id) return null;
+  return db.get().prepare('SELECT external_id FROM external_calendars WHERE id = ? AND source = ?')
+    .get(event.calendar_ref_id, event.external_source)?.external_id ?? null;
+}
+
 /** Der Event-Stand unmittelbar vor dem Provider-Aufruf; null, wenn parallel gelöscht. */
 export function reloadEvent(eventId) {
   return db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(eventId) ?? null;
@@ -307,13 +314,16 @@ export function settleOutbound(sent, handledMoveTo = null, requested = sent) {
   // sah wie "kein Umzug" aus und liess die alte Vormerkung stehen, die hier als
   // erledigt gälte. Massgeblich ist dann das Ziel der Anfrage, gegen den Kalender,
   // in dem der Termin jetzt liegt. Dasselbe gilt für jeden während des Aufrufs
-  // vorgemerkten Umzug: er stammt aus einem Zielwechsel, und ein späterer Wechsel
-  // zurück auf den Kalender, in dem der Termin inzwischen liegt, kann ihn in der
-  // Route nicht mehr zurücknehmen - das aktuelle Ziel ist der letzte Wunsch.
+  // vorgemerkten Umzug, auch ohne Umzug in diesem Aufruf: er stammt aus einem
+  // Zielwechsel, und ein späterer Wechsel zurück auf den Kalender, in dem der
+  // Termin liegt, kann ihn in der Route nicht mehr zurücknehmen - das aktuelle
+  // Ziel ist der letzte Wunsch.
   const targetField = targetFieldFor(now.external_source);
-  if (handledMoveTo && targetField && (now[targetField] !== requested[targetField] || nextMove)) {
-    const target = now[targetField] || null;
-    nextMove = target && target !== handledMoveTo ? target : null;
+  const retargeted  = handledMoveTo && now[targetField] !== requested[targetField];
+  if (targetField && (nextMove || retargeted)) {
+    const target  = now[targetField] || null;
+    const current = currentCalendarId(now) ?? handledMoveTo;
+    nextMove = target && target !== current ? target : null;
   }
   if (!edited && !nextMove) {
     clearOutbound(sent.id);
@@ -413,10 +423,7 @@ export function markEventOutbound(before, after) {
   let moveTo = null;
   if (targetField) {
     const target  = after[targetField] || null;
-    const current = after.calendar_ref_id
-      ? db.get().prepare('SELECT external_id FROM external_calendars WHERE id = ? AND source = ?')
-          .get(after.calendar_ref_id, after.external_source)?.external_id ?? null
-      : null;
+    const current = currentCalendarId(after);
     if (target && target !== before?.[targetField] && current && target !== current) {
       moveTo = target;
     }
