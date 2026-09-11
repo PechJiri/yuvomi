@@ -561,6 +561,16 @@ test('eventWhenText: Zeit-Event bis 00:00 des Folgetags bleibt eintägig', () =>
   assert(whenRange(text).to === '2026-09-11T00:00', `21:00-24:00 gehört dem Abend (#804): ${text}`);
 });
 
+test('eventWhenText: mehrtägiges Zeit-Event bis 00:00 nennt den echten Endzeitpunkt, nicht den letzten Rastertag', () => {
+  // Review auf #1114, entschieden: das Raster fuehrt den Termin am 1. und 2.,
+  // die Zeile nennt aber, WANN er endet - am 3. um 00:00. Das Datum aus
+  // eventEndDate() mit der rohen Uhrzeit hiesse "2. 00:00", einen Tag zu frueh.
+  const ev = { start_datetime: '2026-01-01T14:00', end_datetime: '2026-01-03T00:00', all_day: 0 };
+  assert(eventEndDate(ev) === '2026-01-02', 'das Raster endet am 2. (#804)');
+  const text = eventWhenText(ev);
+  assert(whenRange(text).to === '2026-01-03 2026-01-03T00:00', `Ende ist der 3. um 00:00: ${text}`);
+});
+
 test('eventWhenText: mehrtägiges Ganztags-Event nennt beide Tage', () => {
   const text = eventWhenText({ start_datetime: '2026-09-10T00:00', end_datetime: '2026-09-12T00:00', all_day: 1 });
   assert(text === 'calendar.dayRangeLabel{"from":"2026-09-10","to":"2026-09-12"} · calendar.allDay',

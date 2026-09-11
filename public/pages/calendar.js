@@ -3517,6 +3517,11 @@ function eventWhenText(ev) {
   }
   const start = formatDateTime(ev.start_datetime);
   if (!ev.end_datetime) return start;
+  // Das Ende ist der ZEITPUNKT, nicht der letzte Rastertag. Ein Termin vom 1.
+  // 14:00 bis zum 3. 00:00 steht im Raster am 1. und 2., endet aber am 3. um
+  // 00:00 - und genau das steht hier. Das Datum aus `eventEndDate` mit der
+  // rohen Uhrzeit ergaebe "2. 00:00", einen Tag zu frueh; rastertreu waere nur
+  // "2. 24:00", und das kann keine Locale formatieren (Review auf #1114).
   const end = multiDay
     ? formatDateTime(ev.end_datetime)
     : `${formatTime(ev.end_datetime)} ${timeSuffix()}`.trimEnd();
