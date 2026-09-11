@@ -1099,15 +1099,18 @@ function calendarSources() {
     const key = eventSourceKey(ev);
     if (!key) continue;
     const bekannt = quellen.get(key);
-    // Ein noch nicht hochgeladener Termin kennt Name und Farbe seines Ziels
-    // nicht (`cal_name` folgt `calendar_ref_id`); ein anderer Termin derselben
-    // Quelle oder der Merker fuellt sie nach.
+    // Name und Farbe der QUELLE: `source_calendar_*` loest der Server auch fuer
+    // einen noch nicht hochgeladenen Termin ueber sein Ziel auf, `cal_name` und
+    // `cal_color` folgen nur `calendar_ref_id` - und tragen bei Abos die Werte
+    // des Abos. Fehlt beides, fuellt ein anderer Termin oder der Merker nach.
+    const name = ev.source_calendar_name || ev.cal_name || '';
+    const color = ev.source_calendar_color || ev.cal_color || null;
     if (bekannt) {
-      bekannt.name ||= ev.cal_name || '';
-      bekannt.color ||= ev.cal_color || null;
+      bekannt.name ||= name;
+      bekannt.color ||= color;
       continue;
     }
-    quellen.set(key, { key, name: ev.cal_name || '', color: ev.cal_color || null });
+    quellen.set(key, { key, name, color });
   }
   for (const [key, merk] of state.hiddenSources ?? []) {
     const bekannt = quellen.get(key);

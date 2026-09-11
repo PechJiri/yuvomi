@@ -705,7 +705,7 @@ test('POST / — CalDAV-Ziel wird gespeichert', async () => {
 // `source_calendar_ref_id` loest die Quelle ueber das Ziel auf - und JEDER
 // Lesepfad, der Termine an die Kalenderseite gibt, muss es liefern.
 test('source_calendar_ref_id - das Ziel vertritt die Quelle, bis der Sync sie setzt (#1064)', async () => {
-  const google = db.prepare("INSERT INTO external_calendars (source, external_id, name) VALUES ('google', 'ziel-1064@group.calendar.google.com', 'Arbeit 1064') RETURNING id").get().id;
+  const google = db.prepare("INSERT INTO external_calendars (source, external_id, name, color) VALUES ('google', 'ziel-1064@group.calendar.google.com', 'Arbeit 1064', '#aa3300') RETURNING id").get().id;
   const caldav = db.prepare("INSERT INTO external_calendars (source, external_id, name) VALUES ('caldav', 'https://dav.test/ziel-1064/', 'Verein 1064') RETURNING id").get().id;
 
   const neu = await call('POST', '/', { body: {
@@ -715,6 +715,11 @@ test('source_calendar_ref_id - das Ziel vertritt die Quelle, bis der Sync sie se
   assert.equal(neu.status, 201);
   assert.equal(neu.body.data.calendar_ref_id, null, 'vor dem Hochladen ohne calendar_ref_id - der Fall aus dem Befund');
   assert.equal(neu.body.data.source_calendar_ref_id, google, 'POST /');
+  // Name und Farbe der Quelle kommen mit - fuers Filterblatt (Codex-Review zu
+  // #1124). Die geerbte Farbe des Termins folgt weiter calendar_ref_id.
+  assert.equal(neu.body.data.source_calendar_name, 'Arbeit 1064', 'der Name der Quelle vor dem Hochladen');
+  assert.equal(neu.body.data.source_calendar_color, '#aa3300', 'die Farbe der Quelle vor dem Hochladen');
+  assert.equal(neu.body.data.cal_name, null, 'cal_name bleibt am bestaetigten Kalender');
   const id = neu.body.data.id;
 
   assert.equal((await call('GET', `/${id}`)).body.data.source_calendar_ref_id, google, 'GET /:id');

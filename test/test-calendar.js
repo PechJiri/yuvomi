@@ -1997,6 +1997,15 @@ test('#1064: ein Termin fuer einen ausgeblendeten Kalender fehlt schon vor dem H
     const arbeit = calendarSources().find((q) => q.key === 'cal:5');
     assert(arbeit.name === 'Arbeit', `steht nur der neue im Zeitraum, nennt der Merker den Kalender, war ${JSON.stringify(arbeit)}`);
   });
+  // Codex-Review zu PR #1124: ohne Merker und ohne synchronisierten Nachbarn
+  // stand der Kalender als namenloses „Kalender" im Blatt. Der Server liefert
+  // Name und Farbe der aufgeloesten Quelle mit.
+  const mitQuelle = { ...unterwegs, source_calendar_name: 'Arbeit', source_calendar_color: '#3366cc' };
+  mitFilterzustand({ ...basis, events: [mitQuelle], hiddenSources: new Map() }, () => {
+    const arbeit = calendarSources().find((q) => q.key === 'cal:5');
+    assert(arbeit.name === 'Arbeit' && arbeit.color === '#3366cc',
+      `ein neuer Termin allein nennt seinen Kalender, war ${JSON.stringify(arbeit)}`);
+  });
 });
 
 test('#1064: das Blatt kennt jede Quelle aus den Terminen und jede ausgeblendete, auch ohne Termin', () => {

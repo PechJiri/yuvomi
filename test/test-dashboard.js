@@ -1442,7 +1442,7 @@ cdb.exec(`
   -- als cal_color mitgelesen, weil ein Abo-Termin keinen external_calendars-
   -- Eintrag hat. Fehlt sie hier, misst dieses verkuerzte Schema an der echten
   -- Abfrage vorbei. Dasselbe gilt fuer source/external_id und die beiden
-  -- target_*-Spalten unten: SOURCE_CALENDAR_REF_SQL loest darueber die Quelle
+  -- target_*-Spalten unten: SOURCE_CALENDAR_JOIN loest darueber die Quelle
   -- eines noch nicht hochgeladenen Termins auf (#1064).
   CREATE TABLE ics_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
