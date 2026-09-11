@@ -1294,3 +1294,52 @@ test('ein nach dem Umzug scheiternder Patch gibt nach MAX_OUTBOUND_ATTEMPTS auf'
   row = reload(before.id);
   assert.equal(row.outbound_dirty, 0, 'der Push ist aufgegeben');
 });
+
+test('ein Zwischenziel während des Umzugs verfällt, wenn der Patch wieder aufs Umzugsziel wechselt', async () => {
+  // Während events.move wird work@g gewählt (vorgemerkt, der Termin liegt noch in der
+  // Quelle), während des Patches wieder fam@g. Dort liegt der Termin inzwischen, die
+  // Route merkt nichts vor und kann work@g nicht zurücknehmen.
+  reset();
+  const event = seedMirrored('gev-move-detour');
+  await put(event.id, { title: 'Umbenannt', target_google_calendar_id: 'fam@g' });
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g', 'work@g']),
+    onMove: async (params) => {
+      await put(event.id, { target_google_calendar_id: 'work@g' });
+      return { data: { id: params.eventId } };
+    },
+    onPatch: () => put(event.id, { target_google_calendar_id: 'fam@g' }),
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.moves.length, 1);
+  assert.equal(calendar.patches.length, 1);
+  const row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'fam@g');
+  assert.equal(row.outbound_move_to, null, 'gewählt ist der Kalender, in dem der Termin liegt');
+});
+
+test('eine Bearbeitung während des Umzugs bekommt beim scheiternden Patch ihre eigenen Versuche', async () => {
+  // Der Umzug stand auf seinem letzten Versuch; die Bearbeitung setzt den Zähler zurück.
+  reset();
+  const event = seedMirrored('gev-move-budget');
+  await put(event.id, { target_google_calendar_id: 'fam@g' });
+  db.prepare('UPDATE calendar_events SET outbound_attempts = ? WHERE id = ?')
+    .run(__test.MAX_OUTBOUND_ATTEMPTS - 1, event.id);
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g']),
+    onMove: async (params) => {
+      await put(event.id, { title: 'Unterwegs umbenannt' });
+      return { data: { id: params.eventId } };
+    },
+    onPatch: () => { throw apiError(500); },
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.patches.length, 1);
+  const row = reload(event.id);
+  assert.equal(row.outbound_dirty, 1, 'die Bearbeitung darf nach einem Fehlversuch nicht verworfen sein');
+  assert.equal(row.outbound_attempts, 1);
+});

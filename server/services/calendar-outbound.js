@@ -306,9 +306,12 @@ export function settleOutbound(sent, handledMoveTo = null, requested = sent) {
   // gerechnet: calendar_ref_id wandert erst nach dem Umzug. Ein Rückweg dorthin
   // sah wie "kein Umzug" aus und liess die alte Vormerkung stehen, die hier als
   // erledigt gälte. Massgeblich ist dann das Ziel der Anfrage, gegen den Kalender,
-  // in dem der Termin jetzt liegt.
+  // in dem der Termin jetzt liegt. Dasselbe gilt für jeden während des Aufrufs
+  // vorgemerkten Umzug: er stammt aus einem Zielwechsel, und ein späterer Wechsel
+  // zurück auf den Kalender, in dem der Termin inzwischen liegt, kann ihn in der
+  // Route nicht mehr zurücknehmen - das aktuelle Ziel ist der letzte Wunsch.
   const targetField = targetFieldFor(now.external_source);
-  if (handledMoveTo && targetField && now[targetField] !== requested[targetField]) {
+  if (handledMoveTo && targetField && (now[targetField] !== requested[targetField] || nextMove)) {
     const target = now[targetField] || null;
     nextMove = target && target !== handledMoveTo ? target : null;
   }

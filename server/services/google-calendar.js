@@ -313,7 +313,9 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
       outbound.settleOutbound(fresh, movedTo, event);
       done++;
     } catch (err) {
-      handleError(err, event, 'update', clear);
+      // Mit dem Zähler des nachgeladenen Stands: eine Bearbeitung seit der Auswahl
+      // hat ihn zurückgesetzt und bekommt ihre eigenen Versuche.
+      handleError(err, fresh, 'update', clear);
     }
   }
   return done;
