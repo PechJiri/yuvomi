@@ -101,6 +101,28 @@ export function bejaht(text, muster) {
 }
 
 /**
+ * Wie `bejaht`, aber JEDER Treffer zaehlt: reicht einer ohne Verneiner davor?
+ *
+ * Fuer die Abbruch-Diagnose `schon-kommentiert` (#1101). "Claude has not
+ * already reviewed this HEAD. Claude has already reviewed this PR, so I should
+ * stop here." verneint die erste Erwaehnung und bejaht die zweite; `bejaht`
+ * las nur die erste und machte daraus `unbekannt`. Dieselbe Form wie in
+ * `hoertAuf`, dasselbe Fenster wie in `bejaht`.
+ *
+ * NICHT fuer die Tor-Ausnahme. Die kann gruen machen, und dort ist die engere
+ * Lesart die sichere Richtung - diese hier waehlt nur zwischen roten Diagnosen.
+ */
+export function bejahtIrgendwo(text, muster) {
+  const roh = String(text ?? '');
+  const flags = muster.flags.includes('g') ? muster.flags : `${muster.flags}g`;
+  for (const treffer of roh.matchAll(new RegExp(muster.source, flags))) {
+    const von = Math.max(0, treffer.index - FENSTER);
+    if (!VERNEINER.test(roh.slice(von, treffer.index + treffer[0].length))) return true;
+  }
+  return false;
+}
+
+/**
  * Sagt der Text, dass er aufhoert - und verneint er das NICHT?
  *
  * Nicht ueber `bejaht`, und der Unterschied ist Absicht. Zwei der Aufhoer-Formeln
@@ -350,10 +372,12 @@ export function beurteile({
   // Stand geprueft hat und am Posten scheiterte, galt damit als Abbruch im Tor,
   // und die Meldung schickte den Leser zum Prompt statt zur Werkzeugsperre.
   // Geprueft ueber `hoertAuf` und nicht ueber `bejaht` - warum, steht dort.
+  // Die Erwaehnung selbst ebenso ueber JEDEN Treffer (`bejahtIrgendwo`, #1101):
+  // eine verneinte erste Erwaehnung verdeckte sonst eine bejahte spaetere.
   if (
     gepostet.erfolge === 0 &&
     zahl.gebunden === 0 &&
-    bejaht(text, SCHON_KOMMENTIERT) &&
+    bejahtIrgendwo(text, SCHON_KOMMENTIERT) &&
     hoertAuf(text)
   ) {
     return stumm('schon-kommentiert', neu, seit, ergebnis, zahl.gebunden, gepostet.erfolge);
