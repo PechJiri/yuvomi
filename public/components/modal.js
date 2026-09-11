@@ -910,6 +910,31 @@ export function forgetRestore() {
   _lastRestore = null;
 }
 
+/**
+ * Den Fokus nach einem Schliessen AN dieser Schicht vorbei zurueckgeben - mit
+ * demselben Merker wie `_doClose` (#1083).
+ *
+ * Das Popover der Detailansicht schliesst ohne `closeModal()`. Bisher verwarf es
+ * dabei nur den fremden Merker: der Fokus fiel mit dem entfernten Popover auf
+ * `body`, und ein `refocusAfterRender()` nach dem Neuaufbau hatte nichts, worauf
+ * es sich beziehen konnte. Hier laeuft derselbe Weg wie beim Modal - Ziel
+ * bestimmen, mit Rueckfall fokussieren, Merker setzen, einen Frame spaeter
+ * nachfassen.
+ *
+ * @param {ReturnType<typeof rememberFocus>} memo  der beim Oeffnen gemerkte Ausloeser
+ * @returns {HTMLElement|null} das Element, das den Fokus tatsaechlich bekam
+ */
+export function restoreFocusAfterClose(memo) {
+  _lastRestore = null;
+  if (!memo) return null;
+  const gesetzt = _fokussiereMitRueckfall(focusRestoreTarget(memo));
+  if (gesetzt) {
+    _lastRestore = { memo, ziel: gesetzt };
+    _refocusIfDropped(memo, gesetzt);
+  }
+  return gesetzt;
+}
+
 function _doClose(overlayEl) {
   const target = overlayEl ?? activeOverlay;
   if (!target) return;

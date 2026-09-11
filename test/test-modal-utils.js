@@ -10,7 +10,10 @@ import { readFileSync } from 'node:fs';
 import { eachRule } from './css-rules.js';
 
 // /i18n.js wird durch test-browser-loader.mjs gemockt (--loader Flag)
-const { wireBlurValidation, btnSuccess, btnError, focusRestoreTarget, rememberFocus } = await import('../public/components/modal.js');
+const {
+  wireBlurValidation, btnSuccess, btnError, focusRestoreTarget, rememberFocus,
+  restoreFocusAfterClose, refocusAfterRender, forgetRestore,
+} = await import('../public/components/modal.js');
 
 // matchMedia und document.createElementNS werden von btnSuccess/btnError benötigt
 global.matchMedia = () => ({ matches: false });
@@ -774,6 +777,58 @@ test('closeDetailView verwirft den Merker, wenn es am Modal vorbei schliesst', (
   assert.match(fn, /forgetRestore\(\)/,
     'der Popover-Zweig kehrt ohne closeModal() zurueck - ohne Verwerfen bliebe der Merker '
     + 'des vorigen Dialogs stehen');
+});
+
+/* DAS POPOVER GIBT DEN FOKUS UEBER DENSELBEN MERKER ZURUECK WIE EIN MODAL (#1083).
+ *
+ * Bis hierher verwarf `closeDetailView()` im Popover-Zweig nur den fremden
+ * Merker. Der Fokus fiel mit dem entfernten Popover auf `body`, und ein
+ * `refocusAfterRender()` nach dem Neuaufbau - etwa nach dem Zuruecksetzen eines
+ * ICS-Termins, der das Raster neu zeichnet - hatte nichts, worauf es sich
+ * beziehen konnte. Gemessen am ERGEBNIS, nicht an der Schreibweise.
+ */
+test('der Merker aus dem Popover traegt auch den Neuaufbau danach (#1083)', () => {
+  const vorher = { active: global.document.activeElement, body: global.document.body };
+  global.document.body = makeNode('body');
+  const fokussierbar = (n) => { n.focus = () => { global.document.activeElement = n; }; return n; };
+  const wurzel = fokussierbar(makeNode('main', { id: 'main-content' }));
+  const anker = fokussierbar(makeNode('div', { cls: 'calendar-chip', data: { eventId: '7' } }));
+  try {
+    const merker = rememberFocus(anker);
+    withDom({ byId: { 'main-content': wurzel } }, () => {
+      global.document.activeElement = global.document.body;
+      assert.equal(restoreFocusAfterClose(merker), anker,
+        'haengt der Ausloeser noch, bekommt er den Fokus selbst');
+      assert.equal(global.document.activeElement, anker);
+    });
+
+    // Die Seite zeichnet das Raster neu: der alte Chip ist weg, ein gleicher steht da.
+    anker.isConnected = false;
+    const neu = fokussierbar(makeNode('div', { cls: 'calendar-chip', data: { eventId: '7' } }));
+    withDom({ byTag: { DIV: [neu] }, byId: { 'main-content': wurzel } }, () => {
+      global.document.activeElement = global.document.body;
+      refocusAfterRender();
+      assert.equal(global.document.activeElement, neu,
+        'ohne den Merker aus dem Popover bliebe der Fokus nach dem Neuaufbau auf body');
+    });
+
+    assert.equal(restoreFocusAfterClose(null), null, 'ohne Merker gibt es nichts zurueckzugeben');
+  } finally {
+    forgetRestore();
+    global.document.activeElement = vorher.active;
+    global.document.body = vorher.body;
+  }
+});
+
+test('das Popover gibt den Fokus nur zurueck, wo niemand woanders hin wollte (#1083)', () => {
+  const src = readFileSync(new URL('../public/components/detail-view.js', import.meta.url), 'utf8');
+  const fn = src.match(/export function closeDetailView\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(fn, /if \(fokus && merker\) restoreFocusAfterClose\(merker\);\s*else forgetRestore\(\);/,
+    'Rueckgabe mit eigenem Merker, sonst verwerfen - nie einen fremden stehen lassen');
+  assert.match(src, /!popover\.contains\(e\.target\)\) closeDetailView\(\{ fokus: false \}\)/,
+    'ein Klick daneben wollte woanders hin - der Fokus springt nicht zurueck');
+  assert.match(src, /if \(activePopover\) closeDetailView\(\{ fokus: false \}\)/,
+    'eine neue Ansicht nimmt den Fokus selbst');
 });
 
 /* REVIEW ZU #1070: die Klasse ist Darstellung, keine Identitaet.
