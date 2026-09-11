@@ -78,12 +78,30 @@ test('gh api ist nur lesend frei: Allow auf den Repo-Pfad, Deny auf jede Schreib
     'Bash(gh api "repos/${{ github.repository }}/*)',
     'Bash(gh api repos/${{ github.repository }}/*)',
   ], 'gh api darf nur unter dem eigenen Repo-Pfad frei sein, nie als blosses Praefix');
-  for (const schreibform of ['-X', '--method', '-f', '-F', '--field', '--raw-field', '--input']) {
-    assert.ok(deny.includes(`Bash(gh api * ${schreibform}*)`),
-      `die Schreibform ${schreibform} fehlt in --disallowed-tools`);
+  // `-i` schliesst die gebuendelten Kurzflags (`-if`, `-iX POST`), `--hostname`
+  // den fremden Host (Review auf #1117, beides am Werkzeug gemessen).
+  for (const flag of ['-X', '--method', '-f', '-F', '--field', '--raw-field', '--input', '-i', '--hostname']) {
+    assert.ok(deny.includes(`Bash(gh api * ${flag}*)`),
+      `${flag} fehlt fuer gh api in --disallowed-tools`);
   }
-  assert.ok(deny.includes('Bash(git fetch * --upload-pack*)'),
-    '`git fetch origin` darf nicht das Programm der Gegenseite waehlen');
+  // git nimmt die Abkuerzung `--upl=` an; `--upload-pack*` allein liesse sie durch.
+  assert.ok(deny.includes('Bash(git fetch * --upl*)'),
+    '`git fetch origin` darf das Programm der Gegenseite nicht waehlen, auch nicht abgekuerzt');
+});
+
+test('kein erlaubter git-Befehl schreibt per --output eine Datei', () => {
+  // `git show --output=$GITHUB_ENV` schreibt ins Umgebungsfile des Runners, und ein
+  // `BASH_ENV` darin laeuft im naechsten Schritt mit dessen Tokens. show, log, diff
+  // und rev-list nehmen `--output` an (gemessen); alle vier sind erlaubt, also
+  // muessen fuer jeden BEIDE Stellungen gesperrt sein.
+  const { 'allowed-tools': allow = [], 'disallowed-tools': deny = [] } = claudeArgs();
+  for (const befehl of ['show', 'log', 'diff', 'rev-list']) {
+    assert.ok(allow.includes(`Bash(git ${befehl}:*)`), `git ${befehl} ist nicht mehr erlaubt - Test anpassen`);
+    assert.ok(deny.includes(`Bash(git ${befehl} --output*)`),
+      `git ${befehl} --output direkt nach dem Befehl ist nicht gesperrt`);
+    assert.ok(deny.includes(`Bash(git ${befehl} * --output*)`),
+      `git ${befehl} ... --output weiter hinten ist nicht gesperrt`);
+  }
 });
 
 test('Code aus dem Checkout laeuft in der Review nicht', () => {
