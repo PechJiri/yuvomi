@@ -335,6 +335,10 @@ function onEscape(e) {
 // Swipe-to-Close (Mobile)
 // --------------------------------------------------------
 
+// Beruehrungs-Schlupf der Wischgeste, in BEIDE Richtungen derselbe: unterhalb
+// davon entscheidet sie weder "Sheet ziehen" noch "Inhalt scrollen".
+const SHEET_SWIPE_SLOP_PX = 10;
+
 function _wireSheetSwipe(panel) {
   let startY = 0;
   let dragging = false;
@@ -363,23 +367,33 @@ function _wireSheetSwipe(panel) {
     if (dy < 0) {
       // RICHTUNGSSPERRE (#981). Ein frisch geöffneter Dialog steht oben, also
       // begann JEDE Wischgeste im Inhalt als verfolgter Zug, und der schrieb
-      // bei jedem Aufwärts-Frame `translateY(0)` ans Panel - ein Stil-Schreib-
-      // zugriff je Frame am Vorfahren genau des Elements, das gerade scrollen
-      // soll. Gemeldet: der Inhalt scrollt auf iOS gar nicht, im Safari-Tab wie
-      // in der PWA. Aufwärts, bevor das Sheet gezogen wurde, ist deshalb kein
-      // Zug: die Geste gibt ab und fasst das Panel nicht an.
-      if (!pulled) { dragging = false; return; }
+      // bei jedem Aufwärts-Frame `translateY(0)` ans Panel. Solange die
+      // Einfahranimation das Panel hält (`forwards`), aendert das nichts; mit
+      // "Bewegung reduzieren" gibt es keine Animation, das Inline-transform
+      // wirkt, und iOS bricht das Scrollen des Inhalts ab - gemessen im
+      // Simulator: 0 bis 30 px statt 500 bis 675 px fuer dieselbe Geste.
+      // Aufwärts, bevor das Sheet gezogen wurde, ist deshalb kein Zug: die
+      // Geste gibt ab und fasst das Panel nicht an.
+      //
+      // Aber erst jenseits derselben Schwelle, die abwärts gilt: ein Finger
+      // zittert beim Aufsetzen, und ein einzelner Pixel nach oben durfte eine
+      // gewollte Schliessgeste nicht verwerfen. Innerhalb der Schwelle
+      // passiert nichts - kein Abbruch, kein Schreibzugriff.
+      if (!pulled) {
+        if (dy < -SHEET_SWIPE_SLOP_PX) dragging = false;
+        return;
+      }
       // Ein begonnener Zug bleibt verfolgt, wenn der Finger zurückkehrt - sonst
       // endete touchend ohne Rücksetzen und das Panel stünde verschoben
       // (b7c0312c). Zurückgesetzt wird einmal, nicht in jedem Frame.
       if (panel.style.transform) panel.style.transform = '';
       return;
     }
-    // Erst ab 10px Bewegung animieren: Verhindert winzige Transforms durch
+    // Erst ab der Schwelle animieren: Verhindert winzige Transforms durch
     // normale Taps, die danach zurückgesetzt werden müssten.
-    if (dy > 10) {
+    if (dy > SHEET_SWIPE_SLOP_PX) {
       pulled = true;
-      panel.style.transform = `translateY(${(dy - 10) * 0.6}px)`;
+      panel.style.transform = `translateY(${(dy - SHEET_SWIPE_SLOP_PX) * 0.6}px)`;
     }
   }, { passive: true });
 

@@ -141,9 +141,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing. With Reduce Motion the animation is switched off, the write turned the panel's transform
   from `none` into a matrix on every swipe, and iOS dropped the scroll. Measured in the iOS simulator
   with the setting on: the same upward swipe left the content 0 to 30 px down in three runs. An
-  upward movement before the sheet has been pulled is now content scrolling - the gesture lets go
-  and never touches the panel's style. A pull that has already started stays tracked when the
-  finger reverses, so the panel still returns to rest. Under the same setting the swipe now ends
+  upward movement of more than 10 px before the sheet has been pulled is now content scrolling -
+  the gesture lets go and never touches the panel's style. Below that, the same threshold that
+  already applied downwards, nothing is decided, so a finger that wobbles upward as it lands can
+  still pull the sheet closed. A pull that has already started stays tracked when the finger
+  reverses, so the panel still returns to rest. Under the same setting the swipe now ends
   500 to 675 px down.
 
 - **The Module options settings page describes what it actually contains.** Its description named

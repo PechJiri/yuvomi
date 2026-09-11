@@ -871,6 +871,19 @@ test('Sheet-Swipe: aufwaerts im Inhalt schreibt nichts ans Panel (#981)', () => 
   assert.deepEqual(sheet.writes, [], 'kein Stil-Schreibzugriff, waehrend eine Aufwaertsgeste den Inhalt scrollt');
 });
 
+test('Sheet-Swipe: ein Zittern nach oben verwirft eine Schliessgeste nicht', () => {
+  // Die erste Fassung der Sperre griff beim ersten Pixel nach oben: eine
+  // gewollte Abwaertsgeste mit unruhigem Aufsetzen blieb danach tot. Nach oben
+  // gilt dieselbe Schwelle wie nach unten.
+  const sheet = fakeSheet();
+  sheet.start(600);
+  sheet.move(598);
+  sheet.move(592); // 8px nach oben: innerhalb der Schwelle
+  assert.deepEqual(sheet.writes, [], 'innerhalb der Schwelle kein Schreibzugriff');
+  sheet.move(650);
+  assert.equal(sheet.transform, 'translateY(24px)', 'die Geste zieht das Sheet trotz des Zitterns');
+});
+
 test('Sheet-Swipe: ein begonnener Zug bleibt verfolgt und setzt das Panel einmal zurueck', () => {
   global.requestAnimationFrame = (fn) => fn();
   try {
