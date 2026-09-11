@@ -1097,3 +1097,122 @@ test('PUT /:id markiert einen rein lokalen Termin nicht', async () => {
   assert.equal(res.status, 200);
   assert.equal(reload(r.lastInsertRowid).outbound_dirty, 0);
 });
+
+// ── Bearbeitung während des Google-Aufrufs ──────────────────────────────────────
+// Zwischen dem Nachladen und dem Abschluss liegt der await auf Google. Eine
+// Bearbeitung, die in dieser Zeit eintrifft, setzt ihre Vormerkung neu, und der
+// Abschluss darf nur löschen, was tatsächlich hinausging - sonst hielte Google den
+// älteren Stand, und der nächste Inbound überschriebe die neuere lokale Änderung.
+// Die Bearbeitung läuft über den echten PUT, damit die Route die Vormerkung so
+// setzt wie im Betrieb (ihr Sofortversuch bricht ohne GOOGLE_CLIENT_ID ab).
+
+/** Gespiegeltes Event mit Kalenderzuordnung - ohne sie erkennt die Route keinen Umzug. */
+function seedMirrored(googleId, from = 'primary') {
+  const calRefId = __test.upsertExternalCalendar('google', from, from, '#4285F4');
+  return insertGoogleEvent({ calRefId, googleId, target: from });
+}
+
+async function put(id, body) {
+  const res = await callRoute('PUT', `/${id}`, body);
+  assert.equal(res.status, 200);
+}
+
+test('eine Bearbeitung während des Patches bleibt für den nächsten Push vorgemerkt', async () => {
+  reset();
+  const event = seedMirrored('gev-edit-in-patch');
+  await put(event.id, { title: 'Erste' });
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(),
+    onPatch: () => put(event.id, { title: 'Zweite' }),
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.patches[0].requestBody.summary, 'Erste');
+  const row = reload(event.id);
+  assert.equal(row.outbound_dirty, 1, 'die zweite Bearbeitung hat Google noch nicht erreicht');
+
+  // Genau davor schützt der Marker: Google liefert noch den gepatchten Stand.
+  __test.upsertGoogleEvents([inboundItem('gev-edit-in-patch', 'Erste')], row.calendar_ref_id);
+  assert.equal(reload(event.id).title, 'Zweite');
+
+  const next = fakeCalendar({ calendars: writableCalendars() });
+  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.equal(next.patches[0].requestBody.summary, 'Zweite');
+  assert.equal(reload(event.id).outbound_dirty, 0);
+});
+
+test('eine Bearbeitung während des Umzugs geht im selben Lauf in den Zielkalender', async () => {
+  reset();
+  const event = seedMirrored('gev-edit-in-move');
+  await put(event.id, { target_google_calendar_id: 'fam@g' });
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g']),
+    onMove: async (params) => {
+      await put(event.id, { title: 'Unterwegs umbenannt' });
+      return { data: { id: params.eventId } };
+    },
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.moves.length, 1);
+  assert.equal(calendar.patches.length, 1, 'die Auswahl kannte die Umbenennung noch nicht');
+  assert.equal(calendar.patches[0].calendarId, 'fam@g');
+  assert.equal(calendar.patches[0].requestBody.summary, 'Unterwegs umbenannt');
+  const row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'fam@g');
+  assert.equal(row.outbound_dirty, 0);
+  assert.equal(row.outbound_move_to, null);
+});
+
+test('ein Umzug, der während des Patches vorgemerkt wird, bleibt stehen', async () => {
+  reset();
+  const event = seedMirrored('gev-move-in-patch');
+  await put(event.id, { title: 'Umbenannt' });
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g']),
+    onPatch: () => put(event.id, { target_google_calendar_id: 'fam@g' }),
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.moves.length, 0);
+  let row = reload(event.id);
+  assert.equal(row.outbound_move_to, 'fam@g', 'der Umzug hat Google noch nicht erreicht');
+  assert.equal(row.outbound_dirty, 0, 'die Umbenennung ist mit dem Patch draussen');
+
+  const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) });
+  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.deepEqual(next.moves, [{ calendarId: 'primary', eventId: 'gev-move-in-patch', destination: 'fam@g' }]);
+  row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'fam@g');
+  assert.equal(row.outbound_move_to, null);
+});
+
+test('ein weiterer Umzug während des Umzugs bleibt vorgemerkt', async () => {
+  reset();
+  const event = seedMirrored('gev-move-in-move');
+  await put(event.id, { target_google_calendar_id: 'fam@g' });
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g', 'work@g']),
+    onMove: async (params) => {
+      await put(event.id, { target_google_calendar_id: 'work@g' });
+      return { data: { id: params.eventId } };
+    },
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.moves.length, 1);
+  let row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'fam@g');
+  assert.equal(row.outbound_move_to, 'work@g', 'der zweite Umzug hat Google noch nicht erreicht');
+
+  const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g', 'work@g']) });
+  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.deepEqual(next.moves, [{ calendarId: 'fam@g', eventId: 'gev-move-in-move', destination: 'work@g' }]);
+  row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'work@g');
+  assert.equal(row.outbound_move_to, null);
+});

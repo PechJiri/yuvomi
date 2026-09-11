@@ -269,6 +269,36 @@ export function reloadEvent(eventId) {
   return db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(eventId) ?? null;
 }
 
+/**
+ * Schliesst die ausgehende Arbeit eines Termins nach dem Provider-Aufruf ab.
+ *
+ * Zwischen dem Nachladen vor dem Aufruf und hier liegt mindestens ein await. Trifft
+ * in dieser Zeit eine Bearbeitung ein, setzt die Route outbound_dirty erneut, und
+ * ein pauschales clearOutbound löschte genau diese Markierung: beim Provider läge
+ * der ältere Stand, und der nächste Inbound überschriebe die neuere lokale
+ * Änderung. Ein in dieser Zeit vorgemerkter Umzug fiele genauso weg. Erledigt ist
+ * deshalb nur, was hinausging - verglichen an den gespiegelten Feldern und an dem
+ * Umzug, den dieser Aufruf ausgeführt hat.
+ *
+ * @param {object}      sent           die Zeile, aus der der Aufruf gebaut wurde
+ * @param {string|null} handledMoveTo  der Umzug, den dieser Aufruf erledigt hat
+ */
+export function settleOutbound(sent, handledMoveTo = null) {
+  const now = reloadEvent(sent.id);
+  if (!now) return;
+  const edited = mirroredFieldsChanged(sent, now);
+  const moved  = (now.outbound_move_to ?? null) !== handledMoveTo;
+  if (!edited && !moved) {
+    clearOutbound(sent.id);
+    return;
+  }
+  db.get().prepare(`
+    UPDATE calendar_events
+    SET outbound_dirty = ?, outbound_move_to = ?, outbound_attempts = 0
+    WHERE id = ?
+  `).run(edited ? 1 : 0, moved ? now.outbound_move_to : null, sent.id);
+}
+
 export function recordObjectUrl(eventId, objectUrl) {
   if (!objectUrl) return;
   db.get().prepare('UPDATE calendar_events SET external_object_url = ? WHERE id = ?').run(objectUrl, eventId);

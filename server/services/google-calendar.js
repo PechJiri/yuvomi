@@ -216,10 +216,12 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
   const clearMove = outbound.clearOutboundMove;
   // Nach dem Umzug zeigt die Zeile auf den Zielkalender. Ohne das ginge ein
   // späteres Löschen an den alten Kalender und liefe dort ins Leere, während der
-  // Termin in Google stehen bliebe.
+  // Termin in Google stehen bliebe. Die Umzugs-Vormerkung räumt erst
+  // settleOutbound ab: ein während des Aufrufs vorgemerkter weiterer Umzug gehört
+  // nicht zu diesem hier und muss stehen bleiben.
   const applyMove = db.get().prepare(`
     UPDATE calendar_events
-    SET calendar_ref_id = ?, external_calendar_id = ?, outbound_move_to = NULL
+    SET calendar_ref_id = ?, external_calendar_id = ?
     WHERE id = ?
   `);
 
@@ -244,6 +246,8 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
     }
     // Zeigt nach einem Umzug auf den Zielkalender - dessen Zone gilt für den Patch.
     let activeMeta = meta;
+    // Der Umzug, den dieser Lauf bei Google ausgeführt hat.
+    let movedTo = null;
 
     // ── Umzug in einen anderen Kalender (events.move) ────────────────────────
     const moveTo = event.outbound_move_to;
@@ -265,7 +269,7 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
           calendarId = moveTo;
           activeMeta = destMeta;
           applyMove.run(destMeta.refId, eventId, event.id);
-          if (!event.outbound_dirty) done++;
+          movedTo = moveTo;
         } catch (err) {
           // Der Umzug ist die Voraussetzung für den Patch im Zielkalender -
           // hier abbrechen, statt im alten Kalender zu patchen. Wird der Umzug
@@ -280,20 +284,28 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
       clearMove(event.id);
     }
 
-    if (!event.outbound_dirty) continue;
-
     // ── Geänderte Felder pushen (events.patch) ───────────────────────────────
     // Frisch nachladen: zwischen der Auswahl oben und hier liegt mindestens ein
     // await, in dem eine weitere Bearbeitung eingetroffen sein kann. Sonst ginge
-    // der ältere Stand raus und das anschließende clear würde die neue
-    // Vormerkung mitlöschen - Google bliebe dauerhaft hinterher.
+    // der ältere Stand raus. Auch ob überhaupt gepatcht wird, entscheidet dieser
+    // Stand: eine Bearbeitung während des Umzugs geht so noch im Zielkalender
+    // hinaus, statt auf den nächsten Lauf zu warten.
     const fresh = outbound.reloadEvent(event.id);
     if (!fresh) continue; // parallel gelöscht - der Tombstone-Pfad übernimmt
+
+    if (!fresh.outbound_dirty) {
+      if (movedTo) {
+        outbound.settleOutbound(fresh, movedTo);
+        done++;
+      }
+      continue;
+    }
 
     try {
       const gEvent = localEventToGoogle(fresh, colorMap, activeMeta?.timeZone || householdTimeZone(db.get()));
       await calendar.events.patch({ calendarId, eventId, requestBody: gEvent });
-      clear(event.id);
+      // Während des Patches Eingetroffenes bleibt vorgemerkt.
+      outbound.settleOutbound(fresh, movedTo);
       done++;
     } catch (err) {
       handleError(err, event, 'update', clear);
