@@ -532,6 +532,48 @@ test('eventEndDate: ohne Enddatum gilt der Starttag', () => {
   assert(eventEndDate(ev) === '2026-06-14', 'Kein Ende → Starttag');
 });
 
+// --------------------------------------------------------
+// eventWhenText (#1102): die „Wann"-Zeile der Detailansicht nennt den Endtag,
+// sobald er ein anderer ist - nach derselben Regel wie das Raster.
+//
+// Der i18n-Stub gibt Datum und Uhrzeit unverändert zurück (formatTime also den
+// ganzen Zeitstempel) und hängt die Werte als JSON an den Key. Ein Ende OHNE
+// Datum ist deshalb der blanke Zeitstempel, ein Ende MIT Datum trägt das
+// Datum davor: "2026-09-12 2026-09-12T11:00".
+// --------------------------------------------------------
+const { eventWhenText } = calendarHelpers;
+const whenRange = (text) => JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+
+test('eventWhenText: eintägiges Zeit-Event nennt vom Ende nur die Uhrzeit', () => {
+  const text = eventWhenText({ start_datetime: '2026-09-10T14:00', end_datetime: '2026-09-10T15:30', all_day: 0 });
+  assert(text.startsWith('calendar.dayRangeLabel'), `Zeitraum über den Locale-Key: ${text}`);
+  assert(whenRange(text).to === '2026-09-10T15:30', `Ende ohne vorangestelltes Datum: ${text}`);
+});
+
+test('eventWhenText: mehrtägiges Zeit-Event nennt Enddatum und Enduhrzeit', () => {
+  const text = eventWhenText({ start_datetime: '2026-09-10T14:00', end_datetime: '2026-09-12T11:00', all_day: 0 });
+  assert(whenRange(text).from === '2026-09-10 2026-09-10T14:00', `Start mit Datum: ${text}`);
+  assert(whenRange(text).to === '2026-09-12 2026-09-12T11:00', `Enddatum steht vor der Uhrzeit: ${text}`);
+});
+
+test('eventWhenText: Zeit-Event bis 00:00 des Folgetags bleibt eintägig', () => {
+  const text = eventWhenText({ start_datetime: '2026-09-10T21:00', end_datetime: '2026-09-11T00:00', all_day: 0 });
+  assert(whenRange(text).to === '2026-09-11T00:00', `21:00-24:00 gehört dem Abend (#804): ${text}`);
+});
+
+test('eventWhenText: mehrtägiges Ganztags-Event nennt beide Tage', () => {
+  const text = eventWhenText({ start_datetime: '2026-09-10T00:00', end_datetime: '2026-09-12T00:00', all_day: 1 });
+  assert(text === 'calendar.dayRangeLabel{"from":"2026-09-10","to":"2026-09-12"} · calendar.allDay',
+    `Ende inklusiv, beide Tage genannt: ${text}`);
+});
+
+test('eventWhenText: eintägiges Ganztags-Event und Termin ohne Ende bleiben unverändert', () => {
+  const allDay = eventWhenText({ start_datetime: '2026-09-10T00:00', end_datetime: '2026-09-10T00:00', all_day: 1 });
+  assert(allDay === '2026-09-10 · calendar.allDay', `Ein Tag, kein Zeitraum: ${allDay}`);
+  const open = eventWhenText({ start_datetime: '2026-09-10T14:00', end_datetime: null, all_day: 0 });
+  assert(open === '2026-09-10 2026-09-10T14:00', `Ohne Ende nur der Start: ${open}`);
+});
+
 test('eventEndDate: Ende vor dem Start fällt auf den Starttag zurück', () => {
   const ev = { start_datetime: '2026-06-14T09:00', end_datetime: '2026-06-13T00:00', all_day: 0 };
   assert(eventEndDate(ev) === '2026-06-14', 'Verdrehtes Ende erzeugt keinen Rückwärtsbereich');
