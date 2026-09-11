@@ -338,6 +338,9 @@ function onEscape(e) {
 function _wireSheetSwipe(panel) {
   let startY = 0;
   let dragging = false;
+  // Hat dieser Finger das Sheet schon nach unten gezogen? Erst dann gehört eine
+  // Aufwärtsbewegung zum Zug; davor ist sie Scrollen des Inhalts (#981).
+  let pulled = false;
 
   // Scroll position is now on the body, not the panel itself
   const scrollBody = panel.querySelector('.modal-panel__body');
@@ -351,15 +354,33 @@ function _wireSheetSwipe(panel) {
     if (!isHandleZone && !isScrolledToTop) return;
     startY = touchY;
     dragging = true;
+    pulled = false;
   }, { passive: true });
 
   panel.addEventListener('touchmove', (e) => {
     if (!dragging) return;
     const dy = e.touches[0].clientY - startY;
-    if (dy < 0) { panel.style.transform = 'translateY(0)'; return; } // Aufwärts: Panel zurücksetzen, dragging bleibt aktiv
+    if (dy < 0) {
+      // RICHTUNGSSPERRE (#981). Ein frisch geöffneter Dialog steht oben, also
+      // begann JEDE Wischgeste im Inhalt als verfolgter Zug, und der schrieb
+      // bei jedem Aufwärts-Frame `translateY(0)` ans Panel - ein Stil-Schreib-
+      // zugriff je Frame am Vorfahren genau des Elements, das gerade scrollen
+      // soll. Gemeldet: der Inhalt scrollt auf iOS gar nicht, im Safari-Tab wie
+      // in der PWA. Aufwärts, bevor das Sheet gezogen wurde, ist deshalb kein
+      // Zug: die Geste gibt ab und fasst das Panel nicht an.
+      if (!pulled) { dragging = false; return; }
+      // Ein begonnener Zug bleibt verfolgt, wenn der Finger zurückkehrt - sonst
+      // endete touchend ohne Rücksetzen und das Panel stünde verschoben
+      // (b7c0312c). Zurückgesetzt wird einmal, nicht in jedem Frame.
+      if (panel.style.transform) panel.style.transform = '';
+      return;
+    }
     // Erst ab 10px Bewegung animieren: Verhindert winzige Transforms durch
     // normale Taps, die danach zurückgesetzt werden müssten.
-    if (dy > 10) panel.style.transform = `translateY(${(dy - 10) * 0.6}px)`;
+    if (dy > 10) {
+      pulled = true;
+      panel.style.transform = `translateY(${(dy - 10) * 0.6}px)`;
+    }
   }, { passive: true });
 
   panel.addEventListener('touchend', (e) => {
@@ -377,6 +398,9 @@ function _wireSheetSwipe(panel) {
     }
   });
 }
+
+/** Nur fuer Tests: die Geste ohne echtes Panel treiben (#981). */
+export const __test = { wireSheetSwipe: _wireSheetSwipe };
 
 // --------------------------------------------------------
 // Suspend/Restore für Dialoge über einem offenen Modal (Audit 1.5)
