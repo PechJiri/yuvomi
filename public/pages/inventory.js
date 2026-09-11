@@ -1530,6 +1530,7 @@ async function removeItem(item) {
     await api.delete(`/inventory/items/${item.id}`);
     await loadItems();
     renderList();
+    refocusAfterRender();
     updateAttentionBadge();
     window.yuvomi?.showToast(t('inventory.deleted'), 'success');
   } catch (err) {

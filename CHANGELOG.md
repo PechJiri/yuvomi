@@ -142,6 +142,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Keyboard focus comes back after a confirmation, an input dialog or the calendar's detail
+  popover** (#1083). Confirm a delete, rename a list or a subtask, pick a folder to move to, and
+  the page reloads its list - which rebuilds the very button you came from. Focus fell to the page
+  body, so keyboard and screen-reader users started over at the top. These paths now put focus back
+  on the rebuilt control, or on the page itself when that control is gone: in Tasks, Shopping,
+  Documents, Health, Subscriptions, Housekeeping, Inventory, Meals, Rewards, the Schedule, Split
+  Expenses, the quick links and several Settings pages (API tokens, invitations, document storage,
+  recipe providers, calendar subscriptions and accounts). On desktop, the calendar's detail popover
+  now returns focus to the event it was opened from when it closes through Escape or one of its
+  actions; a click elsewhere still leaves focus where it went.
+
+  Where a dialog appears on only some paths - rejecting a reward redemption asks, fulfilling it does
+  not - focus is pulled back only on the path that asked. Otherwise it would land on the trigger of
+  some earlier, unrelated dialog. The guard that holds all of this learned three shapes it could not
+  see: dialogs that deliver their answer after closing (`confirmModal`, `promptModal`, `selectModal`,
+  `confirmOverModal`), a reload inside a `try` block or after an `if`, and a callback handed in as a
+  parameter.
+
 - **A review run that stopped at its gate is named as such, even when it first denied having
   reviewed** (#1101). The check behind the automated review reads the run's closing text to say
   why a silent run went red. It only looked at the first mention of "already reviewed", so a text

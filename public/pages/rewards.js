@@ -662,7 +662,8 @@ async function openRedeemModal(memberId, presetItemId = null) {
 }
 
 async function decideRedemption(id, action, btn) {
-  if (action === 'reject' || action === 'cancel') {
+  const gefragt = action === 'reject' || action === 'cancel';
+  if (gefragt) {
     // Kein `danger`: der Server bucht die reservierten Punkte per `reversal`
     // zurück (routes/rewards.js), es geht also kein Guthaben verloren. Die
     // Anfrage bleibt als entschieden stehen und lässt sich neu stellen, solange
@@ -684,6 +685,9 @@ async function decideRedemption(id, action, btn) {
       : action === 'reject' ? t('rewards.toastRejected') : t('rewards.toastCancelled');
     toast(msg, action === 'fulfill' ? 'success' : 'default');
     await refreshActiveTab();
+    // Nur nach der Rueckfrage: "Einloesen" fragt nicht, schliesst also keinen
+    // Dialog, und das Nachfassen griffe auf den Merker eines frueheren zurueck (#1083).
+    if (gefragt) refocusAfterRender();
   } catch (err) {
     if (btn) btn.disabled = false;
     await confirmModal(err?.message || t('common.error'), { confirmLabel: t('rewards.gotIt') });
@@ -790,6 +794,7 @@ function openRewardModal(item) {
         await api.delete(`/rewards/catalog/${item.id}`);
         toast(t('rewards.toastRewardDeleted'), 'default');
         await refreshActiveTab();
+        refocusAfterRender();
       });
       panel.querySelector('#rw-reward-form').addEventListener('submit', async (e) => {
         e.preventDefault();
