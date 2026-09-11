@@ -134,6 +134,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A review run that stopped at its gate is named as such, even when it first denied having
+  reviewed** (#1101). The check behind the automated review reads the run's closing text to say
+  why a silent run went red. It only looked at the first mention of "already reviewed", so a text
+  that negated it once and then affirmed it ("has not already reviewed this HEAD ... has already
+  reviewed this PR, so I should stop here") was diagnosed as unknown, pointing at a missing post
+  instead of the gate. Every mention now counts, the way every "stop" already did. The check was
+  red either way; only its message changes. The one exception that can turn it green still reads
+  the narrower way.
+
 - **The event detail names the day a multi-day event ends** (#1102). The "When" row showed the
   start date and, of the end, only the time: an event from 10 September 14:00 to 12 September 11:00
   read as "14:00 - 11:00" on a single day that ends before it begins, and an all-day event across

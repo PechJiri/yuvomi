@@ -30,7 +30,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import {
-  adressenImStrom, beurteile, bejaht, zaehleBelege, zaehleSeit
+  adressenImStrom, beurteile, bejaht, bejahtIrgendwo, zaehleBelege, zaehleSeit
 } from '../.github/scripts/review-verdict.mjs';
 
 const fixture = JSON.parse(
@@ -1089,6 +1089,54 @@ test('ein spaeteres bejahtes Aufhoeren zaehlt auch nach einem verneinten (#1096,
       result:
         'I did not stop here at the first check. Claude has already left a comment on this PR, ' +
         'so I should stop here.'
+    },
+    aeusserungen: [],
+    gepostet: NICHTS
+  });
+  assert.equal(urteil.grund, 'schon-kommentiert');
+});
+
+test('eine spaetere bejahte Erwaehnung zaehlt auch nach einer verneinten (#1101)', () => {
+  // Dieselbe Luecke wie beim Aufhoeren, eine Bedingung weiter vorn: `bejaht`
+  // sah nur die ERSTE Erwaehnung von "schon geprueft". Verneint im ersten Satz,
+  // bejaht im zweiten, und der Lauf hat aufgehoert - die Diagnose lautete
+  // trotzdem `unbekannt` und schickte den Leser zum fehlenden `--comment` statt
+  // zum Tor, das den Lauf angehalten hat. Rot war der Haken in beiden Faellen.
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 4, subtype: 'success', is_error: false, permission_denials: [],
+      result: 'Claude has not already reviewed this HEAD. Claude has already reviewed this PR, so I should stop here.'
+    },
+    aeusserungen: [],
+    gepostet: NICHTS
+  });
+  assert.equal(urteil.grund, 'schon-kommentiert');
+});
+
+test('bejahtIrgendwo liest jede Erwaehnung, bejaht weiter nur die erste (#1101)', () => {
+  const muster = /already\s+(?:left\s+a\s+comment|commented|posted|reviewed)/i;
+  const gemischt = 'Claude has not already reviewed this HEAD. Claude has already reviewed this PR.';
+  assert.equal(bejahtIrgendwo(gemischt, muster), true);
+  // Die Tor-Ausnahme, die GRUEN machen kann, prueft weiter ueber `bejaht`: dort
+  // bleibt die engere Lesart die sichere Richtung.
+  assert.equal(bejaht(gemischt, muster), false);
+  assert.equal(bejahtIrgendwo('Claude has not already commented. It has never already posted.', muster), false);
+  assert.equal(bejahtIrgendwo('', muster), false);
+  assert.equal(bejahtIrgendwo(undefined, muster), false);
+  // Das Fenster endet am Satzende davor (Codex zu #1121): ein kurzer verneinter
+  // Satz lag sonst noch in den 30 Zeichen vor der naechsten Erwaehnung.
+  assert.equal(bejahtIrgendwo('Claude has not already reviewed. Has already reviewed, so I should stop here.', muster), true);
+});
+
+test('ein kurzer verneinter Satz verneint die naechste Erwaehnung nicht mit (#1121, Codex P2)', () => {
+  const urteil = beurteile({
+    seit: seit(ABBRUCH_LAUF),
+    kopf: kopf(ABBRUCH_LAUF),
+    ergebnis: {
+      num_turns: 4, subtype: 'success', is_error: false, permission_denials: [],
+      result: 'Claude has not already reviewed. Has already reviewed, so I should stop here.'
     },
     aeusserungen: [],
     gepostet: NICHTS
