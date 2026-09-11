@@ -947,7 +947,8 @@
         "filtersActive_one": "1 filtre etkin",
         "filtersReset": "Tüm filtreleri kaldır",
         "filtersDisplay": "Görünüm",
-        "agendaDayEmpty": "Planlanmış bir şey yok"
+        "agendaDayEmpty": "Planlanmış bir şey yok",
+        "openInMap": "Haritada aç"
     },
     "noteCategories": {
         "permissionLabel": "Ev notu kategorilerini yönet"

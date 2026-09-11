@@ -947,7 +947,8 @@
         "filtersActive_one": "1 个筛选条件生效",
         "filtersReset": "清除所有筛选",
         "filtersDisplay": "显示",
-        "agendaDayEmpty": "没有安排"
+        "agendaDayEmpty": "没有安排",
+        "openInMap": "在地图中打开"
     },
     "noteCategories": {
         "permissionLabel": "管理家庭笔记分类"

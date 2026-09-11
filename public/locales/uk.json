@@ -947,7 +947,8 @@
         "filtersActive_one": "1 активний фільтр",
         "filtersReset": "Зняти всі фільтри",
         "filtersDisplay": "Відображення",
-        "agendaDayEmpty": "Нічого не заплановано"
+        "agendaDayEmpty": "Нічого не заплановано",
+        "openInMap": "Відкрити на картах"
     },
     "noteCategories": {
         "permissionLabel": "Керувати сімейними категоріями нотаток"

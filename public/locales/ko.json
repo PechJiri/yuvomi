@@ -959,7 +959,8 @@
         "filtersActive_one": "필터 1개 적용됨",
         "filtersReset": "모든 필터 해제",
         "filtersDisplay": "표시",
-        "agendaDayEmpty": "예정된 일정 없음"
+        "agendaDayEmpty": "예정된 일정 없음",
+        "openInMap": "지도에서 열기"
     },
     "noteCategories": {
         "permissionLabel": "가정 메모 카테고리 관리"

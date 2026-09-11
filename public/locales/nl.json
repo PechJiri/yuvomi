@@ -947,7 +947,8 @@
         "filtersActive_one": "1 filter actief",
         "filtersReset": "Alle filters wissen",
         "filtersDisplay": "Weergave",
-        "agendaDayEmpty": "Niets gepland"
+        "agendaDayEmpty": "Niets gepland",
+        "openInMap": "Openen in Maps"
     },
     "noteCategories": {
         "permissionLabel": "Notitiecategorieën voor het huishouden beheren"

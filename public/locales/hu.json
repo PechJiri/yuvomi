@@ -947,7 +947,8 @@
         "filtersActive_one": "1 aktív szűrő",
         "filtersReset": "Összes szűrő törlése",
         "filtersDisplay": "Megjelenítés",
-        "agendaDayEmpty": "Semmi sincs tervezve"
+        "agendaDayEmpty": "Semmi sincs tervezve",
+        "openInMap": "Megnyitás a Térképen"
     },
     "noteCategories": {
         "permissionLabel": "Háztartási jegyzetkategóriák kezelése"

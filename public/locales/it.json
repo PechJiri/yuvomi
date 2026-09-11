@@ -947,7 +947,8 @@
         "filtersActive_one": "1 filtro attivo",
         "filtersReset": "Rimuovi tutti i filtri",
         "filtersDisplay": "Visualizzazione",
-        "agendaDayEmpty": "Niente in programma"
+        "agendaDayEmpty": "Niente in programma",
+        "openInMap": "Apri in Maps"
     },
     "noteCategories": {
         "permissionLabel": "Gestisci le categorie delle note di casa"

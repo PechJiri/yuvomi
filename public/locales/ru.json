@@ -947,7 +947,8 @@
         "filtersActive_one": "1 активный фильтр",
         "filtersReset": "Снять все фильтры",
         "filtersDisplay": "Отображение",
-        "agendaDayEmpty": "Ничего не запланировано"
+        "agendaDayEmpty": "Ничего не запланировано",
+        "openInMap": "Открыть в Картах"
     },
     "noteCategories": {
         "permissionLabel": "Управлять семейными категориями заметок"

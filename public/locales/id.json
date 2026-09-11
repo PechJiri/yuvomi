@@ -959,7 +959,8 @@
         "filtersActive_one": "1 filter aktif",
         "filtersReset": "Hapus semua filter",
         "filtersDisplay": "Tampilan",
-        "agendaDayEmpty": "Tidak ada rencana"
+        "agendaDayEmpty": "Tidak ada rencana",
+        "openInMap": "Buka di Maps"
     },
     "noteCategories": {
         "permissionLabel": "Kelola kategori catatan rumah tangga"

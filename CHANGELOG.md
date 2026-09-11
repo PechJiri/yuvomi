@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **An event's location opens in a map** (#1110, from discussion #1047). The event detail carries
+  an "Open in Maps" action whenever the event has a location; it opens an OpenStreetMap search for
+  that text in a new tab, the same search Contacts already uses for an address. It is an explicit
+  action rather than a link on the location itself, because the field is free text: "Zoom" or
+  "Room 3B" is not an address, and the action never claims it is. The link is built on the device
+  and used only when tapped - no geocoding, nothing looked up in advance. An address imported over
+  CalDAV with escaped line breaks is searched as one line.
+
 - **A shopping item can carry a price and the shop it was bought at** (#1003, first cut). Both sit
   in the item dialog, where the item is already open - the checkbox stays the fastest gesture in the
   app and gains no second step. The price is stored in whole minor units (cents, yen, fils) rather
@@ -151,6 +159,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   see: dialogs that deliver their answer after closing (`confirmModal`, `promptModal`, `selectModal`,
   `confirmOverModal`), a reload inside a `try` block or after an `if`, and a callback handed in as a
   parameter.
+
+- **A review run that stopped at its gate is named as such, even when it first denied having
+  reviewed** (#1101). The check behind the automated review reads the run's closing text to say
+  why a silent run went red. It only looked at the first mention of "already reviewed", so a text
+  that negated it once and then affirmed it ("has not already reviewed this HEAD ... has already
+  reviewed this PR, so I should stop here") was diagnosed as unknown, pointing at a missing post
+  instead of the gate. Every mention now counts, the way every "stop" already did. The check was
+  red either way; only its message changes. The one exception that can turn it green still reads
+  the narrower way.
 
 - **The event detail names the day a multi-day event ends** (#1102). The "When" row showed the
   start date and, of the end, only the time: an event from 10 September 14:00 to 12 September 11:00
