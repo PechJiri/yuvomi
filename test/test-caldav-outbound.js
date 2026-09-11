@@ -1026,6 +1026,124 @@ test('scheitert das Anlegen im Ziel, wird in der Quelle nichts gelöscht', async
   assert.equal(reload(before.id).outbound_move_to, CAL2_URL, 'der nächste Lauf versucht es erneut');
 });
 
+// ── Nach dem Kalenderwechsel: die Zeile zeigt auf das Ziel ─────────────────────
+//
+// Bis zum nächsten Inbound-Lauf zeigten calendar_ref_id und external_object_url
+// weiter auf die Quelle, deren Objekt der Umzug gerade gelöscht hatte. Alles, was
+// in diesem Fenster am Termin geschieht, adressiert diese beiden Spalten: ein
+// Löschen lief per DELETE auf die tote URL, das 404 galt als erledigt, der
+// Tombstone fiel weg - und der nächste Lauf importierte den Termin aus dem Ziel
+// neu. Google zieht calendar_ref_id im Umzug sofort nach (`applyMove`).
+
+function seedMoved(uid) {
+  const calRefId = upsertCalendar(CAL_URL);
+  const before = insertSyncedEvent({ uid, calRefId, objectUrl: `${CAL_URL}${uid}.ics`, target: CAL_URL });
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL2_URL, before.id);
+  outbound.markEventOutbound(before, reload(before.id));
+  return reload(before.id);
+}
+
+async function runMove(uid) {
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  return processPendingUpdates(fakeClient(), 'caldav', indexFor(uid), calendars);
+}
+
+function calRefFor(url) {
+  return db.prepare(`SELECT id FROM external_calendars WHERE source = 'caldav' AND external_id = ?`).get(url)?.id;
+}
+
+test('nach dem Kalenderwechsel zeigt der Termin auf den Zielkalender und sein neues Objekt', async () => {
+  reset();
+  const event = seedMoved('mv4@t');
+  assert.equal(await runMove('mv4@t'), 1);
+
+  const row = reload(event.id);
+  assert.ok(calRefFor(CAL2_URL), 'der Zielkalender hat seine external_calendars-Zeile');
+  assert.equal(row.calendar_ref_id, calRefFor(CAL2_URL), 'calendar_ref_id folgt dem Umzug');
+  assert.equal(row.external_object_url, `${CAL2_URL}mv4@t.ics`,
+    'die Objekt-URL ist die, unter der der Umzug angelegt hat');
+});
+
+test('ein Löschen direkt nach dem Umzug trifft das Objekt im Zielkalender', async () => {
+  reset();
+  const event = seedMoved('mv5@t');
+  await runMove('mv5@t');
+
+  assert.equal(outbound.queueEventDeletion(reload(event.id)), true);
+  const [row] = tombstones();
+  assert.equal(row.calendar_external_id, CAL2_URL, 'der Tombstone gehört zum Zielkalender');
+  assert.equal(row.object_url, `${CAL2_URL}mv5@t.ics`);
+
+  const client = fakeClient();
+  await processPendingDeletions(client, 'caldav', new Map(), new Set([CAL_URL, CAL2_URL]));
+  assert.equal(client.deletes[0].calendarObject.url, `${CAL2_URL}mv5@t.ics`,
+    'die alte URL ist schon gelöscht - ihr 404 hätte den Tombstone als erledigt verworfen');
+});
+
+test('eine Bearbeitung nach dem Umzug geht an das Objekt im Zielkalender', async () => {
+  reset();
+  const event = seedMoved('mv6@t');
+  await runMove('mv6@t');
+
+  db.prepare("UPDATE calendar_events SET title = 'Nach dem Umzug' WHERE id = ?").run(event.id);
+  outbound.markOutbound(event.id, { dirty: true });
+
+  // Der volle Lauf findet das Objekt nur noch im Ziel. Der Inbound überspringt
+  // einen Termin mit ausstehendem Push, korrigiert die Spalten also nicht vorher.
+  const client = fakeClient();
+  const index = indexFor('mv6@t', { url: `${CAL2_URL}mv6@t.ics`, calendarUrl: CAL2_URL });
+  assert.equal(await processPendingUpdates(client, 'caldav', index), 1);
+  assert.equal(client.updates[0].calendarObject.url, `${CAL2_URL}mv6@t.ics`,
+    'ein PUT auf die gelöschte URL endet im 404, und das verwirft die Bearbeitung');
+});
+
+test('ein Wechsel zurück in den Ausgangskalender wird als Umzug erkannt', async () => {
+  reset();
+  const event = seedMoved('mv7@t');
+  await runMove('mv7@t');
+
+  const before = reload(event.id);
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL_URL, event.id);
+  assert.equal(outbound.markEventOutbound(before, reload(event.id)), true,
+    'zeigte calendar_ref_id noch auf die Quelle, sähe das Ziel wie der aktuelle Kalender aus');
+  assert.equal(reload(event.id).outbound_move_to, CAL_URL);
+});
+
+test('der Umzug übernimmt Name und Farbe des Zielkalenders aus der Kontoauswahl', async () => {
+  // Dieselben Werte, die der nächste Inbound-Lauf schreibt: sonst setzte der Umzug
+  // eine vorhandene Kalenderfarbe bis dahin auf null.
+  reset();
+  db.prepare('DELETE FROM caldav_calendar_selection').run();
+  const accountId = db.prepare('SELECT id FROM caldav_accounts LIMIT 1').get().id;
+  db.prepare(`INSERT INTO caldav_calendar_selection (account_id, calendar_url, calendar_name, calendar_color, enabled)
+              VALUES (?, ?, 'Arbeit (Auswahl)', '#FF8800', 1)`).run(accountId, CAL2_URL);
+  // Eine ältere Kalenderzeile mit anderem Stand: die Auswahl gewinnt, wie im Inbound.
+  upsertCalendar(CAL2_URL, 'Arbeit (alt)');
+
+  const event = seedMoved('mv8@t');
+  await runMove('mv8@t');
+
+  const cal = db.prepare('SELECT id, name, color FROM external_calendars WHERE external_id = ?').get(CAL2_URL);
+  assert.equal(reload(event.id).calendar_ref_id, cal.id);
+  assert.equal(cal.name, 'Arbeit (Auswahl)');
+  assert.equal(cal.color, '#FF8800');
+});
+
+test('ohne Eintrag in der Kontoauswahl behält eine bestehende Kalenderzeile Name und Farbe', async () => {
+  reset();
+  db.prepare('DELETE FROM caldav_calendar_selection').run();
+  const calRefId = upsertCalendar(CAL2_URL, 'Arbeit (bekannt)');
+
+  const event = seedMoved('mv9@t');
+  await runMove('mv9@t');
+
+  const cal = db.prepare('SELECT id, name, color FROM external_calendars WHERE external_id = ?').get(CAL2_URL);
+  assert.equal(cal.id, calRefId, 'keine zweite Zeile für denselben Kalender');
+  assert.equal(reload(event.id).calendar_ref_id, calRefId);
+  assert.equal(cal.name, 'Arbeit (bekannt)', 'nicht der displayName des Abrufs');
+  assert.equal(cal.color, '#4A90E2', 'die Farbe wird nicht auf null gesetzt');
+});
+
 // ── Sofortversuch ───────────────────────────────────────────────────────────────
 
 /** Attrappe mit gezieltem Objektabruf, wie ihn der Sofortversuch nutzt. */

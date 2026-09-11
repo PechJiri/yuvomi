@@ -142,6 +142,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An event moved to another CalDAV calendar can be deleted or edited right away** (#593). A move
+  creates the event in the new calendar and removes it from the old one, but until the next sync
+  Yuvomi kept pointing at the old copy. Deleting the event in that window went to an address that
+  no longer existed, counted as done, and the next sync brought the event back from the new
+  calendar. An edit was dropped the same way, and moving the event back to where it came from was
+  not recognised as a move. The event now points at the new calendar and its new copy as soon as
+  the move succeeds, as moves to Google calendars already did.
+
 - **Keyboard focus comes back after a confirmation, an input dialog or the calendar's detail
   popover** (#1083). Confirm a delete, rename a list or a subtask, pick a folder to move to, and
   the page reloads its list - which rebuilds the very button you came from. Focus fell to the page

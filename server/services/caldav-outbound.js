@@ -19,10 +19,44 @@ import { householdTimeZone } from '../utils/timezone.js';
 import * as db from '../db.js';
 import { nearestIcalColorName } from '../utils/ical-color.js';
 import { outboundEvent } from './outbound-dtstart.js';
+import { upsertExternalCalendar } from './external-calendars.js';
 
 const log = createLogger('CalDAVOutbound');
 
 const label = (source) => (source === 'apple' ? 'Apple' : 'CalDAV');
+
+/**
+ * Zieht die Zeile nach einem Umzug auf den Zielkalender und das dort angelegte
+ * Objekt nach - wie `applyMove` bei Google.
+ *
+ * Ohne das zeigen calendar_ref_id und external_object_url bis zum nächsten
+ * Inbound-Lauf auf die Quelle, deren Objekt gerade gelöscht wurde. Ein Löschen in
+ * diesem Fenster ginge per DELETE an die tote URL, deren 404 den Tombstone als
+ * erledigt verwirft, und der nächste Lauf importierte den Termin aus dem Ziel neu;
+ * eine Bearbeitung liefe ebenso ins 404 und fiele weg.
+ *
+ * Name und Farbe kommen aus der Kontoauswahl, also dieselben Werte, die der
+ * Inbound schreibt: der Helfer überschreibt beide, und ein null hätte die Farbe
+ * einer bestehenden Kalenderzeile bis dahin gelöscht.
+ */
+function applyMove(eventId, source, calendarUrl, destCal, objectUrl) {
+  const conn = db.get();
+  const selected = conn.prepare(
+    'SELECT calendar_name, calendar_color FROM caldav_calendar_selection WHERE calendar_url = ? LIMIT 1'
+  ).get(calendarUrl);
+  const known = selected ? null : conn.prepare(
+    'SELECT name, color FROM external_calendars WHERE source = ? AND external_id = ?'
+  ).get(source, calendarUrl);
+
+  const calRefId = upsertExternalCalendar(
+    source, calendarUrl,
+    selected?.calendar_name || known?.name || destCal.displayName || calendarUrl,
+    selected ? selected.calendar_color : (known?.color ?? null),
+  );
+  conn.prepare(
+    'UPDATE calendar_events SET calendar_ref_id = ?, external_object_url = ? WHERE id = ?'
+  ).run(calRefId, objectUrl, eventId);
+}
 
 /**
  * Kalender-Properties eines lokalen Termins für patchICSEvent.
@@ -275,9 +309,10 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
         outbound.clearOutboundMove(event.id);
       } else {
         try {
+          const filename = filenameFromUrl(url, event.external_calendar_id);
           await client.createCalendarObject({
             calendar:   destCal,
-            filename:   filenameFromUrl(url, event.external_calendar_id),
+            filename,
             iCalString: patched,
           });
           // Erst nach erfolgreichem Anlegen löschen: scheitert das Löschen, steht
@@ -287,6 +322,8 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
           } catch (err) {
             log.error(`[${label(source)}] Event ${event.id} was copied to ${moveTo} but could not be removed from its old calendar:`, err.message);
           }
+          // Die URL so gebildet, wie tsdav sie für den PUT gebildet hat.
+          applyMove(event.id, source, moveTo, destCal, new URL(filename, destCal.url).href);
           outbound.clearOutbound(event.id);
           done++;
           continue; // der Patch ist mit dem Anlegen bereits geschrieben
