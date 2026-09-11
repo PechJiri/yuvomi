@@ -947,7 +947,8 @@
         "filtersActive_one": "1 ενεργό φίλτρο",
         "filtersReset": "Κατάργηση όλων των φίλτρων",
         "filtersDisplay": "Εμφάνιση",
-        "agendaDayEmpty": "Τίποτα προγραμματισμένο"
+        "agendaDayEmpty": "Τίποτα προγραμματισμένο",
+        "openInMap": "Άνοιγμα στους Χάρτες"
     },
     "noteCategories": {
         "permissionLabel": "Διαχείριση κοινόχρηστων κατηγοριών σημειώσεων"

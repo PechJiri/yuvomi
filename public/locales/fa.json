@@ -959,7 +959,8 @@
         "filtersActive_one": "۱ فیلتر فعال",
         "filtersReset": "برداشتن همه فیلترها",
         "filtersDisplay": "نمایش",
-        "agendaDayEmpty": "چیزی برنامه‌ریزی نشده"
+        "agendaDayEmpty": "چیزی برنامه‌ریزی نشده",
+        "openInMap": "باز کردن در نقشه"
     },
     "noteCategories": {
         "permissionLabel": "مدیریت دسته‌بندی‌های یادداشت خانوادگی"

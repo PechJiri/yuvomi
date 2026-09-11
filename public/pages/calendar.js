@@ -3331,6 +3331,7 @@ export const __test = {
   tasksOnDay,
   eventsOnDay,
   passesPersonFilters,
+  eventMapUrl,
   eventEndDate,
   isMultiDayEvent,
   eventWhenText,
@@ -3529,6 +3530,18 @@ function eventWhenText(ev) {
 }
 
 /**
+ * Die Kartensuche zu einem Ortstext, oder '' wenn es nichts zu suchen gibt.
+ *
+ * Über `fmtLocation`, damit eine ICS-escapte, mehrzeilige Adresse als eine
+ * Zeile gesucht wird. Gebaut wird lokal; nichts verlässt das Gerät, bevor
+ * jemand die Aktion antippt (#1110).
+ */
+function eventMapUrl(location) {
+  const query = fmtLocation(location ?? '').trim();
+  return query ? `https://www.openstreetmap.org/search?query=${encodeURIComponent(query)}` : '';
+}
+
+/**
  * Die Leseinformationen eines Termins.
  *
  * Wiederholung, Erinnerungen und Sichtbarkeit standen bisher nur im
@@ -3595,6 +3608,21 @@ async function openEventDetail(ev, anchor = null) {
     // Dialog, und das Shared-Modal kennt kein Stacking.
     onClick: async ({ close }) => { await close({ force: true }); await requestDeleteEvent(ev); },
   }];
+
+  // Ort in einer Karte öffnen (#1110) - als ausdrückliche Aktion, nicht als Link
+  // auf dem Ortstext: `location` ist Freitext, und "Zoom" oder "Raum 3B" sind
+  // keine Adresse. Die Aktion behauptet das nie, der Link wird erst beim Antippen
+  // benutzt. Dieselbe Suche wie die Adresse in Kontakte.
+  const mapUrl = eventMapUrl(ev.location);
+  if (mapUrl) {
+    actions.push({
+      id: 'detail-open-map',
+      label: t('calendar.openInMap'),
+      variant: 'ghost',
+      icon: 'map-pin',
+      onClick: () => window.open(mapUrl, '_blank', 'noopener'),
+    });
+  }
 
   // ICS-Abos: Ein lokal geänderter Termin lässt sich auf das Original
   // zurücksetzen. Die Aktion gehört zum Objekt, also in die Fußzeile.

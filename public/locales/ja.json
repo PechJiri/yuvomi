@@ -947,7 +947,8 @@
         "filtersActive_one": "フィルター 1 件が有効",
         "filtersReset": "すべてのフィルターを解除",
         "filtersDisplay": "表示",
-        "agendaDayEmpty": "予定なし"
+        "agendaDayEmpty": "予定なし",
+        "openInMap": "地図で開く"
     },
     "noteCategories": {
         "permissionLabel": "世帯のメモカテゴリーを管理"

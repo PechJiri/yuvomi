@@ -1876,6 +1876,31 @@ test('renderDayView: zwei ueberlappende Schichten am selben Tag bekommen untersc
   });
 });
 
+test('eventMapUrl: eine Kartensuche nur, wo ein Ortstext uebrig bleibt (#1110)', () => {
+  const { eventMapUrl } = calendarHelpers;
+  assert(typeof eventMapUrl === 'function', 'eventMapUrl muss ueber __test erreichbar sein');
+  const gleich = (ist, soll, was) => assert(ist === soll, `${was}: ${JSON.stringify(ist)} statt ${JSON.stringify(soll)}`);
+  gleich(
+    eventMapUrl('Hauptstraße 5, Berlin'),
+    'https://www.openstreetmap.org/search?query=Hauptstra%C3%9Fe%205%2C%20Berlin',
+    'Adresse als Suchtext',
+  );
+  // Zeichen, die eine URL zerlegen koennten, bleiben im Suchtext.
+  gleich(
+    eventMapUrl('A&B?x=1#2'),
+    'https://www.openstreetmap.org/search?query=A%26B%3Fx%3D1%232',
+    'URL-Sonderzeichen',
+  );
+  // Ohne Ort: keine Aktion.
+  for (const leer of [null, undefined, '', '   ']) {
+    gleich(eventMapUrl(leer), '', `kein Link fuer ${JSON.stringify(leer)}`);
+  }
+  // NICHT HIER: die ICS-escapte Adresse. Der Browser-Loader ersetzt
+  // `/utils/html.js` durch einen Stub, dessen `fmtLocation` die Identitaet ist -
+  // ein Fall, der das Aufraeumen braucht, waere hier rot aus dem falschen Grund.
+  // Er steht in test:detail-view gegen das echte fmtLocation.
+});
+
 // --------------------------------------------------------
 // Ergebnis
 // --------------------------------------------------------

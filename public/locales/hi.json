@@ -947,7 +947,8 @@
         "filtersActive_one": "1 फ़िल्टर सक्रिय",
         "filtersReset": "सभी फ़िल्टर हटाएँ",
         "filtersDisplay": "प्रदर्शन",
-        "agendaDayEmpty": "कुछ भी नियोजित नहीं"
+        "agendaDayEmpty": "कुछ भी नियोजित नहीं",
+        "openInMap": "मानचित्र में खोलें"
     },
     "noteCategories": {
         "permissionLabel": "घर की नोट श्रेणियाँ प्रबंधित करें"

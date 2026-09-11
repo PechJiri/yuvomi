@@ -959,7 +959,8 @@
         "filtersActive_one": "1 aktibong filter",
         "filtersReset": "Alisin ang lahat ng filter",
         "filtersDisplay": "Pagpapakita",
-        "agendaDayEmpty": "Walang nakaplano"
+        "agendaDayEmpty": "Walang nakaplano",
+        "openInMap": "Buksan sa Maps"
     },
     "noteCategories": {
         "permissionLabel": "Pamahalaan ang mga kategorya ng tala ng sambahayan"
