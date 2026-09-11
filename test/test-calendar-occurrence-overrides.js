@@ -1172,7 +1172,37 @@ test('saving no actual difference restores the expanded master occurrence', () =
   ).get(seriesId).count, 0);
 });
 
-test('a no-difference PUT cannot uncover a slot owned by a detached replacement', () => {
+test('only-this update rejects a slot excluded without a linked replacement', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Deleted slot master',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  deleteOccurrence(database, {
+    seriesId,
+    recurrenceId: '2026-10-07',
+    actorId: 1,
+  });
+
+  assert.throws(() => upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-07',
+    actorId: 1,
+    changes: { title: 'Must stay deleted' },
+  }), (error) => error instanceof CalendarOccurrenceError
+    && error.code === 'invalid_recurrence_id');
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_event_exceptions
+    WHERE event_id = ? AND exception_date = '2026-10-07'
+  `).get(seriesId).count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_events
+    WHERE recurrence_parent_id = ? AND recurrence_id = '2026-10-07'
+  `).get(seriesId).count, 0);
+});
+
+test('only-this updates reject a slot owned by a detached replacement', () => {
   const database = createDatabase();
   const seriesId = Number(insertSeries(database, {
     title: 'Detached no-op master',
@@ -1201,26 +1231,19 @@ test('a no-difference PUT cannot uncover a slot owned by a detached replacement'
     changes: { recurrence_rule: 'FREQ=DAILY' },
   });
 
-  const noDifference = upsertOccurrenceOverride(database, {
-    seriesId,
-    recurrenceId: '2026-10-07',
-    actorId: 1,
-    changes: {},
-  });
-  assert.equal(noDifference.restored, true);
-  assert.equal(database.prepare(`
-    SELECT COUNT(*) AS count FROM calendar_event_exceptions
-    WHERE event_id = ? AND exception_date = '2026-10-07'
-  `).get(seriesId).count, 1);
-
-  const matchingReminder = upsertOccurrenceOverride(database, {
-    seriesId,
-    recurrenceId: '2026-10-07',
-    actorId: 1,
-    changes: {},
-    reminderOffsets: [1440],
-  });
-  assert.equal(matchingReminder.restored, true);
+  for (const mutation of [
+    { changes: {} },
+    { changes: { title: 'New linked title' } },
+    { changes: {}, reminderOffsets: [1440] },
+  ]) {
+    assert.throws(() => upsertOccurrenceOverride(database, {
+      seriesId,
+      recurrenceId: '2026-10-07',
+      actorId: 1,
+      ...mutation,
+    }), (error) => error instanceof CalendarOccurrenceError
+      && error.code === 'invalid_recurrence_id');
+  }
   assert.equal(database.prepare(`
     SELECT COUNT(*) AS count FROM calendar_event_exceptions
     WHERE event_id = ? AND exception_date = '2026-10-07'
@@ -1631,6 +1654,81 @@ test('following edit splits, reparents and recomputes replacement markers', () =
     SELECT exception_date FROM calendar_event_exceptions
     WHERE event_id = ? ORDER BY exception_date
   `).all(successorId).map((row) => row.exception_date), ['2026-10-03', '2026-10-04']);
+});
+
+test('following update rejects excluded first and later slots without linked replacements', () => {
+  for (const recurrenceId of ['2026-10-01', '2026-10-07']) {
+    const database = createDatabase();
+    const seriesId = Number(insertSeries(database, {
+      title: 'Deleted split slot master',
+      start_datetime: '2026-10-01T09:00:00',
+      recurrence_rule: 'FREQ=DAILY',
+    }));
+    deleteOccurrence(database, { seriesId, recurrenceId, actorId: 1 });
+
+    assert.throws(() => splitSeries(database, {
+      seriesId,
+      recurrenceId,
+      actorId: 1,
+      changes: { title: 'Must stay deleted' },
+    }), (error) => error instanceof CalendarOccurrenceError
+      && error.code === 'invalid_recurrence_id');
+    assert.equal(database.prepare('SELECT recurrence_rule FROM calendar_events WHERE id = ?')
+      .get(seriesId).recurrence_rule, 'FREQ=DAILY');
+    assert.equal(database.prepare(`
+      SELECT COUNT(*) AS count FROM calendar_event_exceptions
+      WHERE event_id = ? AND exception_date = ?
+    `).get(seriesId, recurrenceId).count, 1);
+    assert.equal(database.prepare(`
+      SELECT COUNT(*) AS count FROM calendar_events
+      WHERE id != ? AND recurrence_rule IS NOT NULL
+    `).get(seriesId).count, 0);
+  }
+});
+
+test('following update revalidates an excluded slot inside its write transaction', () => {
+  const database = createDatabase();
+  const seriesId = Number(insertSeries(database, {
+    title: 'Concurrent delete master',
+    start_datetime: '2026-10-01T09:00:00',
+    recurrence_rule: 'FREQ=DAILY',
+  }));
+  upsertOccurrenceOverride(database, {
+    seriesId,
+    recurrenceId: '2026-10-07',
+    actorId: 1,
+    changes: { title: 'Linked before split' },
+  });
+
+  const originalExec = database.exec.bind(database);
+  let injectedDelete = false;
+  database.exec = (sql) => {
+    if (!injectedDelete && /^SAVEPOINT calendar_occurrence_/i.test(String(sql).trim())) {
+      injectedDelete = true;
+      database.prepare(`
+        DELETE FROM calendar_events
+        WHERE recurrence_parent_id = ? AND recurrence_id = '2026-10-07'
+      `).run(seriesId);
+    }
+    return originalExec(sql);
+  };
+
+  assert.throws(() => splitSeries(database, {
+    seriesId,
+    recurrenceId: '2026-10-07',
+    actorId: 1,
+    changes: { title: 'Must not become a successor' },
+  }), (error) => error instanceof CalendarOccurrenceError
+    && error.code === 'invalid_recurrence_id');
+  assert.equal(injectedDelete, true);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_event_exceptions
+    WHERE event_id = ? AND exception_date = '2026-10-07'
+  `).get(seriesId).count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) AS count FROM calendar_events
+    WHERE id != ? AND recurrence_rule IS NOT NULL
+  `).get(seriesId).count, 0);
 });
 
 test('following split preserves an occurrence-specific assignment primary', () => {

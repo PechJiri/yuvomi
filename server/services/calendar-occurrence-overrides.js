@@ -187,6 +187,25 @@ export function baseOccurrenceFor(master, recurrenceId) {
   return occurrence;
 }
 
+function assertOccurrenceSlotCanBeMutated(database, seriesId, recurrenceId) {
+  const state = database.prepare(`
+    SELECT
+      EXISTS(
+        SELECT 1 FROM calendar_event_exceptions
+        WHERE event_id = ? AND exception_date = ?
+      ) AS excluded,
+      EXISTS(
+        SELECT 1 FROM calendar_events
+        WHERE recurrence_parent_id = ? AND recurrence_id = ?
+      ) AS has_linked_child
+  `).get(seriesId, recurrenceId, seriesId, recurrenceId);
+  if (state.excluded && !state.has_linked_child) {
+    throw invalidRecurrenceIdentity(
+      'recurrence_id identifies an excluded slot without a linked occurrence.',
+    );
+  }
+}
+
 const OVERRIDE_PROPERTIES = Object.freeze({
   title: ['title'],
   description: ['description'],
@@ -930,6 +949,7 @@ export function upsertOccurrenceOverride(database, {
   return runTransaction(database, () => {
     const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
     const base = baseOccurrenceFor(master, recurrenceId);
+    assertOccurrenceSlotCanBeMutated(database, master.id, recurrenceId);
     const existing = database.prepare(`
       SELECT * FROM calendar_events
       WHERE recurrence_parent_id = ? AND recurrence_id = ?
@@ -1417,29 +1437,28 @@ export function splitSeries(database, {
   reminderOffsets: requestedReminderOffsets,
   confirmedOrphanCount,
 }) {
-  const initialMaster = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
-  const initialSelected = baseOccurrenceFor(initialMaster, recurrenceId);
-  if (initialSelected.is_series_start) {
-    const normalizedChanges = firstSlotSeriesChanges(initialMaster, initialSelected, changes);
-    assertValidEffectiveInterval({ ...initialMaster, ...normalizedChanges });
-    const result = updateSeriesWithOverrides(database, {
-      seriesId,
-      actorId,
-      isAdmin,
-      changes: normalizedChanges,
-      assignments,
-      attachment,
-      createAttachment,
-      cloneDetachedAttachment,
-      reminderOffsets: requestedReminderOffsets,
-      confirmedOrphanCount,
-    });
-    return { series: result.series, wholeSeries: true };
-  }
-
   return runTransaction(database, () => {
     const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
     const selectedBase = baseOccurrenceFor(master, recurrenceId);
+    assertOccurrenceSlotCanBeMutated(database, master.id, recurrenceId);
+    if (selectedBase.is_series_start) {
+      const normalizedChanges = firstSlotSeriesChanges(master, selectedBase, changes);
+      assertValidEffectiveInterval({ ...master, ...normalizedChanges });
+      const result = updateSeriesWithOverrides(database, {
+        seriesId,
+        actorId,
+        isAdmin,
+        changes: normalizedChanges,
+        assignments,
+        attachment,
+        createAttachment,
+        cloneDetachedAttachment,
+        reminderOffsets: requestedReminderOffsets,
+        confirmedOrphanCount,
+      });
+      return { series: result.series, wholeSeries: true };
+    }
+
     const children = linkedChildren(database, master.id, recurrenceId);
     const resolvedById = new Map(children.map((row) => [
       Number(row.id),

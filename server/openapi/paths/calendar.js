@@ -158,7 +158,7 @@ export function calendarPaths() {
           stringPathParam('recurrenceId', 'Original occurrence date in YYYY-MM-DD format'),
         ],
         stateChanging: true,
-        description: 'Creates or updates a linked replacement for one original slot of an eligible local-only series. Scalar fields, assignments, attachments, and `reminder_offsets` are compared with the expanded series defaults. Saving no actual difference restores the normal series occurrence.',
+        description: 'Creates or updates a linked replacement for one original slot of an eligible local-only series. Scalar fields, assignments, attachments, and `reminder_offsets` are compared with the expanded series defaults. Saving no actual difference restores the normal series occurrence only when a linked replacement existed for that slot; a slot excluded by a deletion or detached replacement remains excluded.',
         requestBody: jsonBody('#/components/schemas/CalendarOccurrenceOnlyMutation'),
         responses: {
           200: {
@@ -200,7 +200,7 @@ export function calendarPaths() {
           stringPathParam('recurrenceId', 'Original occurrence date in YYYY-MM-DD format'),
         ],
         stateChanging: true,
-        description: 'Truncates the original series before the selected original slot, creates a successor series, and reparents later linked replacements and deletion exceptions atomically.',
+        description: 'Truncates the original series before the selected original slot, creates a successor series, transfers every later exclusion except the selected slot, and reparents later linked replacements atomically.',
         requestBody: jsonBody('#/components/schemas/CalendarOccurrenceFollowingMutation'),
         responses: {
           200: {
@@ -230,7 +230,7 @@ export function calendarPaths() {
           stringPathParam('recurrenceId', 'Original occurrence date in YYYY-MM-DD format'),
         ],
         stateChanging: true,
-        description: 'Truncates immediately before the selected original slot and removes later linked replacements and deletion exceptions in one transaction. Selecting the first slot deletes the whole series.',
+        description: 'Truncates immediately before the selected original slot, removes later linked replacements, and preserves later exclusions. Selecting the first slot deletes the whole series.',
         responses: {
           204: { description: 'Selected and following occurrences deleted' },
           400: { $ref: '#/components/responses/BadRequest' },
