@@ -161,6 +161,11 @@ test('#1060: das Terminformular ruft die Regel auf - nur beim Anlegen, und die e
     'eine geaenderte Zuweisung rechnet das Ziel neu');
   assert.match(src, /id="event-sync-target-assignee-hint" hidden>\$\{t\('calendar\.syncTargetAssigneeAmbiguous'\)\}/,
     'bei zwei Kalendern fuer dieselbe Person sagt das Formular, warum nichts gewaehlt ist');
+  // Der Hinweis steht mit der Zielwahl unter „Weitere Einstellungen", und das
+  // ist beim Anlegen zu - ohne Aufklappen sagte das Formular es niemandem
+  // (Review zu #1125).
+  assert.match(form, /if \(ambiguous\) mehrdeutigHint\.closest\('details'\)\?\.setAttribute\('open', ''\);/,
+    'ein mehrdeutiges Ziel klappt die Einstellungen auf, in denen der Hinweis steht');
 });
 
 test('#1060: nennen zwei Kalender dieselbe Person, wird nicht geraten', () => {

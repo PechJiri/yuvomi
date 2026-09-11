@@ -4258,7 +4258,15 @@ function wireEventForm(panel, { mode, event = null, reminder = null }) {
     const zielNachZuweisung = () => {
       if (mode !== 'create' || zielVonHand || !ziele) return;
       const { value, ambiguous } = assigneeSyncTarget(ziele, getSelectedUserIds(panel, 'cal_assigned'));
-      if (mehrdeutigHint) mehrdeutigHint.hidden = !ambiguous;
+      if (mehrdeutigHint) {
+        mehrdeutigHint.hidden = !ambiguous;
+        // Die Zielwahl steht unter „Weitere Einstellungen", und das ist beim
+        // Anlegen zu. Ein Hinweis in einem geschlossenen <details> sagt
+        // niemandem etwas - dabei ist er die ganze Antwort darauf, warum hier
+        // nicht geraten wird (Review zu #1125). Aufklappen, nie zuklappen: was
+        // jemand selbst geoeffnet hat, bleibt offen.
+        if (ambiguous) mehrdeutigHint.closest('details')?.setAttribute('open', '');
+      }
       const angeboten = Boolean(value) && Array.from(syncTargetSelect.options).some((o) => o.value === value);
       if (angeboten) {
         syncTargetSelect.value = value;
