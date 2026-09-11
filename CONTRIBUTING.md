@@ -283,18 +283,21 @@ branch: push to it, or merge `main` into the branch, or close and reopen it. A r
 when the refusal came from the path the review happened to take - reading earlier comments one
 way rather than another - because the next run may take a different one.
 
-**Every push is reviewed, and every run has to show its own work.** That holds for a pull
-request from a branch of this repository that is ready for review. Drafts are skipped until
-they are marked ready, pull requests opened by bots or from forks are not reviewed here, a run
-cancelled because a newer push arrived counts for nothing, and a pull request that changes the
-review workflow - or whose branch carries an older copy of it - is skipped as described above.
-Within that, the review does not stop because it already commented on an earlier push of the
-same PR: the workflow's prompt lifts
-that condition on purpose, since a green check over an unreviewed push is worse than a second
-review. The check counts only what the reviewer said after the run began and can tie to the
-run itself, so an earlier comment cannot turn a later silent run green. A run that stops with
-"already reviewed this PR" is therefore red - the push it was started for has not been
-reviewed, even when that push only merged `main` into the branch.
+**Every push is reviewed, and a silent run is red.** That holds for a pull request from a
+branch of this repository that is ready for review. Drafts are skipped until they are marked
+ready, pull requests opened by bots or from forks are not reviewed here, a run cancelled
+because a newer push arrived ends as cancelled rather than red, and a pull request that
+changes the review workflow - or whose branch carries an older copy of it - is skipped as
+described above. Within that, the review does not stop because it already commented on an
+earlier push of the same PR: the workflow's prompt lifts that condition on purpose, since a
+green check over an unreviewed push is worse than a second review. The check counts only what
+the reviewer said after the run began - by preference a comment whose address this run itself
+received, otherwise a review or inline comment bound to the commit under review. So a comment
+on an earlier push cannot turn a later silent run green. What the check cannot tell apart is a
+comment on the same commit from another run during this one, such as a cancelled predecessor
+that still posted: then the commit was reviewed, only not by this run. A run that stops with
+"already reviewed this PR" is red - the push it was started for has not been reviewed, even
+when that push only merged `main` into the branch.
 
 **If the maintainer stops.** There is one maintainer and no succession arrangement: nobody
 acquires rights to this repository automatically, and none are needed, because the MIT

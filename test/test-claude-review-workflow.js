@@ -45,6 +45,10 @@ test('der Prompt traegt keine Werkzeug-Anweisungen, nur den Verweis auf CONTRIBU
   assert.doesNotMatch(prompt, /gh api|--allowed-tools|gesperrt|WERKZEUGE/i,
     'Werkzeug-Anweisungen gehoeren in claude_args, nicht in den Prompt');
   assert.match(prompt, /CONTRIBUTING\.md/, 'der Verweis auf die nachlesbare Regel fehlt');
+  // Der Checkout traegt die Fassung des PR - ein PR koennte den Widerspruch sonst
+  // selbst wieder einbauen (Review auf #1119). Massgeblich ist der Default-Branch.
+  assert.match(prompt, /github\.event\.repository\.default_branch/,
+    'der Prompt muss die Fassung auf dem Default-Branch fuer massgeblich erklaeren');
 });
 
 test('Skill und Task stehen in den erlaubten Werkzeugen', () => {

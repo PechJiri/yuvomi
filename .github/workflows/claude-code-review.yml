@@ -283,8 +283,10 @@ jobs:
             automatisiert, trivial) bleiben unveraendert.
 
             Ein CLAUDE.md liegt im Checkout nicht (gitignored). Die Regeln dieses
-            Repos stehen in CONTRIBUTING.md; dessen Abschnitt zu `claude-review`
-            beschreibt auch, dass hier jeder Push geprueft wird.
+            Repos stehen in CONTRIBUTING.md, und massgeblich ist die Fassung auf
+            `${{ github.event.repository.default_branch }}`, nicht eine im PR
+            geaenderte. Deren Abschnitt zu `claude-review` beschreibt auch, dass
+            hier jeder Push geprueft wird.
           # KEINE WERKZEUG-ANWEISUNGEN IM PROMPT (11.09.2026, nach #1117). Dort
           # stand kurz ein Absatz, welche `gh api`- und git-Wege offen und welche
           # gesperrt sind. Die beiden Laeufe danach (#1116, #1114) hielten den
