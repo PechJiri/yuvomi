@@ -264,9 +264,76 @@ export function handleUpdateError(err, event, what, provider, giveUp = clearOutb
   log.warn(`[${provider}] Outbound ${what} failed for event ${event.id} (attempt ${attempts}):`, err.message);
 }
 
+/**
+ * Spalte mit dem gewählten Zielkalender eines Providers. Umzug kennt nur, wer ein
+ * wählbares Ziel hat: der Apple-Legacy-Sync lädt in den ersten verfügbaren
+ * Kalender, dort gibt es nichts zu wechseln.
+ */
+function targetFieldFor(source) {
+  if (source === 'google') return 'target_google_calendar_id';
+  if (source === 'caldav') return 'target_caldav_calendar_url';
+  return null;
+}
+
+/** Externe Kennung des Kalenders, in dem der Termin laut calendar_ref_id liegt. */
+function currentCalendarId(event) {
+  if (!event.calendar_ref_id) return null;
+  return db.get().prepare('SELECT external_id FROM external_calendars WHERE id = ? AND source = ?')
+    .get(event.calendar_ref_id, event.external_source)?.external_id ?? null;
+}
+
 /** Der Event-Stand unmittelbar vor dem Provider-Aufruf; null, wenn parallel gelöscht. */
 export function reloadEvent(eventId) {
   return db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(eventId) ?? null;
+}
+
+/**
+ * Schliesst die ausgehende Arbeit eines Termins nach dem Provider-Aufruf ab.
+ *
+ * Zwischen dem Nachladen vor dem Aufruf und hier liegt mindestens ein await. Trifft
+ * in dieser Zeit eine Bearbeitung ein, setzt die Route outbound_dirty erneut, und
+ * ein pauschales clearOutbound löschte genau diese Markierung: beim Provider läge
+ * der ältere Stand, und der nächste Inbound überschriebe die neuere lokale
+ * Änderung. Ein in dieser Zeit vorgemerkter Umzug fiele genauso weg. Erledigt ist
+ * deshalb nur, was hinausging - verglichen an den gespiegelten Feldern und an dem
+ * Umzug, den dieser Aufruf ausgeführt hat.
+ *
+ * @param {object}      sent           die Zeile, aus der der Aufruf gebaut wurde
+ * @param {string|null} handledMoveTo  der Umzug, den dieser Aufruf erledigt hat
+ * @param {object}      requested      die Zeile, auf deren Ziel der Umzug beruhte.
+ *   Gleich `sent`, wenn Umzug und Änderung ein Aufruf sind (CalDAV); älter, wenn
+ *   ein Provider erst verschiebt und danach getrennt patcht (Google).
+ */
+export function settleOutbound(sent, handledMoveTo = null, requested = sent) {
+  const now = reloadEvent(sent.id);
+  if (!now) return;
+  const edited = mirroredFieldsChanged(sent, now);
+  let nextMove = (now.outbound_move_to ?? null) !== handledMoveTo ? now.outbound_move_to : null;
+  // Einen Zielwechsel während eines Umzugs hat die Route noch gegen die QUELLE
+  // gerechnet: calendar_ref_id wandert erst nach dem Umzug. Ein Rückweg dorthin
+  // sah wie "kein Umzug" aus und liess die alte Vormerkung stehen, die hier als
+  // erledigt gälte. Massgeblich ist dann das Ziel der Anfrage, gegen den Kalender,
+  // in dem der Termin jetzt liegt. Dasselbe gilt für jeden während des Aufrufs
+  // vorgemerkten Umzug, auch ohne Umzug in diesem Aufruf: er stammt aus einem
+  // Zielwechsel, und ein späterer Wechsel zurück auf den Kalender, in dem der
+  // Termin liegt, kann ihn in der Route nicht mehr zurücknehmen - das aktuelle
+  // Ziel ist der letzte Wunsch.
+  const targetField = targetFieldFor(now.external_source);
+  const retargeted  = handledMoveTo && now[targetField] !== requested[targetField];
+  if (targetField && (nextMove || retargeted)) {
+    const target  = now[targetField] || null;
+    const current = currentCalendarId(now) ?? handledMoveTo;
+    nextMove = target && target !== current ? target : null;
+  }
+  if (!edited && !nextMove) {
+    clearOutbound(sent.id);
+    return;
+  }
+  db.get().prepare(`
+    UPDATE calendar_events
+    SET outbound_dirty = ?, outbound_move_to = ?, outbound_attempts = 0
+    WHERE id = ?
+  `).run(edited ? 1 : 0, nextMove, sent.id);
 }
 
 export function recordObjectUrl(eventId, objectUrl) {
@@ -351,19 +418,12 @@ export function markEventOutbound(before, after) {
 
   const dirty = mirroredFieldsChanged(before, after);
 
-  // Umzug kennt nur, wer ein wählbares Ziel hat. Der Apple-Legacy-Sync lädt in den
-  // ersten verfügbaren Kalender, dort gibt es nichts zu wechseln.
-  const targetField = after.external_source === 'google'
-    ? 'target_google_calendar_id'
-    : after.external_source === 'caldav' ? 'target_caldav_calendar_url' : null;
+  const targetField = targetFieldFor(after.external_source);
 
   let moveTo = null;
   if (targetField) {
     const target  = after[targetField] || null;
-    const current = after.calendar_ref_id
-      ? db.get().prepare('SELECT external_id FROM external_calendars WHERE id = ? AND source = ?')
-          .get(after.calendar_ref_id, after.external_source)?.external_id ?? null
-      : null;
+    const current = currentCalendarId(after);
     if (target && target !== before?.[targetField] && current && target !== current) {
       moveTo = target;
     }
