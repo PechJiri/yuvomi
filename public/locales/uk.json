@@ -948,7 +948,9 @@
         "filtersReset": "Зняти всі фільтри",
         "filtersDisplay": "Відображення",
         "agendaDayEmpty": "Нічого не заплановано",
-        "openInMap": "Відкрити на картах"
+        "openInMap": "Відкрити на картах",
+        "filtersSources": "Календарі",
+        "filterUnassigned": "Не призначені"
     },
     "noteCategories": {
         "permissionLabel": "Керувати сімейними категоріями нотаток"

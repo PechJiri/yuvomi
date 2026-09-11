@@ -960,7 +960,9 @@
         "filtersReset": "모든 필터 해제",
         "filtersDisplay": "표시",
         "agendaDayEmpty": "예정된 일정 없음",
-        "openInMap": "지도에서 열기"
+        "openInMap": "지도에서 열기",
+        "filtersSources": "캘린더",
+        "filterUnassigned": "할당되지 않음"
     },
     "noteCategories": {
         "permissionLabel": "가정 메모 카테고리 관리"

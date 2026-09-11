@@ -23,6 +23,43 @@ const ASSIGNED_USERS_SQL = `(
 ) AS assigned_users_json`;
 
 /**
+ * Die Quelle eines Termins fuer den Kalenderfilter (#1064), als ID in
+ * `external_calendars`. Ein synchronisierter Termin haengt ueber
+ * `calendar_ref_id` daran. Ein frisch angelegter mit Google- oder CalDAV-Ziel
+ * bekommt diese Spalte erst, wenn der Ausgang ihn hochgeladen hat - bis dahin,
+ * und bei scheiterndem Sync auf Dauer, sagt nur das Ziel, wohin er gehoert.
+ * Ohne diesen Rueckfall bliebe er stehen, obwohl sein Kalender ausgeblendet ist.
+ *
+ * Bewusst nicht im Join fuer `cal_name`/`cal_color`: die geerbte Farbe folgt
+ * weiter dem, was der Sync bestaetigt hat. Name und Farbe der QUELLE kommen
+ * trotzdem mit (`source_calendar_name`/`_color`): ohne sie stand ein Kalender,
+ * von dem nur ein neuer Termin im Zeitraum liegt, im Filterblatt als
+ * namenloses „Kalender" - zwei davon waren nicht zu unterscheiden (Codex-Review
+ * zu #1124). Jeder Lesepfad, der Termine an die Kalenderseite liefert, nimmt
+ * den Join und die Spalten mit.
+ *
+ * Ein vorgemerkter Umzug (`outbound_move_to`, #593) geht vor: er ist der
+ * ausdrueckliche Wunsch, und bis der Ausgang ihn ausgefuehrt hat, zeigt
+ * `calendar_ref_id` noch auf den alten Kalender (Codex-Review zu #1124). Die
+ * blosse Abweichung zwischen Ziel und `calendar_ref_id` zaehlt dagegen nicht:
+ * Bestandsdaten tragen sie folgenlos, siehe Migration 105.
+ */
+export const SOURCE_CALENDAR_JOIN = `LEFT JOIN external_calendars src ON src.id = COALESCE(
+  (SELECT tm.id FROM external_calendars tm
+    WHERE tm.source = e.external_source AND tm.external_id = e.outbound_move_to),
+  e.calendar_ref_id,
+  (SELECT tg.id FROM external_calendars tg
+    WHERE tg.source = 'google' AND tg.external_id = e.target_google_calendar_id),
+  (SELECT tc.id FROM external_calendars tc
+    WHERE tc.source = 'caldav' AND tc.external_id = e.target_caldav_calendar_url)
+)`;
+
+/** Die Spalten zu SOURCE_CALENDAR_JOIN: ID, Name und Farbe der aufgeloesten Quelle. */
+export const SOURCE_CALENDAR_COLUMNS = `src.id    AS source_calendar_ref_id,
+  src.name  AS source_calendar_name,
+  src.color AS source_calendar_color`;
+
+/**
  * Lädt die Instanz-Ausnahmen (EXDATE, #489) für die gegebenen Event-IDs als Map.
  * @param {import('node:sqlite').DatabaseSync} d  Geöffnete DB-Verbindung
  * @param {Array<number>} eventIds  IDs wiederkehrender Events
@@ -303,6 +340,7 @@ export function getUpcomingEvents(d, {
            -- am Abo-Termin NULL, obwohl dessen Farbe schon herauskam (#1064).
            COALESCE(ec.name, isub.name)   AS cal_name,
            COALESCE(ec.color, isub.color) AS cal_color,
+           ${SOURCE_CALENDAR_COLUMNS},
            COALESCE(bd.name, nd.name) AS birthday_name,
            bd.birth_date AS birthday_date,
            nd.name_day   AS name_day,
@@ -312,6 +350,7 @@ export function getUpcomingEvents(d, {
     FROM calendar_events e
     LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
     LEFT JOIN external_calendars ec ON ec.id = e.calendar_ref_id
+    ${SOURCE_CALENDAR_JOIN}
     LEFT JOIN ics_subscriptions isub ON isub.id = e.subscription_id
     LEFT JOIN birthdays bd ON bd.calendar_event_id = e.id
     LEFT JOIN birthdays nd ON nd.name_day_calendar_event_id = e.id

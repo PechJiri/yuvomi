@@ -948,7 +948,9 @@
         "filtersReset": "Снять все фильтры",
         "filtersDisplay": "Отображение",
         "agendaDayEmpty": "Ничего не запланировано",
-        "openInMap": "Открыть в Картах"
+        "openInMap": "Открыть в Картах",
+        "filtersSources": "Календари",
+        "filterUnassigned": "Не назначенные"
     },
     "noteCategories": {
         "permissionLabel": "Управлять семейными категориями заметок"

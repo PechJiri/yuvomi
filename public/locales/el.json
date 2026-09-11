@@ -948,7 +948,9 @@
         "filtersReset": "Κατάργηση όλων των φίλτρων",
         "filtersDisplay": "Εμφάνιση",
         "agendaDayEmpty": "Τίποτα προγραμματισμένο",
-        "openInMap": "Άνοιγμα στους Χάρτες"
+        "openInMap": "Άνοιγμα στους Χάρτες",
+        "filtersSources": "Ημερολόγια",
+        "filterUnassigned": "Χωρίς ανάθεση"
     },
     "noteCategories": {
         "permissionLabel": "Διαχείριση κοινόχρηστων κατηγοριών σημειώσεων"

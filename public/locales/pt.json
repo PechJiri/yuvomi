@@ -948,7 +948,9 @@
         "filtersReset": "Limpar todos os filtros",
         "filtersDisplay": "Apresentação",
         "agendaDayEmpty": "Nada planeado",
-        "openInMap": "Abrir no Maps"
+        "openInMap": "Abrir no Maps",
+        "filtersSources": "Calendários",
+        "filterUnassigned": "Não atribuídos"
     },
     "noteCategories": {
         "permissionLabel": "Gerir categorias de notas do agregado familiar"

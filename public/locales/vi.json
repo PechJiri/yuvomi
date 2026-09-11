@@ -948,7 +948,9 @@
         "filtersReset": "Xóa tất cả bộ lọc",
         "filtersDisplay": "Hiển thị",
         "agendaDayEmpty": "Không có kế hoạch",
-        "openInMap": "Mở trong Bản đồ"
+        "openInMap": "Mở trong Bản đồ",
+        "filtersSources": "Lịch",
+        "filterUnassigned": "Chưa được giao"
     },
     "noteCategories": {
         "permissionLabel": "Quản lý danh mục ghi chú gia đình"

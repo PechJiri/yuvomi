@@ -948,7 +948,9 @@
         "filtersReset": "Zrušit všechny filtry",
         "filtersDisplay": "Zobrazení",
         "agendaDayEmpty": "Nic naplánováno",
-        "openInMap": "Otevřít v Mapách"
+        "openInMap": "Otevřít v Mapách",
+        "filtersSources": "Kalendáře",
+        "filterUnassigned": "Nepřiřazeno"
     },
     "noteCategories": {
         "permissionLabel": "Spravovat domácí kategorie poznámek"

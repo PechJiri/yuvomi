@@ -960,7 +960,9 @@
         "filtersReset": "Wyczyść wszystkie filtry",
         "filtersDisplay": "Wyświetlanie",
         "agendaDayEmpty": "Nic zaplanowane",
-        "openInMap": "Otwórz w mapach"
+        "openInMap": "Otwórz w mapach",
+        "filtersSources": "Kalendarze",
+        "filterUnassigned": "Nieprzypisane"
     },
     "noteCategories": {
         "permissionLabel": "Zarządzaj domowymi kategoriami notatek"

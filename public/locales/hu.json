@@ -948,7 +948,9 @@
         "filtersReset": "Összes szűrő törlése",
         "filtersDisplay": "Megjelenítés",
         "agendaDayEmpty": "Semmi sincs tervezve",
-        "openInMap": "Megnyitás a Térképen"
+        "openInMap": "Megnyitás a Térképen",
+        "filtersSources": "Naptárak",
+        "filterUnassigned": "Senkihez sincs rendelve"
     },
     "noteCategories": {
         "permissionLabel": "Háztartási jegyzetkategóriák kezelése"
