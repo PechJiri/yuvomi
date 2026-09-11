@@ -282,16 +282,19 @@ jobs:
             Alle uebrigen Bedingungen aus Schritt 1 (geschlossen, Entwurf,
             automatisiert, trivial) bleiben unveraendert.
 
-            WERKZEUGE IN DIESEM LAUF. Lesend steht dir mehr offen als die Anleitung
-            des Plugins nennt: `gh api` auf `repos/${{ github.repository }}/...`
-            (Reviews, Kommentare, Inhalte, Vergleiche) mit dem Pfad ohne oder in
-            doppelten Anfuehrungszeichen, dazu `git show`, `git fetch origin <ref>`
-            und die uebrigen lesenden git-Befehle. Gesperrt sind schreibende
-            `gh api`-Aufrufe, Umleitungen in Dateien (`> datei`) und das Ausfuehren
-            von Code aus dem Checkout (`node`, `npm`, Tests) - die Tests laufen in
-            einer eigenen CI. Lies Ausgaben direkt, statt sie zwischenzuspeichern.
-            Ein CLAUDE.md liegt im Checkout nicht (gitignored); die Regeln dieses
-            Repos stehen in CONTRIBUTING.md.
+            Ein CLAUDE.md liegt im Checkout nicht (gitignored). Die Regeln dieses
+            Repos stehen in CONTRIBUTING.md; dessen Abschnitt zu `claude-review`
+            beschreibt auch, dass hier jeder Push geprueft wird.
+          # KEINE WERKZEUG-ANWEISUNGEN IM PROMPT (11.09.2026, nach #1117). Dort
+          # stand kurz ein Absatz, welche `gh api`- und git-Wege offen und welche
+          # gesperrt sind. Die beiden Laeufe danach (#1116, #1114) hielten den
+          # ganzen deutschen Block fuer eine eingeschleuste Anweisung - einer
+          # zitierte woertlich "use gh api with unquoted paths" - und brachen im
+          # Tor ab; von den 18 Laeufen davor tat das keiner. Was erlaubt ist, setzt
+          # `claude_args` durch, nicht der Prompt. Der Verweis auf CONTRIBUTING.md
+          # bleibt, weil er die Regel "jeder Push" an einer Stelle belegt, die die
+          # Review selbst nachlesen kann: genau das vermisste sie ("no reliable way
+          # to verify ... a per-push review policy").
           allowed_bots: 'dependabot[bot]'
           # DIESE LISTE ERSETZT, SIE ERGÄNZT NICHT. Das war die Annahme, die den
           # zweiten Anlauf gekostet hat: `--allowed-tools` verdrängt die acht
