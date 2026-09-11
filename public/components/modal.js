@@ -335,9 +335,16 @@ function onEscape(e) {
 // Swipe-to-Close (Mobile)
 // --------------------------------------------------------
 
+// Beruehrungs-Schlupf der Wischgeste, in BEIDE Richtungen derselbe: unterhalb
+// davon entscheidet sie weder "Sheet ziehen" noch "Inhalt scrollen".
+const SHEET_SWIPE_SLOP_PX = 10;
+
 function _wireSheetSwipe(panel) {
   let startY = 0;
   let dragging = false;
+  // Hat dieser Finger das Sheet schon nach unten gezogen? Erst dann gehört eine
+  // Aufwärtsbewegung zum Zug; davor ist sie Scrollen des Inhalts (#981).
+  let pulled = false;
 
   // Scroll position is now on the body, not the panel itself
   const scrollBody = panel.querySelector('.modal-panel__body');
@@ -351,15 +358,43 @@ function _wireSheetSwipe(panel) {
     if (!isHandleZone && !isScrolledToTop) return;
     startY = touchY;
     dragging = true;
+    pulled = false;
   }, { passive: true });
 
   panel.addEventListener('touchmove', (e) => {
     if (!dragging) return;
     const dy = e.touches[0].clientY - startY;
-    if (dy < 0) { panel.style.transform = 'translateY(0)'; return; } // Aufwärts: Panel zurücksetzen, dragging bleibt aktiv
-    // Erst ab 10px Bewegung animieren: Verhindert winzige Transforms durch
+    if (dy < 0) {
+      // RICHTUNGSSPERRE (#981). Ein frisch geöffneter Dialog steht oben, also
+      // begann JEDE Wischgeste im Inhalt als verfolgter Zug, und der schrieb
+      // bei jedem Aufwärts-Frame `translateY(0)` ans Panel. Solange die
+      // Einfahranimation das Panel hält (`forwards`), aendert das nichts; mit
+      // "Bewegung reduzieren" gibt es keine Animation, das Inline-transform
+      // wirkt, und iOS bricht das Scrollen des Inhalts ab - gemessen im
+      // Simulator: 0 bis 30 px statt 500 bis 675 px fuer dieselbe Geste.
+      // Aufwärts, bevor das Sheet gezogen wurde, ist deshalb kein Zug: die
+      // Geste gibt ab und fasst das Panel nicht an.
+      //
+      // Aber erst jenseits derselben Schwelle, die abwärts gilt: ein Finger
+      // zittert beim Aufsetzen, und ein einzelner Pixel nach oben durfte eine
+      // gewollte Schliessgeste nicht verwerfen. Innerhalb der Schwelle
+      // passiert nichts - kein Abbruch, kein Schreibzugriff.
+      if (!pulled) {
+        if (dy < -SHEET_SWIPE_SLOP_PX) dragging = false;
+        return;
+      }
+      // Ein begonnener Zug bleibt verfolgt, wenn der Finger zurückkehrt - sonst
+      // endete touchend ohne Rücksetzen und das Panel stünde verschoben
+      // (b7c0312c). Zurückgesetzt wird einmal, nicht in jedem Frame.
+      if (panel.style.transform) panel.style.transform = '';
+      return;
+    }
+    // Erst ab der Schwelle animieren: Verhindert winzige Transforms durch
     // normale Taps, die danach zurückgesetzt werden müssten.
-    if (dy > 10) panel.style.transform = `translateY(${(dy - 10) * 0.6}px)`;
+    if (dy > SHEET_SWIPE_SLOP_PX) {
+      pulled = true;
+      panel.style.transform = `translateY(${(dy - SHEET_SWIPE_SLOP_PX) * 0.6}px)`;
+    }
   }, { passive: true });
 
   panel.addEventListener('touchend', (e) => {
@@ -377,6 +412,9 @@ function _wireSheetSwipe(panel) {
     }
   });
 }
+
+/** Nur fuer Tests: die Geste ohne echtes Panel treiben (#981). */
+export const __test = { wireSheetSwipe: _wireSheetSwipe };
 
 // --------------------------------------------------------
 // Suspend/Restore für Dialoge über einem offenen Modal (Audit 1.5)
