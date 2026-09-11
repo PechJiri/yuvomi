@@ -19,10 +19,105 @@ import { householdTimeZone } from '../utils/timezone.js';
 import * as db from '../db.js';
 import { nearestIcalColorName } from '../utils/ical-color.js';
 import { outboundEvent } from './outbound-dtstart.js';
+import { upsertExternalCalendar } from './external-calendars.js';
 
 const log = createLogger('CalDAVOutbound');
 
 const label = (source) => (source === 'apple' ? 'Apple' : 'CalDAV');
+
+/**
+ * Zieht die Zeile nach einem Umzug auf den Zielkalender und das dort angelegte
+ * Objekt nach - wie `applyMove` bei Google.
+ *
+ * Ohne das zeigen calendar_ref_id und external_object_url bis zum nächsten
+ * Inbound-Lauf auf die Quelle, deren Objekt gerade gelöscht wurde. Ein Löschen in
+ * diesem Fenster ginge per DELETE an die tote URL, deren 404 den Tombstone als
+ * erledigt verwirft, und der nächste Lauf importierte den Termin aus dem Ziel neu;
+ * eine Bearbeitung liefe ebenso ins 404 und fiele weg.
+ *
+ * Name und Farbe kommen aus der Kontoauswahl, also dieselben Werte, die der
+ * Inbound schreibt: der Helfer überschreibt beide, und ein null hätte die Farbe
+ * einer bestehenden Kalenderzeile bis dahin gelöscht.
+ */
+function applyMove(eventId, source, calendarUrl, destCal, objectUrl) {
+  const conn = db.get();
+  const selected = conn.prepare(
+    'SELECT calendar_name, calendar_color FROM caldav_calendar_selection WHERE calendar_url = ? LIMIT 1'
+  ).get(calendarUrl);
+  const known = selected ? null : conn.prepare(
+    'SELECT name, color FROM external_calendars WHERE source = ? AND external_id = ?'
+  ).get(source, calendarUrl);
+
+  const calRefId = upsertExternalCalendar(
+    source, calendarUrl,
+    selected?.calendar_name || known?.name || destCal.displayName || calendarUrl,
+    selected ? selected.calendar_color : (known?.color ?? null),
+  );
+  conn.prepare(
+    'UPDATE calendar_events SET calendar_ref_id = ?, external_object_url = ? WHERE id = ?'
+  ).run(calRefId, objectUrl, eventId);
+}
+
+/**
+ * Hat der Nutzer den Termin gelöscht, während sein Umzug lief? Dann steht der
+ * Tombstone der Löschroute für genau das Objekt in der Quelle - über dessen URL,
+ * bei Altbestand ohne gespeicherte URL über den Quellkalender.
+ *
+ * Eine fehlende Zeile allein sagt das nicht. Das Aufräumen eines abgewählten
+ * Kalenders, das Trennen eines Kontos und der Prune löschen ebenfalls lokal, und
+ * zwar ausdrücklich, ohne den Anbieter anzufassen (calendar-prune.js). Ein
+ * Tombstone für die Kopie im Ziel löschte dort einen Termin, den andere Clients
+ * derselben Familie weiter sehen sollen.
+ *
+ * Offen bleibt: räumt ein paralleler Durchgang den Tombstone der Quelle ab, bevor
+ * der Umzug hier ankommt, fehlt das Signal, und die Kopie im Ziel bleibt stehen.
+ * Das schliesst erst eine Serialisierung der ausgehenden Arbeit.
+ */
+function deletedByUser(source, uid, sourceObjectUrl, sourceCalendarUrl) {
+  return !!db.get().prepare(`
+    SELECT 1 FROM calendar_pending_deletions
+    WHERE source = ? AND event_external_id = ?
+      AND (object_url = ? OR (object_url IS NULL AND calendar_external_id = ?))
+  `).get(source, uid, sourceObjectUrl, sourceCalendarUrl);
+}
+
+/**
+ * Schliesst die ausgehende Arbeit eines Termins nach dem Provider-Aufruf ab.
+ *
+ * Zwischen dem Nachladen vor dem Aufruf und hier liegen awaits. Trifft in dieser
+ * Zeit eine Bearbeitung ein, setzt die Route outbound_dirty erneut, und ein
+ * pauschales clearOutbound löschte genau diese Markierung: beim Server läge der
+ * ältere Stand, und der nächste Inbound überschriebe die neuere lokale Änderung.
+ * Erledigt ist deshalb nur, was hinausging - verglichen an den gespiegelten
+ * Feldern und an dem Umzug, den dieser Aufruf ausgeführt hat.
+ *
+ * @param {object}      sent           die Zeile, aus der der Patch gebaut wurde
+ * @param {string|null} handledMoveTo  der Umzug, den dieser Aufruf erledigt hat
+ */
+function settleOutbound(sent, handledMoveTo = null) {
+  const now = outbound.reloadEvent(sent.id);
+  if (!now) return;
+  const edited = outbound.mirroredFieldsChanged(sent, now);
+  let nextMove = (now.outbound_move_to ?? null) !== handledMoveTo ? now.outbound_move_to : null;
+  // Einen Zielwechsel während eines Umzugs hat die Route noch gegen die QUELLE
+  // gerechnet: calendar_ref_id wandert erst mit applyMove. Ein Rückweg dorthin
+  // sah wie "kein Umzug" aus und liess die alte Vormerkung stehen, die hier als
+  // erledigt gälte. Massgeblich ist dann das Ziel der Anfrage, gegen den Kalender,
+  // in dem der Termin jetzt liegt.
+  if (handledMoveTo && now.target_caldav_calendar_url !== sent.target_caldav_calendar_url) {
+    const target = now.target_caldav_calendar_url || null;
+    nextMove = target && target !== handledMoveTo ? target : null;
+  }
+  if (!edited && !nextMove) {
+    outbound.clearOutbound(sent.id);
+    return;
+  }
+  db.get().prepare(`
+    UPDATE calendar_events
+    SET outbound_dirty = ?, outbound_move_to = ?, outbound_attempts = 0
+    WHERE id = ?
+  `).run(edited ? 1 : 0, nextMove, sent.id);
+}
 
 /**
  * Kalender-Properties eines lokalen Termins für patchICSEvent.
@@ -275,9 +370,15 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
         outbound.clearOutboundMove(event.id);
       } else {
         try {
+          const filename = filenameFromUrl(url, event.external_calendar_id);
+          // tsdav löst den Dateinamen relativ zur Kalender-URL auf. Ohne Schrägstrich
+          // am Ende ersetzte er deren letztes Segment, und das Objekt landete neben
+          // der Collection statt darin - wie der Upload-Pfad als Collection behandeln.
+          const collectionUrl = String(destCal.url).replace(/\/?$/, '/');
+          const objectUrl = new URL(filename, collectionUrl).href;
           await client.createCalendarObject({
-            calendar:   destCal,
-            filename:   filenameFromUrl(url, event.external_calendar_id),
+            calendar:   { ...destCal, url: collectionUrl },
+            filename,
             iCalString: patched,
           });
           // Erst nach erfolgreichem Anlegen löschen: scheitert das Löschen, steht
@@ -287,7 +388,21 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
           } catch (err) {
             log.error(`[${label(source)}] Event ${event.id} was copied to ${moveTo} but could not be removed from its old calendar:`, err.message);
           }
-          outbound.clearOutbound(event.id);
+          // Während der beiden awaits lokal entfernt. Hat der Nutzer gelöscht, gilt
+          // der Tombstone der Route nur der Quelle; die Kopie im Ziel bliebe stehen,
+          // und der nächste Lauf importierte den Termin von dort neu. Ein Aufräumen
+          // dagegen soll den Anbieter nicht anfassen - siehe deletedByUser.
+          if (!outbound.reloadEvent(event.id)) {
+            if (deletedByUser(source, event.external_calendar_id, url, known.calendarUrl)) {
+              outbound.queueDeletion({
+                source, calendarExternalId: moveTo, eventExternalId: event.external_calendar_id, objectUrl,
+              });
+              log.warn(`[${label(source)}] Event ${event.id} was deleted during its move, queued the deletion of its copy in ${moveTo}.`);
+            }
+            continue;
+          }
+          applyMove(event.id, source, moveTo, destCal, objectUrl);
+          settleOutbound(fresh, moveTo);
           done++;
           continue; // der Patch ist mit dem Anlegen bereits geschrieben
         } catch (err) {
@@ -305,7 +420,7 @@ export async function processPendingUpdates(client, source, objectIndex, calenda
       await client.updateCalendarObject({
         calendarObject: { url, etag: known.etag, data: patched },
       });
-      outbound.clearOutbound(event.id);
+      settleOutbound(fresh);
       done++;
     } catch (err) {
       outbound.handleUpdateError(err, event, 'update', label(source));
