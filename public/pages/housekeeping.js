@@ -528,6 +528,7 @@ function renderTasks(content) {
         window.yuvomi?.showToast(t('housekeeping.taskDeletedToast'), 'success');
         await loadData();
         renderTasks(content);
+        refocusAfterRender();
       } catch (err) {
         window.yuvomi?.showToast(err.message, 'danger');
       }
@@ -770,6 +771,7 @@ function renderStaff(content) {
         await loadData();
         await loadStaffVisits();
         renderStaff(content);
+        refocusAfterRender();
       } catch (err) {
         window.yuvomi?.showToast(err.message, 'danger');
       }
