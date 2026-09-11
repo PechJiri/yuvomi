@@ -948,7 +948,9 @@
         "filtersReset": "Tüm filtreleri kaldır",
         "filtersDisplay": "Görünüm",
         "agendaDayEmpty": "Planlanmış bir şey yok",
-        "openInMap": "Haritada aç"
+        "openInMap": "Haritada aç",
+        "filtersSources": "Takvimler",
+        "filterUnassigned": "Atanmamış"
     },
     "noteCategories": {
         "permissionLabel": "Ev notu kategorilerini yönet"

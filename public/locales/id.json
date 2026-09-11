@@ -960,7 +960,9 @@
         "filtersReset": "Hapus semua filter",
         "filtersDisplay": "Tampilan",
         "agendaDayEmpty": "Tidak ada rencana",
-        "openInMap": "Buka di Maps"
+        "openInMap": "Buka di Maps",
+        "filtersSources": "Kalender",
+        "filterUnassigned": "Belum ditugaskan"
     },
     "noteCategories": {
         "permissionLabel": "Kelola kategori catatan rumah tangga"

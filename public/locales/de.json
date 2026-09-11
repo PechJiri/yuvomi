@@ -960,7 +960,9 @@
         "filtersReset": "Alle Filter aufheben",
         "filtersDisplay": "Darstellung",
         "agendaDayEmpty": "Nichts geplant",
-        "openInMap": "In Maps öffnen"
+        "openInMap": "In Maps öffnen",
+        "filtersSources": "Kalender",
+        "filterUnassigned": "Nicht zugewiesen"
     },
     "noteCategories": {
         "permissionLabel": "Gemeinsame Notizkategorien verwalten"

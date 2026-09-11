@@ -948,7 +948,9 @@
         "filtersReset": "सभी फ़िल्टर हटाएँ",
         "filtersDisplay": "प्रदर्शन",
         "agendaDayEmpty": "कुछ भी नियोजित नहीं",
-        "openInMap": "मानचित्र में खोलें"
+        "openInMap": "मानचित्र में खोलें",
+        "filtersSources": "कैलेंडर",
+        "filterUnassigned": "किसी को नहीं सौंपे गए"
     },
     "noteCategories": {
         "permissionLabel": "घर की नोट श्रेणियाँ प्रबंधित करें"

@@ -948,7 +948,9 @@
         "filtersReset": "Rensa alla filter",
         "filtersDisplay": "Visning",
         "agendaDayEmpty": "Inget planerat",
-        "openInMap": "Öppna i Kartor"
+        "openInMap": "Öppna i Kartor",
+        "filtersSources": "Kalendrar",
+        "filterUnassigned": "Ej tilldelade"
     },
     "noteCategories": {
         "permissionLabel": "Hantera hushållets anteckningskategorier"

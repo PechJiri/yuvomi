@@ -960,7 +960,9 @@
         "filtersReset": "Alisin ang lahat ng filter",
         "filtersDisplay": "Pagpapakita",
         "agendaDayEmpty": "Walang nakaplano",
-        "openInMap": "Buksan sa Maps"
+        "openInMap": "Buksan sa Maps",
+        "filtersSources": "Mga kalendaryo",
+        "filterUnassigned": "Walang nakatalaga"
     },
     "noteCategories": {
         "permissionLabel": "Pamahalaan ang mga kategorya ng tala ng sambahayan"

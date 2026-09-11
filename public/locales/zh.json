@@ -948,7 +948,9 @@
         "filtersReset": "清除所有筛选",
         "filtersDisplay": "显示",
         "agendaDayEmpty": "没有安排",
-        "openInMap": "在地图中打开"
+        "openInMap": "在地图中打开",
+        "filtersSources": "日历",
+        "filterUnassigned": "未分配"
     },
     "noteCategories": {
         "permissionLabel": "管理家庭笔记分类"

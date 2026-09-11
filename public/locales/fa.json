@@ -960,7 +960,9 @@
         "filtersReset": "برداشتن همه فیلترها",
         "filtersDisplay": "نمایش",
         "agendaDayEmpty": "چیزی برنامه‌ریزی نشده",
-        "openInMap": "باز کردن در نقشه"
+        "openInMap": "باز کردن در نقشه",
+        "filtersSources": "تقویم‌ها",
+        "filterUnassigned": "واگذارنشده"
     },
     "noteCategories": {
         "permissionLabel": "مدیریت دسته‌بندی‌های یادداشت خانوادگی"

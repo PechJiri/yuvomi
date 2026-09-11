@@ -948,7 +948,9 @@
         "filtersReset": "Rimuovi tutti i filtri",
         "filtersDisplay": "Visualizzazione",
         "agendaDayEmpty": "Niente in programma",
-        "openInMap": "Apri in Maps"
+        "openInMap": "Apri in Maps",
+        "filtersSources": "Calendari",
+        "filterUnassigned": "Non assegnati"
     },
     "noteCategories": {
         "permissionLabel": "Gestisci le categorie delle note di casa"

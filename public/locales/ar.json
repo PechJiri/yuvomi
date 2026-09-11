@@ -948,7 +948,9 @@
         "filtersReset": "إزالة كل عوامل التصفية",
         "filtersDisplay": "العرض",
         "agendaDayEmpty": "لا شيء مُخطط",
-        "openInMap": "فتح في الخرائط"
+        "openInMap": "فتح في الخرائط",
+        "filtersSources": "التقويمات",
+        "filterUnassigned": "غير مُسندة"
     },
     "noteCategories": {
         "permissionLabel": "إدارة فئات ملاحظات الأسرة"

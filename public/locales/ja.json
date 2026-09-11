@@ -948,7 +948,9 @@
         "filtersReset": "すべてのフィルターを解除",
         "filtersDisplay": "表示",
         "agendaDayEmpty": "予定なし",
-        "openInMap": "地図で開く"
+        "openInMap": "地図で開く",
+        "filtersSources": "カレンダー",
+        "filterUnassigned": "割り当てなし"
     },
     "noteCategories": {
         "permissionLabel": "世帯のメモカテゴリーを管理"

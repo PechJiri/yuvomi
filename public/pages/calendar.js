@@ -342,6 +342,13 @@ const SCHEDULE_DISPLAY_KEY = 'yuvomi:calendar:schedule-display';
 const MONTH_TITLES_KEY = 'yuvomi:calendar:month-titles';
 const ASSIGNED_TO_ME_KEY  = 'yuvomi:calendar:assignedToMe';
 const PEOPLE_FILTER_KEY   = 'yuvomi:calendar:people';
+// Ausgeblendete Kalender und Abos (#1064), geraeteweit wie die Ebenen. Mit Name
+// und Farbe gemerkt: eine ausgeblendete Quelle muss im Blatt auch dann wieder
+// einzuschalten sein, wenn im geladenen Zeitraum kein Termin von ihr liegt.
+const HIDDEN_SOURCES_KEY  = 'yuvomi:calendar:sources-hidden';
+// Der Eintrag „Nicht zugewiesen" auf der Personenachse (#1064). Ein String,
+// damit er mit keiner Nutzer-ID zusammenfallen kann.
+const UNASSIGNED = 'none';
 
 /* DIE FEIERTAGSFARBEN, WENN DER HAUSHALT KEINE GEWAEHLT HAT.
  *
@@ -620,6 +627,7 @@ let state = {
   // `assigned_users`, ihre Farbe gehoert ihr, und in einem FAMILIENplaner ist
   // „wessen Termin ist das" die Frage, die der Filter beantworten soll.
   people:        new Set(),
+  hiddenSources: new Map(), // Quellschluessel -> { name, color }, siehe calendarSources()
 };
 let _container = null;
 const calendarLoads = createCalendarLoadCoordinator();
@@ -1020,13 +1028,17 @@ function belongsToMe(item) {
  * herausfuehrt: wer alle Haekchen entfernt, saehe nichts mehr und haette
  * ausserhalb des Blatts keinen Hinweis darauf, warum.
  *
- * Termine OHNE Zuweisung fallen bei aktivem Filter heraus. Das ist Absicht:
- * der Filter beantwortet „wessen Termin", und ein Termin ohne Person ist
- * keine Antwort darauf. Der Rueckweg steht im Blatt.
+ * Termine OHNE Zuweisung haben seit #1064 einen eigenen Eintrag auf dieser
+ * Achse: `UNASSIGNED`, die Antwort „niemandes" auf „wessen Termin". Steht er in
+ * der Auswahl, bleiben sie stehen; allein gewaehlt zeigt er nur sie. Ein Filter,
+ * der VOR #1064 gespeichert wurde, kennt den Eintrag nicht und behaelt damit
+ * sein Verhalten: ein Termin ohne Person faellt heraus.
  */
 function matchesPeopleFilter(item) {
   if (state.people.size === 0) return true;
-  return (item.assigned_users ?? []).some((u) => state.people.has(u.id));
+  const zugewiesen = item.assigned_users ?? [];
+  if (zugewiesen.length === 0) return state.people.has(UNASSIGNED);
+  return zugewiesen.some((u) => state.people.has(u.id));
 }
 
 /**
@@ -1044,11 +1056,53 @@ function passesPersonFilters(item) {
   return belongsToMe(item) && matchesPeopleFilter(item);
 }
 
+/**
+ * Die Quelle eines Termins als Schluessel, oder null fuer einen eigenen (#1064).
+ *
+ * CalDAV-, Google- und Apple-Kalender haengen ueber `calendar_ref_id` an
+ * `external_calendars`, ICS-Abos ueber `subscription_id`. Outlook schreibt nur
+ * hinaus und bringt keine Termine mit, die eine Quelle haetten.
+ */
+function eventSourceKey(ev) {
+  if (ev?.subscription_id) return `sub:${ev.subscription_id}`;
+  if (ev?.calendar_ref_id) return `cal:${ev.calendar_ref_id}`;
+  return null;
+}
+
+/** True, solange die Quelle des Termins nicht ausgeblendet ist. Eigene Termine haben keine. */
+function passesSourceFilter(item) {
+  const key = eventSourceKey(item);
+  return !key || !state.hiddenSources?.has(key);
+}
+
+/**
+ * Die Kalender und Abos fuer das Filterblatt (#1064).
+ *
+ * Aus den geladenen Terminen, dazu jede ausgeblendete Quelle, auch ohne Termin
+ * im Zeitraum - sonst liesse sich nur zurueckholen, was gerade zu sehen waere.
+ * Keine eigene Route: Name und Farbe liefert der Server an jedem Termin
+ * (`cal_name`, `cal_color`), und die Verwaltungsrouten der Quellen sind
+ * `requireAdmin` - ein Mitglied kaeme dort nicht durch.
+ */
+function calendarSources() {
+  const quellen = new Map();
+  for (const ev of state.events ?? []) {
+    const key = eventSourceKey(ev);
+    if (!key || quellen.has(key)) continue;
+    quellen.set(key, { key, name: ev.cal_name || '', color: ev.cal_color || null });
+  }
+  for (const [key, merk] of state.hiddenSources ?? []) {
+    if (!quellen.has(key)) quellen.set(key, { key, name: merk.name || '', color: merk.color || null });
+  }
+  return [...quellen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Wie viele Filter gerade etwas wegnehmen - die Zahl am Filterknopf. */
 function activeFilterCount() {
   let n = 0;
   if (state.assignedToMe) n += 1;
   if (state.people.size > 0) n += 1;
+  if (state.hiddenSources?.size > 0) n += 1;
   const hp = state.holidayPrefs ?? {};
   if (hp.holiday_show_public && !state.layerHolidays) n += 1;
   if (hp.holiday_show_school && !state.layerSchool) n += 1;
@@ -1087,7 +1141,9 @@ function eventsOnDay(dateStr) {
         return start <= dateStr && end >= dateStr;
       });
   const layered = state.layerBirthdays ? list : list.filter(isVisibleLayer);
-  return layered.filter(passesPersonFilters);
+  // Quelle UND Person (#1064), wie Ebenen und Personen schon zusammenwirken.
+  // Hier und nicht in passesPersonFilters: Aufgaben und Schichten haben keine Quelle.
+  return layered.filter((e) => passesSourceFilter(e) && passesPersonFilters(e));
 }
 
 /**
@@ -1476,6 +1532,7 @@ export async function render(container, { user }) {
   state.user          = user ?? null;
   state.assignedToMe  = localStorage.getItem(ASSIGNED_TO_ME_KEY) === '1';
   state.people = restorePeopleFilter(state.users);
+  state.hiddenSources = restoreHiddenSources();
 
   renderToolbar();
   renderView();
@@ -2905,12 +2962,23 @@ function personInitials(name) {
 function openCalendarFilters() {
   const layers = availableLayers();
   const people = state.users ?? [];
+  const sources = calendarSources();
 
   const layerRows = layers.map((row) => toggleRowHtml({
     label: row.label,
     checked: row.checked,
     swatchColor: row.color,
     attrs: { 'data-filter-layer': row.key },
+  })).join('');
+
+  // Je Kalender und Abo ein Schalter (#1064), mit der Farbe, die seine Termine
+  // tragen. Neben den Ebenen, nicht in ihnen: eine Ebene ist eine Sorte Eintrag,
+  // eine Quelle ist, woher ein gewoehnlicher Termin kommt.
+  const sourceRows = sources.map((s) => toggleRowHtml({
+    label: s.name || t('calendar.detailCalendar'),
+    checked: !state.hiddenSources.has(s.key),
+    swatchColor: s.color,
+    attrs: { 'data-filter-source': s.key },
   })).join('');
 
   // Der Anzeigemodus des Schichtplans ist KEIN Filter - er nimmt nichts weg,
@@ -2962,6 +3030,14 @@ function openCalendarFilters() {
     attrs: { 'data-filter-person': String(u.id) },
   })).join('');
 
+  // „Nicht zugewiesen" als Eintrag der Personenachse (#1064): dieselbe Lesart
+  // wie eine Person - leeres Set heisst alle, also steht er dann auf „an".
+  const unassignedRow = people.length ? toggleRowHtml({
+    label: t('calendar.filterUnassigned'),
+    checked: state.people.size === 0 || state.people.has(UNASSIGNED),
+    attrs: { 'data-filter-person': UNASSIGNED },
+  }) : '';
+
   const content = `
     <div class="cal-filters">
       ${layerRows ? `
@@ -2970,11 +3046,18 @@ function openCalendarFilters() {
           ${layerRows}
         </section>
       ` : ''}
+      ${sourceRows ? `
+        <section class="cal-filters__group">
+          <h3 class="cal-filters__heading">${t('calendar.filtersSources')}</h3>
+          ${sourceRows}
+        </section>
+      ` : ''}
       ${(meRow || personRows) ? `
         <section class="cal-filters__group">
           <h3 class="cal-filters__heading">${t('calendar.filtersPeople')}</h3>
           ${meRow}
           ${personRows}
+          ${unassignedRow}
         </section>
       ` : ''}
       ${(scheduleDisplayRow || monthTitlesRow) ? `
@@ -3020,19 +3103,31 @@ function openCalendarFilters() {
     } else if (input.dataset.filterMine) {
       state.assignedToMe = input.checked;
       try { localStorage.setItem(ASSIGNED_TO_ME_KEY, input.checked ? '1' : '0'); } catch {}
+    } else if (input.dataset.filterSource) {
+      const key = input.dataset.filterSource;
+      if (input.checked) {
+        state.hiddenSources.delete(key);
+      } else {
+        const quelle = sources.find((s) => s.key === key);
+        state.hiddenSources.set(key, { name: quelle?.name ?? '', color: quelle?.color ?? null });
+      }
+      persistHiddenSources();
     } else if (input.dataset.filterPerson) {
-      const id = Number(input.dataset.filterPerson);
+      const raw = input.dataset.filterPerson;
+      const id = raw === UNASSIGNED ? UNASSIGNED : Number(raw);
       // Der Sprung aus „alle" heraus: das erste Abwaehlen macht aus dem leeren
       // Set die Menge der UEBRIGEN. Ohne diesen Schritt haette ein Klick auf
-      // ein Haekchen, das „alle" bedeutet, gar nichts getan.
+      // ein Haekchen, das „alle" bedeutet, gar nichts getan. „Nicht zugewiesen"
+      // gehoert zu den uebrigen (#1064).
       if (state.people.size === 0) {
         for (const u of state.users ?? []) state.people.add(u.id);
+        state.people.add(UNASSIGNED);
       }
       if (input.checked) state.people.add(id);
       else state.people.delete(id);
       // Wieder ALLE gewaehlt heisst wieder „kein Filter" - sonst bliebe ein
       // Filter aktiv, der nichts wegnimmt, und der Zaehler am Knopf loege.
-      if (state.people.size === (state.users ?? []).length) state.people.clear();
+      if (state.people.size === (state.users ?? []).length + 1) state.people.clear();
       persistPeopleFilter();
     } else {
       return;
@@ -3049,6 +3144,8 @@ function openCalendarFilters() {
     state.layerBirthdays = true;
     state.assignedToMe = false;
     state.people.clear();
+    state.hiddenSources.clear();
+    persistHiddenSources();
     try {
       localStorage.setItem(LAYER_HOLIDAYS_KEY, 'true');
       localStorage.setItem(LAYER_SCHOOL_KEY, 'true');
@@ -3075,10 +3172,13 @@ function openCalendarFilters() {
  */
 function restorePeopleFilter(users) {
   const known = new Set((users ?? []).map((u) => u.id));
+  // „Nicht zugewiesen" gehoert zur Achse (#1064) - ohne diesen Eintrag fiele er
+  // beim Laden als unbekannte ID weg.
+  known.add(UNASSIGNED);
   let stored;
   try { stored = JSON.parse(localStorage.getItem(PEOPLE_FILTER_KEY) ?? '[]'); } catch { stored = []; }
   if (!Array.isArray(stored)) return new Set();
-  const valid = stored.map(Number).filter((id) => known.has(id));
+  const valid = stored.map((id) => (id === UNASSIGNED ? id : Number(id))).filter((id) => known.has(id));
   if (valid.length === 0 || valid.length === known.size) return new Set();
   return new Set(valid);
 }
@@ -3087,6 +3187,36 @@ function persistPeopleFilter() {
   try {
     if (state.people.size === 0) localStorage.removeItem(PEOPLE_FILTER_KEY);
     else localStorage.setItem(PEOPLE_FILTER_KEY, JSON.stringify([...state.people]));
+  } catch {}
+}
+
+/**
+ * Die ausgeblendeten Quellen aus dem Geraet (#1064).
+ *
+ * Anders als beim Personenfilter gibt es hier keine Liste, gegen die sich
+ * pruefen liesse: die Quellen kennt die Seite nur ueber die geladenen Termine.
+ * Eine inzwischen geloeschte Quelle bleibt deshalb unter ihrem gemerkten Namen
+ * im Blatt stehen, bis jemand sie wieder einschaltet oder alle Filter aufhebt -
+ * sichtbar und mit Rueckweg, statt still weiter zu filtern.
+ */
+function restoreHiddenSources() {
+  let stored;
+  try { stored = JSON.parse(localStorage.getItem(HIDDEN_SOURCES_KEY) ?? '[]'); } catch { stored = []; }
+  const quellen = new Map();
+  if (!Array.isArray(stored)) return quellen;
+  for (const eintrag of stored) {
+    if (!eintrag || !/^(?:cal|sub):\d+$/.test(String(eintrag.key))) continue;
+    // Die Farbe landet als Scheibe im Blatt; aus dem Speicher nur, was eine Farbe ist.
+    const color = /^#[0-9a-f]{3,8}$/i.test(String(eintrag.color ?? '')) ? eintrag.color : null;
+    quellen.set(eintrag.key, { name: String(eintrag.name ?? ''), color });
+  }
+  return quellen;
+}
+
+function persistHiddenSources() {
+  try {
+    if (state.hiddenSources.size === 0) localStorage.removeItem(HIDDEN_SOURCES_KEY);
+    else localStorage.setItem(HIDDEN_SOURCES_KEY, JSON.stringify([...state.hiddenSources].map(([key, merk]) => ({ key, ...merk }))));
   } catch {}
 }
 
@@ -3332,6 +3462,13 @@ export const __test = {
   eventsOnDay,
   passesPersonFilters,
   eventMapUrl,
+  eventSourceKey,
+  passesSourceFilter,
+  calendarSources,
+  restorePeopleFilter,
+  restoreHiddenSources,
+  activeFilterCount,
+  UNASSIGNED,
   eventEndDate,
   isMultiDayEvent,
   eventWhenText,

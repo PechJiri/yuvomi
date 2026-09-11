@@ -948,7 +948,9 @@
         "filtersReset": "Clear all filters",
         "filtersDisplay": "Display",
         "agendaDayEmpty": "Nothing planned",
-        "openInMap": "Open in Maps"
+        "openInMap": "Open in Maps",
+        "filtersSources": "Calendars",
+        "filterUnassigned": "Unassigned"
     },
     "noteCategories": {
         "permissionLabel": "Manage household note categories"

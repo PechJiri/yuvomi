@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The calendar filter can hide a connected calendar or subscription, and show the events nobody
+  is assigned to** (#1064). The filter sheet lists every calendar and ICS subscription with events
+  in the loaded range, each with its colour and a switch. Hiding one removes its events from all
+  four views and the agenda, remembered on the device like the layers. A hidden calendar stays in
+  the list under its name even when none of its events is on screen, so it can always be switched
+  back on. The person axis gains "Unassigned": on its own it shows only the events and tasks nobody
+  is assigned to, together with people it adds them. A person filter saved before this update keeps
+  its behaviour - it does not contain the new entry, so unassigned events stay out, as they did.
+
 - **An event's location opens in a map** (#1110, from discussion #1047). The event detail carries
   an "Open in Maps" action whenever the event has a location; it opens an OpenStreetMap search for
   that text in a new tab, the same search Contacts already uses for an address. It is an explicit
