@@ -34,6 +34,23 @@ test('die Subagenten laufen synchron', () => {
     'die Anweisung, Subagenten synchron zu fahren, fehlt im Prompt');
 });
 
+test('der Prompt traegt keine Werkzeug-Anweisungen, nur den Verweis auf CONTRIBUTING.md', () => {
+  // 11.09.2026: ein Absatz ueber offene und gesperrte `gh api`- und git-Wege liess
+  // die Review den ganzen Prompt als eingeschleust verwerfen (#1116, #1114; von
+  // den 18 Laeufen davor keiner). Was erlaubt ist, setzt `claude_args` durch. Der
+  // Verweis auf CONTRIBUTING.md bleibt - dort kann die Review die Regel "jeder
+  // Push" selbst nachlesen, und genau das vermisste sie.
+  const prompt = workflow.match(/prompt: \|\n((?:[ ]{12}.*\n|\n)+)/)?.[1] ?? '';
+  assert.ok(prompt.includes('/code-review:code-review'), 'der Prompt liess sich nicht lesen');
+  assert.doesNotMatch(prompt, /gh api|--allowed-tools|gesperrt|WERKZEUGE/i,
+    'Werkzeug-Anweisungen gehoeren in claude_args, nicht in den Prompt');
+  assert.match(prompt, /CONTRIBUTING\.md/, 'der Verweis auf die nachlesbare Regel fehlt');
+  // Der Checkout traegt die Fassung des PR - ein PR koennte den Widerspruch sonst
+  // selbst wieder einbauen (Review auf #1119). Massgeblich ist der Default-Branch.
+  assert.match(prompt, /github\.event\.repository\.default_branch/,
+    'der Prompt muss die Fassung auf dem Default-Branch fuer massgeblich erklaeren');
+});
+
 test('Skill und Task stehen in den erlaubten Werkzeugen', () => {
   // `--allowed-tools` ERSETZT die Liste des Plugins. Ohne `Skill` kann die
   // Review ihr eigenes Kommando nicht ausfuehren, ohne `Task` keinen einzigen

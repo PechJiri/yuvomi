@@ -262,27 +262,36 @@ failed first - the job goes red for ordinary reasons too (checkout, the action i
 GitHub API call), and only one specific failure is about the review staying silent.
 
 That one is the step **"Die Review muss gesprochen haben"**. It exists because for five PRs
-the check was green over a review that never happened. Its message names the two known
-causes; the second needs the job log, where `permission_denials_count` tells you *how many*
-tools were refused but not which - re-run with `show_full_output: true` to see the name.
+the check was green over a review that never happened. Its message says what it saw - refused
+tools, a run that stopped at the plugin's own gate, agents it started but never waited for -
+and is a lead for the job log, not a proven cause: a run can hit a refusal on the way and still
+stop for another reason. The log shows every tool call because `show_full_output` stays on, and
+that setting is not only for reading: the step needs the same stream to find the comment the
+run posted. The exact rules - including every case in which the review is skipped or silence
+stays green - live in `.github/workflows/claude-code-review.yml` and
+`.github/scripts/review-verdict.mjs`, and are not repeated here.
 
 **Do not add the tool in the PR that failed.** A PR touching
 `.github/workflows/claude-code-review.yml` makes the action skip itself (it only runs when
 the workflow matches the default branch) and makes this check stand aside, so it would turn
 green without any review having run. Report the denied tool instead and let a maintainer add
-it to `claude_args` on `main` - note that the list there **replaces** the review plugin's
-own, so existing entries have to stay.
+it to `claude_args` on `main` - note that the allowed list there **replaces** the review
+plugin's own, so existing entries have to stay, and that a second list denies the write forms
+of the read-only commands it allows.
 
 Once that has landed, **"Re-run jobs" on the old run will not pick it up.** A rerun replays
 the same workflow file at the same commit, so it hits the same denial and looks like the fix
 failed. The PR needs a fresh `pull_request` event to be evaluated against the new default
-branch: push to it, or merge `main` into the branch, or close and reopen it.
+branch: push to it, or merge `main` into the branch, or close and reopen it. A rerun does help
+when the refusal came from the path the review happened to take - reading earlier comments one
+way rather than another - because the next run may take a different one.
 
-One limit worth knowing: the check asks whether the PR carries *any* comment from the
-reviewer, not whether *this run* produced one. That is deliberate - the plugin looks for its
-own earlier comment and will not repeat itself on a later push - but it means a silent rerun
-on a PR that was already reviewed stays green. The assertion covers "this PR was never
-reviewed", not "every run reviewed it".
+**A later push is reviewed again.** The review does not stop because it already commented on
+an earlier push of the same PR: the workflow's prompt lifts that condition on purpose, since a
+green check over an unreviewed push is worse than a second review. A run that stops with
+"already reviewed this PR" has not reviewed the push it was started for, and the check turns red
+unless it finds that the push was reviewed some other way - also when that push only merged
+`main` into the branch.
 
 **If the maintainer stops.** There is one maintainer and no succession arrangement: nobody
 acquires rights to this repository automatically, and none are needed, because the MIT
