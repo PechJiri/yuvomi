@@ -2025,20 +2025,50 @@ test('#1064: beide Filter kommen gegen den Speicher geprueft zurueck', () => {
     assert(set.size === 1 && !set.has(UNASSIGNED), 'ein alter Filter bekommt den Eintrag nicht untergeschoben');
   });
   mitSpeicher({
-    'yuvomi:calendar:sources-hidden': JSON.stringify([
+    'yuvomi:calendar:sources-hidden:1': JSON.stringify([
       { key: 'sub:7', name: 'Abfallkalender', color: '#228844' },
       { key: 'cal:5', name: 'Arbeit', color: 'red;background:url(x)' },
       { key: 'fremd:1', name: 'x' },
       null,
     ]),
   }, () => {
-    const quellen = restoreHiddenSources();
+    const quellen = restoreHiddenSources(1);
     assert(quellen.size === 2 && quellen.has('sub:7') && quellen.has('cal:5'), 'nur gueltige Schluessel');
     assert(quellen.get('cal:5').color === null, 'aus dem Speicher nur, was eine Farbe ist');
   });
-  mitSpeicher({ 'yuvomi:calendar:sources-hidden': '{kaputt' }, () => {
-    assert(restoreHiddenSources().size === 0, 'ein kaputter Eintrag ist kein Filter');
+  mitSpeicher({ 'yuvomi:calendar:sources-hidden:1': '{kaputt' }, () => {
+    assert(restoreHiddenSources(1).size === 0, 'ein kaputter Eintrag ist kein Filter');
   });
+});
+
+// Codex-Review zu PR #1124: der Merker traegt Namen und Farben. Ein privates Abo
+// sieht nur, wer es angelegt hat - auf einem geteilten Browser stand sein Name
+// sonst im Filterblatt des naechsten Kontos.
+test('#1064: die ausgeblendeten Quellen gehoeren dem Nutzer, nicht dem Geraet', () => {
+  const { restoreHiddenSources, persistHiddenSources } = calendarHelpers;
+  mitSpeicher({ 'yuvomi:calendar:sources-hidden:1': JSON.stringify([{ key: 'sub:7', name: 'Privat', color: null }]) }, () => {
+    assert(restoreHiddenSources(1).get('sub:7')?.name === 'Privat', 'der eigene Merker kommt zurueck');
+    assert(restoreHiddenSources(2).size === 0, 'ein anderes Konto auf demselben Geraet sieht ihn nicht');
+    assert(restoreHiddenSources(null).size === 0, 'ohne angemeldeten Nutzer gibt es keinen');
+  });
+  mitSpeicher({ 'yuvomi:calendar:sources-hidden': JSON.stringify([{ key: 'sub:7', name: 'Alt', color: null }]) }, () => {
+    assert(restoreHiddenSources(1).size === 0, 'ein geraeteweiter Eintrag gehoert niemandem');
+  });
+  mitSpeicher({}, (daten) => {
+    mitFilterzustand({ user: { id: 3 }, hiddenSources: new Map([['sub:7', { name: 'Privat', color: null }]]) }, () => {
+      persistHiddenSources();
+    });
+    assert([...daten.keys()].join(',') === 'yuvomi:calendar:sources-hidden:3', `geschrieben unter dem Nutzer, war ${[...daten.keys()]}`);
+    mitFilterzustand({ user: null, hiddenSources: new Map([['cal:5', { name: 'Arbeit', color: null }]]) }, () => {
+      persistHiddenSources();
+    });
+    assert(daten.size === 1, 'ohne Nutzer wird nichts geschrieben');
+  });
+  // Die Funktion kann stimmen und der Aufrufer trotzdem keine ID uebergeben -
+  // dann kaeme nach jedem Laden ein leerer Filter heraus, und alles oben bliebe gruen.
+  const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
+  assert(/state\.hiddenSources = restoreHiddenSources\(state\.user\?\.id\);/.test(src),
+    'render() liest den Merker des angemeldeten Nutzers');
 });
 
 test('#1064: eine ausgeblendete Quelle zaehlt am Filterknopf als ein Filter', () => {

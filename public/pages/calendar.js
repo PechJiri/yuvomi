@@ -342,9 +342,12 @@ const SCHEDULE_DISPLAY_KEY = 'yuvomi:calendar:schedule-display';
 const MONTH_TITLES_KEY = 'yuvomi:calendar:month-titles';
 const ASSIGNED_TO_ME_KEY  = 'yuvomi:calendar:assignedToMe';
 const PEOPLE_FILTER_KEY   = 'yuvomi:calendar:people';
-// Ausgeblendete Kalender und Abos (#1064), geraeteweit wie die Ebenen. Mit Name
+// Ausgeblendete Kalender und Abos (#1064), auf dem Geraet und je Nutzer. Mit Name
 // und Farbe gemerkt: eine ausgeblendete Quelle muss im Blatt auch dann wieder
-// einzuschalten sein, wenn im geladenen Zeitraum kein Termin von ihr liegt.
+// einzuschalten sein, wenn im geladenen Zeitraum kein Termin von ihr liegt. Genau
+// deshalb nicht geraeteweit wie die Ebenen: ein privates Abo sieht nur, wer es
+// angelegt hat, und ein geteilter Browser zeigte seinen Namen sonst dem naechsten
+// Konto (Codex-Review zu #1124). Schluessel siehe hiddenSourcesKey().
 const HIDDEN_SOURCES_KEY  = 'yuvomi:calendar:sources-hidden';
 // Der Eintrag „Nicht zugewiesen" auf der Personenachse (#1064). Ein String,
 // damit er mit keiner Nutzer-ID zusammenfallen kann.
@@ -1553,7 +1556,7 @@ export async function render(container, { user }) {
   state.user          = user ?? null;
   state.assignedToMe  = localStorage.getItem(ASSIGNED_TO_ME_KEY) === '1';
   state.people = restorePeopleFilter(state.users);
-  state.hiddenSources = restoreHiddenSources();
+  state.hiddenSources = restoreHiddenSources(state.user?.id);
 
   renderToolbar();
   renderView();
@@ -3211,8 +3214,13 @@ function persistPeopleFilter() {
   } catch {}
 }
 
+/** Der Speicherschluessel je Nutzer; ohne angemeldeten Nutzer wird nichts gemerkt. */
+function hiddenSourcesKey(userId) {
+  return userId == null ? null : `${HIDDEN_SOURCES_KEY}:${userId}`;
+}
+
 /**
- * Die ausgeblendeten Quellen aus dem Geraet (#1064).
+ * Die ausgeblendeten Quellen dieses Nutzers aus dem Geraet (#1064).
  *
  * Anders als beim Personenfilter gibt es hier keine Liste, gegen die sich
  * pruefen liesse: die Quellen kennt die Seite nur ueber die geladenen Termine.
@@ -3220,10 +3228,12 @@ function persistPeopleFilter() {
  * im Blatt stehen, bis jemand sie wieder einschaltet oder alle Filter aufhebt -
  * sichtbar und mit Rueckweg, statt still weiter zu filtern.
  */
-function restoreHiddenSources() {
-  let stored;
-  try { stored = JSON.parse(localStorage.getItem(HIDDEN_SOURCES_KEY) ?? '[]'); } catch { stored = []; }
+function restoreHiddenSources(userId) {
   const quellen = new Map();
+  const schluessel = hiddenSourcesKey(userId);
+  if (!schluessel) return quellen;
+  let stored;
+  try { stored = JSON.parse(localStorage.getItem(schluessel) ?? '[]'); } catch { stored = []; }
   if (!Array.isArray(stored)) return quellen;
   for (const eintrag of stored) {
     if (!eintrag || !/^(?:cal|sub):\d+$/.test(String(eintrag.key))) continue;
@@ -3235,9 +3245,11 @@ function restoreHiddenSources() {
 }
 
 function persistHiddenSources() {
+  const schluessel = hiddenSourcesKey(state.user?.id);
+  if (!schluessel) return;
   try {
-    if (state.hiddenSources.size === 0) localStorage.removeItem(HIDDEN_SOURCES_KEY);
-    else localStorage.setItem(HIDDEN_SOURCES_KEY, JSON.stringify([...state.hiddenSources].map(([key, merk]) => ({ key, ...merk }))));
+    if (state.hiddenSources.size === 0) localStorage.removeItem(schluessel);
+    else localStorage.setItem(schluessel, JSON.stringify([...state.hiddenSources].map(([key, merk]) => ({ key, ...merk }))));
   } catch {}
 }
 
@@ -3488,6 +3500,7 @@ export const __test = {
   calendarSources,
   restorePeopleFilter,
   restoreHiddenSources,
+  persistHiddenSources,
   activeFilterCount,
   UNASSIGNED,
   eventEndDate,

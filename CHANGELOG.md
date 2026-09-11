@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The calendar filter can hide a connected calendar or subscription, and show the events nobody
   is assigned to** (#1064). The filter sheet lists every calendar and ICS subscription with events
   in the loaded range, each with its colour and a switch. Hiding one removes its events from all
-  four views and the agenda, remembered on the device like the layers. A hidden calendar stays in
+  four views and the agenda, remembered on the device for each account. A hidden calendar stays in
   the list under its name even when none of its events is on screen, so it can always be switched
   back on. A new event created for a hidden calendar stays out right away, not only once it has
   synced. The person axis gains "Unassigned": on its own it shows only the events and tasks nobody
