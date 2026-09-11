@@ -949,7 +949,9 @@
         "filtersDisplay": "Megjelenítés",
         "agendaDayEmpty": "Semmi sincs tervezve",
         "openInMap": "Megnyitás a Térképen",
-        "syncTargetAssigneeAmbiguous": "Több naptárnak is ez a személy az alapértelmezett hozzárendelése. Válaszd ki magad a célt."
+        "syncTargetAssigneeAmbiguous": "Több naptárnak is ez a személy az alapértelmezett hozzárendelése. Válaszd ki magad a célt.",
+        "filtersSources": "Naptárak",
+        "filterUnassigned": "Senkihez sincs rendelve"
     },
     "noteCategories": {
         "permissionLabel": "Háztartási jegyzetkategóriák kezelése"

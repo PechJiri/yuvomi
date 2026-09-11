@@ -1435,12 +1435,15 @@ cdb.exec(`
   );
   CREATE TABLE external_calendars (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL DEFAULT 'google', external_id TEXT,
     name TEXT NOT NULL, color TEXT
   );
   -- color gehoert dazu: sie ist die GEERBTE Farbe eines Abos und wird seit #891
   -- als cal_color mitgelesen, weil ein Abo-Termin keinen external_calendars-
   -- Eintrag hat. Fehlt sie hier, misst dieses verkuerzte Schema an der echten
-  -- Abfrage vorbei.
+  -- Abfrage vorbei. Dasselbe gilt fuer source/external_id und die beiden
+  -- target_*-Spalten unten: SOURCE_CALENDAR_JOIN loest darueber die Quelle
+  -- eines noch nicht hochgeladenen Termins auf (#1064).
   CREATE TABLE ics_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL, color TEXT, shared INTEGER NOT NULL DEFAULT 0,
@@ -1458,6 +1461,7 @@ cdb.exec(`
     recurrence_rule TEXT,
     subscription_id INTEGER REFERENCES ics_subscriptions(id) ON DELETE CASCADE,
     calendar_ref_id INTEGER REFERENCES external_calendars(id) ON DELETE SET NULL,
+    target_google_calendar_id TEXT, target_caldav_calendar_url TEXT, outbound_move_to TEXT,
     visibility TEXT NOT NULL DEFAULT 'all'
   );
   CREATE TABLE event_assignments (

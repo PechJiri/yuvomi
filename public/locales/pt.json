@@ -949,7 +949,9 @@
         "filtersDisplay": "Apresentação",
         "agendaDayEmpty": "Nada planeado",
         "openInMap": "Abrir no Maps",
-        "syncTargetAssigneeAmbiguous": "Vários calendários têm esta pessoa como atribuição padrão. Escolha o destino manualmente."
+        "syncTargetAssigneeAmbiguous": "Vários calendários têm esta pessoa como atribuição padrão. Escolha o destino manualmente.",
+        "filtersSources": "Calendários",
+        "filterUnassigned": "Não atribuídos"
     },
     "noteCategories": {
         "permissionLabel": "Gerir categorias de notas do agregado familiar"

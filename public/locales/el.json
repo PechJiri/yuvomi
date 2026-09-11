@@ -949,7 +949,9 @@
         "filtersDisplay": "Εμφάνιση",
         "agendaDayEmpty": "Τίποτα προγραμματισμένο",
         "openInMap": "Άνοιγμα στους Χάρτες",
-        "syncTargetAssigneeAmbiguous": "Πολλά ημερολόγια έχουν αυτό το άτομο ως προεπιλεγμένη ανάθεση. Επίλεξε μόνος σου τον προορισμό."
+        "syncTargetAssigneeAmbiguous": "Πολλά ημερολόγια έχουν αυτό το άτομο ως προεπιλεγμένη ανάθεση. Επίλεξε μόνος σου τον προορισμό.",
+        "filtersSources": "Ημερολόγια",
+        "filterUnassigned": "Χωρίς ανάθεση"
     },
     "noteCategories": {
         "permissionLabel": "Διαχείριση κοινόχρηστων κατηγοριών σημειώσεων"

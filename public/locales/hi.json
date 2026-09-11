@@ -949,7 +949,9 @@
         "filtersDisplay": "प्रदर्शन",
         "agendaDayEmpty": "कुछ भी नियोजित नहीं",
         "openInMap": "मानचित्र में खोलें",
-        "syncTargetAssigneeAmbiguous": "कई कैलेंडर में यह व्यक्ति डिफ़ॉल्ट असाइनमेंट है। लक्ष्य स्वयं चुनें।"
+        "syncTargetAssigneeAmbiguous": "कई कैलेंडर में यह व्यक्ति डिफ़ॉल्ट असाइनमेंट है। लक्ष्य स्वयं चुनें।",
+        "filtersSources": "कैलेंडर",
+        "filterUnassigned": "किसी को नहीं सौंपे गए"
     },
     "noteCategories": {
         "permissionLabel": "घर की नोट श्रेणियाँ प्रबंधित करें"

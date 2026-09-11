@@ -949,7 +949,9 @@
         "filtersDisplay": "Visning",
         "agendaDayEmpty": "Inget planerat",
         "openInMap": "Öppna i Kartor",
-        "syncTargetAssigneeAmbiguous": "Flera kalendrar har den här personen som standardtilldelning. Välj målet själv."
+        "syncTargetAssigneeAmbiguous": "Flera kalendrar har den här personen som standardtilldelning. Välj målet själv.",
+        "filtersSources": "Kalendrar",
+        "filterUnassigned": "Ej tilldelade"
     },
     "noteCategories": {
         "permissionLabel": "Hantera hushållets anteckningskategorier"

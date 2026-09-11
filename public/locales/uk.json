@@ -949,7 +949,9 @@
         "filtersDisplay": "Відображення",
         "agendaDayEmpty": "Нічого не заплановано",
         "openInMap": "Відкрити на картах",
-        "syncTargetAssigneeAmbiguous": "Кілька календарів мають цю особу як призначення за замовчуванням. Обери ціль сам."
+        "syncTargetAssigneeAmbiguous": "Кілька календарів мають цю особу як призначення за замовчуванням. Обери ціль сам.",
+        "filtersSources": "Календарі",
+        "filterUnassigned": "Не призначені"
     },
     "noteCategories": {
         "permissionLabel": "Керувати сімейними категоріями нотаток"

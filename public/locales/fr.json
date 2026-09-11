@@ -949,7 +949,9 @@
         "filtersDisplay": "Affichage",
         "agendaDayEmpty": "Rien de prévu",
         "openInMap": "Ouvrir dans Maps",
-        "syncTargetAssigneeAmbiguous": "Plusieurs calendriers ont cette personne comme attribution par défaut. Choisis toi-même la destination."
+        "syncTargetAssigneeAmbiguous": "Plusieurs calendriers ont cette personne comme attribution par défaut. Choisis toi-même la destination.",
+        "filtersSources": "Calendriers",
+        "filterUnassigned": "Non attribués"
     },
     "noteCategories": {
         "permissionLabel": "Gérer les catégories de notes du foyer"

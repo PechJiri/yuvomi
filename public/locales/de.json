@@ -961,7 +961,9 @@
         "filtersDisplay": "Darstellung",
         "agendaDayEmpty": "Nichts geplant",
         "openInMap": "In Maps öffnen",
-        "syncTargetAssigneeAmbiguous": "Mehrere Kalender haben diese Person als Standard-Zuweisung. Wähle das Ziel selbst."
+        "syncTargetAssigneeAmbiguous": "Mehrere Kalender haben diese Person als Standard-Zuweisung. Wähle das Ziel selbst.",
+        "filtersSources": "Kalender",
+        "filterUnassigned": "Nicht zugewiesen"
     },
     "noteCategories": {
         "permissionLabel": "Gemeinsame Notizkategorien verwalten"

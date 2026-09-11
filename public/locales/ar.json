@@ -949,7 +949,9 @@
         "filtersDisplay": "العرض",
         "agendaDayEmpty": "لا شيء مُخطط",
         "openInMap": "فتح في الخرائط",
-        "syncTargetAssigneeAmbiguous": "لدى عدة تقويمات هذا الشخص كإسناد افتراضي. اختر الوجهة بنفسك."
+        "syncTargetAssigneeAmbiguous": "لدى عدة تقويمات هذا الشخص كإسناد افتراضي. اختر الوجهة بنفسك.",
+        "filtersSources": "التقويمات",
+        "filterUnassigned": "غير مُسندة"
     },
     "noteCategories": {
         "permissionLabel": "إدارة فئات ملاحظات الأسرة"

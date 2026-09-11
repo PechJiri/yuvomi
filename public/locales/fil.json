@@ -961,7 +961,9 @@
         "filtersDisplay": "Pagpapakita",
         "agendaDayEmpty": "Walang nakaplano",
         "openInMap": "Buksan sa Maps",
-        "syncTargetAssigneeAmbiguous": "Ilang kalendaryo ang may taong ito bilang default na nakatalaga. Piliin mismo ang target."
+        "syncTargetAssigneeAmbiguous": "Ilang kalendaryo ang may taong ito bilang default na nakatalaga. Piliin mismo ang target.",
+        "filtersSources": "Mga kalendaryo",
+        "filterUnassigned": "Walang nakatalaga"
     },
     "noteCategories": {
         "permissionLabel": "Pamahalaan ang mga kategorya ng tala ng sambahayan"

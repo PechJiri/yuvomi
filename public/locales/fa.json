@@ -961,7 +961,9 @@
         "filtersDisplay": "نمایش",
         "agendaDayEmpty": "چیزی برنامه‌ریزی نشده",
         "openInMap": "باز کردن در نقشه",
-        "syncTargetAssigneeAmbiguous": "چند تقویم این فرد را به‌عنوان واگذاری پیش‌فرض دارند. مقصد را خودت انتخاب کن."
+        "syncTargetAssigneeAmbiguous": "چند تقویم این فرد را به‌عنوان واگذاری پیش‌فرض دارند. مقصد را خودت انتخاب کن.",
+        "filtersSources": "تقویم‌ها",
+        "filterUnassigned": "واگذارنشده"
     },
     "noteCategories": {
         "permissionLabel": "مدیریت دسته‌بندی‌های یادداشت خانوادگی"

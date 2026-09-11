@@ -961,7 +961,9 @@
         "filtersDisplay": "Wyświetlanie",
         "agendaDayEmpty": "Nic zaplanowane",
         "openInMap": "Otwórz w mapach",
-        "syncTargetAssigneeAmbiguous": "Kilka kalendarzy ma tę osobę jako domyślne przypisanie. Wybierz cel samodzielnie."
+        "syncTargetAssigneeAmbiguous": "Kilka kalendarzy ma tę osobę jako domyślne przypisanie. Wybierz cel samodzielnie.",
+        "filtersSources": "Kalendarze",
+        "filterUnassigned": "Nieprzypisane"
     },
     "noteCategories": {
         "permissionLabel": "Zarządzaj domowymi kategoriami notatek"

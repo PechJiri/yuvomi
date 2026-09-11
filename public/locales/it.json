@@ -949,7 +949,9 @@
         "filtersDisplay": "Visualizzazione",
         "agendaDayEmpty": "Niente in programma",
         "openInMap": "Apri in Maps",
-        "syncTargetAssigneeAmbiguous": "Più calendari hanno questa persona come assegnazione predefinita. Scegli tu la destinazione."
+        "syncTargetAssigneeAmbiguous": "Più calendari hanno questa persona come assegnazione predefinita. Scegli tu la destinazione.",
+        "filtersSources": "Calendari",
+        "filterUnassigned": "Non assegnati"
     },
     "noteCategories": {
         "permissionLabel": "Gestisci le categorie delle note di casa"

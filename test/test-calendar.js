@@ -1902,6 +1902,203 @@ test('eventMapUrl: eine Kartensuche nur, wo ein Ortstext uebrig bleibt (#1110)',
 });
 
 // --------------------------------------------------------
+// #1064: Filter nach Kalender/Abo und die Achse "Nicht zugewiesen"
+// --------------------------------------------------------
+
+/** Den Filterzustand fuer einen Fall setzen und danach zuruecklegen. */
+function mitFilterzustand(felder, fn) {
+  const { state } = calendarHelpers;
+  const vorher = {};
+  for (const k of Object.keys(felder)) vorher[k] = state[k];
+  Object.assign(state, felder);
+  try { return fn(); } finally { Object.assign(state, vorher); }
+}
+
+/** localStorage fuer einen Fall - der Browser-Loader stellt keinen bereit. */
+function mitSpeicher(eintraege, fn) {
+  const vorher = globalThis.localStorage;
+  const daten = new Map(Object.entries(eintraege));
+  globalThis.localStorage = {
+    getItem: (k) => (daten.has(k) ? daten.get(k) : null),
+    setItem: (k, v) => daten.set(k, String(v)),
+    removeItem: (k) => daten.delete(k),
+  };
+  try { return fn(daten); } finally { globalThis.localStorage = vorher; }
+}
+
+const FILTER_TAG = '2026-09-10';
+const FILTER_TERMINE = [
+  { id: 1, title: 'Zahnarzt', start_datetime: `${FILTER_TAG}T09:00:00`, assigned_users: [{ id: 1 }] },
+  { id: 2, title: 'Training', start_datetime: `${FILTER_TAG}T17:00:00`, assigned_users: [{ id: 2 }],
+    calendar_ref_id: 5, cal_name: 'Arbeit', cal_color: '#3366cc' },
+  { id: 3, title: 'Muellabfuhr', start_datetime: `${FILTER_TAG}T07:00:00`, assigned_users: [],
+    subscription_id: 7, cal_name: 'Abfallkalender', cal_color: '#228844' },
+  { id: 4, title: 'Elternabend', start_datetime: `${FILTER_TAG}T19:00:00`, assigned_users: [] },
+];
+const NUTZER = [{ id: 1 }, { id: 2 }];
+const tagesIds = () => calendarHelpers.eventsOnDay(FILTER_TAG).map((e) => e.id).sort((a, b) => a - b).join(',');
+
+test('#1064: "Nicht zugewiesen" ist ein Eintrag der Personenachse', () => {
+  const { UNASSIGNED } = calendarHelpers;
+  const basis = { events: FILTER_TERMINE, users: NUTZER, assignedToMe: false, hiddenSources: new Map(), layerBirthdays: true };
+  mitFilterzustand({ ...basis, people: new Set() }, () => {
+    assert(tagesIds() === '1,2,3,4', `ohne Filter alle vier, war ${tagesIds()}`);
+  });
+  mitFilterzustand({ ...basis, people: new Set([UNASSIGNED]) }, () => {
+    assert(tagesIds() === '3,4', `allein gewaehlt zeigt der Eintrag nur die Termine ohne Person, war ${tagesIds()}`);
+  });
+  mitFilterzustand({ ...basis, people: new Set([1, UNASSIGNED]) }, () => {
+    assert(tagesIds() === '1,3,4', `mit einer Person zusammen die Vereinigung, war ${tagesIds()}`);
+  });
+  mitFilterzustand({ ...basis, people: new Set([1]) }, () => {
+    assert(tagesIds() === '1',
+      `ein Filter ohne den Eintrag - etwa einer von vor #1064 - laesst Termine ohne Person weiter heraus, war ${tagesIds()}`);
+  });
+});
+
+test('#1064: eine ausgeblendete Quelle fehlt in jeder Ansicht, und Quelle UND Person wirken zusammen', () => {
+  const { passesSourceFilter, eventSourceKey } = calendarHelpers;
+  assert(eventSourceKey(FILTER_TERMINE[1]) === 'cal:5', 'CalDAV/Google/Apple ueber calendar_ref_id');
+  assert(eventSourceKey(FILTER_TERMINE[2]) === 'sub:7', 'ICS-Abos ueber subscription_id');
+  assert(eventSourceKey(FILTER_TERMINE[0]) === null, 'ein eigener Termin hat keine Quelle');
+
+  const basis = { events: FILTER_TERMINE, users: NUTZER, assignedToMe: false, layerBirthdays: true };
+  mitFilterzustand({ ...basis, people: new Set(), hiddenSources: new Map([['sub:7', { name: 'Abfallkalender', color: null }]]) }, () => {
+    assert(tagesIds() === '1,2,4', `das Abo ist ausgeblendet, der Rest bleibt, war ${tagesIds()}`);
+    assert(passesSourceFilter(FILTER_TERMINE[0]) === true, 'ein eigener Termin laesst sich nicht wegschalten');
+  });
+  mitFilterzustand({ ...basis, people: new Set([calendarHelpers.UNASSIGNED]), hiddenSources: new Map([['sub:7', { name: '', color: null }]]) }, () => {
+    assert(tagesIds() === '4', `Quelle UND Person: vom Unzugewiesenen bleibt nur, was nicht aus dem Abo kommt, war ${tagesIds()}`);
+  });
+});
+
+// Codex-Befund auf PR #1124: ein neuer Termin fuer einen Google- oder
+// CalDAV-Kalender traegt `calendar_ref_id` erst nach dem Hochladen. Der Server
+// loest die Quelle deshalb ueber das Ziel auf (`source_calendar_ref_id`, siehe
+// test-calendar-routes.js), und der Filter muss genau dieses Feld lesen.
+test('#1064: ein Termin fuer einen ausgeblendeten Kalender fehlt schon vor dem Hochladen', () => {
+  const { eventSourceKey, calendarSources } = calendarHelpers;
+  const unterwegs = {
+    id: 5, title: 'Neu im Arbeitskalender', start_datetime: `${FILTER_TAG}T12:00:00`, assigned_users: [{ id: 1 }],
+    calendar_ref_id: null, source_calendar_ref_id: 5, cal_name: null, cal_color: null,
+  };
+  assert(eventSourceKey(unterwegs) === 'cal:5', 'die aufgeloeste Quelle zaehlt, auch ohne calendar_ref_id');
+  const termine = [unterwegs, ...FILTER_TERMINE];
+  const basis = { events: termine, users: NUTZER, assignedToMe: false, people: new Set(), layerBirthdays: true };
+  mitFilterzustand({ ...basis, hiddenSources: new Map([['cal:5', { name: 'Arbeit', color: '#3366cc' }]]) }, () => {
+    assert(tagesIds() === '1,3,4', `der neue Termin geht mit seinem Kalender, war ${tagesIds()}`);
+  });
+  mitFilterzustand({ ...basis, hiddenSources: new Map() }, () => {
+    const arbeit = calendarSources().find((q) => q.key === 'cal:5');
+    assert(arbeit.name === 'Arbeit' && arbeit.color === '#3366cc',
+      `Name und Farbe kommen vom synchronisierten Termin derselben Quelle, auch wenn der neue zuerst steht, war ${JSON.stringify(arbeit)}`);
+  });
+  mitFilterzustand({ ...basis, events: [unterwegs], hiddenSources: new Map([['cal:5', { name: 'Arbeit', color: '#3366cc' }]]) }, () => {
+    const arbeit = calendarSources().find((q) => q.key === 'cal:5');
+    assert(arbeit.name === 'Arbeit', `steht nur der neue im Zeitraum, nennt der Merker den Kalender, war ${JSON.stringify(arbeit)}`);
+  });
+  // Codex-Review zu PR #1124: ohne Merker und ohne synchronisierten Nachbarn
+  // stand der Kalender als namenloses „Kalender" im Blatt. Der Server liefert
+  // Name und Farbe der aufgeloesten Quelle mit.
+  const mitQuelle = { ...unterwegs, source_calendar_name: 'Arbeit', source_calendar_color: '#3366cc' };
+  mitFilterzustand({ ...basis, events: [mitQuelle], hiddenSources: new Map() }, () => {
+    const arbeit = calendarSources().find((q) => q.key === 'cal:5');
+    assert(arbeit.name === 'Arbeit' && arbeit.color === '#3366cc',
+      `ein neuer Termin allein nennt seinen Kalender, war ${JSON.stringify(arbeit)}`);
+  });
+});
+
+test('#1064: das Blatt kennt jede Quelle aus den Terminen und jede ausgeblendete, auch ohne Termin', () => {
+  const { calendarSources } = calendarHelpers;
+  mitFilterzustand({ events: FILTER_TERMINE, hiddenSources: new Map([['cal:9', { name: 'Urlaub', color: '#aa5500' }]]) }, () => {
+    const quellen = calendarSources();
+    assert(quellen.map((q) => q.key).join(',') === 'sub:7,cal:5,cal:9',
+      `nach Namen sortiert, die ausgeblendete ohne Termin dabei, war ${quellen.map((q) => q.key)}`);
+    assert(quellen.find((q) => q.key === 'cal:5').color === '#3366cc', 'die Farbe kommt vom Termin');
+    assert(quellen.find((q) => q.key === 'cal:9').name === 'Urlaub', 'der Name der ausgeblendeten aus dem Merker');
+  });
+});
+
+test('#1064: beide Filter kommen gegen den Speicher geprueft zurueck', () => {
+  const { restorePeopleFilter, restoreHiddenSources, UNASSIGNED } = calendarHelpers;
+  mitSpeicher({ 'yuvomi:calendar:people': JSON.stringify([1, UNASSIGNED, 99]) }, () => {
+    const set = restorePeopleFilter(NUTZER);
+    assert(set.has(1) && set.has(UNASSIGNED) && !set.has(99) && set.size === 2,
+      'der Eintrag ueberlebt das Laden, eine unbekannte ID nicht');
+  });
+  mitSpeicher({ 'yuvomi:calendar:people': JSON.stringify([1, 2, UNASSIGNED]) }, () => {
+    assert(restorePeopleFilter(NUTZER).size === 0, 'alle Personen und der Eintrag heisst alle - also kein Filter');
+  });
+  mitSpeicher({ 'yuvomi:calendar:people': JSON.stringify([1]) }, () => {
+    const set = restorePeopleFilter(NUTZER);
+    assert(set.size === 1 && !set.has(UNASSIGNED), 'ein alter Filter bekommt den Eintrag nicht untergeschoben');
+  });
+  mitSpeicher({
+    'yuvomi:calendar:sources-hidden:1': JSON.stringify([
+      { key: 'sub:7', name: 'Abfallkalender', color: '#228844' },
+      { key: 'cal:5', name: 'Arbeit', color: 'red;background:url(x)' },
+      { key: 'fremd:1', name: 'x' },
+      null,
+    ]),
+  }, () => {
+    const quellen = restoreHiddenSources(1);
+    assert(quellen.size === 2 && quellen.has('sub:7') && quellen.has('cal:5'), 'nur gueltige Schluessel');
+    assert(quellen.get('cal:5').color === null, 'aus dem Speicher nur, was eine Farbe ist');
+  });
+  mitSpeicher({ 'yuvomi:calendar:sources-hidden:1': '{kaputt' }, () => {
+    assert(restoreHiddenSources(1).size === 0, 'ein kaputter Eintrag ist kein Filter');
+  });
+});
+
+// Codex-Review zu PR #1124: der Merker traegt Namen und Farben. Ein privates Abo
+// sieht nur, wer es angelegt hat - auf einem geteilten Browser stand sein Name
+// sonst im Filterblatt des naechsten Kontos.
+test('#1064: die ausgeblendeten Quellen gehoeren dem Nutzer, nicht dem Geraet', () => {
+  const { restoreHiddenSources, persistHiddenSources } = calendarHelpers;
+  mitSpeicher({ 'yuvomi:calendar:sources-hidden:1': JSON.stringify([{ key: 'sub:7', name: 'Privat', color: null }]) }, () => {
+    assert(restoreHiddenSources(1).get('sub:7')?.name === 'Privat', 'der eigene Merker kommt zurueck');
+    assert(restoreHiddenSources(2).size === 0, 'ein anderes Konto auf demselben Geraet sieht ihn nicht');
+    assert(restoreHiddenSources(null).size === 0, 'ohne angemeldeten Nutzer gibt es keinen');
+  });
+  mitSpeicher({ 'yuvomi:calendar:sources-hidden': JSON.stringify([{ key: 'sub:7', name: 'Alt', color: null }]) }, () => {
+    assert(restoreHiddenSources(1).size === 0, 'ein geraeteweiter Eintrag gehoert niemandem');
+  });
+  mitSpeicher({}, (daten) => {
+    mitFilterzustand({ user: { id: 3 }, hiddenSources: new Map([['sub:7', { name: 'Privat', color: null }]]) }, () => {
+      persistHiddenSources();
+    });
+    assert([...daten.keys()].join(',') === 'yuvomi:calendar:sources-hidden:3', `geschrieben unter dem Nutzer, war ${[...daten.keys()]}`);
+    mitFilterzustand({ user: null, hiddenSources: new Map([['cal:5', { name: 'Arbeit', color: null }]]) }, () => {
+      persistHiddenSources();
+    });
+    assert(daten.size === 1, 'ohne Nutzer wird nichts geschrieben');
+  });
+  // Die Funktion kann stimmen und der Aufrufer trotzdem keine ID uebergeben -
+  // dann kaeme nach jedem Laden ein leerer Filter heraus, und alles oben bliebe gruen.
+  const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
+  assert(/state\.hiddenSources = restoreHiddenSources\(state\.user\?\.id\);/.test(src),
+    'render() liest den Merker des angemeldeten Nutzers');
+});
+
+test('#1064: eine ausgeblendete Quelle zaehlt am Filterknopf als ein Filter', () => {
+  const { activeFilterCount } = calendarHelpers;
+  const basis = { assignedToMe: false, people: new Set(), holidayPrefs: {}, layerBirthdays: true, layerSchedule: true };
+  // scheduleEnabled() fragt window.yuvomi - ohne Modul-Registry gilt der Schichtplan als an.
+  const previousWindow = globalThis.window;
+  globalThis.window = {};
+  try {
+    mitFilterzustand({ ...basis, hiddenSources: new Map() }, () => {
+      assert(activeFilterCount() === 0, `ohne ausgeblendete Quelle kein Filter, war ${activeFilterCount()}`);
+    });
+    mitFilterzustand({ ...basis, hiddenSources: new Map([['cal:5', {}], ['sub:7', {}]]) }, () => {
+      assert(activeFilterCount() === 1, `zwei ausgeblendete Quellen sind EINE Achse, war ${activeFilterCount()}`);
+    });
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+// --------------------------------------------------------
 // Ergebnis
 // --------------------------------------------------------
 console.log(`\n[Calendar-Test] Ergebnis: ${passed} bestanden, ${failed} fehlgeschlagen\n`);

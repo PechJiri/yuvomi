@@ -949,7 +949,9 @@
         "filtersDisplay": "显示",
         "agendaDayEmpty": "没有安排",
         "openInMap": "在地图中打开",
-        "syncTargetAssigneeAmbiguous": "多个日历将此人设为默认分配对象。请自行选择目标。"
+        "syncTargetAssigneeAmbiguous": "多个日历将此人设为默认分配对象。请自行选择目标。",
+        "filtersSources": "日历",
+        "filterUnassigned": "未分配"
     },
     "noteCategories": {
         "permissionLabel": "管理家庭笔记分类"

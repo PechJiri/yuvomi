@@ -949,7 +949,9 @@
         "filtersDisplay": "Weergave",
         "agendaDayEmpty": "Niets gepland",
         "openInMap": "Openen in Maps",
-        "syncTargetAssigneeAmbiguous": "Meerdere agenda's hebben deze persoon als standaardtoewijzing. Kies het doel zelf."
+        "syncTargetAssigneeAmbiguous": "Meerdere agenda's hebben deze persoon als standaardtoewijzing. Kies het doel zelf.",
+        "filtersSources": "Agenda's",
+        "filterUnassigned": "Niet toegewezen"
     },
     "noteCategories": {
         "permissionLabel": "Notitiecategorieën voor het huishouden beheren"

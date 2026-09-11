@@ -961,7 +961,9 @@
         "filtersDisplay": "Tampilan",
         "agendaDayEmpty": "Tidak ada rencana",
         "openInMap": "Buka di Maps",
-        "syncTargetAssigneeAmbiguous": "Beberapa kalender memiliki orang ini sebagai penugasan default. Pilih sendiri tujuannya."
+        "syncTargetAssigneeAmbiguous": "Beberapa kalender memiliki orang ini sebagai penugasan default. Pilih sendiri tujuannya.",
+        "filtersSources": "Kalender",
+        "filterUnassigned": "Belum ditugaskan"
     },
     "noteCategories": {
         "permissionLabel": "Kelola kategori catatan rumah tangga"
