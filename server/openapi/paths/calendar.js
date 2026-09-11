@@ -78,7 +78,7 @@ export function calendarPaths() {
       get: op({
         summary: 'List selectable sync targets for the event editor',
         tag: 'Calendar',
-        description: 'Available to every authenticated user (#618). Returns `{ data: { google: [{ id, summary }], caldav: [{ accountId, accountName, calendarUrl, calendarName }] } }`, pre-filtered to enabled (and, for Google, writable) calendars. Carries no credentials, server URLs, or usernames - account management stays admin-only. A provider that cannot be reached yields an empty list instead of failing the request.',
+        description: 'Available to every authenticated user (#618). Returns `{ data: { google: [{ id, summary, defaultAssigneeUserId }], caldav: [{ accountId, accountName, calendarUrl, calendarName, defaultAssigneeUserId }], outlook: [{ accountId, accountName, calendarId, calendarName }] } }`, pre-filtered to enabled (and, for Google, writable) calendars. `defaultAssigneeUserId` is the default assignee set on that calendar (#459), or null; the event editor reads it backwards to pick the calendar of the person a new event is assigned to (#1060). Carries no credentials, server URLs, or usernames - account management stays admin-only. A provider that cannot be reached yields an empty list instead of failing the request.',
       }),
     },
     '/api/v1/calendar/caldav/accounts': {

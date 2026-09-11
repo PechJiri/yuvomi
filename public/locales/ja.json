@@ -948,7 +948,8 @@
         "filtersReset": "すべてのフィルターを解除",
         "filtersDisplay": "表示",
         "agendaDayEmpty": "予定なし",
-        "openInMap": "地図で開く"
+        "openInMap": "地図で開く",
+        "syncTargetAssigneeAmbiguous": "複数のカレンダーでこの人が既定の割り当てになっています。保存先を自分で選んでください。"
     },
     "noteCategories": {
         "permissionLabel": "世帯のメモカテゴリーを管理"
@@ -2455,7 +2456,8 @@
         "sync": {
             "defaultAssignee": "既定の割り当て先",
             "defaultAssigneeNone": "なし",
-            "defaultAssigneeHint": "新しく同期された予定は自動的にこの人に割り当てられます。"
+            "defaultAssigneeHint": "新しく同期された予定は自動的にこの人に割り当てられます。",
+            "defaultAssigneeRoutingHint": "既定の割り当て先: カレンダーの予定にはそこで選んだ人が割り当てられ、その人だけに割り当てた新しい予定はそのカレンダーに作成されます。Google と CalDAV のカレンダーが対象で、Apple と Outlook は対象外です。"
         },
         "calendarDefaultsTitle": "新しい予定の既定値",
         "calendarDefaultsDescription": "新しい予定に自動的に適用される既定設定。",

@@ -948,7 +948,8 @@
         "filtersReset": "Összes szűrő törlése",
         "filtersDisplay": "Megjelenítés",
         "agendaDayEmpty": "Semmi sincs tervezve",
-        "openInMap": "Megnyitás a Térképen"
+        "openInMap": "Megnyitás a Térképen",
+        "syncTargetAssigneeAmbiguous": "Több naptárnak is ez a személy az alapértelmezett hozzárendelése. Válaszd ki magad a célt."
     },
     "noteCategories": {
         "permissionLabel": "Háztartási jegyzetkategóriák kezelése"
@@ -2455,7 +2456,8 @@
         "sync": {
             "defaultAssignee": "Alapértelmezett hozzárendelés",
             "defaultAssigneeNone": "Nincs",
-            "defaultAssigneeHint": "Az újonnan szinkronizált események automatikusan ehhez a személyhez lesznek rendelve."
+            "defaultAssigneeHint": "Az újonnan szinkronizált események automatikusan ehhez a személyhez lesznek rendelve.",
+            "defaultAssigneeRoutingHint": "Alapértelmezett hozzárendelés: egy naptár eseményei az ott kiválasztott személyhez kerülnek, és a csak neki kiosztott új esemény abban a naptárban jön létre. Google- és CalDAV-naptárakra vonatkozik, Apple-re és Outlookra nem."
         },
         "calendarDefaultsTitle": "Új események alapértékei",
         "calendarDefaultsDescription": "Az új eseményekre automatikusan alkalmazott beállítások.",

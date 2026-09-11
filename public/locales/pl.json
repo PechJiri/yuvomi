@@ -960,7 +960,8 @@
         "filtersReset": "Wyczyść wszystkie filtry",
         "filtersDisplay": "Wyświetlanie",
         "agendaDayEmpty": "Nic zaplanowane",
-        "openInMap": "Otwórz w mapach"
+        "openInMap": "Otwórz w mapach",
+        "syncTargetAssigneeAmbiguous": "Kilka kalendarzy ma tę osobę jako domyślne przypisanie. Wybierz cel samodzielnie."
     },
     "noteCategories": {
         "permissionLabel": "Zarządzaj domowymi kategoriami notatek"
@@ -2467,7 +2468,8 @@
         "sync": {
             "defaultAssignee": "Domyślne przypisanie",
             "defaultAssigneeNone": "Brak",
-            "defaultAssigneeHint": "Nowo zsynchronizowane wydarzenia są automatycznie przypisywane do tej osoby."
+            "defaultAssigneeHint": "Nowo zsynchronizowane wydarzenia są automatycznie przypisywane do tej osoby.",
+            "defaultAssigneeRoutingHint": "Domyślne przypisanie: wydarzenia z kalendarza otrzymują wybraną tam osobę, a nowe wydarzenie przypisane tylko tej osobie jest tworzone w tym kalendarzu. Dotyczy kalendarzy Google i CalDAV, nie Apple ani Outlook."
         },
         "calendarDefaultsTitle": "Domyślne ustawienia nowych wydarzeń",
         "calendarDefaultsDescription": "Ustawienia stosowane automatycznie do nowych wydarzeń.",

@@ -948,7 +948,8 @@
         "filtersReset": "Limpar todos os filtros",
         "filtersDisplay": "Apresentação",
         "agendaDayEmpty": "Nada planeado",
-        "openInMap": "Abrir no Maps"
+        "openInMap": "Abrir no Maps",
+        "syncTargetAssigneeAmbiguous": "Vários calendários têm esta pessoa como atribuição padrão. Escolha o destino manualmente."
     },
     "noteCategories": {
         "permissionLabel": "Gerir categorias de notas do agregado familiar"
@@ -2455,7 +2456,8 @@
         "sync": {
             "defaultAssignee": "Atribuição padrão",
             "defaultAssigneeNone": "Nenhum",
-            "defaultAssigneeHint": "Os eventos recém-sincronizados são atribuídos automaticamente a esta pessoa."
+            "defaultAssigneeHint": "Os eventos recém-sincronizados são atribuídos automaticamente a esta pessoa.",
+            "defaultAssigneeRoutingHint": "Atribuição padrão: os eventos de um calendário recebem a pessoa escolhida nele, e um novo evento atribuído apenas a essa pessoa é criado nesse calendário. Vale para calendários Google e CalDAV, não para Apple nem Outlook."
         },
         "calendarDefaultsTitle": "Padrões para novos eventos",
         "calendarDefaultsDescription": "Predefinições aplicadas automaticamente a novos eventos.",

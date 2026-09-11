@@ -948,7 +948,8 @@
         "filtersReset": "Xóa tất cả bộ lọc",
         "filtersDisplay": "Hiển thị",
         "agendaDayEmpty": "Không có kế hoạch",
-        "openInMap": "Mở trong Bản đồ"
+        "openInMap": "Mở trong Bản đồ",
+        "syncTargetAssigneeAmbiguous": "Nhiều lịch đặt người này làm người được giao mặc định. Hãy tự chọn đích."
     },
     "noteCategories": {
         "permissionLabel": "Quản lý danh mục ghi chú gia đình"
@@ -2455,7 +2456,8 @@
         "sync": {
             "defaultAssignee": "Người được giao mặc định",
             "defaultAssigneeNone": "Không có",
-            "defaultAssigneeHint": "Các sự kiện mới đồng bộ sẽ tự động được giao cho người này."
+            "defaultAssigneeHint": "Các sự kiện mới đồng bộ sẽ tự động được giao cho người này.",
+            "defaultAssigneeRoutingHint": "Người được giao mặc định: sự kiện từ một lịch được giao cho người đã chọn ở đó, và sự kiện mới chỉ giao cho người đó sẽ được tạo trong lịch ấy. Áp dụng cho lịch Google và CalDAV, không áp dụng cho Apple hay Outlook."
         },
         "calendarDefaultsTitle": "Mặc định cho sự kiện mới",
         "calendarDefaultsDescription": "Cài đặt sẵn tự động áp dụng cho sự kiện mới.",

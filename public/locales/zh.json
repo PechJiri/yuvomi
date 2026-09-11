@@ -948,7 +948,8 @@
         "filtersReset": "清除所有筛选",
         "filtersDisplay": "显示",
         "agendaDayEmpty": "没有安排",
-        "openInMap": "在地图中打开"
+        "openInMap": "在地图中打开",
+        "syncTargetAssigneeAmbiguous": "多个日历将此人设为默认分配对象。请自行选择目标。"
     },
     "noteCategories": {
         "permissionLabel": "管理家庭笔记分类"
@@ -2455,7 +2456,8 @@
         "sync": {
             "defaultAssignee": "默认分配",
             "defaultAssigneeNone": "无",
-            "defaultAssigneeHint": "新同步的日程会自动分配给此人。"
+            "defaultAssigneeHint": "新同步的日程会自动分配给此人。",
+            "defaultAssigneeRoutingHint": "默认分配: 日历中的事件会分配给在此选择的人，仅分配给此人的新事件会创建在该日历中。适用于 Google 和 CalDAV 日历，不适用于 Apple 或 Outlook。"
         },
         "calendarDefaultsTitle": "新事件的默认值",
         "calendarDefaultsDescription": "自动应用于新事件的预设。",

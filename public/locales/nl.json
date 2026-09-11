@@ -948,7 +948,8 @@
         "filtersReset": "Alle filters wissen",
         "filtersDisplay": "Weergave",
         "agendaDayEmpty": "Niets gepland",
-        "openInMap": "Openen in Maps"
+        "openInMap": "Openen in Maps",
+        "syncTargetAssigneeAmbiguous": "Meerdere agenda's hebben deze persoon als standaardtoewijzing. Kies het doel zelf."
     },
     "noteCategories": {
         "permissionLabel": "Notitiecategorieën voor het huishouden beheren"
@@ -2455,7 +2456,8 @@
         "sync": {
             "defaultAssignee": "Standaardtoewijzing",
             "defaultAssigneeNone": "Geen",
-            "defaultAssigneeHint": "Nieuw gesynchroniseerde afspraken worden automatisch aan deze persoon toegewezen."
+            "defaultAssigneeHint": "Nieuw gesynchroniseerde afspraken worden automatisch aan deze persoon toegewezen.",
+            "defaultAssigneeRoutingHint": "Standaardtoewijzing: afspraken uit een agenda krijgen de daar gekozen persoon, en een nieuwe afspraak die alleen aan die persoon is toegewezen, wordt in die agenda aangemaakt. Dit geldt voor Google- en CalDAV-agenda's, niet voor Apple of Outlook."
         },
         "calendarDefaultsTitle": "Standaardwaarden voor nieuwe afspraken",
         "calendarDefaultsDescription": "Voorinstellingen die automatisch op nieuwe afspraken worden toegepast.",

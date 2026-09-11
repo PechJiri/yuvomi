@@ -960,7 +960,8 @@
         "filtersReset": "Alisin ang lahat ng filter",
         "filtersDisplay": "Pagpapakita",
         "agendaDayEmpty": "Walang nakaplano",
-        "openInMap": "Buksan sa Maps"
+        "openInMap": "Buksan sa Maps",
+        "syncTargetAssigneeAmbiguous": "Ilang kalendaryo ang may taong ito bilang default na nakatalaga. Piliin mismo ang target."
     },
     "noteCategories": {
         "permissionLabel": "Pamahalaan ang mga kategorya ng tala ng sambahayan"
@@ -2490,7 +2491,8 @@
         "sync": {
             "defaultAssignee": "Default na naaatasan",
             "defaultAssigneeNone": "Wala",
-            "defaultAssigneeHint": "Awtomatikong inaatasan sa taong ito ang mga bagong naka-sync na kaganapan."
+            "defaultAssigneeHint": "Awtomatikong inaatasan sa taong ito ang mga bagong naka-sync na kaganapan.",
+            "defaultAssigneeRoutingHint": "Default na naaatasan: ang mga event mula sa kalendaryo ay itinatalaga sa taong pinili rito, at ang bagong event na itinalaga lamang sa taong iyon ay nilikha sa kalendaryong iyon. Para sa mga kalendaryong Google at CalDAV, hindi para sa Apple o Outlook."
         },
         "calendarDefaultsTitle": "Mga default para sa bagong kaganapan",
         "calendarDefaultsDescription": "Mga preset na awtomatikong inilalapat sa mga bagong kaganapan.",

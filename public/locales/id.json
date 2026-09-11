@@ -960,7 +960,8 @@
         "filtersReset": "Hapus semua filter",
         "filtersDisplay": "Tampilan",
         "agendaDayEmpty": "Tidak ada rencana",
-        "openInMap": "Buka di Maps"
+        "openInMap": "Buka di Maps",
+        "syncTargetAssigneeAmbiguous": "Beberapa kalender memiliki orang ini sebagai penugasan default. Pilih sendiri tujuannya."
     },
     "noteCategories": {
         "permissionLabel": "Kelola kategori catatan rumah tangga"
@@ -2467,7 +2468,8 @@
         "sync": {
             "defaultAssignee": "Penerima tugas default",
             "defaultAssigneeNone": "Tidak ada",
-            "defaultAssigneeHint": "Acara yang baru disinkronkan otomatis ditugaskan ke orang ini."
+            "defaultAssigneeHint": "Acara yang baru disinkronkan otomatis ditugaskan ke orang ini.",
+            "defaultAssigneeRoutingHint": "Penerima tugas default: acara dari sebuah kalender mendapat orang yang dipilih di sana, dan acara baru yang hanya ditugaskan ke orang itu dibuat di kalender tersebut. Berlaku untuk kalender Google dan CalDAV, bukan Apple atau Outlook."
         },
         "calendarDefaultsTitle": "Bawaan untuk acara baru",
         "calendarDefaultsDescription": "Prasetel yang otomatis diterapkan ke acara baru.",

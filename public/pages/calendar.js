@@ -31,7 +31,7 @@ import { wireTablist } from '/utils/tablist.js';
 // in eine eigene Runde. Der Import benennt die Schuld, statt sie zu umgehen.
 import { toggleRowHtml } from '/settings/components.js';
 import { localizeBirthdayEvent } from '/utils/birthday-event.js';
-import { googleTargetValue, caldavTargetValue, outlookTargetValue } from '/utils/sync-target.js';
+import { googleTargetValue, caldavTargetValue, outlookTargetValue, assigneeSyncTarget } from '/utils/sync-target.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { findPageFab } from '/utils/fab.js';
 import { nowFields, todayKey, zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
@@ -3982,6 +3982,10 @@ async function loadSyncTargets(selectElement, currentEvent = null) {
     // Termins ihn stillschweigend in einen Kalender schieben.
     applyDefaultSyncTarget(selectElement);
   }
+
+  // Die Ziele samt Standard-Zuweisung: das Formular waehlt daraus den Kalender
+  // der zugewiesenen Person (#1060).
+  return targets;
 }
 
 /**
@@ -4241,8 +4245,43 @@ function wireEventForm(panel, { mode, event = null, reminder = null }) {
     const syncOutlookHint = () => {
       if (outlookHint) outlookHint.hidden = !syncTargetSelect.value.startsWith('outlook:');
     };
-    syncTargetSelect.addEventListener('change', syncOutlookHint);
-    loadSyncTargets(syncTargetSelect, event).then(syncOutlookHint);
+
+    // DAS ZIEL FOLGT DER ZUWEISUNG (#1060) - nur beim Anlegen, und nur bis jemand
+    // selbst ein Ziel waehlt. Rangfolge: die eigene Wahl im Dialog, dann der
+    // Kalender, der die EINE zugewiesene Person als Standard nennt, dann der
+    // eigene Standard des Autors (#620). Ein bestehender Termin zieht nie von
+    // selbst um: das Verschieben zwischen Kalendern ist ein Vorgang
+    // (`outbound_move_to`, #593), keine Feldaenderung.
+    const mehrdeutigHint = panel.querySelector('#event-sync-target-assignee-hint');
+    let zielVonHand = false;
+    let ziele = null;
+    const zielNachZuweisung = () => {
+      if (mode !== 'create' || zielVonHand || !ziele) return;
+      const { value, ambiguous } = assigneeSyncTarget(ziele, getSelectedUserIds(panel, 'cal_assigned'));
+      if (mehrdeutigHint) mehrdeutigHint.hidden = !ambiguous;
+      const angeboten = Boolean(value) && Array.from(syncTargetSelect.options).some((o) => o.value === value);
+      if (angeboten) {
+        syncTargetSelect.value = value;
+      } else {
+        syncTargetSelect.value = '';
+        applyDefaultSyncTarget(syncTargetSelect);
+      }
+      syncOutlookHint();
+    };
+    syncTargetSelect.addEventListener('change', () => {
+      // Ein programmatisch gesetzter Wert feuert kein change - das hier ist die Hand.
+      zielVonHand = true;
+      if (mehrdeutigHint) mehrdeutigHint.hidden = true;
+      syncOutlookHint();
+    });
+    // Einen Tick spaeter lesen: bindUserMultiSelect raeumt "Niemand" im selben change ab.
+    panel.querySelector('.user-ms[data-ms-name="cal_assigned"]')
+      ?.addEventListener('change', () => setTimeout(zielNachZuweisung, 0));
+    loadSyncTargets(syncTargetSelect, event).then((geladen) => {
+      ziele = geladen ?? null;
+      zielNachZuweisung();
+      syncOutlookHint();
+    });
   }
 
   // Enddatum dem Startdatum nachführen, damit das Verschieben des Starts
@@ -4409,6 +4448,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
       </select>
       <small class="form-hint">${t('calendar.syncTargetHint')}</small>
       <small class="form-hint" id="event-sync-target-outlook-hint" hidden>${t('settings.outlookPushHint')}</small>
+      <small class="form-hint" id="event-sync-target-assignee-hint" hidden>${t('calendar.syncTargetAssigneeAmbiguous')}</small>
     </div>
 
     <div class="form-group">
