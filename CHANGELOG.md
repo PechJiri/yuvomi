@@ -134,6 +134,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The automated review no longer loses its result on a later push.** On a pull request's second
+  push the review first reads what has already been said, and the tools it reached for - `gh api` on
+  the pull request's reviews and comments, `git show`, `git fetch` of a commit - were not in its
+  allowed list. The run on #1116 did the review, collected seven refusals and posted nothing, which
+  the evidence step rightly turned red; 17 of the last 40 runs carried refusals like these. The list
+  now lets it read the repository through `gh api` and through read-only git commands.
+
+  Writing through `gh api` stays blocked by a second list that denies every write form (`-X`,
+  `--method`, `-f`, `-F`, `--field`, `--raw-field`, `--input`), bundled short flags such as `-if`,
+  and `--hostname`, which would send the request - headers included - to another host. That list is
+  load-bearing, measured with the CLI: a rule on the path alone let a POST through. The same list
+  keeps the read-only git commands read-only: `git show`, `git log`, `git diff` and `git rev-list`
+  write a file with `--output`, and on a runner that file can be the environment of the next step. Running code from the checkout
+  (`node`, `npm`, the test suites), writing files and fetching web pages stay out, because the job
+  holds a token that can write to pull requests and the checkout is the pull request's own code. A
+  guard in `test:claude-review-workflow` holds both lists.
+
+  Worth knowing: a pull request that touches the review workflow makes the action skip itself, so
+  this one is not reviewed by it, and after the merge an older branch skips the review until it is
+  rebased.
+
 - **The Module options settings page describes what it actually contains.** Its description named
   only Budget, Health and Housekeeping - accurate when it was written, but Tasks and Schedule have
   since grown their own sections on the same page without the sentence ever being updated. Reworded
