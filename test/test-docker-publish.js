@@ -57,8 +57,13 @@ test('every base image is pinned to a digest, and both stages share it', () => {
   // Digest wuerde beim naechsten Bump lautlos zurueckfallen.
   const froms = dockerfile.split('\n').filter((l) => /^FROM /.test(l));
   assert.ok(froms.length >= 2, 'expected a build and a runtime stage');
-  const digests = froms.map((l) => l.match(/^FROM node:(\d+)-slim@(sha256:[0-9a-f]{64})(?:\s+AS\s+\w+)?$/));
-  digests.forEach((m, i) => assert.ok(m, `FROM line ${i + 1} must be node:<major>-slim@sha256:<digest>: ${froms[i]}`));
+  const digests = froms.map((l) => l.match(/^FROM node:(\d+\.\d+\.\d+)-slim@(sha256:[0-9a-f]{64})(?:\s+AS\s+\w+)?$/));
+  digests.forEach((m, i) => assert.ok(m, `FROM line ${i + 1} must be node:<version>-slim@sha256:<digest>: ${froms[i]}`));
+  assert.ok(digests.every((m) => m[1] === '24.21.0'), 'both stages must use Node 24.21.0');
+  assert.ok(
+    digests.every((m) => m[2] === 'sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553'),
+    'both stages must pin the reviewed Node 24.21.0 slim multi-architecture index',
+  );
   assert.equal(new Set(digests.map((m) => m[2])).size, 1, 'build and runtime stage must pin the same digest');
 });
 
@@ -67,7 +72,7 @@ test('CI tests the Node major the image runs on', () => {
   // die Version gesehen, die bei den Nutzern laeuft. Die Matrix muss den Major
   // des Dockerfiles enthalten; die Entwicklungs-Baseline aus package.json engines
   // bleibt daneben stehen.
-  const imageMajor = dockerfile.match(/^FROM node:(\d+)-slim@/m)?.[1];
+  const imageMajor = dockerfile.match(/^FROM node:(\d+)(?:\.\d+\.\d+)?-slim@/m)?.[1];
   assert.ok(imageMajor, 'Dockerfile must name a Node major');
   const matrix = ci.match(/node-version:\s*\[([^\]]+)\]/)?.[1];
   assert.ok(matrix, 'ci.yml must have a node-version matrix');
