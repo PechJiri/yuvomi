@@ -351,6 +351,12 @@ async function switchToForm(panel, opts, state) {
       body.appendChild(pane);
       state.formPane = pane;
       opts.edit.mount(panel, pane);
+      // mount() fuegt sein Markup erst jetzt ein - lange nach dem createIcons-
+      // Lauf, der beim ersten Oeffnen der Leseansicht (renderIcons(panel) oben)
+      // durchlief. Ohne diesen zweiten Lauf bleiben `data-lucide`-Platzhalter im
+      // Formular leer, z. B. die 13 Knoepfe der Markdown-Formatierungsleiste
+      // (#1141).
+      renderIcons(pane);
       // Die Formular-Fußzeile entstand gerade erst im Body und muss ans Panel,
       // sonst scrollt die Primäraktion weg und ein „Speichern" mit
       // type="submit" löst außerhalb seines Formulars kein submit aus (#543).
