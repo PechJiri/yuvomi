@@ -970,7 +970,11 @@
         "filtersActive_one": "1 Filter aktiv",
         "filtersReset": "Alle Filter aufheben",
         "filtersDisplay": "Darstellung",
-        "agendaDayEmpty": "Nichts geplant"
+        "agendaDayEmpty": "Nichts geplant",
+        "openInMap": "In Maps öffnen",
+        "syncTargetAssigneeAmbiguous": "Mehrere Kalender haben diese Person als Standard-Zuweisung. Wähle das Ziel selbst.",
+        "filtersSources": "Kalender",
+        "filterUnassigned": "Nicht zugewiesen"
     },
     "noteCategories": {
         "permissionLabel": "Gemeinsame Notizkategorien verwalten"
@@ -2500,7 +2504,8 @@
         "sync": {
             "defaultAssignee": "Standard-Zuweisung",
             "defaultAssigneeNone": "Keine",
-            "defaultAssigneeHint": "Neu synchronisierte Termine werden automatisch dieser Person zugewiesen."
+            "defaultAssigneeHint": "Neu synchronisierte Termine werden automatisch dieser Person zugewiesen.",
+            "defaultAssigneeRoutingHint": "Standard-Zuweisung: Termine aus einem Kalender bekommen die dort gewählte Person, und ein neuer Termin, der nur dieser Person zugewiesen ist, wird in diesem Kalender angelegt. Das gilt für Google- und CalDAV-Kalender, nicht für Apple oder Outlook."
         },
         "calendarDefaultsTitle": "Standardwerte für neue Termine",
         "calendarDefaultsDescription": "Voreinstellungen, die neue Termine automatisch übernehmen.",

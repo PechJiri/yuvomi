@@ -958,7 +958,11 @@
         "filtersActive_one": "1 filtre etkin",
         "filtersReset": "Tüm filtreleri kaldır",
         "filtersDisplay": "Görünüm",
-        "agendaDayEmpty": "Planlanmış bir şey yok"
+        "agendaDayEmpty": "Planlanmış bir şey yok",
+        "openInMap": "Haritada aç",
+        "syncTargetAssigneeAmbiguous": "Birden fazla takvimde bu kişi varsayılan atama olarak ayarlı. Hedefi kendin seç.",
+        "filtersSources": "Takvimler",
+        "filterUnassigned": "Atanmamış"
     },
     "noteCategories": {
         "permissionLabel": "Ev notu kategorilerini yönet"
@@ -2465,7 +2469,8 @@
         "sync": {
             "defaultAssignee": "Varsayılan atama",
             "defaultAssigneeNone": "Yok",
-            "defaultAssigneeHint": "Yeni eşitlenen etkinlikler otomatik olarak bu kişiye atanır."
+            "defaultAssigneeHint": "Yeni eşitlenen etkinlikler otomatik olarak bu kişiye atanır.",
+            "defaultAssigneeRoutingHint": "Varsayılan atama: bir takvimdeki etkinlikler orada seçilen kişiye atanır ve yalnızca o kişiye atanan yeni bir etkinlik o takvimde oluşturulur. Google ve CalDAV takvimleri için geçerlidir, Apple veya Outlook için değil."
         },
         "calendarDefaultsTitle": "Yeni etkinlikler için varsayılanlar",
         "calendarDefaultsDescription": "Yeni etkinliklere otomatik uygulanan ön ayarlar.",

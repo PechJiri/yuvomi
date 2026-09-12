@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A new event goes to the calendar of the person it is assigned to** (#1060). A Google or CalDAV
+  calendar that names a default assignee in the sync settings now works in both directions: events
+  imported from it get that person, and a new event assigned to exactly that person gets that
+  calendar as its target in the event dialog. Your own choice in the dialog always wins, and
+  without a match the personal default target from Settings applies as before. Nothing is picked
+  when two people are assigned, or when two calendars name the same person - the dialog says so
+  instead of guessing. Existing events are never moved on their own, and Apple and Outlook
+  calendars are not chosen this way; the sync settings say both where the default assignee is set.
+
+- **The calendar filter can hide a connected calendar or subscription, and show the events nobody
+  is assigned to** (#1064). The filter sheet lists every calendar and ICS subscription with events
+  in the loaded range, each with its colour and a switch. Hiding one removes its events from all
+  four views and the agenda, remembered on the device for each account. A hidden calendar stays in
+  the list under its name even when none of its events is on screen, so it can always be switched
+  back on. A new event created for a hidden calendar stays out right away, not only once it has
+  synced. The person axis gains "Unassigned": on its own it shows only the events and tasks nobody
+  is assigned to, together with people it adds them. A person filter saved before this update keeps
+  its behaviour - it does not contain the new entry, so unassigned events stay out, as they did.
+
+- **An event's location opens in a map** (#1110, from discussion #1047). The event detail carries
+  an "Open in Maps" action whenever the event has a location; it opens an OpenStreetMap search for
+  that text in a new tab, the same search Contacts already uses for an address. It is an explicit
+  action rather than a link on the location itself, because the field is free text: "Zoom" or
+  "Room 3B" is not an address, and the action never claims it is. The link is built on the device
+  and used only when tapped - no geocoding, nothing looked up in advance. An address imported over
+  CalDAV with escaped line breaks is searched as one line.
+
 - **A shopping item can carry a price and the shop it was bought at** (#1003, first cut). Both sit
   in the item dialog, where the item is already open - the checkbox stays the fastest gesture in the
   app and gains no second step. The price is stored in whole minor units (cents, yen, fils) rather
@@ -133,6 +160,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The delete dialog is unchanged: "Delete entire series" already says it.
 
 ### Fixed
+
+- **An event moved to another CalDAV calendar can be deleted or edited right away** (#593). A move
+  creates the event in the new calendar and removes it from the old one, but until the next sync
+  Yuvomi kept pointing at the old copy. Deleting the event in that window went to an address that
+  no longer existed, counted as done, and the next sync brought the event back from the new
+  calendar. An edit was dropped the same way, and moving the event back to where it came from was
+  not recognised as a move. The event now points at the new calendar and its new copy as soon as
+  the move succeeds, as moves to Google calendars already did. An event deleted while its move is
+  still under way has its new copy deleted as well, and an edit or a move made while a change is
+  still being sent to the server stays queued instead of being dropped.
+
+- **Keyboard focus comes back after a confirmation, an input dialog or the calendar's detail
+  popover** (#1083). Confirm a delete, rename a list or a subtask, pick a folder to move to, and
+  the page reloads its list - which rebuilds the very button you came from. Focus fell to the page
+  body, so keyboard and screen-reader users started over at the top. These paths now put focus back
+  on the rebuilt control, or on the page itself when that control is gone: in Tasks, Shopping,
+  Documents, Health, Subscriptions, Housekeeping, Inventory, Meals, Rewards, the Schedule, Split
+  Expenses, the quick links and several Settings pages (API tokens, invitations, document storage,
+  recipe providers, calendar subscriptions and accounts). On desktop, the calendar's detail popover
+  now returns focus to the event it was opened from when it closes through Escape or one of its
+  actions; a click elsewhere still leaves focus where it went. Deleting a contact or an event from
+  its detail view puts focus back on the page as well.
+
+  Where a dialog appears on only some paths - rejecting a reward redemption asks, fulfilling it does
+  not - focus is pulled back only on the path that asked. Otherwise it would land on the trigger of
+  some earlier, unrelated dialog. The guard that holds all of this learned three shapes it could not
+  see: dialogs that deliver their answer after closing (`confirmModal`, `promptModal`, `selectModal`,
+  `confirmOverModal`), a reload inside a `try` block or after an `if`, and a callback handed in as a
+  parameter.
+
+- **An edit or a move made while a change is still on its way to Google is no longer dropped**
+  (#593). A change to a synced Google event is sent in the background. If the event was edited
+  again, or moved to another calendar, while that request was still under way, finishing it cleared
+  the note that more was waiting: Google kept the older version, and the next sync could write it
+  back over the newer edit. A second move made during a move was lost the same way, and moving the
+  event back to its old calendar while the first move was running was not recognised at all. Only
+  what actually reached Google now counts as done, and anything newer stays queued for the next
+  attempt. An edit made while the event is being moved goes to its new calendar in the same run
+  instead of waiting for the next sync.
+
+- **A review run that stopped at its gate is named as such, even when it first denied having
+  reviewed** (#1101). The check behind the automated review reads the run's closing text to say
+  why a silent run went red. It only looked at the first mention of "already reviewed", so a text
+  that negated it once and then affirmed it ("has not already reviewed this HEAD ... has already
+  reviewed this PR, so I should stop here") was diagnosed as unknown, pointing at a missing post
+  instead of the gate. Every mention now counts, the way every "stop" already did. The check was
+  red either way; only its message changes. The one exception that can turn it green still reads
+  the narrower way.
+
+- **The event detail names the day a multi-day event ends** (#1102). The "When" row showed the
+  start date and, of the end, only the time: an event from 10 September 14:00 to 12 September 11:00
+  read as "14:00 - 11:00" on a single day that ends before it begins, and an all-day event across
+  three days named only the first. When an event ends on another day, the row now carries that day
+  as well - start date and time to end date and time, or first to last day for an all-day event.
+  "Another day" is the rule the calendar grid already uses rather than a second one: a timed event
+  that ends at 00:00 still belongs to the evening it started in (#804), and the end of an all-day
+  event stays inclusive. The range separator now comes from the same locale string as the day
+  view's date range, a hyphen where the time range used to carry an en dash.
+
+- **Dialog content on a phone scrolls again with Reduce Motion turned on** (#981). A freshly opened
+  dialog stands at the top, so every swipe inside it began as a tracked swipe-to-close gesture, and
+  on every upward frame that gesture wrote `translateY(0)` to the panel. Normally the sheet's
+  entrance animation holds its end state and outranks that inline style, so the write changed
+  nothing. With Reduce Motion the animation is switched off, the write turned the panel's transform
+  from `none` into a matrix on every swipe, and iOS dropped the scroll. Measured in the iOS simulator
+  with the setting on: the same upward swipe left the content 0 to 30 px down in three runs. An
+  upward movement of more than 10 px before the sheet has been pulled is now content scrolling -
+  the gesture lets go and never touches the panel's style. Below that, the same threshold that
+  already applied downwards, nothing is decided, so a finger that wobbles upward as it lands can
+  still pull the sheet closed. A pull that has already started stays tracked when the finger
+  reverses, so the panel still returns to rest. Under the same setting the swipe now ends
+  500 to 675 px down.
+
+- **The automated review no longer loses its result on a later push.** On a pull request's second
+  push the review first reads what has already been said, and the tools it reached for - `gh api` on
+  the pull request's reviews and comments, `git show`, `git fetch` of a commit - were not in its
+  allowed list. The run on #1116 did the review, collected seven refusals and posted nothing, which
+  the evidence step rightly turned red; 17 of the last 40 runs carried refusals like these. The list
+  now lets it read the repository through `gh api` and through read-only git commands.
+
+  Writing through `gh api` stays blocked by a second list that denies every write form (`-X`,
+  `--method`, `-f`, `-F`, `--field`, `--raw-field`, `--input`), bundled short flags such as `-if`,
+  and `--hostname`, which would send the request - headers included - to another host. That list is
+  load-bearing, measured with the CLI: a rule on the path alone let a POST through. The same list
+  keeps the read-only git commands read-only: `git show`, `git log`, `git diff` and `git rev-list`
+  write a file with `--output`, and on a runner that file can be the environment of the next step. Running code from the checkout
+  (`node`, `npm`, the test suites), writing files and fetching web pages stay out, because the job
+  holds a token that can write to pull requests and the checkout is the pull request's own code. A
+  guard in `test:claude-review-workflow` holds both lists.
+
+  Worth knowing: a pull request that touches the review workflow makes the action skip itself, so
+  this one is not reviewed by it, and after the merge an older branch skips the review until it is
+  rebased.
 
 - **The Module options settings page describes what it actually contains.** Its description named
   only Budget, Health and Housekeeping - accurate when it was written, but Tasks and Schedule have

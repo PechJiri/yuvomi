@@ -1026,6 +1026,361 @@ test('scheitert das Anlegen im Ziel, wird in der Quelle nichts gelöscht', async
   assert.equal(reload(before.id).outbound_move_to, CAL2_URL, 'der nächste Lauf versucht es erneut');
 });
 
+// ── Nach dem Kalenderwechsel: die Zeile zeigt auf das Ziel ─────────────────────
+//
+// Bis zum nächsten Inbound-Lauf zeigten calendar_ref_id und external_object_url
+// weiter auf die Quelle, deren Objekt der Umzug gerade gelöscht hatte. Alles, was
+// in diesem Fenster am Termin geschieht, adressiert diese beiden Spalten: ein
+// Löschen lief per DELETE auf die tote URL, das 404 galt als erledigt, der
+// Tombstone fiel weg - und der nächste Lauf importierte den Termin aus dem Ziel
+// neu. Google zieht calendar_ref_id im Umzug sofort nach (`applyMove`).
+
+function seedMoved(uid) {
+  const calRefId = upsertCalendar(CAL_URL);
+  const before = insertSyncedEvent({ uid, calRefId, objectUrl: `${CAL_URL}${uid}.ics`, target: CAL_URL });
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL2_URL, before.id);
+  outbound.markEventOutbound(before, reload(before.id));
+  return reload(before.id);
+}
+
+async function runMove(uid) {
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  return processPendingUpdates(fakeClient(), 'caldav', indexFor(uid), calendars);
+}
+
+function calRefFor(url) {
+  return db.prepare(`SELECT id FROM external_calendars WHERE source = 'caldav' AND external_id = ?`).get(url)?.id;
+}
+
+test('nach dem Kalenderwechsel zeigt der Termin auf den Zielkalender und sein neues Objekt', async () => {
+  reset();
+  const event = seedMoved('mv4@t');
+  assert.equal(await runMove('mv4@t'), 1);
+
+  const row = reload(event.id);
+  assert.ok(calRefFor(CAL2_URL), 'der Zielkalender hat seine external_calendars-Zeile');
+  assert.equal(row.calendar_ref_id, calRefFor(CAL2_URL), 'calendar_ref_id folgt dem Umzug');
+  assert.equal(row.external_object_url, `${CAL2_URL}mv4@t.ics`,
+    'die Objekt-URL ist die, unter der der Umzug angelegt hat');
+});
+
+test('ein Löschen direkt nach dem Umzug trifft das Objekt im Zielkalender', async () => {
+  reset();
+  const event = seedMoved('mv5@t');
+  await runMove('mv5@t');
+
+  assert.equal(outbound.queueEventDeletion(reload(event.id)), true);
+  const [row] = tombstones();
+  assert.equal(row.calendar_external_id, CAL2_URL, 'der Tombstone gehört zum Zielkalender');
+  assert.equal(row.object_url, `${CAL2_URL}mv5@t.ics`);
+
+  const client = fakeClient();
+  await processPendingDeletions(client, 'caldav', new Map(), new Set([CAL_URL, CAL2_URL]));
+  assert.equal(client.deletes[0].calendarObject.url, `${CAL2_URL}mv5@t.ics`,
+    'die alte URL ist schon gelöscht - ihr 404 hätte den Tombstone als erledigt verworfen');
+});
+
+test('eine Bearbeitung nach dem Umzug geht an das Objekt im Zielkalender', async () => {
+  reset();
+  const event = seedMoved('mv6@t');
+  await runMove('mv6@t');
+
+  db.prepare("UPDATE calendar_events SET title = 'Nach dem Umzug' WHERE id = ?").run(event.id);
+  outbound.markOutbound(event.id, { dirty: true });
+
+  // Der volle Lauf findet das Objekt nur noch im Ziel. Der Inbound überspringt
+  // einen Termin mit ausstehendem Push, korrigiert die Spalten also nicht vorher.
+  const client = fakeClient();
+  const index = indexFor('mv6@t', { url: `${CAL2_URL}mv6@t.ics`, calendarUrl: CAL2_URL });
+  assert.equal(await processPendingUpdates(client, 'caldav', index), 1);
+  assert.equal(client.updates[0].calendarObject.url, `${CAL2_URL}mv6@t.ics`,
+    'ein PUT auf die gelöschte URL endet im 404, und das verwirft die Bearbeitung');
+});
+
+test('ein Wechsel zurück in den Ausgangskalender wird als Umzug erkannt', async () => {
+  reset();
+  const event = seedMoved('mv7@t');
+  await runMove('mv7@t');
+
+  const before = reload(event.id);
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL_URL, event.id);
+  assert.equal(outbound.markEventOutbound(before, reload(event.id)), true,
+    'zeigte calendar_ref_id noch auf die Quelle, sähe das Ziel wie der aktuelle Kalender aus');
+  assert.equal(reload(event.id).outbound_move_to, CAL_URL);
+});
+
+test('der Umzug übernimmt Name und Farbe des Zielkalenders aus der Kontoauswahl', async () => {
+  // Dieselben Werte, die der nächste Inbound-Lauf schreibt: sonst setzte der Umzug
+  // eine vorhandene Kalenderfarbe bis dahin auf null.
+  reset();
+  db.prepare('DELETE FROM caldav_calendar_selection').run();
+  const accountId = db.prepare('SELECT id FROM caldav_accounts LIMIT 1').get().id;
+  db.prepare(`INSERT INTO caldav_calendar_selection (account_id, calendar_url, calendar_name, calendar_color, enabled)
+              VALUES (?, ?, 'Arbeit (Auswahl)', '#FF8800', 1)`).run(accountId, CAL2_URL);
+  // Eine ältere Kalenderzeile mit anderem Stand: die Auswahl gewinnt, wie im Inbound.
+  upsertCalendar(CAL2_URL, 'Arbeit (alt)');
+
+  const event = seedMoved('mv8@t');
+  await runMove('mv8@t');
+
+  const cal = db.prepare('SELECT id, name, color FROM external_calendars WHERE external_id = ?').get(CAL2_URL);
+  assert.equal(reload(event.id).calendar_ref_id, cal.id);
+  assert.equal(cal.name, 'Arbeit (Auswahl)');
+  assert.equal(cal.color, '#FF8800');
+});
+
+test('eine Ziel-URL ohne Schrägstrich am Ende wird als Collection behandelt', async () => {
+  // tsdav bildet die Objekt-URL mit new URL(filename, calendar.url). Ohne den
+  // Schrägstrich ersetzt das das letzte Segment: das Objekt käme nach /cal/ statt
+  // nach /cal/work/, und die gespeicherte URL zeigte auf dieselbe falsche Stelle.
+  reset();
+  const bare = 'https://dav.example/cal/work';
+  const calRefId = upsertCalendar(CAL_URL);
+  const before = insertSyncedEvent({ uid: 'mv10@t', calRefId, objectUrl: `${CAL_URL}mv10@t.ics`, target: CAL_URL });
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(bare, before.id);
+  outbound.markEventOutbound(before, reload(before.id));
+
+  const client = fakeClient();
+  const calendars = new Map([[bare, { url: bare, displayName: 'Arbeit' }]]);
+  assert.equal(await processPendingUpdates(client, 'caldav', indexFor('mv10@t'), calendars), 1);
+
+  assert.equal(client.creates[0].calendar.url, `${bare}/`, 'der PUT geht in die Collection');
+  const row = reload(before.id);
+  assert.equal(row.external_object_url, `${bare}/mv10@t.ics`);
+  assert.equal(row.calendar_ref_id, calRefFor(bare), 'die Kalenderzeile behält die URL der Auswahl');
+});
+
+test('wird der Termin während des Umzugs gelöscht, wird auch die Kopie im Ziel gelöscht', async () => {
+  // Der Sofortversuch läuft ohne await hinter der Antwort. Löscht jemand den
+  // Termin, während das Anlegen im Ziel noch unterwegs ist, legt die Route den
+  // Tombstone mit der alten Quelle an - die neue Kopie bliebe sonst stehen und
+  // käme mit dem nächsten Lauf zurück.
+  reset();
+  const event = seedMoved('mv11@t');
+
+  const client = fakeClient({
+    onCreate: () => {
+      outbound.queueEventDeletion(reload(event.id));
+      db.prepare('DELETE FROM calendar_events WHERE id = ?').run(event.id);
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv11@t'), calendars);
+
+  const target = tombstones().find((t) => t.calendar_external_id === CAL2_URL);
+  assert.ok(target, 'für die Kopie im Ziel steht ein Tombstone');
+  assert.equal(target.event_external_id, 'mv11@t');
+  assert.equal(target.object_url, `${CAL2_URL}mv11@t.ics`);
+  assert.ok(outbound.hasPendingDeletion('caldav', 'mv11@t'), 'der Inbound importiert die UID nicht neu');
+
+  const cleanup = fakeClient();
+  await processPendingDeletions(cleanup, 'caldav', new Map(), new Set([CAL_URL, CAL2_URL]));
+  assert.ok(cleanup.deletes.some((d) => d.calendarObject.url === `${CAL2_URL}mv11@t.ics`),
+    'der nächste Lauf räumt die Kopie im Ziel ab');
+});
+
+// ── Was während des Provider-Aufrufs eintrifft ──────────────────────────────────
+//
+// Der Patch wird vor den awaits aus der Zeile gebaut. Eine Bearbeitung, die in
+// dieser Zeit ankommt, setzt outbound_dirty erneut - ein pauschales Abräumen
+// danach löschte ihre Markierung, und der nächste Inbound überschriebe sie.
+
+test('eine Bearbeitung während des Umzugs bleibt für den nächsten Push vorgemerkt', async () => {
+  reset();
+  const event = seedMoved('mv12@t');
+
+  const client = fakeClient({
+    onCreate: () => {
+      const before = reload(event.id);
+      db.prepare("UPDATE calendar_events SET title = 'Während des Umzugs' WHERE id = ?").run(event.id);
+      outbound.markEventOutbound(before, reload(event.id));
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  assert.equal(await processPendingUpdates(client, 'caldav', indexFor('mv12@t'), calendars), 1);
+
+  assert.doesNotMatch(client.creates[0].iCalString, /Während des Umzugs/,
+    'Vorbedingung: das angelegte Objekt trägt noch den alten Stand');
+  const row = reload(event.id);
+  assert.equal(row.outbound_dirty, 1, 'die neuere Bearbeitung wartet auf ihren Push');
+  assert.equal(row.outbound_move_to, null, 'der Umzug selbst ist erledigt');
+  assert.equal(row.calendar_ref_id, calRefFor(CAL2_URL));
+});
+
+test('eine Bearbeitung während des PUT bleibt für den nächsten Push vorgemerkt', async () => {
+  reset();
+  const event = seedDirty('u7@t', { title: 'Erste Fassung' });
+
+  const client = fakeClient({
+    onUpdate: () => {
+      const before = reload(event.id);
+      db.prepare("UPDATE calendar_events SET title = 'Zweite Fassung' WHERE id = ?").run(event.id);
+      outbound.markEventOutbound(before, reload(event.id));
+    },
+  });
+  assert.equal(await processPendingUpdates(client, 'caldav', indexFor('u7@t')), 1);
+
+  assert.match(client.updates[0].calendarObject.data, /SUMMARY:Erste Fassung/);
+  assert.equal(reload(event.id).outbound_dirty, 1, 'die zweite Fassung ist noch nicht beim Server');
+});
+
+test('ein während des PUT vorgemerkter Umzug bleibt stehen', async () => {
+  reset();
+  const event = seedDirty('u8@t', { title: 'Neu' });
+
+  const client = fakeClient({
+    onUpdate: () => {
+      const before = reload(event.id);
+      db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL2_URL, event.id);
+      outbound.markEventOutbound(before, reload(event.id));
+    },
+  });
+  await processPendingUpdates(client, 'caldav', indexFor('u8@t'));
+
+  const row = reload(event.id);
+  assert.equal(row.outbound_move_to, CAL2_URL, 'der Umzug läuft im nächsten Durchgang');
+  assert.equal(row.outbound_dirty, 0, 'die Feldänderung selbst ist angekommen');
+});
+
+test('wird der Quellkalender während des Umzugs aufgeräumt, bleibt die Kopie im Ziel stehen', async () => {
+  // Abwählen mit "Termine löschen" entfernt die Zeilen lokal und fasst den Anbieter
+  // ausdrücklich nicht an (calendar-prune.js). Eine fehlende Zeile ist deshalb kein
+  // Löschwunsch: ein Tombstone hier löschte den Termin bei allen anderen Clients.
+  reset();
+  const { deleteMirroredEvents } = await import('../server/services/calendar-prune.js');
+  const event = seedMoved('mv15@t');
+
+  const client = fakeClient({ onCreate: () => { deleteMirroredEvents(db, [CAL_URL]); } });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv15@t'), calendars);
+
+  assert.equal(reload(event.id), undefined, 'Vorbedingung: das Aufräumen hat die Zeile entfernt');
+  assert.deepEqual(tombstones(), [], 'kein Tombstone - weder für die Quelle noch für das Ziel');
+});
+
+test('ein Tombstone derselben UID in einem fremden Kalender gilt nicht als Löschen dieses Termins', async () => {
+  reset();
+  const { deleteMirroredEvents } = await import('../server/services/calendar-prune.js');
+  const CAL3_URL = 'https://dav.example/cal/school/';
+  const event = seedMoved('mv16@t');
+  outbound.queueDeletion({
+    source: 'caldav', calendarExternalId: CAL3_URL, eventExternalId: 'mv16@t', objectUrl: `${CAL3_URL}mv16@t.ics`,
+  });
+
+  const client = fakeClient({ onCreate: () => { deleteMirroredEvents(db, [CAL_URL]); } });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv16@t'), calendars);
+
+  assert.equal(reload(event.id), undefined);
+  assert.equal(tombstones().filter((t) => t.calendar_external_id === CAL2_URL).length, 0);
+});
+
+test('auch Altbestand ohne gespeicherte URL erkennt das Löschen während des Umzugs', async () => {
+  // Ohne external_object_url trägt der Tombstone der Route keine URL, nur den
+  // Quellkalender. Daran muss das Löschen erkannt werden.
+  reset();
+  const calRefId = upsertCalendar(CAL_URL);
+  const before = insertSyncedEvent({ uid: 'mv17@t', calRefId, target: CAL_URL });
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL2_URL, before.id);
+  outbound.markEventOutbound(before, reload(before.id));
+
+  const client = fakeClient({
+    onCreate: () => {
+      outbound.queueEventDeletion(reload(before.id));
+      db.prepare('DELETE FROM calendar_events WHERE id = ?').run(before.id);
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv17@t'), calendars);
+
+  assert.equal(tombstones().find((t) => t.calendar_external_id === CAL_URL)?.object_url, null,
+    'Vorbedingung: der Tombstone der Route kennt keine URL');
+  const target = tombstones().find((t) => t.calendar_external_id === CAL2_URL);
+  assert.equal(target?.object_url, `${CAL2_URL}mv17@t.ics`);
+});
+
+test('ein Rückweg in die Quelle während des Umzugs wird als neuer Umzug vorgemerkt', async () => {
+  // Während das Anlegen im Ziel läuft, steht calendar_ref_id noch auf der Quelle.
+  // Die Route sieht im Rückweg dorthin deshalb keinen Umzug und lässt die alte
+  // Vormerkung stehen - nach dem Umzug läge der Termin im Ziel, gewählt ist die Quelle.
+  reset();
+  const event = seedMoved('mv13@t');
+
+  const client = fakeClient({
+    onCreate: () => {
+      const before = reload(event.id);
+      db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL_URL, event.id);
+      outbound.markEventOutbound(before, reload(event.id));
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv13@t'), calendars);
+
+  const row = reload(event.id);
+  assert.equal(row.calendar_ref_id, calRefFor(CAL2_URL), 'Vorbedingung: der Umzug ins Ziel ist ausgeführt');
+  assert.equal(row.outbound_move_to, CAL_URL, 'der Rückweg läuft im nächsten Durchgang');
+});
+
+test('ein Zielwechsel während des Umzugs zurück auf das Umzugsziel merkt nichts vor', async () => {
+  // Das Gegenstück: liegt das Ziel der Anfrage am Ende dort, wohin der Umzug
+  // gerade ging, gibt es nichts mehr zu tun - kein zweiter Umzug an denselben Ort.
+  reset();
+  const CAL3_URL = 'https://dav.example/cal/school/';
+  const event = seedMoved('mv14@t');
+  db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL3_URL, event.id);
+
+  const client = fakeClient({
+    onCreate: () => {
+      db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(CAL2_URL, event.id);
+    },
+  });
+  const calendars = new Map([[CAL2_URL, { url: CAL2_URL, displayName: 'Arbeit' }]]);
+  await processPendingUpdates(client, 'caldav', indexFor('mv14@t'), calendars);
+
+  assert.equal(reload(event.id).outbound_move_to, null);
+});
+
+test('ein während des PUT gewählter und wieder verworfener Umzug verfällt', async () => {
+  // Ohne Umzug in diesem Lauf: ein anderer Kalender wird vorgemerkt, dann wieder der
+  // gewählt, in dem der Termin liegt. Die Route kann die Vormerkung nicht zurücknehmen,
+  // der nächste Lauf verschöbe den Termin in den verworfenen Kalender.
+  reset();
+  const event = seedDirty('u9@t', { title: 'Neu' });
+
+  const retarget = (url) => {
+    const before = reload(event.id);
+    db.prepare('UPDATE calendar_events SET target_caldav_calendar_url = ? WHERE id = ?').run(url, event.id);
+    outbound.markEventOutbound(before, reload(event.id));
+  };
+  const client = fakeClient({
+    onUpdate: () => {
+      retarget(CAL2_URL);
+      assert.equal(reload(event.id).outbound_move_to, CAL2_URL, 'Vorbedingung: der Umweg ist vorgemerkt');
+      retarget(CAL_URL);
+    },
+  });
+  await processPendingUpdates(client, 'caldav', indexFor('u9@t'));
+
+  const row = reload(event.id);
+  assert.equal(row.outbound_move_to, null, 'gewählt ist der Kalender, in dem der Termin liegt');
+  assert.equal(row.outbound_dirty, 0);
+});
+
+test('ohne Eintrag in der Kontoauswahl behält eine bestehende Kalenderzeile Name und Farbe', async () => {
+  reset();
+  db.prepare('DELETE FROM caldav_calendar_selection').run();
+  const calRefId = upsertCalendar(CAL2_URL, 'Arbeit (bekannt)');
+
+  const event = seedMoved('mv9@t');
+  await runMove('mv9@t');
+
+  const cal = db.prepare('SELECT id, name, color FROM external_calendars WHERE external_id = ?').get(CAL2_URL);
+  assert.equal(cal.id, calRefId, 'keine zweite Zeile für denselben Kalender');
+  assert.equal(reload(event.id).calendar_ref_id, calRefId);
+  assert.equal(cal.name, 'Arbeit (bekannt)', 'nicht der displayName des Abrufs');
+  assert.equal(cal.color, '#4A90E2', 'die Farbe wird nicht auf null gesetzt');
+});
+
 // ── Sofortversuch ───────────────────────────────────────────────────────────────
 
 /** Attrappe mit gezieltem Objektabruf, wie ihn der Sofortversuch nutzt. */

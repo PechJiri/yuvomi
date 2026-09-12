@@ -36,8 +36,13 @@ db.exec(MIGRATIONS_SQL[10]);  // ics_subscriptions used by calendar visibility
 db.exec(`
   ALTER TABLE calendar_events ADD COLUMN subscription_id INTEGER;
   ALTER TABLE calendar_events ADD COLUMN calendar_ref_id INTEGER;
+  ALTER TABLE calendar_events ADD COLUMN target_google_calendar_id TEXT;
+  ALTER TABLE calendar_events ADD COLUMN target_caldav_calendar_url TEXT;
+  ALTER TABLE calendar_events ADD COLUMN outbound_move_to TEXT;
   CREATE TABLE external_calendars (
     id INTEGER PRIMARY KEY,
+    source TEXT,
+    external_id TEXT,
     name TEXT NOT NULL,
     color TEXT
   );

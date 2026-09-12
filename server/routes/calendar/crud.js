@@ -18,6 +18,7 @@ import {
   stageDocumentUpload,
 } from '../../services/document-storage.js';
 import { queueEventDeletion, markEventOutbound, flushOutbound } from '../../services/calendar-outbound.js';
+import { SOURCE_CALENDAR_COLUMNS, SOURCE_CALENDAR_JOIN } from '../../services/calendar-events.js';
 import {
   assertSuccessorHasOccurrence,
   baseOccurrenceFor,
@@ -269,6 +270,7 @@ router.get('/:id', (req, res) => {
              -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_COLUMNS},
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,
              nd.name_day   AS name_day,
@@ -280,6 +282,7 @@ router.get('/:id', (req, res) => {
       LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
       LEFT JOIN users u_created  ON u_created.id  = e.created_by
       LEFT JOIN external_calendars ec ON ec.id = e.calendar_ref_id
+      ${SOURCE_CALENDAR_JOIN}
       LEFT JOIN ics_subscriptions isub ON isub.id = e.subscription_id
       LEFT JOIN birthdays bd ON bd.calendar_event_id = e.id
       LEFT JOIN birthdays nd ON nd.name_day_calendar_event_id = e.id
@@ -429,11 +432,13 @@ router.post('/', async (req, res) => {
              -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_COLUMNS},
              ${ASSIGNED_USERS_SQL}
       FROM calendar_events e
       LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
       LEFT JOIN users u_created  ON u_created.id  = e.created_by
       LEFT JOIN external_calendars ec ON ec.id = e.calendar_ref_id
+      ${SOURCE_CALENDAR_JOIN}
       LEFT JOIN ics_subscriptions isub ON isub.id = e.subscription_id
       WHERE e.id = ?
     `).get(eventId);
@@ -911,6 +916,17 @@ router.put('/:id', async (req, res) => {
     }
     stagedUpload = null;
 
+    // Änderung an einem synchronisierten Termin beim Provider nachziehen (#593):
+    // geänderte Felder als Patch, ein gewechselter Zielkalender als Umzug.
+    // Wie beim Löschen: vormerken, antworten, danach best effort ausführen.
+    // Vorgemerkt wird VOR dem Lesen der Antwort: deren Quelle folgt einem
+    // anstehenden Umzug, und ohne ihn filterte die Seite den Termin bis zum
+    // nächsten Laden weiter als Teil des alten Kalenders (#1064).
+    const pending = markEventOutbound(
+      event,
+      db.get().prepare('SELECT * FROM calendar_events WHERE id = ?').get(id),
+    );
+
     const updated = db.get().prepare(`
       SELECT e.*,
              u_assigned.display_name AS assigned_name,
@@ -924,19 +940,16 @@ router.put('/:id', async (req, res) => {
              -- angelegter oder geaenderter Termin kam ohne ihn zurueck.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_COLUMNS},
              ${ASSIGNED_USERS_SQL}
       FROM calendar_events e
       LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
       LEFT JOIN users u_created  ON u_created.id  = e.created_by
       LEFT JOIN external_calendars ec ON ec.id = e.calendar_ref_id
+      ${SOURCE_CALENDAR_JOIN}
       LEFT JOIN ics_subscriptions isub ON isub.id = e.subscription_id
       WHERE e.id = ?
     `).get(id);
-
-    // Änderung an einem synchronisierten Termin beim Provider nachziehen (#593):
-    // geänderte Felder als Patch, ein gewechselter Zielkalender als Umzug.
-    // Wie beim Löschen: vormerken, antworten, danach best effort ausführen.
-    const pending = markEventOutbound(event, updated);
 
     res.json({ data: serializeEvent(updated, {
       database: db.get(),

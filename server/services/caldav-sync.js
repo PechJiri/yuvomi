@@ -8,7 +8,7 @@ import { createLogger } from '../logger.js';
 const log = createLogger('CalDAV');
 
 import * as db from '../db.js';
-import { decodeHtmlEntities } from '../utils/html-entities.js';
+import { upsertExternalCalendar } from './external-calendars.js';
 import { assignDefaultToEvent } from './sync-assignment.js';
 import { pruneDeletedEvents, countMirroredEvents, deleteMirroredEvents } from './calendar-prune.js';
 import * as outbound from './calendar-outbound.js';
@@ -86,20 +86,6 @@ function normalizeCalColor(c) {
   if (/^#[0-9a-fA-F]{8}$/.test(c)) return c.slice(0, 7); // strip alpha
   if (/^#[0-9a-fA-F]{6}$/.test(c)) return c;
   return null;
-}
-
-function upsertExternalCalendar(source, externalId, name, color) {
-  // Provider-Namen können HTML-entity-encoded sein — zu Klartext normalisieren,
-  // sonst escaped die UI doppelt (z. B. literales "&amp;").
-  const row = db.get().prepare(`
-    INSERT INTO external_calendars (source, external_id, name, color)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(source, external_id) DO UPDATE SET
-      name  = excluded.name,
-      color = excluded.color
-    RETURNING id
-  `).get(source, externalId, decodeHtmlEntities(name), color);
-  return row.id;
 }
 
 // --------------------------------------------------------

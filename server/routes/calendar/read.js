@@ -10,6 +10,7 @@ import { DATE_RE } from '../../middleware/validate.js';
 import {
   expandAndResolveEventRows, getUpcomingEvents, hydrateEventAttachmentBodies,
 } from '../../services/calendar-event-reader.js';
+import { SOURCE_CALENDAR_COLUMNS, SOURCE_CALENDAR_JOIN } from '../../services/calendar-events.js';
 import { buildMatchQuery, resolveEventSearchRows } from '../../services/search.js';
 import { visibilityWhere } from '../../services/visibility.js';
 import {
@@ -56,6 +57,7 @@ router.get('/', (req, res) => {
              -- sichtbar die Farbe seiner Quelle und konnte sie nirgends nennen.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_COLUMNS},
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,
              nd.name_day   AS name_day,
@@ -66,6 +68,7 @@ router.get('/', (req, res) => {
       LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
       LEFT JOIN users u_created  ON u_created.id  = e.created_by
       LEFT JOIN external_calendars ec ON ec.id = e.calendar_ref_id
+      ${SOURCE_CALENDAR_JOIN}
       LEFT JOIN ics_subscriptions isub ON isub.id = e.subscription_id
       LEFT JOIN birthdays bd ON bd.calendar_event_id = e.id
       LEFT JOIN birthdays nd ON nd.name_day_calendar_event_id = e.id
@@ -196,6 +199,7 @@ router.get('/search', (req, res) => {
              -- sichtbar die Farbe seiner Quelle und konnte sie nirgends nennen.
              COALESCE(ec.name, isub.name)   AS cal_name,
              COALESCE(ec.color, isub.color) AS cal_color,
+             ${SOURCE_CALENDAR_COLUMNS},
              COALESCE(bd.name, nd.name) AS birthday_name,
              bd.birth_date AS birthday_date,
              nd.name_day   AS name_day,
@@ -207,6 +211,7 @@ router.get('/search', (req, res) => {
       LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
       LEFT JOIN users u_created  ON u_created.id  = e.created_by
       LEFT JOIN external_calendars ec ON ec.id = e.calendar_ref_id
+      ${SOURCE_CALENDAR_JOIN}
       LEFT JOIN ics_subscriptions isub ON isub.id = e.subscription_id
       LEFT JOIN birthdays bd ON bd.calendar_event_id = e.id
       LEFT JOIN birthdays nd ON nd.name_day_calendar_event_id = e.id

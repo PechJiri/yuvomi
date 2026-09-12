@@ -958,7 +958,11 @@
         "filtersActive_one": "1 filter active",
         "filtersReset": "Clear all filters",
         "filtersDisplay": "Display",
-        "agendaDayEmpty": "Nothing planned"
+        "agendaDayEmpty": "Nothing planned",
+        "openInMap": "Open in Maps",
+        "syncTargetAssigneeAmbiguous": "Several calendars have this person as their default assignee. Choose the target yourself.",
+        "filtersSources": "Calendars",
+        "filterUnassigned": "Unassigned"
     },
     "noteCategories": {
         "permissionLabel": "Manage household note categories"
@@ -2488,7 +2492,8 @@
         "sync": {
             "defaultAssignee": "Default assignee",
             "defaultAssigneeNone": "None",
-            "defaultAssigneeHint": "Newly synced events are automatically assigned to this person."
+            "defaultAssigneeHint": "Newly synced events are automatically assigned to this person.",
+            "defaultAssigneeRoutingHint": "Default assignee: events from a calendar get the person chosen there, and a new event assigned only to that person is created in that calendar. This applies to Google and CalDAV calendars, not to Apple or Outlook."
         },
         "calendarDefaultsTitle": "Defaults for new events",
         "calendarDefaultsDescription": "Presets automatically applied to new events.",
