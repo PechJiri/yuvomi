@@ -94,6 +94,21 @@ test('der Wechsel ins Formular löst die drei Fallen in fester Reihenfolge', asy
   assert.match(form, /focusFirstField\(/, 'Falle 3: der Fokus muss bewusst gesetzt werden');
 });
 
+test('das nachgeladene Formular bekommt seine Lucide-Icons (#1141)', async () => {
+  const src = await detailJs();
+  const form = src.slice(src.indexOf('function switchToForm'), src.indexOf('function switchToDetail'));
+  // edit.mount() fuegt sein Markup erst beim Wechsel ein - der createIcons-Lauf
+  // beim urspruenglichen Oeffnen der Leseansicht (renderIcons(panel) in
+  // onSave()) kommt dafuer zu frueh und erreicht dieses Formular nie. Ohne
+  // einen zweiten Lauf bleiben `data-lucide`-Platzhalter im Formular leer -
+  // z. B. alle 13 Knoepfe der Markdown-Formatierungsleiste ueber der
+  // Aufgaben-Notiz.
+  const mountIdx = form.indexOf('opts.edit.mount(');
+  const iconsIdx = form.indexOf('renderIcons(pane)');
+  assert.ok(mountIdx > -1 && iconsIdx > -1, 'renderIcons(pane) muss nach dem Mount stehen');
+  assert.ok(iconsIdx > mountIdx, 'die Icons muessen NACH dem Einfuegen des Formular-Markups erzeugt werden');
+});
+
 test('„Abbrechen" wirkt auch in einem nachträglich gebauten Formular (#738)', async () => {
   const src = await modalJs();
   const open = src.slice(src.indexOf('export function openModal'), src.indexOf('export async function closeModal'));

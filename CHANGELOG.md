@@ -161,6 +161,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The formatting toolbar over a task's note shows its icons again** (#1141). Switching a task's
+  detail view into edit mode builds that form only then, but the icon-replacing pass over the whole
+  overlay had already run before the form existed, so the 13 buttons of the markdown toolbar (bold,
+  list, link, and so on) stayed blank. The edit form now gets its own icon pass right after it is
+  built.
+
 - **An event moved to another CalDAV calendar can be deleted or edited right away** (#593). A move
   creates the event in the new calendar and removes it from the old one, but until the next sync
   Yuvomi kept pointing at the old copy. Deleting the event in that window went to an address that
@@ -170,6 +176,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the move succeeds, as moves to Google calendars already did. An event deleted while its move is
   still under way has its new copy deleted as well, and an edit or a move made while a change is
   still being sent to the server stays queued instead of being dropped.
+
+- **A change to a synced calendar no longer collides with a sync that is already running**
+  (#593). Every create, edit and delete tries to reach the server right away, and the scheduler
+  runs its own sync every few minutes. Both did the same bookkeeping at the same time, so one
+  could clear the other's notes between two network calls: an event deleted while its move to
+  another calendar was still under way left its new copy behind, and the next sync brought the
+  deleted event back. A provider now runs one pass at a time - the immediate attempt, the
+  scheduled sync and a second scheduled tick wait for each other instead of overlapping, and a
+  burst of edits during a slow pass is followed by one catch-up pass rather than one per edit.
+  This covers Google, CalDAV, iCloud and the CalDAV reminder lists behind Tasks and Shopping.
 
 - **Keyboard focus comes back after a confirmation, an input dialog or the calendar's detail
   popover** (#1083). Confirm a delete, rename a list or a subtask, pick a folder to move to, and
@@ -199,6 +215,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   what actually reached Google now counts as done, and anything newer stays queued for the next
   attempt. An edit made while the event is being moved goes to its new calendar in the same run
   instead of waiting for the next sync.
+
+- **Choosing the calendar an event already sits in withdraws a move that has not gone out yet**
+  (#593). A move to another calendar is queued and carried out by the sync, and that attempt can
+  fail - the server may be unreachable right then. Choosing the original calendar again in that
+  window looked like no change at all, so the queued move stayed: the next sync moved the event into
+  a calendar nobody had chosen any more, while the dialog showed the one that was. A target pointing
+  back at the calendar the event sits in now withdraws the queued move, and a target pointing at a
+  third calendar replaces it. Only the choice made in that edit counts: an edit that leaves the
+  target alone keeps a queued move, and a target stored on an older event that differs from its
+  actual calendar is still never read as a wish to move. Withdrawing also works while the sync is
+  set to read-only or its account is gone - it changes nothing at the provider, and a move the user
+  took back must not come back to life once writing is allowed again. Google and CalDAV alike.
 
 - **A review run that stopped at its gate is named as such, even when it first denied having
   reviewed** (#1101). The check behind the automated review reads the run's closing text to say
