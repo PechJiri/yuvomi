@@ -1,4 +1,4 @@
-/** Fasting preferences and record dialog, on Health and Settings. */
+/** Shared fasting preferences and record dialog, on Health, Settings and Dashboard. */
 import { api } from '/api.js';
 import { t, formatDate, formatTime } from '/i18n.js';
 import { esc } from '/utils/html.js';
