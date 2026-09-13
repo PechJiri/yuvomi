@@ -2533,7 +2533,7 @@ default private, with the existing own-record bulk visibility action.
 
 The page supports immediate/earlier start, completed backfill, active-start
 correction, and completed-record edits. First creation requires explicit safety
-acknowledgement on the page: Yuvomi records fasting and is not a
+acknowledgement, shared by page and widget: Yuvomi records fasting and is not a
 medical device or medical advice. Finish persists before the optional summary;
 closing it keeps the fast completed. Undo end PATCHes end_at:null with the returned
 revision. Deletion uses the shared undoable-delete window. Offline display keeps
@@ -2579,6 +2579,10 @@ created only for future targets; persisted due reminders retain delivery retries
 Lifecycle/settings/permission changes reconcile immediately; periodic repair
 preserves unchanged delivery state. Polling/push share localized neutral text and
 the /health/fasting deep link.
+
+The optional dashboard fasting widget is self-only, requires Health/capability/
+widget permission, and reuses the page's safety, start/finish and clock controls.
+It fits all supported widget sizes and is a web/PWA widget, not a native OS widget.
 
 The Health module stores personal medical data per family member across seven tables (migration
 65) plus three menstrual-cycle tables (migration 71). Every owner-scoped table carries `user_id`
