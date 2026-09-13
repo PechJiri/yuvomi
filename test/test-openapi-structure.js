@@ -33,6 +33,7 @@ test('fasting clients receive concrete lifecycle schemas, revision transports an
     for (const name of ['user_id', 'from', 'to', 'limit', 'before_at', 'before_id']) assert.ok(names.includes(name));
     assert.ok(!names.includes('offset'));
   }
+  assert.ok(!paths['/api/v1/health/fasting/stats'].get.parameters.some((p) => p.name === 'now'));
   assert.ok(paths['/api/v1/health/export/fasting'].get.responses[200].content['text/csv']);
 });
 const indexSrc = readFileSync(new URL('index.js', pathsDir), 'utf8');

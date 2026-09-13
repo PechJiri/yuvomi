@@ -3892,6 +3892,10 @@
             "zoneLater": "Ab 24 Stunden: individuelle Reaktionen unterscheiden sich",
             "zoneVariability": "Diese allgemeinen Phasen überlappen. Der Übergang zur stärkeren Nutzung von Fett und Ketonen ist unterschiedlich, häufig über 12-36 Stunden. Dieser Zeitmesser misst keinen Stoffwechselzustand; längeres Fasten ist nicht unbedingt besser.",
             "extraDays": "+{{days}} Tage",
+            "noRecord": "Kein Eintrag",
+            "goalCoverage": "Ziele für {{records}} von {{total}} Einträgen erfasst",
+            "chartLegend": "Tatsächliche Dauer (links) und erfasstes Ziel (rechts); die Werte sind Summen je Abschlusstag.",
+            "capturedGoal": "Aufgezeichnetes Ziel",
             "safetyDialog": "Yuvomi dient der Aufzeichnung und ist weder ein Medizinprodukt noch medizinischer Rat. Fasten ist nicht für alle geeignet. Holen Sie fachlichen Rat ein, besonders bei Schwangerschaft oder Stillzeit, für Kinder und Jugendliche, bei früheren Essstörungen, Diabetes, relevanten Medikamenten oder chronischen Erkrankungen. Sie können das Fasten jederzeit beenden.",
             "finishConfirm": "Fasten jetzt beenden?",
             "deleteConfirm": "Dieses Fasten wirklich löschen?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Notiz zum Fasten (optional)",
             "saveError": "Fasten konnte nicht gespeichert werden.",
             "loadError": "Fasten konnte nicht geladen werden.",
+            "statsTitle": "Statistik",
+            "statsCount": "Fasten insgesamt",
+            "statsTotal": "Gesamtdauer",
+            "statsAverage": "Durchschnitt",
+            "statsCurrentStreak": "Aktuelle Serie",
+            "statsLongestStreak": "Längste Serie",
+            "statsWeekly": "Fasten der letzten sieben Tage",
             "zone": {
                 "early": "Frühe Phase",
                 "fatBurning": "Neutrale Phase",
@@ -3927,7 +3938,10 @@
             "finishedHint": "Das Ende ist gespeichert. Du kannst Zeiten anpassen und eine Bewertung oder Notiz ergänzen.",
             "rangeError": "Das Ende muss nach dem Beginn liegen und darf nicht in der Zukunft liegen.",
             "elapsed": "Fastenzeit",
-            "sinceLast": "Seit dem letzten Fasten"
+            "sinceLast": "Seit dem letzten Fasten",
+            "allTime": "Gesamter Zeitraum",
+            "thisYear": "Dieses Jahr",
+            "last30Days": "Letzte 30 Tage"
         },
         "tabs": {
             "overview": "Übersicht",

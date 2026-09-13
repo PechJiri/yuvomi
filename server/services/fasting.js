@@ -1,6 +1,7 @@
 import { resolvePermissions } from '../permissions.js';
-import { parseFastingDateRange, rowMatchesFastingDateRange } from './fasting-dates.js';
-import { householdTimeZone } from '../utils/timezone.js';
+import { summarizeFastingRows, fastingStreaks, weeklyFastingSeries } from './fasting-stats.js';
+import { fastingDateKey, parseFastingDateRange, rowMatchesFastingDateRange } from './fasting-dates.js';
+import { householdTimeZone, shiftDateKey } from '../utils/timezone.js';
 
 export class FastingError extends Error {
   constructor(status, reason, message, current = undefined) {
@@ -227,6 +228,32 @@ export function getFastingState(database, actor, subjectId = Number(actor?.id)) 
     canWrite,
     acknowledged: canWrite ? safetyAcknowledged(database, subject) : null,
     display_tzid: householdTimeZone(database),
+  };
+}
+
+export function getFastingStats(database, actor, subjectId = Number(actor?.id), now = new Date()) {
+  const state = getFastingState(database, actor, subjectId);
+  const rows = getAllFastingHistory(database, actor, subjectId);
+  const zone = householdTimeZone(database);
+  const today = fastingDateKey(now, zone);
+  const currentYear = today.slice(0, 4);
+  const windowStart = shiftDateKey(today, -29);
+  const completionKey = (row) => fastingDateKey(row.end_at, row.start_tzid || 'UTC');
+  const yearRows = rows.filter((row) => completionKey(row)?.slice(0, 4) === currentYear);
+  const last30Rows = rows.filter((row) => {
+    const key = completionKey(row);
+    return key && key >= windowStart && key <= today;
+  });
+  const streaks = fastingStreaks(rows, { today });
+  return {
+    display_tzid: zone,
+    today,
+    allTime: summarizeFastingRows(rows),
+    year: summarizeFastingRows(yearRows),
+    last30Days: summarizeFastingRows(last30Rows),
+    currentStreak: streaks.current,
+    longestStreak: streaks.longest,
+    weekly: weeklyFastingSeries(rows, { endDate: today }),
   };
 }
 

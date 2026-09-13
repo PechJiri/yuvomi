@@ -3891,6 +3891,10 @@
             "zoneLater": "24 timmar och mer: individuella reaktioner varierar",
             "zoneVariability": "Dessa övergripande faser överlappar. Övergången till ökad användning av fett och ketoner varierar, ofta över 12-36 timmar. Denna tidtagare mäter inte ämnesomsättningens tillstånd, och längre fasta är inte nödvändigtvis bättre.",
             "extraDays": "+{{days}} dagar",
+            "noRecord": "Ingen registrering",
+            "goalCoverage": "Mål registrerade för {{records}} av {{total}} fastor",
+            "chartLegend": "Faktisk längd (vänster) och registrerat mål (höger); värdena är summor per slutdatum.",
+            "capturedGoal": "Registrerat mål",
             "safetyDialog": "Yuvomi är ett verktyg för registrering, inte en medicinteknisk produkt eller medicinsk rådgivning. Fasta passar inte alla. Sök professionell vägledning, särskilt under graviditet eller amning, för barn och ungdomar, vid tidigare ätstörningar, diabetes, relevanta läkemedel eller kroniska tillstånd. Du kan avsluta en fasta när som helst.",
             "dateReadOnly": "Detta datum kan inte redigeras i datumväljaren. Den ursprungliga tidsstämpeln bevaras; du kan ändra de andra fälten.",
             "finishConfirm": "Avsluta denna fasta nu?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Anteckning om fastan (valfritt)",
             "saveError": "Fastan kunde inte sparas.",
             "loadError": "Fastan kunde inte läsas in.",
+            "statsTitle": "Statistik",
+            "statsCount": "Totalt antal fastor",
+            "statsTotal": "Total varaktighet",
+            "statsAverage": "Genomsnitt",
+            "statsCurrentStreak": "Aktuell serie",
+            "statsLongestStreak": "Längsta serie",
+            "statsWeekly": "Fastor under de senaste sju dagarna",
             "zone": {
                 "early": "Tidig fas",
                 "fatBurning": "Neutral fas",
@@ -3927,7 +3938,10 @@
             "finishedHint": "Slutet har sparats. Du kan ändra tiderna och lägga till betyg eller anteckning.",
             "rangeError": "Slutet måste vara efter starten och får inte ligga i framtiden.",
             "elapsed": "Fastetid",
-            "sinceLast": "Sedan senaste fastan"
+            "sinceLast": "Sedan senaste fastan",
+            "allTime": "Hela historiken",
+            "thisYear": "I år",
+            "last30Days": "Senaste 30 dagarna"
         },
         "tabs": {
             "overview": "Översikt",

@@ -3891,6 +3891,10 @@
             "zoneLater": "24小时及以上：个体反应各不相同",
             "zoneVariability": "这些大致阶段相互重叠。向更多利用脂肪和酮体的状态转变所需时间因人而异，通常为12至36小时。此计时器不测量代谢状态，断食时间更长并不一定更好。",
             "extraDays": "+{{days}}天",
+            "noRecord": "无记录",
+            "goalCoverage": "{{total}}次断食中有{{records}}次记录了目标",
+            "chartLegend": "实际时长（左）和记录的目标（右）；数值为每个完成日期的总计。",
+            "capturedGoal": "记录的目标",
             "safetyDialog": "Yuvomi是一款记录工具，不是医疗器械，也不提供医疗建议。断食并非适合所有人。请寻求专业指导，尤其是在怀孕或哺乳期间、儿童和青少年、有进食障碍史、糖尿病、使用相关药物或患有慢性疾病的情况下。您可以随时结束断食。",
             "dateReadOnly": "此日期无法在日期选择器中编辑。原始时间戳会被保留；您可以更改其他字段。",
             "finishConfirm": "现在结束这次断食吗？",
@@ -3899,6 +3903,13 @@
             "notePrompt": "断食备注（可选）",
             "saveError": "无法保存断食。",
             "loadError": "无法加载断食。",
+            "statsTitle": "统计",
+            "statsCount": "断食总次数",
+            "statsTotal": "总时长",
+            "statsAverage": "平均值",
+            "statsCurrentStreak": "当前连续记录",
+            "statsLongestStreak": "最长连续记录",
+            "statsWeekly": "过去七天的断食",
             "zone": {
                 "early": "早期阶段",
                 "fatBurning": "中性阶段",
@@ -3927,7 +3938,10 @@
             "finishedHint": "结束时间已保存。您可以调整时间并添加评分或备注。",
             "rangeError": "结束时间必须晚于开始时间，且不能在未来。",
             "elapsed": "断食时间",
-            "sinceLast": "距上次断食"
+            "sinceLast": "距上次断食",
+            "allTime": "全部历史",
+            "thisYear": "今年",
+            "last30Days": "最近30天"
         },
         "tabs": {
             "overview": "概览",

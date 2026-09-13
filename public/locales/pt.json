@@ -3891,6 +3891,10 @@
             "zoneLater": "24 horas ou mais: as respostas individuais variam",
             "zoneVariability": "Estas fases gerais se sobrepõem. A transição para um maior uso de gordura e cetonas varia, frequentemente ao longo de 12-36 horas. Este temporizador não mede o estado metabólico, e um jejum mais longo não é necessariamente melhor.",
             "extraDays": "+{{days}} dias",
+            "noRecord": "Nenhum registro",
+            "goalCoverage": "Metas registradas para {{records}} de {{total}} jejuns",
+            "chartLegend": "Duração real (esquerda) e meta registrada (direita); os valores são totais por data de conclusão.",
+            "capturedGoal": "Meta registrada",
             "safetyDialog": "O Yuvomi é uma ferramenta de acompanhamento, não um dispositivo médico nem aconselhamento médico. O jejum não é adequado para todas as pessoas. Procure orientação profissional, especialmente durante a gravidez ou amamentação, para crianças e adolescentes, em caso de histórico de transtornos alimentares, diabetes, medicamentos relevantes ou condições crônicas. Você pode encerrar um jejum a qualquer momento.",
             "dateReadOnly": "Esta data não pode ser editada no seletor de datas. O registro de data e hora original é preservado; você pode alterar os outros campos.",
             "finishConfirm": "Terminar este jejum agora?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Nota sobre este jejum (opcional)",
             "saveError": "Não foi possível guardar o jejum.",
             "loadError": "Não foi possível carregar o jejum.",
+            "statsTitle": "Estatísticas",
+            "statsCount": "Total de jejuns",
+            "statsTotal": "Duração total",
+            "statsAverage": "Média",
+            "statsCurrentStreak": "Sequência atual",
+            "statsLongestStreak": "Sequência mais longa",
+            "statsWeekly": "Jejuns dos últimos sete dias",
             "zone": {
                 "early": "Fase inicial",
                 "fatBurning": "Fase neutra",
@@ -3927,7 +3938,10 @@
             "finishedHint": "O fim está salvo. Você pode ajustar os horários e adicionar uma avaliação ou nota.",
             "rangeError": "O fim deve ser depois do início e não pode estar no futuro.",
             "elapsed": "Tempo de jejum",
-            "sinceLast": "Desde o último jejum"
+            "sinceLast": "Desde o último jejum",
+            "allTime": "Todo o histórico",
+            "thisYear": "Este ano",
+            "last30Days": "Últimos 30 dias"
         },
         "tabs": {
             "overview": "Visão geral",

@@ -3891,6 +3891,10 @@
             "zoneLater": "24 heures et plus : les réponses individuelles varient",
             "zoneVariability": "Ces grandes phases se chevauchent. La transition vers une utilisation accrue des graisses et des cétones varie, souvent sur 12 à 36 heures. Ce minuteur ne mesure pas l’état métabolique, et un jeûne plus long n’est pas nécessairement préférable.",
             "extraDays": "+{{days}} jours",
+            "noRecord": "Aucune entrée",
+            "goalCoverage": "Objectifs enregistrés pour {{records}} jeûnes sur {{total}}",
+            "chartLegend": "Durée réelle (à gauche) et objectif enregistré (à droite) ; les valeurs sont des totaux par date de fin.",
+            "capturedGoal": "Objectif enregistré",
             "safetyDialog": "Yuvomi est un outil de suivi, pas un dispositif médical ni un conseil médical. Le jeûne ne convient pas à tout le monde. Demandez un avis professionnel, notamment pendant la grossesse ou l’allaitement, pour les enfants et les adolescents, en cas d’antécédents de troubles alimentaires, de diabète, de médicaments concernés ou de maladies chroniques. Vous pouvez terminer un jeûne à tout moment.",
             "dateReadOnly": "Cette date ne peut pas être modifiée dans le sélecteur de date. L’horodatage d’origine est conservé ; vous pouvez modifier les autres champs.",
             "finishConfirm": "Terminer ce jeûne maintenant ?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Note sur ce jeûne (facultatif)",
             "saveError": "Impossible d'enregistrer le jeûne.",
             "loadError": "Impossible de charger le jeûne.",
+            "statsTitle": "Statistiques",
+            "statsCount": "Nombre total de jeûnes",
+            "statsTotal": "Durée totale",
+            "statsAverage": "Moyenne",
+            "statsCurrentStreak": "Série actuelle",
+            "statsLongestStreak": "Série la plus longue",
+            "statsWeekly": "Jeûnes des sept derniers jours",
             "zone": {
                 "early": "Phase initiale",
                 "fatBurning": "Phase neutre",
@@ -3927,7 +3938,10 @@
             "finishedHint": "La fin est enregistrée. Vous pouvez ajuster les heures et ajouter une évaluation ou une note.",
             "rangeError": "La fin doit suivre le début et ne pas être dans le futur.",
             "elapsed": "Durée du jeûne",
-            "sinceLast": "Depuis le dernier jeûne"
+            "sinceLast": "Depuis le dernier jeûne",
+            "allTime": "Tout l’historique",
+            "thisYear": "Cette année",
+            "last30Days": "30 derniers jours"
         },
         "tabs": {
             "overview": "Aperçu",

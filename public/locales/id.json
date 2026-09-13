@@ -3891,6 +3891,10 @@
             "zoneLater": "24 jam ke atas: respons tiap orang berbeda",
             "zoneVariability": "Fase-fase umum ini saling tumpang tindih. Peralihan menuju penggunaan lemak dan keton yang lebih besar bervariasi, sering kali dalam 12-36 jam. Pengatur waktu ini tidak mengukur kondisi metabolisme, dan puasa lebih lama belum tentu lebih baik.",
             "extraDays": "+{{days}} hari",
+            "noRecord": "Tidak ada catatan",
+            "goalCoverage": "Target tercatat untuk {{records}} dari {{total}} puasa",
+            "chartLegend": "Durasi aktual (kiri) dan target tercatat (kanan); nilai adalah jumlah untuk tiap tanggal selesai.",
+            "capturedGoal": "Target tercatat",
             "safetyDialog": "Yuvomi adalah alat pencatatan, bukan perangkat medis atau nasihat medis. Puasa tidak cocok untuk semua orang. Mintalah panduan profesional, terutama saat hamil atau menyusui, untuk anak-anak dan remaja, jika ada riwayat gangguan makan, diabetes, obat terkait, atau kondisi kronis. Anda dapat mengakhiri puasa kapan saja.",
             "dateReadOnly": "Tanggal ini tidak dapat diedit di pemilih tanggal. Stempel waktu asli dipertahankan; Anda dapat mengubah kolom lainnya.",
             "finishConfirm": "Selesaikan puasa ini sekarang?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Catatan tentang puasa (opsional)",
             "saveError": "Puasa tidak dapat disimpan.",
             "loadError": "Puasa tidak dapat dimuat.",
+            "statsTitle": "Statistik",
+            "statsCount": "Total puasa",
+            "statsTotal": "Durasi total",
+            "statsAverage": "Rata-rata",
+            "statsCurrentStreak": "Rangkaian saat ini",
+            "statsLongestStreak": "Rangkaian terpanjang",
+            "statsWeekly": "Puasa dalam tujuh hari terakhir",
             "zone": {
                 "early": "Fase awal",
                 "fatBurning": "Fase netral",
@@ -3927,7 +3938,10 @@
             "finishedHint": "Waktu selesai disimpan. Anda dapat mengubah waktu dan menambah penilaian atau catatan.",
             "rangeError": "Waktu selesai harus setelah mulai dan tidak boleh di masa depan.",
             "elapsed": "Waktu puasa",
-            "sinceLast": "Sejak puasa terakhir"
+            "sinceLast": "Sejak puasa terakhir",
+            "allTime": "Seluruh riwayat",
+            "thisYear": "Tahun ini",
+            "last30Days": "30 hari terakhir"
         },
         "tabs": {
             "overview": "Ringkasan",

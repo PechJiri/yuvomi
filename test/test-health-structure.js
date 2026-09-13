@@ -129,6 +129,7 @@ const EXPECTED = [
   'POST /fasting',
   'GET /fasting/state',
   'GET /fasting/history',
+  'GET /fasting/stats',
   'GET /fasting/settings',
   'PUT /fasting/settings',
   'POST /fasting/acknowledge-safety',

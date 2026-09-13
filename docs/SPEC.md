@@ -2560,6 +2560,16 @@ reason FASTING_REVISION_CONFLICT, FASTING_ACTIVE_EXISTS or FASTING_OVERLAP; curr
 contains a conflicting row where available. Missing acknowledgement returns
 FASTING_ACK_REQUIRED. POST retries use Idempotency-Key. API data is not SW-cached.
 
+Fasting insights use completed records only. All-time/calendar-year/rolling-30-day
+summaries contain count, totalMinutes and averageMinutes. Completion dates use each
+record's zone; today/year boundaries use the household display_tzid. A completed
+fast reaching its captured goal credits ceil(actual duration / 24 hours) dates
+ending on completion. Overlapping credits count once; interval merging avoids
+per-day allocation. Current streak ends today/yesterday; longest is historical.
+Weekly buckets contain date,count,totalMinutes,nullable summed goalMinutes,
+goalCount,hasRecord. Missing days differ from completed sub-minute records; the
+chart shows actual/captured-goal values and partial goal coverage.
+
 The Health module stores personal medical data per family member across seven tables (migration
 65) plus three menstrual-cycle tables (migration 71). Every owner-scoped table carries `user_id`
 (the owning member) and a `visibility` of `private` (owner only) or `family` (all members). Nested

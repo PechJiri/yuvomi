@@ -3891,6 +3891,10 @@
             "zoneLater": "24 godziny i dłużej: reakcje są indywidualne",
             "zoneVariability": "Te ogólne fazy nakładają się na siebie. Przejście do większego wykorzystania tłuszczu i ketonów jest zmienne i często trwa 12-36 godzin. Ten zegar nie mierzy stanu metabolicznego, a dłuższy post nie musi być lepszy.",
             "extraDays": "+{{days}} dni",
+            "noRecord": "Brak wpisu",
+            "goalCoverage": "Zapisano cele dla {{records}} z {{total}} postów",
+            "chartLegend": "Rzeczywisty czas (po lewej) i zapisany cel (po prawej); wartości są sumami dla każdej daty zakończenia.",
+            "capturedGoal": "Zapisany cel",
             "safetyDialog": "Yuvomi to narzędzie do rejestrowania, a nie wyrób medyczny ani porada medyczna. Post nie jest odpowiedni dla każdego. Zasięgnij profesjonalnej porady, zwłaszcza w ciąży lub podczas karmienia piersią, w przypadku dzieci i młodzieży, zaburzeń odżywiania w przeszłości, cukrzycy, przyjmowania istotnych leków lub chorób przewlekłych. Post możesz zakończyć w dowolnym momencie.",
             "dateReadOnly": "Tej daty nie można edytować w selektorze daty. Oryginalny znacznik czasu zostaje zachowany; możesz zmienić pozostałe pola.",
             "finishConfirm": "Zakończyć ten post teraz?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Notatka o poście (opcjonalnie)",
             "saveError": "Nie udało się zapisać postu.",
             "loadError": "Nie udało się wczytać postu.",
+            "statsTitle": "Statystyki",
+            "statsCount": "Łączna liczba postów",
+            "statsTotal": "Łączny czas",
+            "statsAverage": "Średnia",
+            "statsCurrentStreak": "Bieżąca seria",
+            "statsLongestStreak": "Najdłuższa seria",
+            "statsWeekly": "Posty z ostatnich siedmiu dni",
             "zone": {
                 "early": "Wczesna faza",
                 "fatBurning": "Faza neutralna",
@@ -3927,7 +3938,10 @@
             "finishedHint": "Koniec zapisano. Możesz zmienić godziny oraz dodać ocenę lub notatkę.",
             "rangeError": "Koniec musi być po początku i nie może być w przyszłości.",
             "elapsed": "Czas postu",
-            "sinceLast": "Od ostatniego postu"
+            "sinceLast": "Od ostatniego postu",
+            "allTime": "Cała historia",
+            "thisYear": "Ten rok",
+            "last30Days": "Ostatnie 30 dni"
         },
         "tabs": {
             "overview": "Przegląd",

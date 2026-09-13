@@ -3892,6 +3892,10 @@
             "zoneLater": "24 a více hodin: individuální reakce se liší",
             "zoneVariability": "Tyto obecné fáze se překrývají. Přechod k většímu využívání tuků a ketonů se liší, často v rozmezí 12-36 hodin. Časovač neměří metabolický stav a delší půst nemusí být lepší.",
             "extraDays": "+{{days}} dní",
+            "noRecord": "Bez záznamu",
+            "goalCoverage": "Cíl zaznamenán u {{records}} z {{total}} půstů",
+            "chartLegend": "Skutečná délka (vlevo) a zaznamenaný cíl (vpravo); hodnoty jsou součty za den dokončení.",
+            "capturedGoal": "Zaznamenaný cíl",
             "safetyDialog": "Yuvomi slouží k evidenci, není zdravotnickým prostředkem ani zdravotním doporučením. Půst není vhodný pro každého. Vyhledejte odbornou radu zejména při těhotenství nebo kojení, u dětí a dospívajících, při poruchách příjmu potravy v minulosti, diabetu, užívání souvisejících léků nebo chronickém onemocnění. Půst můžete kdykoli ukončit.",
             "finishConfirm": "Ukončit tento půst nyní?",
             "deleteConfirm": "Smazat tento půst?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Poznámka k půstu (volitelné)",
             "saveError": "Půst se nepodařilo uložit.",
             "loadError": "Půst se nepodařilo načíst.",
+            "statsTitle": "Statistiky",
+            "statsCount": "Celkem půstů",
+            "statsTotal": "Celková délka",
+            "statsAverage": "Průměr",
+            "statsCurrentStreak": "Aktuální série",
+            "statsLongestStreak": "Nejdelší série",
+            "statsWeekly": "Půsty za posledních sedm dní",
             "zone": {
                 "early": "Počáteční fáze",
                 "fatBurning": "Neutrální fáze",
@@ -3927,7 +3938,10 @@
             "finishedHint": "Konec půstu je uložen. Časy můžete upravit a přidat hodnocení nebo poznámku.",
             "rangeError": "Konec musí být po začátku a nesmí být v budoucnosti.",
             "elapsed": "Doba půstu",
-            "sinceLast": "Od posledního půstu"
+            "sinceLast": "Od posledního půstu",
+            "allTime": "Celá historie",
+            "thisYear": "Tento rok",
+            "last30Days": "Posledních 30 dní"
         },
         "tabs": {
             "overview": "Přehled",

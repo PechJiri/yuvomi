@@ -3891,6 +3891,10 @@
             "zoneLater": "24 órán túl: az egyéni reakciók eltérnek",
             "zoneVariability": "Ezek az általános szakaszok átfedik egymást. A zsír és a ketonok fokozott felhasználására való átállás változó, gyakran 12-36 óra alatt zajlik. Ez az időmérő nem méri az anyagcsere állapotát, és a hosszabb böjt nem feltétlenül jobb.",
             "extraDays": "+{{days}} nap",
+            "noRecord": "Nincs bejegyzés",
+            "goalCoverage": "{{total}} böjtből {{records}} esetében van rögzített cél",
+            "chartLegend": "Tényleges időtartam (balra) és rögzített cél (jobbra); az értékek a befejezés dátuma szerinti összegek.",
+            "capturedGoal": "Rögzített cél",
             "safetyDialog": "A Yuvomi nyilvántartási eszköz, nem orvostechnikai eszköz vagy orvosi tanács. A böjt nem mindenkinek megfelelő. Kérjen szakmai útmutatást, különösen terhesség vagy szoptatás idején, gyermekek és serdülők esetében, korábbi étkezési zavarok, cukorbetegség, érintett gyógyszerek vagy krónikus betegségek esetén. A böjtöt bármikor befejezheti.",
             "dateReadOnly": "Ez a dátum nem szerkeszthető a dátumválasztóval. Az eredeti időbélyeg megmarad; a többi mező módosítható.",
             "finishConfirm": "Befejezi most ezt a böjtöt?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Megjegyzés a böjthöz (nem kötelező)",
             "saveError": "A böjt mentése nem sikerült.",
             "loadError": "A böjt betöltése nem sikerült.",
+            "statsTitle": "Statisztikák",
+            "statsCount": "Böjtök összesen",
+            "statsTotal": "Teljes időtartam",
+            "statsAverage": "Átlag",
+            "statsCurrentStreak": "Jelenlegi sorozat",
+            "statsLongestStreak": "Leghosszabb sorozat",
+            "statsWeekly": "Böjtök az elmúlt hét napban",
             "zone": {
                 "early": "Korai szakasz",
                 "fatBurning": "Semleges szakasz",
@@ -3927,7 +3938,10 @@
             "finishedHint": "A befejezés mentve. Módosíthatod az időpontokat, és értékelést vagy megjegyzést adhatsz hozzá.",
             "rangeError": "A végnek a kezdet után kell lennie, és nem lehet a jövőben.",
             "elapsed": "Böjt időtartama",
-            "sinceLast": "Az utolsó böjt óta"
+            "sinceLast": "Az utolsó böjt óta",
+            "allTime": "Teljes előzmény",
+            "thisYear": "Idén",
+            "last30Days": "Utolsó 30 nap"
         },
         "tabs": {
             "overview": "Áttekintés",

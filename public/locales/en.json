@@ -3892,6 +3892,10 @@
             "zoneLater": "24+ hours: individual responses vary",
             "zoneVariability": "These broad phases overlap. The transition toward greater use of fat and ketones varies, often over 12-36 hours. This timer does not measure metabolic state, and longer fasting is not necessarily better.",
             "extraDays": "+{{days}} days",
+            "noRecord": "No record",
+            "goalCoverage": "Goals recorded for {{records}} of {{total}} fasts",
+            "chartLegend": "Actual duration (left) and recorded goal (right); values are totals for each completion date.",
+            "capturedGoal": "Recorded goal",
             "safetyDialog": "Yuvomi is a tracking tool, not a medical device or medical advice. Fasting is not appropriate for everyone. Seek professional guidance, especially during pregnancy or breastfeeding, for children and adolescents, a history of eating disorders, diabetes, relevant medicines or chronic conditions. You can end a fast at any time.",
             "finishConfirm": "Finish this fast now?",
             "deleteConfirm": "Delete this fast?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Note about this fast (optional)",
             "saveError": "Fasting could not be saved.",
             "loadError": "Fasting could not be loaded.",
+            "statsTitle": "Statistics",
+            "statsCount": "Total fasts",
+            "statsTotal": "Total duration",
+            "statsAverage": "Average",
+            "statsCurrentStreak": "Current streak",
+            "statsLongestStreak": "Longest streak",
+            "statsWeekly": "Fasts in the last seven days",
             "zone": {
                 "early": "Early phase",
                 "fatBurning": "Neutral phase",
@@ -3927,7 +3938,10 @@
             "finishedHint": "The end is saved. You can adjust the times and add a rating or note.",
             "rangeError": "The end must be after the start and not in the future.",
             "elapsed": "Fasting time",
-            "sinceLast": "Since your last fast"
+            "sinceLast": "Since your last fast",
+            "allTime": "All time",
+            "thisYear": "This year",
+            "last30Days": "Last 30 days"
         },
         "tabs": {
             "overview": "Overview",

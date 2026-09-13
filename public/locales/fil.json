@@ -3891,6 +3891,10 @@
             "zoneLater": "24 oras pataas: magkakaiba ang tugon ng bawat tao",
             "zoneVariability": "Nagkakapatong ang mga pangkalahatang yugtong ito. Nag-iiba ang paglipat tungo sa mas malaking paggamit ng taba at mga ketone, kadalasan sa loob ng 12-36 oras. Hindi sinusukat ng orasan na ito ang kalagayan ng metabolismo, at hindi nangangahulugang mas mabuti ang mas mahabang pag-aayuno.",
             "extraDays": "+{{days}} araw",
+            "noRecord": "Walang tala",
+            "goalCoverage": "May naitalang layunin para sa {{records}} sa {{total}} pag-aayuno",
+            "chartLegend": "Aktuwal na tagal (kaliwa) at naitalang layunin (kanan); ang mga halaga ay kabuuan sa bawat petsa ng pagtatapos.",
+            "capturedGoal": "Naitalang layunin",
             "safetyDialog": "Ang Yuvomi ay kasangkapan sa pagtatala, hindi aparatong medikal o payong medikal. Hindi angkop ang pag-aayuno para sa lahat. Humingi ng gabay ng propesyonal, lalo na habang buntis o nagpapasuso, para sa mga bata at kabataan, kung may kasaysayan ng mga karamdaman sa pagkain, diyabetis, kaugnay na gamot o malalang kondisyon. Maaari mong tapusin ang pag-aayuno anumang oras.",
             "dateReadOnly": "Hindi mababago ang petsang ito sa tagapili ng petsa. Pinapanatili ang orihinal na oras at petsa; maaari mong baguhin ang iba pang mga patlang.",
             "finishConfirm": "Tapusin ang pag-aayunong ito ngayon?",
@@ -3899,6 +3903,13 @@
             "notePrompt": "Tala tungkol sa pag-aayuno (opsyonal)",
             "saveError": "Hindi mai-save ang pag-aayuno.",
             "loadError": "Hindi mai-load ang pag-aayuno.",
+            "statsTitle": "Mga istatistika",
+            "statsCount": "Kabuuang pag-aayuno",
+            "statsTotal": "Kabuuang tagal",
+            "statsAverage": "Karaniwan",
+            "statsCurrentStreak": "Kasalukuyang serye",
+            "statsLongestStreak": "Pinakamahabang serye",
+            "statsWeekly": "Mga pag-aayuno sa nakaraang pitong araw",
             "zone": {
                 "early": "Maagang yugto",
                 "fatBurning": "Neutral na yugto",
@@ -3927,7 +3938,10 @@
             "finishedHint": "Nai-save ang pagtatapos. Maaari mong baguhin ang oras at magdagdag ng marka o tala.",
             "rangeError": "Dapat pagkatapos ng simula ang pagtatapos at hindi nasa hinaharap.",
             "elapsed": "Tagal ng pag-aayuno",
-            "sinceLast": "Mula sa huling pag-aayuno"
+            "sinceLast": "Mula sa huling pag-aayuno",
+            "allTime": "Buong kasaysayan",
+            "thisYear": "Ngayong taon",
+            "last30Days": "Huling 30 araw"
         },
         "tabs": {
             "overview": "Pangkalahatang-tanaw",
