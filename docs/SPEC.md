@@ -2488,7 +2488,7 @@ like `apple_app_password` and Google OAuth tokens; encryption-at-rest is via the
 
 ### Health (migration 65)
 
-#### Fasting journal (migration 197)
+#### Fasting journal (migrations 197 and 198)
 
 `/health/fasting` requires `health_use_fasting` and Health module access. The MVP
 provides own-person controls and a family read selector. Other-person views are
@@ -2516,8 +2516,8 @@ Personal settings are owner-only; caregivers may acknowledge safety via the API.
 | created_at, updated_at | TEXT | UTC audit timestamps |
 
 `idx_health_fasts_one_active` is a partial unique index per owner. Service-owned
-immediate transactions validate overlap/revision and perform writes atomically.
-End must follow start; neither may be in the future.
+immediate transactions validate overlap/revision and perform writes and reminder
+reconciliation atomically. End must follow start; neither may be in the future.
 Actual duration is unbounded and uses UTC elapsed time across DST. Ordinary edits
 retain the captured zone and unchanged timestamp precision. Repeated local hours
 retain the original offset; missing spring-forward times are rejected.
@@ -2525,7 +2525,8 @@ retain the original offset; missing spring-forward times are rejected.
 `health_fasting_settings` (migration 197) is keyed by user_id with cascading owner
 deletion. It holds nullable default_goal_minutes, zone_mode (`timer`/`educational`),
 safety_acknowledged_at, nullable safety_acknowledged_by (actor deletion sets null),
-and timestamps. clock_mode (`auto`/`elapsed`/`remaining`) lives in sync_config under
+and timestamps. Migration 198 adds remind_goal and remind_next_start, both off by
+default. clock_mode (`auto`/`elapsed`/`remaining`) lives in sync_config under
 `fasting_clock_mode:user:<id>`. Missing settings mean no goal, timer mode and no
 acknowledgement. Visibility defaults use health_visibility_defaults scope `fasting`,
 default private, with the existing own-record bulk visibility action.
@@ -2569,6 +2570,15 @@ per-day allocation. Current streak ends today/yesterday; longest is historical.
 Weekly buckets contain date,count,totalMinutes,nullable summed goalMinutes,
 goalCount,hasRecord. Missing days differ from completed sub-minute records; the
 chart shows actual/captured-goal values and partial goal coverage.
+
+Notifications are owner-only with independent retained preferences. Goal reached
+targets start_at + goal. Eligible completed fasts with goal below 24 hours schedule
+next start at end_at + (24 hours - goal); actual duration of 24 hours or more is
+excluded. A later fast cancels the prior next-start prompt. Missing reminders are
+created only for future targets; persisted due reminders retain delivery retries.
+Lifecycle/settings/permission changes reconcile immediately; periodic repair
+preserves unchanged delivery state. Polling/push share localized neutral text and
+the /health/fasting deep link.
 
 The Health module stores personal medical data per family member across seven tables (migration
 65) plus three menstrual-cycle tables (migration 71). Every owner-scoped table carries `user_id`

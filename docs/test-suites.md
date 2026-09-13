@@ -1,20 +1,21 @@
 # Test-Suiten
 
-## Fasten: Journal und Auswertung
+## Fasten: Journal, Auswertung und Erinnerungen
 
 ```bash
 npm run test:health-fasting        # Journal: Ziele, Timer, Navigation, Schema, Service und HTTP-Lebenszyklus
 npm run test:health-fasting-stats  # Kalenderfenster, erfasste Zeitzonen, Intervall-Streaks und Wochenwerte
+npm run test:fasting-reminders    # Planung, Abbruch, Wiederholung, Polling und Browser-Benachrichtigung
 npm run test:display-timezone     # Explizite Zone, doppelte DST-Stunde und nicht existierende Ortszeit
-npm run test:fasting-browser      # Echte Journal-/Auswertungs-Interaktionen
+npm run test:fasting-browser      # Echte Journal-/Auswertungs-/Erinnerungs-Interaktionen
 ```
 
-Die zwei fachlichen Node-Suiten sind jeweils einmal in `npm test` registriert.
+Die drei fachlichen Node-Suiten sind jeweils einmal in `npm test` registriert.
 Die bestehende Fasting-HTTP-Suite startet ihren Express-Router in-process auf einem
 isolierten Loopback-Port und einer temporaeren Testdatenbank; sie benoetigt keinen
 externen Dienst. Die Browser-Suiten nutzen den vorhandenen Puppeteer-Harness mit
 isoliertem Seed/Reset und laufen unter `test:document-guards`, ausserhalb von
-`npm test`. Journal und Auswertung haben getrennte Browserdateien;
+`npm test`. Journal, Auswertung und Erinnerungen haben getrennte Browserdateien;
 die gemeinsame Akzeptanzsuite sichert die Journal-Steuerelemente gegen Regressionen.
 Abgedeckt werden mobile/Desktop-Ansichten, Datum/DST, Familien-Lesezugriff,
 Undo/Revisionen, Offline-Resume und die geteilten Steuerelemente. Screenshots lassen

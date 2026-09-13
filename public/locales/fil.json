@@ -3916,6 +3916,7 @@
                 "ketosis": "Huling yugto"
             },
             "custom": "Custom",
+            "notifications": "Mga Abiso",
             "startDate": "Petsa ng simula",
             "endDate": "Petsa ng pagtatapos",
             "note": "Tala",
@@ -3928,6 +3929,8 @@
             "clockRemaining": "Natitira",
             "loadMore": "Mag-load ng 10 pa",
             "goalNextHint": "Kapag binago ang layunin, maa-update ang kasalukuyang pag-aayuno at ang default na layunin para sa mga susunod na pag-aayuno.",
+            "remindNext": "Paalala sa pag-aayuno",
+            "reminderHint": "Pagkatapos, darating ang paalala makalipas ang natitira sa 24-oras na siklo. Walang paalala kung walang layunin o kung 24 oras pataas ito.",
             "safetyTitle": "Bago magsimula",
             "conflict": "Nagbago ang tala. I-reload ang pahina at subukan muli.",
             "finishedTitle": "Tapos na ang pag-aayuno",

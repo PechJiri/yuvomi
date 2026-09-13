@@ -19,8 +19,16 @@ function setup(path = join(mkdtempSync(join(tmpdir(), 'yuvomi-fasting-service-')
     CREATE TABLE access_permissions (subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, resource_type TEXT NOT NULL, resource_key TEXT NOT NULL, access TEXT NOT NULL, updated_at TEXT);
     CREATE TABLE health_care_grants (subject_id INTEGER NOT NULL, caregiver_id INTEGER NOT NULL, PRIMARY KEY(subject_id, caregiver_id));
     CREATE TABLE sync_config (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
+    CREATE TABLE reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('task', 'event', 'subscription', 'inventory_item', 'inventory_tracked_date', 'pantry_item', 'cycle_period', 'cycle_log_nudge', 'schedule_entry', 'schedule_extra_entry')),
+      entity_id INTEGER NOT NULL, remind_at TEXT NOT NULL, dismissed INTEGER NOT NULL DEFAULT 0,
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TEXT,
+      pushed_at TEXT, assigned_from INTEGER
+    );
   `);
   database.exec(MIGRATIONS.find((item) => item.version === 197).up);
+  database.exec(MIGRATIONS.find((item) => item.version === 198).up);
   database.exec("INSERT INTO users VALUES (1, 'owner', 'member', 'parent'), (2, 'caregiver', 'member', 'parent'), (3, 'admin', 'admin', 'parent'), (4, 'disabled', 'member', 'other')");
   database.prepare("INSERT INTO access_permissions VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow', NULL)").run('1');
   database.prepare("INSERT INTO access_permissions VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow', NULL)").run('2');
