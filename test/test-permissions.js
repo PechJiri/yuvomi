@@ -29,7 +29,7 @@ import {
   PERMISSION_WIDGETS,
   PERMISSION_CAPABILITIES,
 } from '../server/permissions.js';
-import { isPermissionDeviation } from '../public/utils/permission-access.js';
+import { isPermissionDeviation } from '../public/utils/permission-group.js';
 import { WIDGET_IDS } from '../public/utils/dashboard-widgets.js';
 
 function freshDb() {

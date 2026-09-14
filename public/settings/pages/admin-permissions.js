@@ -17,8 +17,7 @@ import { prefersInkText } from '/utils/contrast.js';
 import { confirmModal } from '/components/modal.js';
 import { createRetryState } from '/settings/components.js';
 import { resolveExtensionLabel } from '/utils/extension-i18n.js';
-import { parsePermissionGroup } from '/utils/permission-group.js';
-import { isPermissionDeviation } from '/utils/permission-access.js';
+import { parsePermissionGroup, isPermissionDeviation } from '/utils/permission-group.js';
 
 // ── Statik ───────────────────────────────────────────────────────────────────
 
