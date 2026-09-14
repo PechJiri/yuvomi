@@ -79,7 +79,7 @@ test('future, malformed, overlap and bounds are rejected', () => {
   database.close();
 });
 
-test('caregiver requires grant and capabilities on both sides; admin cannot bypass it', () => {
+test('caregiver requires grant and capabilities on both sides; private ids stay hidden', () => {
   const database = setup();
   acknowledgeSafety(database, actor(1), 1);
   assert.throws(() => createFast(database, actor(2), base({ acknowledgeSafety: false })), (error) => error.reason === 'FASTING_SUBJECT_FORBIDDEN');
@@ -92,6 +92,16 @@ test('caregiver requires grant and capabilities on both sides; admin cannot bypa
   assert.throws(() => updateFast(database, actor(3), created.id, {
     expectedRevision: created.revision, note: 'admin without grant',
   }), (error) => error.reason === 'FASTING_NOT_FOUND');
+  database.close();
+});
+
+test('admin cannot bypass the caregiver grant for a reachable subject write', () => {
+  const database = setup();
+  acknowledgeSafety(database, actor(1), 1);
+  assert.throws(
+    () => createFast(database, actor(3), base({ acknowledgeSafety: false })),
+    (error) => error.reason === 'FASTING_SUBJECT_FORBIDDEN',
+  );
   database.close();
 });
 
@@ -121,6 +131,16 @@ test('server now fills omitted start and finish timestamps', () => {
   const older = createFast(database, actor(1), base({ startAt: '2025-01-01T08:00:00Z', acknowledgeSafety: false }));
   const ended = finishFast(database, actor(1), older.id, { expectedRevision: older.revision });
   assert.ok(Date.parse(ended.end_at) >= Date.parse(older.start_at) && Date.parse(ended.end_at) <= Date.now());
+  database.close();
+});
+
+test('journal state exposes server time for completed-entry defaults', () => {
+  const database = setup();
+  const before = Date.now();
+  const state = getFastingState(database, actor(1), 1);
+  const serverNow = Date.parse(state.server_now);
+  assert.ok(Number.isFinite(serverNow));
+  assert.ok(serverNow >= before && serverNow <= Date.now());
   database.close();
 });
 

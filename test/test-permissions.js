@@ -29,7 +29,7 @@ import {
   PERMISSION_WIDGETS,
   PERMISSION_CAPABILITIES,
 } from '../server/permissions.js';
-import { isPermissionDeviation } from '../public/utils/permission-group.js';
+import { effectiveCapabilityAccess, isPermissionDeviation } from '../public/utils/permission-group.js';
 import { WIDGET_IDS } from '../public/utils/dashboard-widgets.js';
 
 function freshDb() {
@@ -127,6 +127,15 @@ test('Fasting is default-on but explicit role and member denials still win', () 
   });
   assert.equal(resolvePermissions(db, member).capabilities.health_use_fasting, 'none');
   db.close();
+});
+
+test('permission sheet resolves each capability from its own default', () => {
+  const fasting = { default: 'allow' };
+  assert.equal(effectiveCapabilityAccess(fasting, { mode: 'role' }), 'allow');
+  assert.equal(effectiveCapabilityAccess(fasting, { mode: 'user' }), 'allow');
+  assert.equal(effectiveCapabilityAccess(fasting, { mode: 'user', inherited: 'none' }), 'none');
+  assert.equal(effectiveCapabilityAccess(fasting, { mode: 'user', draft: 'none', inherited: 'allow' }), 'none');
+  assert.equal(effectiveCapabilityAccess({ default: 'none' }, { mode: 'role' }), 'none');
 });
 
 test('Haushaltskategorien: Admin darf immer verwalten', () => {

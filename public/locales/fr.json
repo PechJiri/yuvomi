@@ -3925,6 +3925,7 @@
             "zoneVariability": "Ces grandes phases se chevauchent. La transition vers une utilisation accrue des graisses et des cétones varie, souvent sur 12 à 36 heures. Ce minuteur ne mesure pas l’état métabolique, et un jeûne plus long n’est pas nécessairement préférable.",
             "extraDays": "+{{count}} jours",
             "extraDays_one": "+{{count}} jour",
+            "extraDays_few": "+{{count}} jours",
             "safetyDialog": "Yuvomi est un outil de suivi, pas un dispositif médical ni un conseil médical. Le jeûne ne convient pas à tout le monde. Demandez un avis professionnel, notamment pendant la grossesse ou l’allaitement, pour les enfants et les adolescents, en cas d’antécédents de troubles alimentaires, de diabète, de médicaments concernés ou de maladies chroniques. Vous pouvez terminer un jeûne à tout moment.",
             "dateReadOnly": "Cette date ne peut pas être modifiée dans le sélecteur de date. L’horodatage d’origine est conservé ; vous pouvez modifier les autres champs.",
             "saveError": "Impossible d'enregistrer le jeûne.",

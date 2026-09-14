@@ -61,8 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conflict protection. Elapsed/remaining clocks, personal goals and an optional
   educational dial preserve the recorded time zone. History loads ten records at
   a time; date filters and CSV cover the complete visible history. Family members
-  can read shared records; personal settings stay private. Yuvomi records fasting
-  and does not provide medical advice.
+  can read shared records; personal settings stay private. Fasting is available to
+  every member by default and an admin can switch it off per family role or person.
+  Yuvomi records fasting and does not provide medical advice.
 
 - **A calendar's default assignee can now be applied to the events it already imported** (#1154).
   Until now the mapping only reached events that arrived after it was set, so the first thing

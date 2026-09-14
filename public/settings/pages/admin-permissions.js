@@ -17,7 +17,11 @@ import { prefersInkText } from '/utils/contrast.js';
 import { confirmModal } from '/components/modal.js';
 import { createRetryState } from '/settings/components.js';
 import { resolveExtensionLabel } from '/utils/extension-i18n.js';
-import { parsePermissionGroup, isPermissionDeviation } from '/utils/permission-group.js';
+import {
+  effectiveCapabilityAccess as resolveCapabilityAccess,
+  isPermissionDeviation,
+  parsePermissionGroup,
+} from '/utils/permission-group.js';
 
 // ── Statik ───────────────────────────────────────────────────────────────────
 
@@ -124,10 +128,11 @@ function effectiveWidgetAccess(w) {
 }
 
 function effectiveCapabilityAccess(item) {
-  const draft = state.draft.capabilities[item.key];
-  if (draft && draft !== 'inherit') return draft;
-  if (state.mode === 'user') return state.inherited.capabilities[item.key] ?? item.default ?? 'none';
-  return item.default ?? 'none';
+  return resolveCapabilityAccess(item, {
+    mode: state.mode,
+    draft: state.draft.capabilities[item.key],
+    inherited: state.inherited.capabilities[item.key],
+  });
 }
 
 // ── Zugriffs-Optionen ────────────────────────────────────────────────────────
@@ -151,12 +156,12 @@ function widgetOptions() {
   return base;
 }
 
-function capabilityOptions() {
+function capabilityOptions(mode = state.mode) {
   const base = [
     { value: 'none', label: t('settings.permCapabilityBlocked'), icon: WIDGET_OPT_ICONS.none },
     { value: 'allow', label: t('settings.permCapabilityAllowed'), icon: WIDGET_OPT_ICONS.allow },
   ];
-  if (state.mode === 'user') return [{ value: 'inherit', label: t('settings.permInherit'), icon: WIDGET_OPT_ICONS.inherit }, ...base];
+  if (mode === 'user') return [{ value: 'inherit', label: t('settings.permInherit'), icon: WIDGET_OPT_ICONS.inherit }, ...base];
   return base;
 }
 
@@ -249,15 +254,22 @@ function widgetRowHtml(w) {
   `;
 }
 
-function capabilityRowHtml(item) {
-  const current = state.draft.capabilities[item.key] ?? (state.mode === 'user' ? 'inherit' : item.default ?? 'none');
+export function capabilityRowHtml(item, view = {}) {
+  const mode = view.mode ?? state.mode;
+  const draft = view.draft ?? state.draft.capabilities;
+  const inherited = view.inherited ?? state.inherited.capabilities;
+  const label = view.label ?? capabilityLabel(item);
+  const current = draft[item.key]
+    ?? (mode === 'user' ? 'inherit' : resolveCapabilityAccess(item, {
+      mode, inherited: inherited[item.key],
+    }));
   return `
     <div class="perm-row perm-row--capability" data-capability="${esc(item.key)}">
       <div class="perm-row__label">
         <i data-lucide="tags" class="perm-row__wicon" aria-hidden="true"></i>
-        <span class="perm-row__name">${esc(capabilityLabel(item))}</span>
+        <span class="perm-row__name">${esc(label)}</span>
       </div>
-      ${segControl({ group: `capability:${item.key}`, label: capabilityLabel(item), current, options: capabilityOptions() })}
+      ${segControl({ group: `capability:${item.key}`, label, current, options: capabilityOptions(mode) })}
     </div>
   `;
 }

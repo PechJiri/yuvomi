@@ -231,6 +231,7 @@ export function getFastingState(database, actor, subjectId = Number(actor?.id)) 
   const history = getFastingHistory(database, actor, subject);
   const canWrite = actorId === subject || !!database.prepare('SELECT 1 FROM health_care_grants WHERE subject_id = ? AND caregiver_id = ?').get(subject, actorId);
   return {
+    server_now: new Date().toISOString(),
     active: database.prepare(`SELECT * FROM health_fasts WHERE ${visibleFilter(database, actorId, subject)} AND end_at IS NULL`).get(subject) || null,
     history: history.entries,
     history_has_more: history.has_more,

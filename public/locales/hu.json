@@ -3925,6 +3925,7 @@
             "zoneVariability": "Ezek az általános szakaszok átfedik egymást. A zsír és a ketonok fokozott felhasználására való átállás változó, gyakran 12-36 óra alatt zajlik. Ez az időmérő nem méri az anyagcsere állapotát, és a hosszabb böjt nem feltétlenül jobb.",
             "extraDays": "+{{count}} nap",
             "extraDays_one": "+{{count}} nap",
+            "extraDays_few": "+{{count}} nap",
             "safetyDialog": "A Yuvomi nyilvántartási eszköz, nem orvostechnikai eszköz vagy orvosi tanács. A böjt nem mindenkinek megfelelő. Kérjen szakmai útmutatást, különösen terhesség vagy szoptatás idején, gyermekek és serdülők esetében, korábbi étkezési zavarok, cukorbetegség, érintett gyógyszerek vagy krónikus betegségek esetén. A böjtöt bármikor befejezheti.",
             "dateReadOnly": "Ez a dátum nem szerkeszthető a dátumválasztóval. Az eredeti időbélyeg megmarad; a többi mező módosítható.",
             "saveError": "A böjt mentése nem sikerült.",

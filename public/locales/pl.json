@@ -3925,6 +3925,7 @@
             "zoneVariability": "Te ogólne fazy nakładają się na siebie. Przejście do większego wykorzystania tłuszczu i ketonów jest zmienne i często trwa 12-36 godzin. Ten zegar nie mierzy stanu metabolicznego, a dłuższy post nie musi być lepszy.",
             "extraDays": "+{{count}} dni",
             "extraDays_one": "+{{count}} dzień",
+            "extraDays_few": "+{{count}} dni",
             "safetyDialog": "Yuvomi to narzędzie do rejestrowania, a nie wyrób medyczny ani porada medyczna. Post nie jest odpowiedni dla każdego. Zasięgnij profesjonalnej porady, zwłaszcza w ciąży lub podczas karmienia piersią, w przypadku dzieci i młodzieży, zaburzeń odżywiania w przeszłości, cukrzycy, przyjmowania istotnych leków lub chorób przewlekłych. Post możesz zakończyć w dowolnym momencie.",
             "dateReadOnly": "Tej daty nie można edytować w selektorze daty. Oryginalny znacznik czasu zostaje zachowany; możesz zmienić pozostałe pola.",
             "saveError": "Nie udało się zapisać postu.",

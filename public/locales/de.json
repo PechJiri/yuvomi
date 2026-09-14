@@ -3926,6 +3926,7 @@
             "zoneVariability": "Diese allgemeinen Phasen überlappen. Der Übergang zur stärkeren Nutzung von Fett und Ketonen ist unterschiedlich, häufig über 12-36 Stunden. Dieser Zeitmesser misst keinen Stoffwechselzustand; längeres Fasten ist nicht unbedingt besser.",
             "extraDays": "+{{count}} Tage",
             "extraDays_one": "+{{count}} Tag",
+            "extraDays_few": "+{{count}} Tage",
             "safetyDialog": "Yuvomi dient der Aufzeichnung und ist weder ein Medizinprodukt noch medizinischer Rat. Fasten ist nicht für alle geeignet. Holen Sie fachlichen Rat ein, besonders bei Schwangerschaft oder Stillzeit, für Kinder und Jugendliche, bei früheren Essstörungen, Diabetes, relevanten Medikamenten oder chronischen Erkrankungen. Sie können das Fasten jederzeit beenden.",
             "saveError": "Fasten konnte nicht gespeichert werden.",
             "loadError": "Fasten konnte nicht geladen werden.",

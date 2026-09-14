@@ -3925,6 +3925,7 @@
             "zoneVariability": "Nagkakapatong ang mga pangkalahatang yugtong ito. Nag-iiba ang paglipat tungo sa mas malaking paggamit ng taba at mga ketone, kadalasan sa loob ng 12-36 oras. Hindi sinusukat ng orasan na ito ang kalagayan ng metabolismo, at hindi nangangahulugang mas mabuti ang mas mahabang pag-aayuno.",
             "extraDays": "+{{count}} araw",
             "extraDays_one": "+{{count}} araw",
+            "extraDays_few": "+{{count}} araw",
             "safetyDialog": "Ang Yuvomi ay kasangkapan sa pagtatala, hindi aparatong medikal o payong medikal. Hindi angkop ang pag-aayuno para sa lahat. Humingi ng gabay ng propesyonal, lalo na habang buntis o nagpapasuso, para sa mga bata at kabataan, kung may kasaysayan ng mga karamdaman sa pagkain, diyabetis, kaugnay na gamot o malalang kondisyon. Maaari mong tapusin ang pag-aayuno anumang oras.",
             "dateReadOnly": "Hindi mababago ang petsang ito sa tagapili ng petsa. Pinapanatili ang orihinal na oras at petsa; maaari mong baguhin ang iba pang mga patlang.",
             "saveError": "Hindi mai-save ang pag-aayuno.",

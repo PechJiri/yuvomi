@@ -3925,6 +3925,7 @@
             "zoneVariability": "Estas fases gerais se sobrepõem. A transição para um maior uso de gordura e cetonas varia, frequentemente ao longo de 12-36 horas. Este temporizador não mede o estado metabólico, e um jejum mais longo não é necessariamente melhor.",
             "extraDays": "+{{count}} dias",
             "extraDays_one": "+{{count}} dia",
+            "extraDays_few": "+{{count}} dias",
             "safetyDialog": "O Yuvomi é uma ferramenta de acompanhamento, não um dispositivo médico nem aconselhamento médico. O jejum não é adequado para todas as pessoas. Procure orientação profissional, especialmente durante a gravidez ou amamentação, para crianças e adolescentes, em caso de histórico de transtornos alimentares, diabetes, medicamentos relevantes ou condições crônicas. Você pode encerrar um jejum a qualquer momento.",
             "dateReadOnly": "Esta data não pode ser editada no seletor de datas. O registro de data e hora original é preservado; você pode alterar os outros campos.",
             "saveError": "Não foi possível guardar o jejum.",

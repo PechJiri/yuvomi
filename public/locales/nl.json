@@ -3925,6 +3925,7 @@
             "zoneVariability": "Deze globale fasen overlappen elkaar. De overgang naar meer gebruik van vet en ketonen varieert, vaak over 12-36 uur. Deze timer meet geen stofwisselingstoestand en langer vasten is niet noodzakelijk beter.",
             "extraDays": "+{{count}} dagen",
             "extraDays_one": "+{{count}} dag",
+            "extraDays_few": "+{{count}} dagen",
             "safetyDialog": "Yuvomi is een registratiemiddel, geen medisch hulpmiddel of medisch advies. Vasten is niet voor iedereen geschikt. Vraag professionele begeleiding, vooral tijdens zwangerschap of borstvoeding, voor kinderen en jongeren, bij een voorgeschiedenis van eetstoornissen, diabetes, relevante medicijnen of chronische aandoeningen. Je kunt een vastenperiode op elk moment beëindigen.",
             "dateReadOnly": "Deze datum kan niet worden bewerkt in de datumkiezer. De oorspronkelijke tijdstempel blijft behouden; je kunt de andere velden wijzigen.",
             "saveError": "Vasten kon niet worden opgeslagen.",

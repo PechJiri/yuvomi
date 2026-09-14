@@ -3925,6 +3925,7 @@
             "zoneVariability": "Các giai đoạn khái quát này chồng lấn nhau. Quá trình chuyển sang sử dụng nhiều chất béo và thể ketone hơn thay đổi tùy người, thường trong 12-36 giờ. Bộ đếm giờ này không đo trạng thái chuyển hóa, và nhịn ăn lâu hơn không nhất thiết tốt hơn.",
             "extraDays": "+{{count}} ngày",
             "extraDays_one": "+{{count}} ngày",
+            "extraDays_few": "+{{count}} ngày",
             "safetyDialog": "Yuvomi là công cụ theo dõi, không phải thiết bị y tế hay lời khuyên y khoa. Nhịn ăn không phù hợp với tất cả mọi người. Hãy tìm hướng dẫn chuyên môn, đặc biệt khi mang thai hoặc cho con bú, đối với trẻ em và thanh thiếu niên, có tiền sử rối loạn ăn uống, tiểu đường, dùng thuốc liên quan hoặc mắc bệnh mạn tính. Bạn có thể kết thúc nhịn ăn bất cứ lúc nào.",
             "dateReadOnly": "Không thể sửa ngày này trong bộ chọn ngày. Dấu thời gian gốc được giữ nguyên; bạn có thể thay đổi các trường khác.",
             "saveError": "Không thể lưu lần nhịn ăn.",

@@ -3925,6 +3925,7 @@
             "zoneVariability": "Fase-fase umum ini saling tumpang tindih. Peralihan menuju penggunaan lemak dan keton yang lebih besar bervariasi, sering kali dalam 12-36 jam. Pengatur waktu ini tidak mengukur kondisi metabolisme, dan puasa lebih lama belum tentu lebih baik.",
             "extraDays": "+{{count}} hari",
             "extraDays_one": "+{{count}} hari",
+            "extraDays_few": "+{{count}} hari",
             "safetyDialog": "Yuvomi adalah alat pencatatan, bukan perangkat medis atau nasihat medis. Puasa tidak cocok untuk semua orang. Mintalah panduan profesional, terutama saat hamil atau menyusui, untuk anak-anak dan remaja, jika ada riwayat gangguan makan, diabetes, obat terkait, atau kondisi kronis. Anda dapat mengakhiri puasa kapan saja.",
             "dateReadOnly": "Tanggal ini tidak dapat diedit di pemilih tanggal. Stempel waktu asli dipertahankan; Anda dapat mengubah kolom lainnya.",
             "saveError": "Puasa tidak dapat disimpan.",

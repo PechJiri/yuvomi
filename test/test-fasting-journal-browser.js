@@ -117,6 +117,31 @@ test('journal earlier start, active edit, recorded target, end undo and manual h
   } finally { await harness.close(); }
 });
 
+test('completed-entry default uses server time when the phone clock is ahead', async () => {
+  const harness = await startHarness();
+  try {
+    await harness.reset();
+    const page = await openPage(harness, { locale: 'cs' });
+    await gotoRoute(page, '/health/fasting');
+    await page.waitForSelector('[data-fasting-backfill]');
+    await call(page, 'post', '/health/fasting/acknowledge-safety', {});
+    await page.evaluate(() => {
+      const RealDate = Date;
+      window.fastingRestoreDate = () => { window.Date = RealDate; };
+      window.Date = class extends RealDate {
+        constructor(...args) { super(...(args.length ? args : [RealDate.now() + 10 * 60 * 1000])); }
+        static now() { return RealDate.now() + 10 * 60 * 1000; }
+      };
+    });
+    await page.click('[data-fasting-backfill]');
+    await page.waitForSelector('[data-fasting-edit-form]');
+    await page.evaluate(() => window.fastingRestoreDate());
+    await page.$eval('[data-fasting-edit-form]', (form) => form.requestSubmit());
+    await page.waitForFunction(() => !document.querySelector('.modal-panel'));
+    assert.equal((await call(page, 'get', '/health/fasting/history')).data.length, 1);
+  } finally { await harness.close(); }
+});
+
 test('delete expiry and failed pagehide flush settle pending identity; stale Undo end conflicts visibly', async () => {
   const harness = await startHarness();
   try {

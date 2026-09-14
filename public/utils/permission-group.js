@@ -52,3 +52,15 @@ export function parsePermissionGroup(group) {
 export function isPermissionDeviation(item, effectiveAccess) {
   return effectiveAccess !== (item?.default ?? 'none');
 }
+
+/**
+ * Resolves the access shown by a capability segment. Each capability owns its
+ * shipped default: fasting defaults to allow while household note-category
+ * management defaults to none. A user row may inherit a role value; a role row
+ * falls straight through to the capability's own default.
+ */
+export function effectiveCapabilityAccess(item, { mode, draft, inherited } = {}) {
+  if (draft && draft !== 'inherit') return draft;
+  if (mode === 'user') return inherited ?? item?.default ?? 'none';
+  return item?.default ?? 'none';
+}

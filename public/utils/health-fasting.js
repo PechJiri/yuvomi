@@ -7,6 +7,17 @@ const DAY_MINUTES = 24 * 60;
 
 export const FASTING_PRESETS = Object.freeze([12, 14, 15, 16, 18, 20, 23]);
 
+/**
+ * Completed-entry forms must use the authoritative server clock. Falling back
+ * to the device clock would reintroduce future timestamps on a phone whose
+ * clock runs ahead of the server.
+ */
+export function fastingServerDate(serverNow) {
+  const timestamp = Date.parse(serverNow);
+  if (!Number.isFinite(timestamp)) throw new Error('FASTING_SERVER_TIME_UNAVAILABLE');
+  return new Date(timestamp);
+}
+
 /** Unbounded hours: a multi-day fast must not wrap back to midnight. */
 export function formatFastingClock(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));

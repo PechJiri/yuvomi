@@ -3926,6 +3926,7 @@
             "zoneVariability": "Tyto obecné fáze se překrývají. Přechod k většímu využívání tuků a ketonů se liší, často v rozmezí 12-36 hodin. Časovač neměří metabolický stav a delší půst nemusí být lepší.",
             "extraDays": "+{{count}} dní",
             "extraDays_one": "+{{count}} den",
+            "extraDays_few": "+{{count}} dny",
             "safetyDialog": "Yuvomi slouží k evidenci, není zdravotnickým prostředkem ani zdravotním doporučením. Půst není vhodný pro každého. Vyhledejte odbornou radu zejména při těhotenství nebo kojení, u dětí a dospívajících, při poruchách příjmu potravy v minulosti, diabetu, užívání souvisejících léků nebo chronickém onemocnění. Půst můžete kdykoli ukončit.",
             "saveError": "Půst se nepodařilo uložit.",
             "loadError": "Půst se nepodařilo načíst.",

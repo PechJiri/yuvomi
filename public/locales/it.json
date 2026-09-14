@@ -3925,6 +3925,7 @@
             "zoneVariability": "Queste fasi generali si sovrappongono. La transizione verso un maggiore utilizzo di grassi e chetoni varia, spesso nell’arco di 12-36 ore. Questo timer non misura lo stato metabolico e un digiuno più lungo non è necessariamente migliore.",
             "extraDays": "+{{count}} giorni",
             "extraDays_one": "+{{count}} giorno",
+            "extraDays_few": "+{{count}} giorni",
             "safetyDialog": "Yuvomi è uno strumento di monitoraggio, non un dispositivo medico né un consiglio medico. Il digiuno non è adatto a tutti. Rivolgiti a un professionista, soprattutto durante la gravidanza o l’allattamento, per bambini e adolescenti, in caso di precedenti disturbi alimentari, diabete, farmaci pertinenti o patologie croniche. Puoi terminare un digiuno in qualsiasi momento.",
             "dateReadOnly": "Questa data non può essere modificata nel selettore della data. Il riferimento temporale originale viene conservato; puoi modificare gli altri campi.",
             "saveError": "Impossibile salvare il digiuno.",

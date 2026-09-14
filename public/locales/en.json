@@ -3926,6 +3926,7 @@
             "zoneVariability": "These broad phases overlap. The transition toward greater use of fat and ketones varies, often over 12-36 hours. This timer does not measure metabolic state, and longer fasting is not necessarily better.",
             "extraDays": "+{{count}} days",
             "extraDays_one": "+{{count}} day",
+            "extraDays_few": "+{{count}} days",
             "safetyDialog": "Yuvomi is a tracking tool, not a medical device or medical advice. Fasting is not appropriate for everyone. Seek professional guidance, especially during pregnancy or breastfeeding, for children and adolescents, a history of eating disorders, diabetes, relevant medicines or chronic conditions. You can end a fast at any time.",
             "saveError": "Fasting could not be saved.",
             "loadError": "Fasting could not be loaded.",

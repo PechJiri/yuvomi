@@ -1,5 +1,11 @@
 # Test-Suiten
 
+Vollständige, annotierte Liste aller `npm run test:*`-Suiten - welche Suite deckt welche Invariante ab.
+
+Testinfrastruktur: In-Memory-SQLite (`--experimental-sqlite`), Node >= 22. Kein laufender Server nötig - Tests importieren die Route-Handler direkt.
+
+Neue Suite - drei Schritte, alle drei Pflicht: (1) `test/test-[module].js` anlegen, (2) `test:[module]`-Skript in `package.json` eintragen, (3) das Skript in die `test`-Kette (`package.json`, Script `test`) einhängen - sonst läuft die Suite weder unter `npm test` noch in CI. Genau so sind fünf Suiten monatelang CI-blind geblieben. Imports von App-Code (`server/`, `public/`, `tools/`) und Root-Dateien via `../`.
+
 ## Fasten: Journal
 
 ```bash
@@ -20,12 +26,6 @@ Undo/Revisionen, Offline-Resume und die geteilten Steuerelemente. Screenshots la
 sich mit `FASTING_SCREENSHOT_DIR=/tmp/fasting-screenshots` ausserhalb des Repos
 speichern. Der vollstaendige `test:document-guards`-Handlauf bleibt vor einem
 Interface-Release Pflicht; ein fokussierter PR-Browserlauf ersetzt ihn nicht.
-
-Vollständige, annotierte Liste aller `npm run test:*`-Suiten - welche Suite deckt welche Invariante ab.
-
-Testinfrastruktur: In-Memory-SQLite (`--experimental-sqlite`), Node >= 22. Kein laufender Server nötig - Tests importieren die Route-Handler direkt.
-
-Neue Suite - drei Schritte, alle drei Pflicht: (1) `test/test-[module].js` anlegen, (2) `test:[module]`-Skript in `package.json` eintragen, (3) das Skript in die `test`-Kette (`package.json`, Script `test`) einhängen - sonst läuft die Suite weder unter `npm test` noch in CI. Genau so sind fünf Suiten monatelang CI-blind geblieben. Imports von App-Code (`server/`, `public/`, `tools/`) und Root-Dateien via `../`.
 
 ```bash
 npm test             # Alle Suiten (Node >=22)

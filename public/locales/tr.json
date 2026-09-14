@@ -3925,6 +3925,7 @@
             "zoneVariability": "Bu genel evreler birbiriyle örtüşür. Yağ ve ketonların daha fazla kullanımına geçiş değişkenlik gösterir ve genellikle 12-36 saat içinde gerçekleşir. Bu zamanlayıcı metabolik durumu ölçmez ve daha uzun oruç mutlaka daha iyi değildir.",
             "extraDays": "+{{count}} gün",
             "extraDays_one": "+{{count}} gün",
+            "extraDays_few": "+{{count}} gün",
             "safetyDialog": "Yuvomi bir takip aracıdır, tıbbi cihaz veya tıbbi tavsiye değildir. Oruç herkes için uygun değildir. Özellikle hamilelik veya emzirme döneminde, çocuklar ve ergenler için, yeme bozukluğu öyküsü, diyabet, ilgili ilaçlar veya kronik rahatsızlıklar durumunda profesyonel rehberlik alın. Orucu istediğiniz zaman sonlandırabilirsiniz.",
             "dateReadOnly": "Bu tarih, tarih seçicide düzenlenemez. Özgün zaman damgası korunur; diğer alanları değiştirebilirsiniz.",
             "saveError": "Oruç kaydedilemedi.",

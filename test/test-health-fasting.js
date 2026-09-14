@@ -9,6 +9,7 @@ import {
   formatFastingClock,
   fastingClockModel,
   fastingDisplayModel,
+  fastingServerDate,
 } from '../public/utils/health-fasting.js';
 
 test('help markup remains importable without a DOM and escapes labels with unique associations', () => {
@@ -25,6 +26,12 @@ test('goal normalization accepts whole hours 1 through 336 and null', () => {
   assert.equal(normalizeGoalHours('16'), 960);
   assert.throws(() => normalizeGoalHours('16.5'), /whole hours/);
   assert.throws(() => normalizeGoalHours(337), /336/);
+});
+
+test('completed-entry defaults require a valid server clock', () => {
+  assert.equal(fastingServerDate('2026-09-14T10:20:30.000Z').toISOString(), '2026-09-14T10:20:30.000Z');
+  assert.throws(() => fastingServerDate(), /FASTING_SERVER_TIME_UNAVAILABLE/);
+  assert.throws(() => fastingServerDate('not-a-date'), /FASTING_SERVER_TIME_UNAVAILABLE/);
 });
 
 test('display preference cannot count down without a goal and progress always fills forward', () => {

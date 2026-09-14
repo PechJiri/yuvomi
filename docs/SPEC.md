@@ -2834,6 +2834,13 @@ like `apple_app_password` and Google OAuth tokens; encryption-at-rest is via the
 
 ### Health (migration 65)
 
+The Health module stores personal medical data per family member across seven tables (migration
+65) plus three menstrual-cycle tables (migration 71). Every owner-scoped table carries `user_id`
+(the owning member) and a `visibility` of `private` (owner only) or `family` (all members). Nested
+tables (schedules, logs, results) inherit visibility from their parent record. Health data is sensitive — encryption-at-rest via the optional
+`DB_ENCRYPTION_KEY` (SQLCipher) is strongly recommended. Yuvomi is **not** a medical device and
+makes **no diagnostic claims**; reference ranges and flags are neutral, user-supplied values.
+
 #### Fasting journal (migration 209)
 
 `/health/fasting` requires `health_use_fasting` and Health module access. The MVP
@@ -2886,7 +2893,9 @@ medical device or medical advice. Finish persists before the optional summary;
 closing it keeps the fast completed. Undo end PATCHes end_at:null with the returned
 revision. Deletion uses the shared undoable-delete window. Offline display keeps
 ticking; writes require connection. Resume and route re-entry refresh authoritative
-state, retaining the same person's clock if that refresh fails.
+state, retaining the same person's clock if that refresh fails. The state payload
+includes `server_now`; completed-entry forms derive their initial end from that UTC
+instant rather than the device clock, so clock skew cannot manufacture a future end.
 
 Presets are 12:12, 14:10, 15:9, 16:8, 18:6, 20:4 and 23:1, plus no goal or whole
 hours up to 336. Page goal changes update the active goal and future default
@@ -2908,13 +2917,6 @@ formula-safe escaping. Revision conflicts return numeric code 409 and separate
 reason FASTING_REVISION_CONFLICT, FASTING_ACTIVE_EXISTS or FASTING_OVERLAP; current
 contains a conflicting row where available. Missing acknowledgement returns
 FASTING_ACK_REQUIRED. POST retries use Idempotency-Key. API data is not SW-cached.
-
-The Health module stores personal medical data per family member across seven tables (migration
-65) plus three menstrual-cycle tables (migration 71). Every owner-scoped table carries `user_id`
-(the owning member) and a `visibility` of `private` (owner only) or `family` (all members). Nested
-tables (schedules, logs, results) inherit visibility from their parent record. Health data is sensitive — encryption-at-rest via the optional
-`DB_ENCRYPTION_KEY` (SQLCipher) is strongly recommended. Yuvomi is **not** a medical device and
-makes **no diagnostic claims**; reference ranges and flags are neutral, user-supplied values.
 
 **`health_vitals`** — one row per measurement.
 
@@ -3695,11 +3697,14 @@ were refused for a capitalised path to a module they may use; that works now as 
 
 Primary key: `(subject_type, subject_id, resource_type, resource_key)`. **`capability` arrived as a
 schema-level allowance (migration v175, #996) and got its first consumer in the next release
-(#991):** `PERMISSION_CAPABILITIES` in `server/permissions.js` registers
-`notes_manage_household_categories` (module `notes`), `resolvePermissions()` and
-`getSubjectPermissions()` read `capability` rows for registered keys with `none` | `allow`, default
-`none`, admins `allow`. A save of the permission matrix replaces the module and widget axes on every
-call and the capability axis only when the body carries the field, so a client that does not know
+(#991):** `PERMISSION_CAPABILITIES` in `server/permissions.js` registers both
+`notes_manage_household_categories` (module `notes`, default `none`) and
+`health_use_fasting` (module `health`, default `allow`). `resolvePermissions()` and
+`getSubjectPermissions()` read registered capability rows with `none` | `allow`; each item's own
+default wins, while the catalog-level `none` remains only as the fallback for entries without one.
+Admins resolve to `allow`. Role rows equal to the item's default are not stored; a member-level
+`none` may still override inherited fasting access. A save of the permission matrix replaces the
+module and widget axes on every call and the capability axis only when the body carries the field, so a client that does not know
 about capabilities cannot erase them. A key that no feature registers is ignored on read, so a
 capability row written by a later feature survives an older release. Since #1044 the permission
 matrix in Settings shows each registered capability as its own row under its module (blocked or

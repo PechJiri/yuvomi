@@ -452,3 +452,10 @@ test('Notiz-Kategorieueberlauf benennt eine und mehrere weitere Kategorien', asy
   assert.equal(t('noteCategories.moreAction', { count: 3 }), '3 další kategorie');
   assert.equal(t('noteCategories.moreAction', { count: 5 }), '5 dalších kategorií');
 });
+
+test('tschechische Fastenanzeige dekliniert zusaetzliche Tage', async () => {
+  await setLocale('cs');
+  assert.equal(t('health.fasting.extraDays', { count: 1 }), '+1 den');
+  assert.equal(t('health.fasting.extraDays', { count: 2 }), '+2 dny');
+  assert.equal(t('health.fasting.extraDays', { count: 5 }), '+5 dní');
+});

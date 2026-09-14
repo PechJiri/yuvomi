@@ -34,7 +34,7 @@ export function permissionsPaths() {
         admin: true,
         description: 'Modules, widgets, capabilities (including access levels and defaults), roles and the member list for the rights matrix. The catalog '
           + 'is the authoritative list of what can be granted - the enforcing side reads the same one, '
-          + 'so the two cannot drift apart.',
+          + 'so the two cannot drift apart. defaults.capability is the legacy fallback; each capability item\'s default takes precedence when present.',
       }),
     },
     '/api/v1/permissions/role/{familyRole}': {

@@ -53,6 +53,21 @@ test('fasting API returns numeric code and symbolic reason, then supports lifecy
   assert.equal(response.status, 204);
 });
 
+test('fasting API is usable through the shipped default without an override row', async () => {
+  const id = database.prepare(
+    "INSERT INTO users (username, display_name, password_hash, role) VALUES ('fasting-default', 'Fasting default', 'x', 'member')",
+  ).run().lastInsertRowid;
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) AS count FROM access_permissions WHERE subject_type = 'user' AND subject_id = ? AND resource_key = 'health_use_fasting'",
+  ).get(String(id)).count, 0);
+  viewer = id;
+  const response = await call('POST', '/fasting', {
+    start_at: '2025-01-01T08:00:00Z', start_tzid: 'UTC', acknowledge_safety: true,
+  });
+  assert.equal(response.status, 201);
+  assert.equal(response.body.data.user_id, id);
+});
+
 test('fasting API enforces private visibility and caregiver grant', async () => {
   viewer = userA;
   const created = await call('POST', '/fasting', { start_at: '2026-09-13T09:00:00+02:00', end_at: '2026-09-13T12:00:00+02:00', start_tzid: 'Europe/Prague', acknowledge_safety: false });

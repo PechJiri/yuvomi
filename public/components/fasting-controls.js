@@ -3,7 +3,7 @@ import { api } from '/api.js';
 import { t, formatDate, formatTime } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { openModal, closeModal, confirmModal, refocusAfterRender, captureModalContext, isModalContextCurrent } from '/components/modal.js';
-import { FASTING_PRESETS, normalizeGoalHours, fastingDisplayModel, formatFastingClock } from '/utils/health-fasting.js';
+import { FASTING_PRESETS, normalizeGoalHours, fastingDisplayModel, fastingServerDate, formatFastingClock } from '/utils/health-fasting.js';
 import { wallTimeValue, wallTimeInstant, wallTimeCandidates } from '/utils/timezone.js';
 import { moduleAccess } from '/permissions.js';
 import { fastingDialMarkup } from '/components/fasting-dial.js';
@@ -139,7 +139,9 @@ export async function openFastingCreator(refresh, completed = false) {
   if (!state.acknowledged && !await confirmModal(t('health.fasting.safetyTitle'), {
     detail: t('health.fasting.safetyDialog'), confirmLabel: t('common.confirm'),
   })) return;
-  const end = new Date();
+  // Never fall back to the device clock: a phone may be minutes ahead and its
+  // local time would submit a future end_at that the server correctly rejects.
+  const end = fastingServerDate(state.server_now);
   openFastingEditor({ start_at: new Date(end.getTime() - 3600000).toISOString(),
     end_at: completed ? end.toISOString() : null,
     start_tzid: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',

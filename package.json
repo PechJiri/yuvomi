@@ -188,7 +188,7 @@
     "test:token-scopes": "node --experimental-sqlite --test test/test-token-scopes.js",
     "test:api-token-subject": "node --experimental-sqlite --test test/test-api-token-subject.js",
     "test:auth-router-token-scope": "node --experimental-sqlite --test test/test-auth-router-token-scope.js",
-    "test:permissions": "node --experimental-sqlite --test test/test-permissions.js",
+    "test:permissions": "node --experimental-sqlite --test test/test-permissions.js && node --loader ./test/test-browser-loader.mjs --test test/test-permission-sheet-ui.js",
     "test:permissions-routes": "node --experimental-sqlite --test test/test-permissions-routes.js",
     "test:schedule-preferences-gate": "node --experimental-sqlite --test test/test-schedule-preferences-gate.js",
     "test:router-guest-guard": "node --test test/test-router-guest-guard.js",
