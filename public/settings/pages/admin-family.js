@@ -55,6 +55,20 @@ function deniedModuleNames(modules) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+/** Lesbarer effektiver Zustand einer Capability in einer Einladungs-Vorlage. */
+function capabilityStateText(key, profile = null, moduleBlocked = false) {
+  const item = permissionCatalog?.capabilities?.find((entry) => entry.key === key);
+  if (!item) return '';
+  const access = moduleBlocked
+    ? 'none'
+    : (profile?.capabilities?.[key] ?? item.default ?? permissionCatalog?.defaults?.capability ?? 'none');
+  return `${t(item.labelKey)}: ${t(access === 'allow' ? 'settings.permCapabilityAllowed' : 'settings.permCapabilityBlocked')}`;
+}
+
+function appendCapabilityState(text, state) {
+  return state ? `${text} · ${state}` : text;
+}
+
 function initials(name) {
   if (!name) return '?';
   return name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -424,9 +438,10 @@ function bindInviteEvents(container, initialInvites) {
     const role = roleSelect?.value || 'other';
     if (presetSelect.value === 'restricted') {
       const names = (permissionCatalog?.invitePresets?.restrictedModules || []).map(moduleLabel);
-      presetHint.textContent = names.length
+      const base = names.length
         ? t('settings.invites.presetHintRestricted', { modules: names.join(', ') })
         : t('settings.invites.presetHintUnavailable');
+      presetHint.textContent = appendCapabilityState(base, capabilityStateText('health_use_fasting', null, true));
       return;
     }
     if (!roleProfiles.has(role)) {
@@ -447,9 +462,13 @@ function bindInviteEvents(container, initialInvites) {
       return;
     }
     const denied = deniedModuleNames(profile.modules);
-    presetHint.textContent = denied.length
+    const base = denied.length
       ? t('settings.invites.presetHintRoleLimited', { role: roleName, modules: denied.join(', ') })
       : t('settings.invites.presetHintRoleOpen', { role: roleName });
+    presetHint.textContent = appendCapabilityState(
+      base,
+      capabilityStateText('health_use_fasting', profile, profile.modules?.health === 'none'),
+    );
   }
 
   presetSelect?.addEventListener('change', updatePresetHint);

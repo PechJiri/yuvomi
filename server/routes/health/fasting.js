@@ -6,7 +6,7 @@ import {
   getFastingHistory, getAllFastingHistory,
 } from '../../services/fasting.js';
 import { fastingToCsv } from '../../services/fasting-export.js';
-import { viewerId } from './helpers.js';
+import { viewerId, log } from './helpers.js';
 
 const router = express.Router();
 
@@ -39,6 +39,7 @@ function sendError(res, error) {
     if (error.current !== undefined) body.current = error.current;
     return res.status(error.status).json(body);
   }
+  log.error('Error handling fasting request:', error?.message || error);
   return res.status(500).json({ error: 'Internal server error.', code: 500 });
 }
 

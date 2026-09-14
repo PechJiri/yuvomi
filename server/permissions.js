@@ -114,11 +114,13 @@ export const PERMISSION_CAPABILITIES = Object.freeze([
     key: 'notes_manage_household_categories',
     module: 'notes',
     labelKey: 'noteCategories.permissionLabel',
+    default: 'none',
   },
   {
     key: 'health_use_fasting',
     module: 'health',
     labelKey: 'health.fasting.permissionLabel',
+    default: 'allow',
   },
 ]);
 
@@ -227,7 +229,7 @@ export function resolvePermissions(database, user) {
   const capabilities = {};
   for (const m of allPermissionModules()) modules[m.key] = isAdmin ? 'write' : MODULE_DEFAULT;
   for (const w of allPermissionWidgets()) widgets[w.id] = isAdmin ? 'allow' : WIDGET_DEFAULT;
-  for (const item of PERMISSION_CAPABILITIES) capabilities[item.key] = isAdmin ? 'allow' : CAPABILITY_DEFAULT;
+  for (const item of PERMISSION_CAPABILITIES) capabilities[item.key] = isAdmin ? 'allow' : (item.default ?? CAPABILITY_DEFAULT);
   if (isAdmin) return { admin: true, modules, widgets, capabilities };
 
   const MODULE_KEY_SET = moduleKeySet();
@@ -469,7 +471,8 @@ export function normalizePermissionInput(
     // Rollenprofile bleiben sparse und erben damit auch kuenftige Defaults.
     // Nur ein Mitglied-Override muss `none` speichern koennen, um ein vom
     // Rollenprofil geerbtes `allow` ausdruecklich aufzuheben.
-    if (access === CAPABILITY_DEFAULT && subjectType !== 'user') continue;
+    const defaultAccess = PERMISSION_CAPABILITIES.find((item) => item.key === key)?.default ?? CAPABILITY_DEFAULT;
+    if (access === defaultAccess && subjectType !== 'user') continue;
     rows.push({ resource_type: 'capability', resource_key: key, access });
   }
   return rows;

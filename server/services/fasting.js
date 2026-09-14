@@ -14,6 +14,7 @@ export class FastingError extends Error {
 
 const MAX_GOAL_MINUTES = 14 * 24 * 60;
 const MAX_NOTE = 2000;
+const MIN_FASTING_INSTANT = Date.UTC(1900, 0, 1);
 
 function fail(status, reason, message, current) {
   throw new FastingError(status, reason, message, current);
@@ -25,23 +26,27 @@ function asActor(actor) {
   return id;
 }
 
-function userRow(database, id) {
+function userRow(database, id, { actor = false } = {}) {
   const user = database.prepare('SELECT id, role, family_role FROM users WHERE id = ?').get(id);
-  if (!user) fail(401, 'FASTING_ACTOR_REQUIRED', 'A signed-in user is required.');
+  if (!user) {
+    if (actor) fail(401, 'FASTING_ACTOR_REQUIRED', 'A signed-in user is required.');
+    fail(404, 'FASTING_SUBJECT_NOT_FOUND', 'Target user not found.');
+  }
   return user;
 }
 
-function capabilityAllowed(database, id) {
-  const user = userRow(database, id);
+function capabilityAllowed(database, id, options) {
+  const user = userRow(database, id, options);
   return resolvePermissions(database, user).capabilities.health_use_fasting === 'allow';
 }
 
-function ensureCapability(database, id, reason = 'FASTING_CAPABILITY_REQUIRED') {
-  if (!capabilityAllowed(database, id)) fail(403, reason, 'Fasting is not enabled for this user.');
+function ensureCapability(database, id, reason = 'FASTING_CAPABILITY_REQUIRED', options) {
+  if (!capabilityAllowed(database, id, options)) fail(403, reason, 'Fasting is not enabled for this user.');
 }
 
 function ensureSubject(database, actorId, subjectId, { read = false } = {}) {
-  ensureCapability(database, actorId);
+  if (!Number.isInteger(subjectId) || subjectId < 1) fail(400, 'FASTING_SUBJECT_INVALID', 'Invalid target user.');
+  ensureCapability(database, actorId, 'FASTING_CAPABILITY_REQUIRED', { actor: true });
   if (actorId === subjectId) return;
   if (!capabilityAllowed(database, subjectId)) {
     fail(403, 'FASTING_SUBJECT_FORBIDDEN', read ? 'This person does not permit fasting access.' : 'You cannot record fasting for this person.');
@@ -64,6 +69,7 @@ function parseInstant(value, field, { allowNull = false } = {}) {
   }
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) fail(400, 'FASTING_TIMESTAMP_INVALID', `${field} must be a valid timestamp.`);
+  if (date.getTime() < MIN_FASTING_INSTANT) fail(400, 'FASTING_TIMESTAMP_INVALID', `${field} is earlier than supported fasting records.`);
   return date.toISOString();
 }
 
@@ -120,7 +126,7 @@ function safetyAcknowledged(database, subjectId) {
 
 function ensureSafety(database, actorId, subjectId, acknowledgeSafety) {
   if (safetyAcknowledged(database, subjectId)) return;
-  if (acknowledgeSafety === true) {
+  if (actorId === subjectId && acknowledgeSafety === true) {
     acknowledgeSafetyFor(database, actorId, subjectId);
     return;
   }
@@ -142,14 +148,17 @@ export function acknowledgeSafety(database, actor, subjectId = Number(actor?.id)
   const subject = Number(subjectId);
   if (!Number.isInteger(subject) || subject < 1) fail(400, 'FASTING_SUBJECT_INVALID', 'Invalid target user.');
   ensureSubject(database, actorId, subject);
+  if (actorId !== subject) fail(403, 'FASTING_ACK_FORBIDDEN', 'Only the person fasting can acknowledge the safety information.');
   acknowledgeSafetyFor(database, actorId, subject);
   return database.prepare('SELECT * FROM health_fasting_settings WHERE user_id = ?').get(subject);
 }
 
 function validateRange(startAt, endAt, now = new Date()) {
-  if (endAt && endAt <= startAt) fail(400, 'FASTING_RANGE_INVALID', 'end_at must be after start_at.');
-  if (new Date(startAt).getTime() > now.getTime()) fail(400, 'FASTING_FUTURE', 'A fast cannot start in the future.');
-  if (endAt && new Date(endAt).getTime() > now.getTime()) fail(400, 'FASTING_FUTURE', 'A fast cannot end in the future.');
+  const startTime = Date.parse(startAt);
+  const endTime = endAt ? Date.parse(endAt) : null;
+  if (endTime !== null && endTime <= startTime) fail(400, 'FASTING_RANGE_INVALID', 'end_at must be after start_at.');
+  if (startTime > now.getTime()) fail(400, 'FASTING_FUTURE', 'A fast cannot start in the future.');
+  if (endTime !== null && endTime > now.getTime()) fail(400, 'FASTING_FUTURE', 'A fast cannot end in the future.');
 }
 
 function visibleFilter(database, actorId, subjectId) {
@@ -250,14 +259,15 @@ function createFastInTransaction(database, actor, input = {}) {
   const subjectId = Number(input.userId ?? actorId);
   ensureSubject(database, actorId, subjectId);
   ensureSafety(database, actorId, subjectId, input.acknowledgeSafety);
-  const startAt = parseInstant(input.startAt, 'start_at');
+  const now = new Date();
+  const startAt = parseInstant(input.startAt ?? now.toISOString(), 'start_at');
   const endAt = input.endAt === undefined || input.endAt === null ? null : parseInstant(input.endAt, 'end_at');
   const startTzid = ensureTimezone(input.startTzid);
   const goal = goalMinutes(input.goalMinutes);
   const note = noteValue(input.note);
   const rating = ratingValue(input.rating);
   const visibility = visibilityValue(input.visibility, defaultVisibility(database, subjectId));
-  validateRange(startAt, endAt);
+  validateRange(startAt, endAt, now);
   if (endAt === null && database.prepare('SELECT 1 FROM health_fasts WHERE user_id = ? AND end_at IS NULL').get(subjectId)) {
     fail(409, 'FASTING_ACTIVE_EXISTS', 'This person already has an active fast.');
   }
@@ -281,6 +291,10 @@ export function createFast(database, actor, input = {}) {
 function loadWritable(database, actorId, id) {
   const row = database.prepare('SELECT * FROM health_fasts WHERE id = ?').get(id);
   if (!row) fail(404, 'FASTING_NOT_FOUND', 'Fasting record not found.');
+  if (actorId !== row.user_id && row.visibility === 'private') {
+    const grant = database.prepare('SELECT 1 FROM health_care_grants WHERE subject_id = ? AND caregiver_id = ?').get(row.user_id, actorId);
+    if (!grant) fail(404, 'FASTING_NOT_FOUND', 'Fasting record not found.');
+  }
   ensureSubject(database, actorId, row.user_id);
   return row;
 }
@@ -297,8 +311,9 @@ function finishFastInTransaction(database, actor, id, input = {}) {
   const revision = expectedRevision(input);
   if (row.revision !== revision) fail(409, 'FASTING_REVISION_CONFLICT', 'The fasting record changed. Reload and try again.', row);
   if (row.end_at !== null) fail(409, 'FASTING_ALREADY_FINISHED', 'This fast is already finished.', row);
-  const endAt = parseInstant(input.endAt ?? new Date().toISOString(), 'end_at');
-  validateRange(row.start_at, endAt);
+  const now = new Date();
+  const endAt = parseInstant(input.endAt ?? now.toISOString(), 'end_at');
+  validateRange(row.start_at, endAt, now);
   overlap(database, row.user_id, row.start_at, endAt, row.id);
   const changed = database.prepare(`UPDATE health_fasts SET end_at = ?, revision = revision + 1,
     updated_by = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND revision = ?`).run(endAt, actorId, row.id, revision);
@@ -357,7 +372,10 @@ function updateSettings(database, actor, input, subjectId) {
   const actorId = asActor(actor);
   const subject = Number(subjectId);
   ensureSubject(database, actorId, subject);
-  if (actorId !== subject && Object.keys(input).some((key) => !['acknowledgeSafety'].includes(key))) {
+  if (actorId !== subject && input.acknowledgeSafety === true) {
+    fail(403, 'FASTING_ACK_FORBIDDEN', 'Only the person fasting can acknowledge the safety information.');
+  }
+  if (actorId !== subject) {
     fail(403, 'FASTING_SETTINGS_FORBIDDEN', 'Only the person fasting can change fasting settings.');
   }
   const goal = input.defaultGoalMinutes === undefined ? undefined : goalMinutes(input.defaultGoalMinutes, 'default_goal_minutes');

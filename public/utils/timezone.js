@@ -123,7 +123,7 @@ function formatterFor(zone) {
   let fmt = _formatterCache.get(zone);
   if (!fmt) {
     fmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: zone, era: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
+      timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
     });
     _formatterCache.set(zone, fmt);
@@ -150,7 +150,7 @@ export function zonedFields(value, timeZone = displayTimeZone()) {
   // unnötig, sondern falsch - er würde die Zeichen in einen Zeitpunkt der
   // Browser-Zone verwandeln und ihn anschließend in eine andere umrechnen.
   if (typeof value === 'string' && !hasExplicitZone(value)) {
-    const m = /^(\d{4}|[+-]\d{6})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(value.trim());
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(value.trim());
     if (m) {
       return {
         year: Number(m[1]), month: Number(m[2]), day: Number(m[3]),
@@ -181,18 +181,17 @@ export function zonedFields(value, timeZone = displayTimeZone()) {
   // Monats auf 0 setzen (dieselbe Falle wie in server/utils/timezone.js).
   const hour = g('hour');
   return {
-    year: parts.find((part) => part.type === 'era')?.value === 'BC' ? 1 - g('year') : g('year'), month: g('month'), day: g('day'),
+    year: g('year'), month: g('month'), day: g('day'),
     hour: hour === 24 ? 0 : hour, minute: g('minute'), second: g('second'),
   };
 }
 
 const pad2 = (n) => String(n).padStart(2, '0');
-const isoYear = (year) => year >= 0 && year <= 9999 ? String(year).padStart(4, '0') : `${year < 0 ? '-' : '+'}${String(Math.abs(year)).padStart(6, '0')}`;
 
 /** Editable wall time in an explicit recorded zone, never the browser zone. */
 export function wallTimeValue(value, zone) {
   const f = zonedFields(value, zone);
-  return f ? `${isoYear(f.year)}-${pad2(f.month)}-${pad2(f.day)}T${pad2(f.hour)}:${pad2(f.minute)}:${pad2(f.second)}` : '';
+  return f ? `${String(f.year).padStart(4, '0')}-${pad2(f.month)}-${pad2(f.day)}T${pad2(f.hour)}:${pad2(f.minute)}:${pad2(f.second)}` : '';
 }
 
 function wallEpoch(value) {
@@ -202,7 +201,7 @@ function wallEpoch(value) {
 
 /** Enumerate valid offsets; round-trip rejects DST gaps and malformed dates. */
 export function wallTimeCandidates(value, zone) {
-  if (!isValidTimeZone(zone) || !/^(?:\d{4}|[+-]\d{6})-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value)) return [];
+  if (!isValidTimeZone(zone) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value)) return [];
   const wall = /T\d{2}:\d{2}$/.test(value) ? `${value}:00` : value;
   const epoch = wallEpoch(wall);
   if (!Number.isFinite(epoch)) return [];

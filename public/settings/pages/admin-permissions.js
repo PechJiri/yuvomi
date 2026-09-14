@@ -126,8 +126,8 @@ function effectiveWidgetAccess(w) {
 function effectiveCapabilityAccess(item) {
   const draft = state.draft.capabilities[item.key];
   if (draft && draft !== 'inherit') return draft;
-  if (state.mode === 'user') return state.inherited.capabilities[item.key] ?? 'none';
-  return 'none';
+  if (state.mode === 'user') return state.inherited.capabilities[item.key] ?? item.default ?? 'none';
+  return item.default ?? 'none';
 }
 
 // ── Zugriffs-Optionen ────────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ function widgetRowHtml(w) {
 }
 
 function capabilityRowHtml(item) {
-  const current = state.draft.capabilities[item.key] ?? (state.mode === 'user' ? 'inherit' : 'none');
+  const current = state.draft.capabilities[item.key] ?? (state.mode === 'user' ? 'inherit' : item.default ?? 'none');
   return `
     <div class="perm-row perm-row--capability" data-capability="${esc(item.key)}">
       <div class="perm-row__label">

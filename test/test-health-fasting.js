@@ -75,7 +75,12 @@ test('dial reserves future goal days and uses neutral overlapping educational ph
 });
 
 test('duration formatter preserves days and minutes', () => {
-  assert.equal(formatFastingDuration(25 * 60 + 7), '1 d 1 h 7 min');
+  const unit = (value, name) => new Intl.NumberFormat('de', {
+    style: 'unit', unit: name, unitDisplay: 'short',
+  }).format(value);
+  assert.equal(formatFastingDuration(25 * 60 + 7), [
+    unit(1, 'day'), unit(1, 'hour'), unit(7, 'minute'),
+  ].join(' '));
 });
 
 test('clock ticks within the first minute and never wraps total hours', () => {

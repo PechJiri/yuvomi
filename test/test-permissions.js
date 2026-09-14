@@ -106,7 +106,26 @@ test('Standard ohne Konfiguration: Vollzugriff (rückwärtskompatibel)', () => {
   assert.equal(r.modules.budget, 'write');
   assert.equal(r.widgets.cycle, 'allow');
   assert.equal(r.capabilities.notes_manage_household_categories, 'none');
+  assert.equal(r.capabilities.health_use_fasting, 'allow');
   assert.equal(buildSessionModuleAccess(r), null); // nichts eingeschränkt
+});
+
+test('Fasting is default-on but explicit role and member denials still win', () => {
+  const db = freshDb();
+  const member = addUser(db, { id: 21, role: 'member', family_role: 'child' });
+  assert.equal(resolvePermissions(db, member).capabilities.health_use_fasting, 'allow');
+
+  replaceSubjectPermissions(db, 'role', 'child', {
+    capabilities: { health_use_fasting: 'none' },
+  });
+  assert.equal(resolvePermissions(db, member).capabilities.health_use_fasting, 'none');
+
+  replaceSubjectPermissions(db, 'role', 'child', { capabilities: {} });
+  replaceSubjectPermissions(db, 'user', member.id, {
+    capabilities: { health_use_fasting: 'none' },
+  });
+  assert.equal(resolvePermissions(db, member).capabilities.health_use_fasting, 'none');
+  db.close();
 });
 
 test('Haushaltskategorien: Admin darf immer verwalten', () => {
@@ -336,6 +355,8 @@ test('permissionCatalog liefert Module, Widgets, Rollen, Levels', () => {
   assert.deepEqual(cat.moduleAccessLevels, ['none', 'read', 'write']);
   assert.deepEqual(cat.widgetAccessLevels, ['none', 'allow']);
   assert.ok(cat.capabilities.some((item) => item.key === 'notes_manage_household_categories'));
+  assert.equal(cat.capabilities.find((item) => item.key === 'notes_manage_household_categories').default, 'none');
+  assert.equal(cat.capabilities.find((item) => item.key === 'health_use_fasting').default, 'allow');
   assert.deepEqual(cat.capabilityAccessLevels, ['none', 'allow']);
   assert.deepEqual(PERMISSION_CAPABILITIES.map((item) => item.key), ['notes_manage_household_categories', 'health_use_fasting']);
 });

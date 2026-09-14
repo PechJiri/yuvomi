@@ -62,7 +62,7 @@ test('fasting API enforces private visibility and caregiver grant', async () => 
   assert.equal(response.status, 200);
   assert.equal(response.body.data.length, 0);
   response = await call('PATCH', `/fasting/${created.body.data.id}`, { expected_revision: 1, note: 'nope' });
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 404);
   database.prepare('INSERT INTO health_care_grants (subject_id, caregiver_id) VALUES (?, ?)').run(userA, userB);
   response = await call('GET', '/fasting/history?user_id=' + userA);
   assert.equal(response.body.data.length, 1);
@@ -266,20 +266,76 @@ test('fasting CSV distinguishes missed, null-goal and positive sub-minute record
   assert.ok(lines.some((line) => line.includes('"0","60","false"')));
 });
 
-test('granted caregiver can acknowledge through sparse settings input only', async () => {
+test('granted caregiver cannot acknowledge safety for the fasting person', async () => {
   const subjectId = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('ack-subject', 'Ack subject', 'x', 'member')").run().lastInsertRowid;
   const caregiverId = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('ack-caregiver', 'Ack caregiver', 'x', 'member')").run().lastInsertRowid;
   for (const id of [subjectId, caregiverId]) database.prepare("INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access) VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow')").run(String(id));
   database.prepare('INSERT INTO health_care_grants (subject_id, caregiver_id) VALUES (?, ?)').run(subjectId, caregiverId);
   viewer = caregiverId;
   let response = await call('PUT', `/fasting/settings?user_id=${subjectId}`, { acknowledge_safety: true });
-  assert.equal(response.status, 200);
-  assert.ok(response.body.data.safety_acknowledged_at);
+  assert.equal(response.status, 403);
+  assert.equal(response.body.reason, 'FASTING_ACK_FORBIDDEN');
+  response = await call('POST', `/fasting/acknowledge-safety?user_id=${subjectId}`, {});
+  assert.equal(response.status, 403);
+  assert.equal(response.body.reason, 'FASTING_ACK_FORBIDDEN');
   response = await call('PUT', `/fasting/settings?user_id=${subjectId}`, { zone_mode: 'educational' });
   assert.equal(response.status, 403);
   database.prepare('DELETE FROM health_care_grants WHERE subject_id = ? AND caregiver_id = ?').run(subjectId, caregiverId);
   response = await call('PUT', `/fasting/settings?user_id=${subjectId}`, { acknowledge_safety: true });
   assert.equal(response.status, 403);
+});
+
+test('family state and export omit private active and finished records', async () => {
+  const ownerId = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('privacy-owner', 'Privacy owner', 'x', 'member')").run().lastInsertRowid;
+  const readerId = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('privacy-reader', 'Privacy reader', 'x', 'member')").run().lastInsertRowid;
+  for (const id of [ownerId, readerId]) database.prepare("INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access) VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow')").run(String(id));
+  const insert = database.prepare(`INSERT INTO health_fasts
+    (user_id, start_at, end_at, start_tzid, note, visibility, created_by, updated_by)
+    VALUES (?, ?, ?, 'UTC', ?, ?, ?, ?)`);
+  insert.run(ownerId, '2025-03-01T08:00:00.000Z', '2025-03-01T09:00:00.000Z', 'PRIVATE_FINISHED', 'private', ownerId, ownerId);
+  insert.run(ownerId, '2025-03-02T08:00:00.000Z', '2025-03-02T09:00:00.000Z', 'FAMILY_FINISHED', 'family', ownerId, ownerId);
+  insert.run(ownerId, '2026-09-14T08:00:00.000Z', null, 'PRIVATE_ACTIVE', 'private', ownerId, ownerId);
+  viewer = readerId;
+  const state = await call('GET', `/fasting/state?user_id=${ownerId}`);
+  assert.equal(state.status, 200);
+  assert.equal(state.body.data.active, null);
+  assert.deepEqual(state.body.data.history.map((row) => row.note), ['FAMILY_FINISHED']);
+  const csv = await (await fetch(`${base}/export/fasting?user_id=${ownerId}`)).text();
+  assert.match(csv, /FAMILY_FINISHED/);
+  assert.doesNotMatch(csv, /PRIVATE_FINISHED|PRIVATE_ACTIVE/);
+});
+
+test('private record ids stay hidden and invalid subjects never look like expired sessions', async () => {
+  const ownerId = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('hidden-owner', 'Hidden owner', 'x', 'member')").run().lastInsertRowid;
+  const readerId = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('hidden-reader', 'Hidden reader', 'x', 'member')").run().lastInsertRowid;
+  for (const id of [ownerId, readerId]) database.prepare("INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access) VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow')").run(String(id));
+  const hidden = database.prepare(`INSERT INTO health_fasts
+    (user_id, start_at, end_at, start_tzid, visibility, created_by, updated_by)
+    VALUES (?, '2025-04-01T08:00:00.000Z', '2025-04-01T09:00:00.000Z', 'UTC', 'private', ?, ?)`).run(ownerId, ownerId, ownerId).lastInsertRowid;
+  viewer = readerId;
+  const existing = await call('PATCH', `/fasting/${hidden}`, { expected_revision: 1, note: 'probe' });
+  const missing = await call('PATCH', '/fasting/99999999', { expected_revision: 1, note: 'probe' });
+  assert.equal(existing.status, 404);
+  assert.equal(missing.status, 404);
+  const malformedSubject = await call('GET', '/fasting/state?user_id=not-a-number');
+  assert.equal(malformedSubject.status, 400);
+  assert.equal(malformedSubject.body.reason, 'FASTING_SUBJECT_INVALID');
+  const unknownSubject = await call('GET', '/fasting/state?user_id=99999999');
+  assert.equal(unknownSubject.status, 404);
+  assert.equal(unknownSubject.body.reason, 'FASTING_SUBJECT_NOT_FOUND');
+});
+
+test('API start and finish use server time when the client means now', async () => {
+  const id = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('server-now', 'Server now', 'x', 'member')").run().lastInsertRowid;
+  database.prepare("INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access) VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow')").run(String(id));
+  viewer = id;
+  const started = await call('POST', '/fasting', { start_tzid: 'UTC', acknowledge_safety: true });
+  assert.equal(started.status, 201);
+  database.prepare('UPDATE health_fasts SET start_at = ? WHERE id = ?')
+    .run('2025-01-01T08:00:00.000Z', started.body.data.id);
+  const finished = await call('POST', `/fasting/${started.body.data.id}/finish`, { expected_revision: started.body.data.revision });
+  assert.equal(finished.status, 200);
+  assert.ok(finished.body.data.end_at);
 });
 
 test('journal state exposes the household display zone', async () => {

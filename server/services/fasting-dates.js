@@ -5,16 +5,12 @@ export function fastingDateKey(value, timeZone = 'UTC') {
     timeZone,
     calendar: 'gregory',
     numberingSystem: 'latn',
-    era: 'short',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(date);
   const map = Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
-  const astronomicalYear = map.era === 'BC' ? 1 - Number(map.year) : Number(map.year);
-  const year = astronomicalYear < 0
-    ? `-${String(Math.abs(astronomicalYear)).padStart(6, '0')}`
-    : String(astronomicalYear).padStart(4, '0');
+  const year = String(Number(map.year)).padStart(4, '0');
   return `${year}-${map.month}-${map.day}`;
 }
 
@@ -26,6 +22,7 @@ export function parseFastingDateRange(from, to, fail) {
     const year = Number(match[1]);
     const month = Number(match[2]);
     const day = Number(match[3]);
+    if (year < 1900) fail();
     const normalized = new Date(0);
     normalized.setUTCHours(0, 0, 0, 0);
     normalized.setUTCFullYear(year, month - 1, day);

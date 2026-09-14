@@ -15,7 +15,7 @@ export function fastingDialMarkup(elapsedMinutes, goalMinutes, zoneMode = 'timer
   const goal = goalMinutes ? Math.min(1, goalMinutes / (count * 1440)) : null;
   const marker = goal === null ? '' : `<circle class="fasting-dial__goal" data-fasting-goal-marker cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="0.8 99.2" stroke-dashoffset="${-goal * 100}"/>`;
   const zones = model.zones.map((zone, i) => `<circle class="fasting-dial__zone fasting-dial__zone--${i}" cx="60" cy="60" r="${46 - i * 3}" pathLength="100" stroke-dasharray="${(zone.endMinute - zone.startMinute) / 1440 / count * 100} 100" stroke-dashoffset="${-zone.startMinute / 1440 / count * 100}"/>`).join('');
-  return `<svg class="fasting-dial__svg" viewBox="0 0 120 120" aria-hidden="true"><g transform="rotate(-90 60 60)">${traces}${zones}${marker}</g>${count === 1 ? '<g class="fasting-dial__landmarks"><text x="60" y="6">0</text><text x="117" y="62">6</text><text x="60" y="118">12</text><text x="3" y="62">18</text></g>' : ''}</svg>${model.additionalDays ? `<span class="fasting-dial__extra">${esc(t('health.fasting.extraDays', { days: model.additionalDays }))}</span>` : ''}`;
+  return `<svg class="fasting-dial__svg" viewBox="0 0 120 120" aria-hidden="true"><g transform="rotate(-90 60 60)">${traces}${zones}${marker}</g>${count === 1 ? '<g class="fasting-dial__landmarks"><text x="60" y="6">0</text><text x="117" y="62">6</text><text x="60" y="118">12</text><text x="3" y="62">18</text></g>' : ''}</svg>${model.additionalDays ? `<span class="fasting-dial__extra">${esc(t('health.fasting.extraDays', { count: model.additionalDays }))}</span>` : ''}`;
 }
 
 export function fastingEducationMarkup() {

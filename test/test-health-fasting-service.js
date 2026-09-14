@@ -20,10 +20,11 @@ function setup(path = join(mkdtempSync(join(tmpdir(), 'yuvomi-fasting-service-')
     CREATE TABLE health_care_grants (subject_id INTEGER NOT NULL, caregiver_id INTEGER NOT NULL, PRIMARY KEY(subject_id, caregiver_id));
     CREATE TABLE sync_config (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
   `);
-  database.exec(MIGRATIONS.find((item) => item.version === 197).up);
+  database.exec(MIGRATIONS.find((item) => item.version === 209).up);
   database.exec("INSERT INTO users VALUES (1, 'owner', 'member', 'parent'), (2, 'caregiver', 'member', 'parent'), (3, 'admin', 'admin', 'parent'), (4, 'disabled', 'member', 'other')");
   database.prepare("INSERT INTO access_permissions VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow', NULL)").run('1');
   database.prepare("INSERT INTO access_permissions VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow', NULL)").run('2');
+  database.prepare("INSERT INTO access_permissions VALUES ('user', ?, 'capability', 'health_use_fasting', 'none', NULL)").run('4');
   return database;
 }
 
@@ -40,9 +41,9 @@ const base = (overrides = {}) => ({
 test('capability is required and safety acknowledgement is explicit', () => {
   const database = setup();
   assert.throws(() => createFast(database, actor(4), base({ userId: 4 })), (error) => error.reason === 'FASTING_CAPABILITY_REQUIRED');
-  database.prepare('DELETE FROM access_permissions WHERE subject_id = ?').run('1');
+  database.prepare("UPDATE access_permissions SET access = 'none' WHERE subject_id = ? AND resource_key = 'health_use_fasting'").run('1');
   assert.throws(() => createFast(database, actor(1), base({ acknowledgeSafety: false })), (error) => error.reason === 'FASTING_CAPABILITY_REQUIRED');
-  database.prepare("INSERT INTO access_permissions VALUES ('user', '1', 'capability', 'health_use_fasting', 'allow', NULL)").run();
+  database.prepare("UPDATE access_permissions SET access = 'allow' WHERE subject_id = '1' AND resource_key = 'health_use_fasting'").run();
   assert.throws(() => createFast(database, actor(1), base({ acknowledgeSafety: false })), (error) => error.reason === 'FASTING_ACK_REQUIRED');
   database.close();
 });
@@ -85,9 +86,70 @@ test('caregiver requires grant and capabilities on both sides; admin cannot bypa
   database.prepare('INSERT INTO health_care_grants VALUES (1, 2)').run();
   const created = createFast(database, actor(2), base({ acknowledgeSafety: false }));
   assert.equal(created.user_id, 1);
-  database.prepare("DELETE FROM access_permissions WHERE subject_id = '1'").run();
+  database.prepare("UPDATE access_permissions SET access = 'none' WHERE subject_id = '1' AND resource_key = 'health_use_fasting'").run();
   assert.throws(() => createFast(database, actor(2), base({ startAt: '2026-09-14T08:00:00+02:00', acknowledgeSafety: false })), (error) => error.reason === 'FASTING_SUBJECT_FORBIDDEN');
-  assert.throws(() => getFastingState(database, actor(3), 1), (error) => error.reason === 'FASTING_SUBJECT_FORBIDDEN');
+  database.prepare("UPDATE access_permissions SET access = 'allow' WHERE subject_id = '1' AND resource_key = 'health_use_fasting'").run();
+  assert.throws(() => updateFast(database, actor(3), created.id, {
+    expectedRevision: created.revision, note: 'admin without grant',
+  }), (error) => error.reason === 'FASTING_NOT_FOUND');
+  database.close();
+});
+
+test('only the fasting person can acknowledge safety', () => {
+  const database = setup();
+  database.prepare('INSERT INTO health_care_grants VALUES (1, 2)').run();
+  assert.throws(
+    () => createFast(database, actor(2), base({ acknowledgeSafety: true })),
+    (error) => error.reason === 'FASTING_ACK_REQUIRED',
+  );
+  assert.throws(
+    () => acknowledgeSafety(database, actor(2), 1),
+    (error) => error.reason === 'FASTING_ACK_FORBIDDEN',
+  );
+  acknowledgeSafety(database, actor(1), 1);
+  assert.equal(createFast(database, actor(2), base({ acknowledgeSafety: false })).user_id, 1);
+  database.close();
+});
+
+test('server now fills omitted start and finish timestamps', () => {
+  const database = setup();
+  acknowledgeSafety(database, actor(1), 1);
+  const before = Date.now();
+  const created = createFast(database, actor(1), base({ startAt: undefined, acknowledgeSafety: false }));
+  assert.ok(Date.parse(created.start_at) >= before && Date.parse(created.start_at) <= Date.now());
+  deleteFast(database, actor(1), created.id, { expectedRevision: created.revision });
+  const older = createFast(database, actor(1), base({ startAt: '2025-01-01T08:00:00Z', acknowledgeSafety: false }));
+  const ended = finishFast(database, actor(1), older.id, { expectedRevision: older.revision });
+  assert.ok(Date.parse(ended.end_at) >= Date.parse(older.start_at) && Date.parse(ended.end_at) <= Date.now());
+  database.close();
+});
+
+test('implausible years and interval overlaps are rejected numerically', () => {
+  const database = setup();
+  acknowledgeSafety(database, actor(1), 1);
+  assert.throws(
+    () => createFast(database, actor(1), base({ startAt: '0202-09-13T08:00:00Z', acknowledgeSafety: false })),
+    (error) => error.reason === 'FASTING_TIMESTAMP_INVALID',
+  );
+  const first = createFast(database, actor(1), base({
+    startAt: '2025-01-01T08:00:00Z', endAt: '2025-01-01T10:00:00Z', acknowledgeSafety: false,
+  }));
+  assert.throws(
+    () => createFast(database, actor(1), base({
+      startAt: '2025-01-01T09:00:00Z', endAt: '2025-01-01T11:00:00Z', acknowledgeSafety: false,
+    })),
+    (error) => error.reason === 'FASTING_OVERLAP',
+  );
+  const second = createFast(database, actor(1), base({
+    startAt: '2025-01-02T08:00:00Z', endAt: '2025-01-02T10:00:00Z', acknowledgeSafety: false,
+  }));
+  assert.throws(
+    () => updateFast(database, actor(1), second.id, {
+      expectedRevision: second.revision, startAt: '2025-01-01T09:30:00Z', endAt: '2025-01-01T11:30:00Z',
+    }),
+    (error) => error.reason === 'FASTING_OVERLAP',
+  );
+  assert.ok(first.id);
   database.close();
 });
 

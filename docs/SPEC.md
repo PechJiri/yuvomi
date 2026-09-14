@@ -2834,7 +2834,7 @@ like `apple_app_password` and Google OAuth tokens; encryption-at-rest is via the
 
 ### Health (migration 65)
 
-#### Fasting journal (migration 197)
+#### Fasting journal (migration 209)
 
 `/health/fasting` requires `health_use_fasting` and Health module access. The MVP
 provides own-person controls and a family read selector. Other-person views are
@@ -2845,7 +2845,7 @@ Family readers see family-visible records; owners and granted caregivers may rea
 private records. Ungranted readers receive null settings and acknowledgement.
 Personal settings are owner-only; caregivers may acknowledge safety via the API.
 
-`health_fasts` (migration 197) stores actual intervals:
+`health_fasts` (migration 209) stores actual intervals:
 
 | Column | Type | Contract |
 |---|---|---|
@@ -2868,7 +2868,7 @@ Actual duration is unbounded and uses UTC elapsed time across DST. Ordinary edit
 retain the captured zone and unchanged timestamp precision. Repeated local hours
 retain the original offset; missing spring-forward times are rejected.
 
-`health_fasting_settings` (migration 197) is keyed by user_id with cascading owner
+`health_fasting_settings` (migration 209) is keyed by user_id with cascading owner
 deletion. It holds nullable default_goal_minutes, zone_mode (`timer`/`educational`),
 safety_acknowledged_at, nullable safety_acknowledged_by (actor deletion sets null),
 and timestamps. clock_mode (`auto`/`elapsed`/`remaining`) lives in sync_config under

@@ -8,7 +8,7 @@ import Database from 'better-sqlite3-multiple-ciphers';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), 'yuvomi-fasting-migration-')), 'unused.db');
 const { MIGRATIONS } = await import('../server/db.js');
-const migration = MIGRATIONS.find((item) => item.version === 197);
+const migration = MIGRATIONS.find((item) => item.version === 209);
 
 function migrated() {
   const database = new Database(join(mkdtempSync(join(tmpdir(), 'yuvomi-fasting-migration-')), 'db.sqlite'));
@@ -17,7 +17,7 @@ function migrated() {
   return database;
 }
 
-test('v197 creates fasting records and sparse settings', () => {
+test('v209 creates fasting records and sparse settings', () => {
   const database = migrated();
   assert.deepEqual(database.prepare('PRAGMA table_info(health_fasts)').all().map((row) => row.name), [
     'id', 'user_id', 'start_at', 'end_at', 'start_tzid', 'goal_minutes', 'rating', 'note',
@@ -32,7 +32,7 @@ test('v197 creates fasting records and sparse settings', () => {
   database.close();
 });
 
-test('v197 enforces one active fast, note/rating/goal bounds and audit FK actions', () => {
+test('v209 enforces one active fast, note/rating/goal bounds and audit FK actions', () => {
   const database = migrated();
   database.pragma('foreign_keys = ON');
   const insert = database.prepare(`INSERT INTO health_fasts

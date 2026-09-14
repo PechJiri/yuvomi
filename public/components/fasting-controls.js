@@ -123,7 +123,6 @@ export async function startFasting() {
     detail: t('health.fasting.safetyDialog'), confirmLabel: t('common.confirm'),
   })) return false;
   await api.post('/health/fasting', {
-    start_at: new Date().toISOString(),
     start_tzid: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     goal_minutes: state.settings.default_goal_minutes,
     acknowledge_safety: !state.acknowledged,
@@ -154,7 +153,7 @@ export async function finishFasting(row, refresh, isCurrent = () => true) {
   requireFastingWrite();
   const context = captureModalContext();
   const { data } = await api.post(`/health/fasting/${row.id}/finish`, {
-    expected_revision: row.revision, end_at: new Date().toISOString(),
+    expected_revision: row.revision,
   });
   if (!isCurrent()) return;
   const canOpenReview = isModalContextCurrent(context);
