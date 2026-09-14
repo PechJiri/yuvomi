@@ -275,7 +275,7 @@ test('die Rechtematrix zerlegt dataset.group nicht mehr selbst (#1009)', () => {
   );
   assert.match(
     src,
-    /import\s*\{\s*parsePermissionGroup\s*\}\s*from\s*'\/utils\/permission-group\.js'/,
+    /import\s*\{[^}]*\bparsePermissionGroup\b[^}]*\}\s*from\s*'\/utils\/permission-group\.js'/,
     'die Seite muss den gemeinsamen Helfer importieren',
   );
   assert.match(
