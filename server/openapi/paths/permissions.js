@@ -19,7 +19,7 @@ const userIdParam = {
 
 const BODY = 'Body: { modules, widgets, capabilities } - `modules` maps a module key to `none`, `read` or `write`, '
   + '`widgets` maps a widget id to `none` or `allow`, and `capabilities` maps '
-  + '`notes_manage_household_categories` to `none` or `allow`. Module and widget rows are replaced on every '
+  + '`notes_manage_household_categories` and `health_use_fasting` to `none` or `allow`. Module and widget rows are replaced on every '
   + 'request. Capability rows are replaced only when `capabilities` is explicitly present, so older clients '
   + 'cannot silently remove them. Role values '
   + 'that match the default are not stored; a member-level `none` capability may be stored to override an '

@@ -44,6 +44,13 @@ function ensureCapability(database, id, reason = 'FASTING_CAPABILITY_REQUIRED', 
   if (!capabilityAllowed(database, id, options)) fail(403, reason, 'Fasting is not enabled for this user.');
 }
 
+/** Enforce the actor-side capability for non-fasting routers that mutate fasting data. */
+export function requireFastingCapability(database, actor) {
+  const actorId = asActor(actor);
+  ensureCapability(database, actorId, 'FASTING_CAPABILITY_REQUIRED', { actor: true });
+  return actorId;
+}
+
 function ensureSubject(database, actorId, subjectId, { read = false } = {}) {
   if (!Number.isInteger(subjectId) || subjectId < 1) fail(400, 'FASTING_SUBJECT_INVALID', 'Invalid target user.');
   ensureCapability(database, actorId, 'FASTING_CAPABILITY_REQUIRED', { actor: true });

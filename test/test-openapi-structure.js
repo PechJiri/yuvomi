@@ -18,7 +18,7 @@ test('fasting clients receive concrete lifecycle schemas, revision transports an
   const paths = buildOpenApiSpec({}).paths;
   const schema = (path, method) => paths[`/api/v1/health/${path}`][method].requestBody.content['application/json'].schema;
   const create = schema('fasting', 'post');
-  assert.deepEqual(create.required, ['start_at', 'start_tzid']);
+  assert.deepEqual(create.required, ['start_tzid']);
   assert.equal(create.properties.goal_minutes.multipleOf, 60);
   assert.equal(create.properties.goal_minutes.maximum, 20160);
   assert.equal(create.properties.end_at.nullable, true);
@@ -28,6 +28,9 @@ test('fasting clients receive concrete lifecycle schemas, revision transports an
   assert.ok(paths['/api/v1/health/fasting'].post.responses[201]);
   assert.ok(paths['/api/v1/health/fasting/{id}'].delete.responses[204]);
   assert.ok(paths['/api/v1/health/fasting/{id}'].delete.parameters.some((p) => p.name === 'expected_revision' && !p.required));
+  assert.match(paths['/api/v1/health/fasting/settings'].put.description, /Personal settings are owner-only/);
+  assert.doesNotMatch(paths['/api/v1/health/fasting/settings'].put.description, /Caregivers may submit/);
+  assert.match(paths['/api/v1/permissions/role/{familyRole}'].put.description, /health_use_fasting/);
   for (const alias of ['fasting', 'fasting/history']) {
     const names = paths[`/api/v1/health/${alias}`].get.parameters.map((p) => p.name);
     for (const name of ['user_id', 'from', 'to', 'limit', 'before_at', 'before_id']) assert.ok(names.includes(name));

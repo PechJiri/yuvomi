@@ -18,6 +18,7 @@ import { confirmModal } from '/components/modal.js';
 import { createRetryState } from '/settings/components.js';
 import { resolveExtensionLabel } from '/utils/extension-i18n.js';
 import { parsePermissionGroup } from '/utils/permission-group.js';
+import { isPermissionDeviation } from '/utils/permission-access.js';
 
 // ── Statik ───────────────────────────────────────────────────────────────────
 
@@ -298,8 +299,10 @@ function deviationChips() {
     }
   }
   for (const item of state.catalog.capabilities || []) {
-    if (effectiveCapabilityAccess(item) === 'allow') {
-      chips.push(`<span class="perm-summary__chip perm-summary__chip--widget"><i data-lucide="tags" aria-hidden="true"></i>${esc(capabilityLabel(item))}</span>`);
+    const access = effectiveCapabilityAccess(item);
+    if (isPermissionDeviation(item, access)) {
+      const icon = access === 'allow' ? 'tags' : 'eye-off';
+      chips.push(`<span class="perm-summary__chip perm-summary__chip--widget"><i data-lucide="${icon}" aria-hidden="true"></i>${esc(capabilityLabel(item))} · ${esc(accessShort(access))}</span>`);
     }
   }
   return chips;

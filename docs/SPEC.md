@@ -2843,7 +2843,10 @@ caregiver grants: both people need the fasting capability, and mutations require
 the caller's Health write access. Admin status does not replace a caregiver grant.
 Family readers see family-visible records; owners and granted caregivers may read
 private records. Ungranted readers receive null settings and acknowledgement.
-Personal settings are owner-only; caregivers may acknowledge safety via the API.
+Personal settings and safety acknowledgement are owner-only. A caregiver cannot
+acknowledge the first-use safety information on the fasting person's behalf.
+The fasting capability also protects the generic fasting visibility-default and
+bulk-apply mutations; hiding the fasting page is never the only enforcement.
 
 `health_fasts` (migration 209) stores actual intervals:
 

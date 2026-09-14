@@ -2058,6 +2058,13 @@ test('admin-family leaf owns family member + role management lazily', () => {
   assert.doesNotMatch(source, /\/version/);
 });
 
+test('permission summary compares capability access with each catalog default', () => {
+  const source = read('../public/settings/pages/admin-permissions.js');
+  assert.match(source, /isPermissionDeviation\(item, access\)/);
+  assert.match(source, /accessShort\(access\)/);
+  assert.doesNotMatch(source, /effectiveCapabilityAccess\(item\) === 'allow'/);
+});
+
 test('admin-api leaf owns API token lifecycle with one-time secret display', () => {
   const source = read('../public/settings/pages/admin-api.js');
 

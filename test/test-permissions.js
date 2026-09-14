@@ -29,6 +29,7 @@ import {
   PERMISSION_WIDGETS,
   PERMISSION_CAPABILITIES,
 } from '../server/permissions.js';
+import { isPermissionDeviation } from '../public/utils/permission-access.js';
 import { WIDGET_IDS } from '../public/utils/dashboard-widgets.js';
 
 function freshDb() {
@@ -359,6 +360,16 @@ test('permissionCatalog liefert Module, Widgets, Rollen, Levels', () => {
   assert.equal(cat.capabilities.find((item) => item.key === 'health_use_fasting').default, 'allow');
   assert.deepEqual(cat.capabilityAccessLevels, ['none', 'allow']);
   assert.deepEqual(PERMISSION_CAPABILITIES.map((item) => item.key), ['notes_manage_household_categories', 'health_use_fasting']);
+});
+
+test('capability summary compares against each capability default', () => {
+  const optIn = { key: 'notes_manage_household_categories', default: 'none' };
+  const optOut = { key: 'health_use_fasting', default: 'allow' };
+
+  assert.equal(isPermissionDeviation(optIn, 'none'), false);
+  assert.equal(isPermissionDeviation(optIn, 'allow'), true);
+  assert.equal(isPermissionDeviation(optOut, 'allow'), false);
+  assert.equal(isPermissionDeviation(optOut, 'none'), true);
 });
 
 test('clientPermissions: kompakte Payload mit admin-Flag', () => {

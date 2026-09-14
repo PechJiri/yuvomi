@@ -85,6 +85,41 @@ test('visibility defaults accepts fasting scope and CSV is escaped', async () =>
   assert.match(csv, /'=formula/);
 });
 
+test('fasting capability denial also protects generic visibility mutations', async () => {
+  const deniedUsers = [
+    { username: 'fasting-user-denied', familyRole: 'child', subjectType: 'user' },
+    { username: 'fasting-role-denied', familyRole: 'grandparent', subjectType: 'role' },
+  ];
+
+  for (const fixture of deniedUsers) {
+    const id = database.prepare(
+      "INSERT INTO users (username, display_name, password_hash, role, family_role) VALUES (?, ?, 'x', 'member', ?)",
+    ).run(fixture.username, fixture.username, fixture.familyRole).lastInsertRowid;
+    const subjectId = fixture.subjectType === 'user' ? String(id) : fixture.familyRole;
+    database.prepare(
+      "INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access) VALUES (?, ?, 'capability', 'health_use_fasting', 'none')",
+    ).run(fixture.subjectType, subjectId);
+    const fastId = database.prepare(`
+      INSERT INTO health_fasts (user_id, start_at, end_at, start_tzid, visibility, created_by, updated_by)
+      VALUES (?, '2026-08-01T08:00:00.000Z', '2026-08-01T09:00:00.000Z', 'UTC', 'family', ?, ?)
+    `).run(id, id, id).lastInsertRowid;
+    viewer = id;
+
+    const defaults = await call('PUT', '/visibility-defaults', { defaults: { fasting: 'family' } });
+    assert.equal(defaults.status, 403, `${fixture.subjectType} deny must protect fasting defaults`);
+    assert.equal(defaults.body.reason, 'FASTING_CAPABILITY_REQUIRED');
+    assert.equal(database.prepare(
+      "SELECT COUNT(*) AS count FROM health_visibility_defaults WHERE user_id = ? AND scope_key = 'fasting'",
+    ).get(id).count, 0);
+
+    const apply = await call('PATCH', '/visibility-defaults/apply', { scope: 'fasting', visibility: 'private' });
+    assert.equal(apply.status, 403, `${fixture.subjectType} deny must protect existing fasting records`);
+    assert.equal(apply.body.reason, 'FASTING_CAPABILITY_REQUIRED');
+    const unchanged = database.prepare('SELECT visibility, revision FROM health_fasts WHERE id = ?').get(fastId);
+    assert.deepEqual(unchanged, { visibility: 'family', revision: 1 });
+  }
+});
+
 test('bulk fasting visibility advances owner revision and audit, rejecting stale privacy edits', async () => {
   const createOwner = (name) => {
     const id = database.prepare('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)').run(name, name, 'x', 'member').lastInsertRowid;
