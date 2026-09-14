@@ -30,6 +30,7 @@ test('fasting clients receive concrete lifecycle schemas, revision transports an
   assert.ok(paths['/api/v1/health/fasting/{id}'].delete.parameters.some((p) => p.name === 'expected_revision' && !p.required));
   assert.match(paths['/api/v1/health/fasting/settings'].put.description, /Personal settings are owner-only/);
   assert.doesNotMatch(paths['/api/v1/health/fasting/settings'].put.description, /Caregivers may submit/);
+  assert.match(paths['/api/v1/health/fasting/acknowledge-safety'].post.description, /authenticated owner only/);
   assert.match(paths['/api/v1/permissions/role/{familyRole}'].put.description, /health_use_fasting/);
   for (const alias of ['fasting', 'fasting/history']) {
     const names = paths[`/api/v1/health/${alias}`].get.parameters.map((p) => p.name);
