@@ -10,6 +10,7 @@ import {
   fastingClockModel,
   fastingDisplayModel,
   fastingServerDate,
+  fastingServerClock,
 } from '../public/utils/health-fasting.js';
 
 test('help markup remains importable without a DOM and escapes labels with unique associations', () => {
@@ -32,6 +33,15 @@ test('completed-entry defaults require a valid server clock', () => {
   assert.equal(fastingServerDate('2026-09-14T10:20:30.000Z').toISOString(), '2026-09-14T10:20:30.000Z');
   assert.throws(() => fastingServerDate(), /FASTING_SERVER_TIME_UNAVAILABLE/);
   assert.throws(() => fastingServerDate('not-a-date'), /FASTING_SERVER_TIME_UNAVAILABLE/);
+});
+
+test('derived server clock advances by device elapsed time after capture', () => {
+  let deviceNow = Date.parse('2026-09-15T09:57:00.000Z');
+  const serverNow = fastingServerClock('2026-09-15T10:00:00.000Z', () => deviceNow);
+
+  assert.equal(serverNow(), Date.parse('2026-09-15T10:00:00.000Z'));
+  deviceNow += 90_000;
+  assert.equal(serverNow(), Date.parse('2026-09-15T10:01:30.000Z'));
 });
 
 test('display preference cannot count down without a goal and progress always fills forward', () => {

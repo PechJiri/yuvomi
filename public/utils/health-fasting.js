@@ -18,6 +18,18 @@ export function fastingServerDate(serverNow) {
   return new Date(timestamp);
 }
 
+/**
+ * Keeps an authoritative server clock moving after a state response is
+ * received. Device time supplies elapsed duration only; its absolute offset
+ * from the server is captured and cancelled out.
+ */
+export function fastingServerClock(serverNow, deviceNow = () => Date.now()) {
+  const serverStartedAt = fastingServerDate(serverNow).getTime();
+  const deviceStartedAt = Number(deviceNow());
+  if (!Number.isFinite(deviceStartedAt)) throw new Error('FASTING_DEVICE_TIME_UNAVAILABLE');
+  return () => serverStartedAt + (Number(deviceNow()) - deviceStartedAt);
+}
+
 /** Unbounded hours: a multi-day fast must not wrap back to midnight. */
 export function formatFastingClock(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));

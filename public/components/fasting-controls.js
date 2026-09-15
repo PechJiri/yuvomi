@@ -3,7 +3,7 @@ import { api } from '/api.js';
 import { t, formatDate, formatTime } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { openModal, closeModal, confirmModal, refocusAfterRender, captureModalContext, isModalContextCurrent } from '/components/modal.js';
-import { FASTING_PRESETS, normalizeGoalHours, fastingDisplayModel, fastingServerDate, formatFastingClock } from '/utils/health-fasting.js';
+import { FASTING_PRESETS, normalizeGoalHours, fastingDisplayModel, fastingServerDate, fastingServerClock, formatFastingClock } from '/utils/health-fasting.js';
 import { wallTimeValue, wallTimeInstant, wallTimeCandidates } from '/utils/timezone.js';
 import { moduleAccess } from '/permissions.js';
 import { fastingDialMarkup } from '/components/fasting-dial.js';
@@ -144,6 +144,7 @@ export async function openFastingCreator(refresh, completed = false) {
   const end = fastingServerDate(state.server_now);
   openFastingEditor({ start_at: new Date(end.getTime() - 3600000).toISOString(),
     end_at: completed ? end.toISOString() : null,
+    server_now: state.server_now,
     start_tzid: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     goal_minutes: state.settings?.default_goal_minutes, visibility: visibility || 'private',
     acknowledge_safety: !state.acknowledged,
@@ -179,6 +180,7 @@ export async function finishFasting(row, refresh, isCurrent = () => true) {
 export function openFastingEditor(row, refresh, finished = false) {
   const creating = !row.id;
   const completed = row.end_at !== null;
+  const currentTime = row.server_now ? fastingServerClock(row.server_now) : null;
   const inputStamp = (value) => wallTimeValue(value, row.start_tzid);
   const editableDate = (name) => editableWallTime(inputStamp(row[`${name}_at`]));
   const field = (name, label, type, value, attrs = '') => `<div class="form-group"><label class="form-label" for="fast-${name}">${esc(label)}</label><input class="form-input" id="fast-${name}" name="${name}" type="${type}" value="${esc(String(value))}" ${attrs}></div>`;
@@ -260,7 +262,9 @@ export function openFastingEditor(row, refresh, finished = false) {
         } catch {
           form.querySelector('[data-fasting-edit-error]').textContent = t('health.fasting.wallTimeError'); return;
         }
-        if (Date.parse(startAt) > Date.now() || (endAt && (Date.parse(endAt) <= Date.parse(startAt) || Date.parse(endAt) > Date.now()))) {
+        const now = currentTime?.();
+        if ((now !== undefined && Date.parse(startAt) > now)
+          || (endAt && (Date.parse(endAt) <= Date.parse(startAt) || (now !== undefined && Date.parse(endAt) > now)))) {
           form.querySelector('[data-fasting-edit-error]').textContent = t('health.fasting.rangeError'); return;
         }
         saving = true;

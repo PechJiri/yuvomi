@@ -127,11 +127,14 @@ function effectiveWidgetAccess(w) {
   return 'allow';
 }
 
-function effectiveCapabilityAccess(item) {
+function effectiveCapabilityAccess(item, view = {}) {
+  const mode = view.mode ?? state.mode;
+  const draft = view.draft ?? state.draft.capabilities;
+  const inherited = view.inherited ?? state.inherited.capabilities;
   return resolveCapabilityAccess(item, {
-    mode: state.mode,
-    draft: state.draft.capabilities[item.key],
-    inherited: state.inherited.capabilities[item.key],
+    mode,
+    draft: draft[item.key],
+    inherited: inherited[item.key],
   });
 }
 
@@ -310,13 +313,18 @@ function deviationChips() {
     }
   }
   for (const item of state.catalog.capabilities || []) {
-    const access = effectiveCapabilityAccess(item);
-    if (isPermissionDeviation(item, access)) {
-      const icon = access === 'allow' ? 'tags' : 'eye-off';
-      chips.push(`<span class="perm-summary__chip perm-summary__chip--widget"><i data-lucide="${icon}" aria-hidden="true"></i>${esc(capabilityLabel(item))} · ${esc(accessShort(access))}</span>`);
-    }
+    const chip = capabilityDeviationHtml(item);
+    if (chip) chips.push(chip);
   }
   return chips;
+}
+
+export function capabilityDeviationHtml(item, view = {}) {
+  const access = effectiveCapabilityAccess(item, view);
+  if (!isPermissionDeviation(item, access)) return '';
+  const label = view.label ?? capabilityLabel(item);
+  const icon = access === 'allow' ? 'tags' : 'eye-off';
+  return `<span class="perm-summary__chip perm-summary__chip--widget"><i data-lucide="${icon}" aria-hidden="true"></i>${esc(label)} · ${esc(accessShort(access))}</span>`;
 }
 
 function summaryHtml() {

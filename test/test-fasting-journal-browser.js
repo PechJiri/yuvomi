@@ -117,28 +117,60 @@ test('journal earlier start, active edit, recorded target, end undo and manual h
   } finally { await harness.close(); }
 });
 
-test('completed-entry default uses server time when the phone clock is ahead', async () => {
+test('completed-entry default uses server time while the phone clock stays ahead or behind through submit', async () => {
+  const harness = await startHarness();
+  try {
+    for (const offsetMinutes of [10, -3]) {
+      await harness.reset();
+      const page = await openPage(harness, { locale: 'cs' });
+      await gotoRoute(page, '/health/fasting');
+      await page.waitForSelector('[data-fasting-backfill]');
+      await call(page, 'post', '/health/fasting/acknowledge-safety', {});
+      await page.evaluate((offset) => {
+        const RealDate = Date;
+        window.fastingRestoreDate = () => { window.Date = RealDate; };
+        window.Date = class extends RealDate {
+          constructor(...args) { super(...(args.length ? args : [RealDate.now() + offset])); }
+          static now() { return RealDate.now() + offset; }
+        };
+      }, offsetMinutes * 60 * 1000);
+      await page.click('[data-fasting-backfill]');
+      await page.waitForSelector('[data-fasting-edit-form]');
+      await page.$eval('[data-fasting-edit-form]', (form) => form.requestSubmit());
+      await settle(page);
+      assert.equal((await call(page, 'get', '/health/fasting/history')).data.length, 1,
+        `completed fast saves while the phone clock is ${offsetMinutes > 0 ? 'ahead' : 'behind'}`);
+      await page.evaluate(() => window.fastingRestoreDate());
+      await page.close();
+    }
+  } finally { await harness.close(); }
+});
+
+test('finished review relies on the server when the phone clock is behind', async () => {
   const harness = await startHarness();
   try {
     await harness.reset();
     const page = await openPage(harness, { locale: 'cs' });
+    await call(page, 'post', '/health/fasting', {
+      start_at: new Date(Date.now() - 3600000).toISOString(),
+      start_tzid: 'UTC', acknowledge_safety: true,
+    });
     await gotoRoute(page, '/health/fasting');
-    await page.waitForSelector('[data-fasting-backfill]');
-    await call(page, 'post', '/health/fasting/acknowledge-safety', {});
+    await page.waitForSelector('[data-fasting-action]');
     await page.evaluate(() => {
       const RealDate = Date;
       window.fastingRestoreDate = () => { window.Date = RealDate; };
       window.Date = class extends RealDate {
-        constructor(...args) { super(...(args.length ? args : [RealDate.now() + 10 * 60 * 1000])); }
-        static now() { return RealDate.now() + 10 * 60 * 1000; }
+        constructor(...args) { super(...(args.length ? args : [RealDate.now() - 3 * 60 * 1000])); }
+        static now() { return RealDate.now() - 3 * 60 * 1000; }
       };
     });
-    await page.click('[data-fasting-backfill]');
+    await page.click('[data-fasting-action]');
     await page.waitForSelector('[data-fasting-edit-form]');
-    await page.evaluate(() => window.fastingRestoreDate());
     await page.$eval('[data-fasting-edit-form]', (form) => form.requestSubmit());
-    await page.waitForFunction(() => !document.querySelector('.modal-panel'));
-    assert.equal((await call(page, 'get', '/health/fasting/history')).data.length, 1);
+    await settle(page);
+    assert.equal(await page.$('.modal-panel'), null, 'unchanged server-finished values are saved');
+    await page.evaluate(() => window.fastingRestoreDate());
   } finally { await harness.close(); }
 });
 
