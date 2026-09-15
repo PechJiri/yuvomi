@@ -46,10 +46,17 @@ The app answers on [http://localhost:3000](http://localhost:3000). On the first 
 guides you through creating the admin account in the browser; headless setups can run
 `npm run setup` instead.
 
+The dev server listens on all interfaces, so other devices on your network can reach it too.
+On a network you do not trust, set `BIND_ADDRESS=127.0.0.1` in `.env` to keep it on your
+machine. The suites that start `server/index.js` as a program already do that, through
+`test/server-ready.js` and the document-guards harness; a new harness that starts the server
+itself has to set it as well.
+
 ### Running tests
 
 ```bash
 npm test              # All suites
+npm run test-parallel # The same suites side by side, keeps going after a failure
 ```
 
 Individual suites (faster during development):
@@ -86,9 +93,25 @@ npm run test:docker-publish
 This is a representative selection - run `npm run` to see the full list of suites.
 Which suite guards which invariant is catalogued in [docs/test-suites.md](docs/test-suites.md).
 
-Tests run with plain Node and in-memory SQLite (`--experimental-sqlite`) - newer suites
-use the built-in `node --test` runner, older ones are plain assertion scripts. No running
-server or database required; tests import route handlers directly.
+Tests run with plain Node against real SQLite (`--experimental-sqlite`), in memory or in a
+temp file - newer suites use the built-in `node --test` runner, older ones are plain
+assertion scripts. Nothing has to be running beforehand: a suite that exercises routes over
+HTTP starts its own server on a free local port and stops it again.
+
+`npm run test-parallel` runs every step of the `test` chain as its own process - by default
+one per CPU core minus one, `--jobs N` to change that. It does not stop at the first failure:
+it ends with the failed steps and their log files, the ten slowest steps and a non-zero exit
+code. Each run writes its logs to a folder of its own under the system temp directory,
+`yuvomi-test-parallel-*`, created fresh for that run and readable only by you; your own run
+folders older than 24 hours are removed at the next start (`--logs DIR` for another place). A step that runs longer than 900 seconds is
+stopped and counted as failed (`--timeout SECONDS`). Ctrl+C stops the running steps with SIGTERM
+and kills whatever still runs 5 seconds later (`--grace SECONDS`); pressing Ctrl+C again after
+more than a second kills at once (npm passes the first Ctrl+C on twice, so an immediate second
+signal is ignored). The steps come
+from the `test` script itself, so a new suite is still registered there
+and nowhere else. Because suites run side by side, a suite takes a free port
+(`listen(0, '127.0.0.1')`) and a temp path of its own (`freshTestDbPath()`, `mkdtemp`), never a
+fixed one. CI runs `npm test`, one suite after the other.
 
 ---
 
@@ -372,9 +395,25 @@ stops being one.
 
 ### Testing
 
-- One test file per module in the `test/` directory (`test/test-[module].js`)
-- Tests use in-memory SQLite via `--experimental-sqlite`
-- Import route handlers directly - no HTTP calls, no running server
+- A new test file `test/test-[name].js` needs a `test:[name]` script in `package.json`, and that
+  script has to be added to the `test` chain as well - otherwise it runs neither under `npm test`
+  nor in CI. The exception is a suite that imports `puppeteer` or `test/document-guards-harness.js`:
+  its script goes into `test:document-guards` instead, never into `test` (see
+  [The pre-release handrail](#the-pre-release-handrail)). `npm run test:suite-chain` fails on a file
+  without a script and on a script that runs in the wrong chain or in none.
+- Real SQLite, never a mock: an in-memory database or a temp file from `freshTestDbPath()` in
+  `test/tmp-db.js`, with the real migrations (or their test mirror in `server/db-schema-test.js`)
+  applied. Don't stub out migrations.
+- Route tests may go over HTTP on loopback: mount the router on a small Express app, set
+  `req.authUserId`, `req.authRole` and `req.session` in a stub middleware, `listen(0, '127.0.0.1')`
+  and `fetch()` that port. `createHarness()` in `test/test-document-folders.js` shows the pattern.
+  Close the server when the suite ends.
+- No network beyond loopback. An outside service a suite needs (CalDAV, an ICS feed, a push
+  endpoint) is a stub or a fake server on `127.0.0.1`.
+- Deterministic: no dependency on the wall clock or the machine's timezone, and files only under
+  `os.tmpdir()`.
+- Frontend modules that import browser-absolute paths (`/api.js`) run with
+  `--loader ./test/test-browser-loader.mjs`, which stubs those imports.
 
 ---
 

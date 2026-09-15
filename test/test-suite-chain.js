@@ -14,7 +14,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const chain = pkg.scripts.test;
@@ -40,9 +43,11 @@ const suiteFile = (name) => pkg.scripts[name].match(/test\/[\w.-]+\.js/)?.[0];
 /**
  * Eine Suite braucht einen Browser, wenn ihre Datei ihn importiert.
  *
- * DAS IST DAS KRITERIUM, NICHT DER NAME. `npm test` ist netzfrei und serverlos:
- * die Suiten importieren Route-Handler direkt gegen In-Memory-SQLite. Eine
- * Suite, die einen echten Browser gegen einen echten Serverprozess fährt,
+ * DAS IST DAS KRITERIUM, NICHT DER NAME. `npm test` geht nicht über Loopback
+ * hinaus und braucht weder einen eigenen Serverprozess noch einen Browser: die
+ * Suiten laufen gegen echtes SQLite, und wo sie Routen über HTTP prüfen, lauscht
+ * der Server im Testprozess selbst auf einem lokalen Port. Eine Suite, die
+ * einen echten Browser gegen einen eigenen Serverprozess fährt,
  * gehört dort nicht hinein - und eine Namensausnahme („außer
  * test:document-guards") wäre wieder eine Allowlist, die beim zweiten Fall
  * fehlt. Geprüft wird deshalb die Bauart der Datei.
@@ -191,4 +196,277 @@ test('keine Suite baut ihren Temp-DB-Pfad von Hand zusammen', () => {
     'DB_PATH im Temp-Ordner gehoert ueber freshTestDbPath() aus test/tmp-db.js - '
     + `sonst erbt ein Lauf die Datei eines abgebrochenen mit derselben PID: ${offenders.join(', ')}`,
   );
+});
+
+/* EIN TESTSERVER LAUSCHT AUF LOOPBACK, NICHT AUF ALLEN INTERFACES.
+ *
+ * `listen(0)` ohne Host bindet an `::` bzw. `0.0.0.0` - der Server ist dann fuer
+ * die Dauer der Suite aus dem lokalen Netz erreichbar. Die Route-Harnesse setzen
+ * `req.authUserId` und `req.authRole` per Stub-Middleware, haeufig als `admin`:
+ * wer im selben WLAN sitzt, haette waehrend des Laufs eine Admin-Sitzung ohne
+ * Anmeldung gegen die Testdatenbank. Gemessen am 2026-09-15: 91 von 153
+ * `listen()`-Aufrufen in 75 Dateien ohne Host.
+ *
+ * Mit Host bindet `listen()` ASYNCHRON: `server.address()` ist direkt danach
+ * `null`, erst nach `'listening'` steht der Port fest. Ohne Host war das
+ * synchron, und vier Aufrufe in test-changelog.js lebten davon - der Umbau
+ * braucht deshalb dort ein `await` auf das Ereignis, nicht nur das Argument.
+ *
+ * DER GUARD SCHLIESST, WAS ER NICHT BEWEISEN KANN. Die erste Fassung suchte
+ * die Portschreibweise per Regex und liess jeden Aufruf durch, auf den das
+ * Muster nicht passte: ein berechneter Port (`PORT + 1`, `getPort()`,
+ * `ports[0]`) war unsichtbar, sogar mit ausdruecklichem `'0.0.0.0'` (Review
+ * auf #1223). Ein Nicht-Treffer darf nicht "in Ordnung" heissen. Deshalb liest
+ * der Guard jeden Aufruf von `listen` im Code, und der besteht nur, wenn er
+ * Loopback BELEGT: `'127.0.0.1'` als zweites Argument oder als `host` auf
+ * oberster Ebene der Objektform, ohne Spread daneben (der koennte `host`
+ * ueberschreiben). Alles andere ist rot, auch ein Aufruf ohne Argument.
+ *
+ * Als Aufruf zaehlt `.listen` auch mit Leerraum, Kommentar oder `?.` vor der
+ * Klammer. Kommentare, Strings, Template- und Regex-Literale ueberspringt der
+ * Leser, damit Prosa und Fixtures nicht zaehlen. Gelesen wird der ganze
+ * test/-Baum, nicht nur seine oberste Ebene.
+ *
+ * WAS ER NICHT IST: ein Beweis ueber das Programm. Er liest die geschriebene
+ * Form eines Aufrufs. Ein Alias (`server.listen.bind(server)`), ein berechneter
+ * Name (`server['listen']`) oder ein Aufruf in einer `${...}`-Einbettung
+ * bleiben unsichtbar; das saehe erst eine Laufzeitprobe auf
+ * `net.Server.prototype.listen`. Er ist eine Stolperleine gegen den
+ * naheliegenden Rueckfall, und der Selbsttest darunter nagelt auch seine
+ * Grenze fest, damit sie nicht still wandert. */
+const IDENT = /[\w$]/;
+const REGEX_AFTER_WORD = new Set(['return', 'typeof', 'case', 'in', 'of', 'void', 'delete', 'throw', 'yield', 'await']);
+const LOOPBACK_VALUE = /^(['"`])127\.0\.0\.1\1$/;
+const HOST_ENTRY = /^(?:host|'host'|"host")\s*:\s*([\s\S]*)$/;
+
+/** Index hinter dem schliessenden Anfuehrungszeichen eines String-Literals ab `at`. */
+function endOfString(src, at) {
+  const quote = src[at];
+  let j = at + 1;
+  while (j < src.length && src[j] !== quote) j += src[j] === '\\' ? 2 : 1;
+  return j + 1;
+}
+
+/** Jeder Aufruf von `.listen(` im Code, mit Position und rohem Argumenttext. */
+function listenCalls(src) {
+  const calls = [];
+  let prev = '';
+  let word = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') {
+      const eol = src.indexOf('\n', i);
+      i = eol < 0 ? src.length : eol;
+    } else if (c === '/' && src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end < 0 ? src.length : end + 2;
+    } else if (c === '\'' || c === '"' || c === '`') {
+      i = endOfString(src, i);
+      prev = 'x';
+      word = '';
+    } else if (c === '/' && (prev === '' || '(,=:[!&|?{};'.includes(prev) || REGEX_AFTER_WORD.has(word))) {
+      let inClass = false;
+      let j = i + 1;
+      for (; j < src.length; j += 1) {
+        if (src[j] === '\\') j += 1;
+        else if (src[j] === '[') inClass = true;
+        else if (src[j] === ']') inClass = false;
+        else if (src[j] === '/' && !inClass) break;
+      }
+      i = j + 1;
+      prev = 'x';
+      word = '';
+    } else if (c === '.') {
+      // `.listen` gefolgt von einer Klammer - Leerraum, Kommentare und `?.`
+      // dazwischen sind gueltiges JavaScript und aendern nichts am Aufruf.
+      const name = skipTrivia(src, i + 1);
+      const afterName = name + 'listen'.length;
+      let open = src.startsWith('listen', name) && !IDENT.test(src[afterName] ?? '')
+        ? skipTrivia(src, afterName)
+        : -1;
+      if (open >= 0 && src.startsWith('?.', open)) open = skipTrivia(src, open + 2);
+      if (open >= 0 && src[open] === '(') {
+        const close = matchingParen(src, open);
+        calls.push({ index: i, args: src.slice(open + 1, close) });
+        i = open + 1;
+        prev = '(';
+      } else {
+        i += 1;
+        prev = '.';
+      }
+      word = '';
+    } else {
+      if (IDENT.test(c)) word = (IDENT.test(src[i - 1] ?? '') ? word : '') + c;
+      else if (!/\s/.test(c)) word = '';
+      if (!/\s/.test(c)) prev = IDENT.test(c) ? 'x' : c;
+      i += 1;
+    }
+  }
+  return calls;
+}
+
+/** Index des naechsten Zeichens ab `at`, das weder Leerraum noch Kommentar ist. */
+function skipTrivia(src, at) {
+  let j = at;
+  for (;;) {
+    while (j < src.length && /\s/.test(src[j])) j += 1;
+    if (src.startsWith('//', j)) {
+      const eol = src.indexOf('\n', j);
+      j = eol < 0 ? src.length : eol;
+    } else if (src.startsWith('/*', j)) {
+      const end = src.indexOf('*/', j + 2);
+      j = end < 0 ? src.length : end + 2;
+    } else {
+      return j;
+    }
+  }
+}
+
+/** Index der schliessenden Klammer zu `src[open]`, Strings und Kommentare uebersprungen. */
+function matchingParen(src, open) {
+  let depth = 0;
+  let j = open;
+  while (j < src.length) {
+    const d = src[j];
+    if (d === '\'' || d === '"' || d === '`') { j = endOfString(src, j); continue; }
+    if (src.startsWith('//', j) || src.startsWith('/*', j)) { j = skipTrivia(src, j); continue; }
+    if ('([{'.includes(d)) depth += 1;
+    else if (')]}'.includes(d) && --depth === 0) return j;
+    j += 1;
+  }
+  return src.length;
+}
+
+/** Die Argumente auf oberster Ebene, an Kommas ausserhalb von Klammern und Strings getrennt. */
+function topLevelArgs(text) {
+  const args = [];
+  let depth = 0;
+  let from = 0;
+  for (let j = 0; j < text.length; j += 1) {
+    const d = text[j];
+    if (d === '\'' || d === '"' || d === '`') { j = endOfString(text, j) - 1; continue; }
+    if ('([{'.includes(d)) depth += 1;
+    else if (')]}'.includes(d)) depth -= 1;
+    else if (d === ',' && depth === 0) { args.push(text.slice(from, j).trim()); from = j + 1; }
+  }
+  const last = text.slice(from).trim();
+  if (last) args.push(last);
+  return args;
+}
+
+/** Der Text ohne Kommentare; Strings bleiben unangetastet, auch wenn `//` darin steht. */
+function withoutComments(text) {
+  let out = '';
+  let j = 0;
+  while (j < text.length) {
+    if (text[j] === '\'' || text[j] === '"' || text[j] === '`') {
+      const end = endOfString(text, j);
+      out += text.slice(j, end);
+      j = end;
+    } else if (text.startsWith('//', j) || text.startsWith('/*', j)) {
+      j = skipTrivia(text, j);
+      out += ' ';
+    } else {
+      out += text[j];
+      j += 1;
+    }
+  }
+  return out;
+}
+
+function bindsLoopback(argsText) {
+  const [first = '', second = ''] = topLevelArgs(withoutComments(argsText));
+  if (LOOPBACK_VALUE.test(second)) return true;
+  if (!(first.startsWith('{') && first.endsWith('}'))) return false;
+  const entries = topLevelArgs(first.slice(1, -1));
+  // Ein Spread kann `host` ueberschreiben, egal wo er steht - dann belegt nichts Loopback.
+  if (entries.some((entry) => entry.startsWith('...'))) return false;
+  // Nur Eintraege DIESER Ebene zaehlen, ein verschachteltes `host` ist keiner.
+  // Bei doppeltem Schluessel gewinnt der letzte, wie in JavaScript selbst.
+  const hosts = entries.map((entry) => entry.match(HOST_ENTRY)).filter(Boolean);
+  return hosts.length > 0 && LOOPBACK_VALUE.test(hosts.at(-1)[1].trim());
+}
+
+/** Jede .js/.mjs unter `dirUrl`, auch in Unterordnern (test/integration/ waere sonst unsichtbar). */
+function jsFilesBelow(dirUrl) {
+  return readdirSync(dirUrl, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === 'node_modules') return [];
+    if (entry.isDirectory()) return jsFilesBelow(new URL(`${entry.name}/`, dirUrl));
+    return /\.m?js$/.test(entry.name) ? [new URL(entry.name, dirUrl)] : [];
+  });
+}
+
+test('kein Testserver lauscht auf allen Interfaces', () => {
+  const root = new URL('../test/', import.meta.url);
+  const offenders = jsFilesBelow(root).flatMap((url) => {
+    const src = readFileSync(url, 'utf8');
+    return listenCalls(src)
+      .filter((call) => !bindsLoopback(call.args))
+      .map((call) => `${url.href.slice(root.href.length)}:${src.slice(0, call.index).split('\n').length}`);
+  });
+  assert.deepEqual(
+    offenders,
+    [],
+    `listen() ohne belegten Loopback-Host - '127.0.0.1' als zweites Argument: ${offenders.join(', ')}`,
+  );
+});
+
+test('der Guard liest auch Unterordner von test/', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'yuvomi-listen-walk-'));
+  try {
+    mkdirSync(join(dir, 'integration'));
+    writeFileSync(join(dir, 'integration', 'deep.js'), 'server.listen(0);\n');
+    const found = jsFilesBelow(pathToFileURL(`${dir}/`)).map((url) => url.href);
+    assert.ok(found.some((href) => href.endsWith('/integration/deep.js')), found.join(', '));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('der Loopback-Leser urteilt ueber den Aufruf, nicht ueber eine Schreibweise', () => {
+  const verdicts = (src) => listenCalls(src).map((call) => bindsLoopback(call.args));
+  // Rot: alles, was Loopback nicht belegt - auch berechnete Ports.
+  for (const src of [
+    'server.listen(0);',
+    'server.listen(PORT + 1);',
+    'server.listen(getPort());',
+    'server.listen(ports[0]);',
+    "server.listen(PORT + 1, '0.0.0.0');",
+    'server.listen(0, cb);',
+    'server.listen();',
+    'server.listen({ port: 0 });',
+    "server.listen({ port: 0, host: '0.0.0.0' });",
+    // Objektform: nur ein `host` dieser Ebene zaehlt, und kein Spread darf ihn ueberschreiben.
+    "server.listen({ port: 0, nested: { host: '127.0.0.1' } });",
+    "server.listen({ host: '127.0.0.1', ...networkOptions });",
+    "server.listen({ ...defaults, host: '127.0.0.1' });",
+    'server.listen({ port, host });',
+    // Gueltige Aufrufsyntax jenseits von `.listen(`.
+    'server.listen /* reason */ (0);',
+    'server.listen?.(0);',
+    'server . listen\n  (0);',
+    'server?.listen(0);',
+  ]) assert.deepEqual(verdicts(src), [false], src);
+  // Gruen: Loopback belegt, auch mehrzeilig und mit Klammern in Callback und String.
+  for (const src of [
+    "server.listen(0, '127.0.0.1');",
+    'app.listen(getPort(), "127.0.0.1", () => resolve({ port: s.address().port }));',
+    "server.listen(\n  0,\n  '127.0.0.1',\n  () => log(')'),\n);",
+    "server.listen({ port: 0, host: '127.0.0.1' }, cb);",
+    "server.listen?.(0, /* loopback */ '127.0.0.1');",
+  ]) assert.deepEqual(verdicts(src), [true], src);
+  // Unsichtbar: Prosa, Strings, Templates, Regex-Literale und blosse Eigenschaften zaehlen nicht.
+  for (const src of [
+    '// server.listen(0)',
+    '/* server.listen(0) */',
+    "const s = 'server.listen(0)';",
+    'const t = `server.listen(0)`;',
+    'const re = /server.listen(0)/;',
+    'return /server.listen(0)/.test(x);',
+    'if (!server.listening) await ready;',
+  ]) assert.deepEqual(verdicts(src), [], src);
+  // BEKANNTE GRENZE, festgenagelt statt verschwiegen: ein Alias ist fuer den
+  // Leser kein Aufruf. Wird er klueger, wird dieser Fall rot und gehoert umgehaengt.
+  assert.deepEqual(verdicts('const l = server.listen.bind(server); l(0);'), []);
 });

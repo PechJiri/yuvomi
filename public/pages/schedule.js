@@ -55,7 +55,7 @@ let statisticsRequestId = 0;
 let overviewRequestId = 0;
 // "Uebersicht"-Tab: mehrere Haushaltsmitglieder nebeneinander vergleichen
 // (#1018 - Stundenplaene mehrerer Kinder). people kommt vorgefiltert vom
-// Server (GET /schedule/household-members, isHouseholdMember()); selectedIds
+// Server (GET /schedule/household-members, householdMemberSql()); selectedIds
 // ist rein clientseitig und loest nie einen Fetch aus - nur der Wochenwechsel
 // tut das (siehe refreshOverview()).
 const OVERVIEW_SELECTION_KEY = 'yuvomi:schedule:overview:people';
@@ -247,7 +247,7 @@ async function load() {
     // Quickstart-Vorlagen ueberhaupt angeboten werden, nicht zu verwechseln
     // mit den per-Nutzer-Werten oben aus /schedule/preferences.
     api.get('/preferences').catch(() => ({ data: {} })),
-    // Vorgefiltert (isHouseholdMember()) fuer den Uebersicht-Tab - Haushaltshilfen
+    // Vorgefiltert (householdMemberSql()) fuer den Uebersicht-Tab - Haushaltshilfen
     // und Split-Expense-Gaeste sollen dort nie eine eigene Spur bekommen.
     api.get('/schedule/household-members').catch(() => ({ data: [] })),
   ]);
@@ -814,8 +814,30 @@ function applyShiftPreset(form) {
   const iconButton = form.querySelector('[data-action="pick-shift-icon"]');
   if (iconButton) setShiftIconButtonIcon(iconButton, selected.icon);
 }
+/**
+ * Wer als Besitzer:in angeboten wird (#1207): die Haushaltsmitglieder aus
+ * GET /schedule/household-members und wer schon einen Plan hat. `state.users`
+ * bleibt das Namensverzeichnis fuer bestehende Zeilen - auch Hauspersonal kann
+ * einen Plan haben -, angeboten wird daraus aber niemand, der nichts besitzt
+ * und kein Mitglied ist. Die Vorauswahl eines NEUEN Formulars (selectedOwner())
+ * macht niemanden waehlbar: POST /schedule/patterns lehnt so jemanden ab.
+ */
+function ownerIds() {
+  const ids = new Set((overview.people ?? []).map((person) => Number(person.id)));
+  for (const row of [...state.patterns, ...state.overrides, ...state.extras]) ids.add(Number(row.user_id));
+  return ids;
+}
 function userOptions(selected) {
-  return state.users.filter((user) => canManageOthers || Number(user.id) === Number(currentUserId)).map((user) => option(user.id, user.display_name || user.username, Number(selected) === Number(user.id))).join('');
+  const eligible = ownerIds();
+  return state.users.filter((user) => eligible.has(Number(user.id)) && (canManageOthers || Number(user.id) === Number(currentUserId))).map((user) => option(user.id, user.display_name || user.username, Number(selected) === Number(user.id))).join('');
+}
+
+/** Nur fuer Tests: den Zustand setzen, aus dem die Besitzer-Auswahl liest. */
+function setOwnerContext({ users = [], people = [], patterns = [], overrides = [], extras = [], me = null, mayManageOthers = false } = {}) {
+  state = { ...state, users, patterns, overrides, extras };
+  overview = { ...overview, people };
+  currentUserId = me;
+  canManageOthers = mayManageOthers;
 }
 
 function formField(label, control, className = '') {
@@ -2978,4 +3000,4 @@ export async function update({ path } = {}) {
 // bereits pur bzw. nehmen ihre Eingabe jetzt als Parameter statt sie fest aus
 // `state` zu lesen - ein Test kann so echte Tage hineingeben und das Ergebnis
 // pruefen, statt nur zu belegen, dass der Funktionsname im Quelltext steht.
-export const __test = { overrideGroups, extraGroups, rangeDifference, setShiftIconButtonIcon, overtimeInfo, sameFieldValues, overlayMeta, buildOverviewLanes, normalizeOverviewSelection, computeActiveHours, collapsedMinutes, isOvernightEntry, touchesVisibleDay, overviewFetchRange, patternDaysExceedingCycleLength, scheduleErrorMessage, cycleDayNextDate, cycleDayHeaderLabel, windowsOverlap, findOverlappingActivePattern, resolveWinningPatternId, scheduleEntryMatchKey };
+export const __test = { userOptions, setOwnerContext, overrideGroups, extraGroups, rangeDifference, setShiftIconButtonIcon, overtimeInfo, sameFieldValues, overlayMeta, buildOverviewLanes, normalizeOverviewSelection, computeActiveHours, collapsedMinutes, isOvernightEntry, touchesVisibleDay, overviewFetchRange, patternDaysExceedingCycleLength, scheduleErrorMessage, cycleDayNextDate, cycleDayHeaderLabel, windowsOverlap, findOverlappingActivePattern, resolveWinningPatternId, scheduleEntryMatchKey };

@@ -19,7 +19,8 @@ import { findPageFab } from '/utils/fab.js';
 // dann nicht (utils/household.js). Das Feld bleibt im DOM und behaelt seinen
 // Wert, es ist nur `hidden`: der Absende-Pfad liest es unveraendert, und kommt
 // ein zweites Mitglied dazu, steht es wieder da.
-import { isSoloHousehold } from '/utils/household.js';
+import { hidesPrivacyControls } from '/utils/household.js';
+import { withChosenPeople } from '/utils/people-picker.js';
 import { maxUploadBytes } from '/utils/upload-limit.js';
 import { mountEmptyState } from '/utils/empty-state.js';
 import { subtreeIds, folderPath, flattenFolderTree } from '/utils/folder-tree.js';
@@ -290,9 +291,16 @@ function renderBreadcrumb() {
   }).join('')}`);
 }
 
+/**
+ * Die Freigabe-Auswahl zeigt Haushaltsmitglieder (#1207); die Namen bestehender
+ * Freigaben kommen aus dem Kontenverzeichnis - auch Hauspersonal oder ein Gast
+ * kann eine haben. Bewusst ohne Fallback auf eine leere Liste: ohne Verzeichnis
+ * fehlte das Kaestchen einer bestehenden Freigabe, und Speichern entzoege sie.
+ */
 async function loadMembers() {
-  const res = await api.get('/family/members');
-  state.members = res.data || [];
+  const [members, directory] = await Promise.all([api.get('/family/members'), api.get('/auth/users')]);
+  state.members = members.data || [];
+  state.directory = directory.data || [];
 }
 
 // Nur der Status wird serverseitig gefiltert: Kategorie und Ordner sind
@@ -1275,7 +1283,7 @@ function renderMeta(doc, { showSize = true } = {}) {
   return `
     <span><i data-lucide="${CATEGORY_ICONS[doc.category] || 'folder'}" aria-hidden="true"></i>${categoryLabel}</span>
     ${doc.folder_name && !folderDuplicatesCategory ? `<span><i data-lucide="folder" aria-hidden="true"></i>${esc(doc.folder_name)}</span>` : ''}
-    ${isSoloHousehold() ? '' : `<span><i data-lucide="${doc.visibility === 'family' ? 'users' : doc.visibility === 'private' ? 'lock' : 'user-check'}" aria-hidden="true"></i>${t(`documents.visibility.${doc.visibility}`)}</span>`}
+    ${hidesPrivacyControls('documents') ? '' : `<span><i data-lucide="${doc.visibility === 'family' ? 'users' : doc.visibility === 'private' ? 'lock' : 'user-check'}" aria-hidden="true"></i>${t(`documents.visibility.${doc.visibility}`)}</span>`}
     ${showSize ? `<span>${formatFileSize(doc.file_size)}</span>` : ''}
     ${storageBadgeHtml(doc)}
   `;
@@ -1660,15 +1668,38 @@ async function deleteSelected() {
   deleteDocuments(docs);
 }
 
+/**
+ * Die Freigabe-Kaestchen: Haushaltsmitglieder und dazu, wer an diesem Dokument
+ * schon freigegeben ist (#1207). saveDocument() baut allowed_member_ids aus den
+ * angehakten Kaestchen - ein fehlendes Kaestchen entzoege beim Speichern den
+ * Zugriff. Namen bestehender Freigaben kommen aus dem Kontenverzeichnis.
+ */
 function memberOptions(selected = []) {
   const selectedSet = new Set(selected.map(String));
-  return state.members.map((member) => `
+  const granted = selected
+    .map((id) => (state.directory ?? []).find((person) => Number(person.id) === Number(id)))
+    .filter(Boolean);
+  return withChosenPeople(state.members, granted).map((member) => `
     <label class="document-member-option">
       <input type="checkbox" value="${member.id}" ${selectedSet.has(String(member.id)) ? 'checked' : ''}>
       <span>${esc(member.display_name)}</span>
     </label>
   `).join('');
 }
+
+/** Das Sichtbarkeitsfeld des Dokument-Dialogs. */
+function documentVisibilityFieldHtml(doc) {
+  return `<div class="form-group"${hidesPrivacyControls('documents') ? ' hidden' : ''}>
+            <label class="label" for="document-visibility">${t('documents.visibilityLabel')}</label>
+            <select class="input" id="document-visibility">
+              <option value="family" ${(doc?.visibility || 'family') === 'family' ? 'selected' : ''}>${t('documents.visibility.family')}</option>
+              <option value="restricted" ${doc?.visibility === 'restricted' ? 'selected' : ''}>${t('documents.visibility.restricted')}</option>
+              <option value="private" ${doc?.visibility === 'private' ? 'selected' : ''}>${t('documents.visibility.private')}</option>
+            </select>
+          </div>`;
+}
+
+export const __test = { memberOptions, loadMembers, documentVisibilityFieldHtml };
 
 function openDocumentModal(doc = null, { initialUpload = 'files' } = {}) {
   const isEdit = !!doc;
@@ -1764,14 +1795,7 @@ function openDocumentModal(doc = null, { initialUpload = 'files' } = {}) {
               ${state.folders.map((folder) => `<option value="${folder.id}" ${presetFolderId === String(folder.id) ? 'selected' : ''}>${esc(folder.name)}</option>`).join('')}
             </select>
           </div>
-          <div class="form-group"${isSoloHousehold() ? ' hidden' : ''}>
-            <label class="label" for="document-visibility">${t('documents.visibilityLabel')}</label>
-            <select class="input" id="document-visibility">
-              <option value="family" ${(doc?.visibility || 'family') === 'family' ? 'selected' : ''}>${t('documents.visibility.family')}</option>
-              <option value="restricted" ${doc?.visibility === 'restricted' ? 'selected' : ''}>${t('documents.visibility.restricted')}</option>
-              <option value="private" ${doc?.visibility === 'private' ? 'selected' : ''}>${t('documents.visibility.private')}</option>
-            </select>
-          </div>
+          ${documentVisibilityFieldHtml(doc)}
         </div>
         <div class="document-member-picker" id="document-member-picker">
           <div class="label">${t('documents.allowedMembersLabel')}</div>

@@ -298,6 +298,73 @@ test('GET /api/preflight liefert envExists und containerRunning', async () => {
   }
 });
 
+test('der Preflight wartet nicht unbegrenzt auf die Container-Engine', async () => {
+  // Der Wizard wartet vor dem Einfach-Pfad und vor dem Erzeugen der Schluessel
+  // auf den Preflight (Review zu #1217). Der Preflight wartete seinerseits auf
+  // die Engine-Erkennung und `docker/podman inspect`, beides ohne Zeitlimit: eine
+  // haengende Engine liess Einfach-Karte und Speichern stumm stehen, obwohl der
+  // Server envExists laengst kannte.
+  const mod = await import('../tools/installer/install-server.js');
+  assert.equal(typeof mod.probeContainerRunning, 'function',
+    'es gibt keine begrenzte Container-Abfrage fuer den Preflight');
+  const { EventEmitter } = await import('node:events');
+
+  const engine = { engine: 'docker', composeBin: 'docker', compose: ['compose'], missing: [] };
+  let killed = false;
+  const hanging = () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.exitCode = null;
+    child.kill = () => { killed = true; return true; };
+    return child; // meldet nie 'close'
+  };
+
+  const started = Date.now();
+  const stalled = await mod.probeContainerRunning({ timeoutMs: 50, resolveEngine: async () => engine, spawnFn: hanging });
+  assert.equal(stalled, false, 'eine haengende Engine muss als "laeuft nicht" gelten');
+  assert.ok(Date.now() - started < 2000, 'die Abfrage haelt ihr Zeitlimit nicht ein');
+  assert.equal(killed, true, 'der haengende inspect-Prozess wird nicht beendet');
+
+  const noEngine = await mod.probeContainerRunning({ timeoutMs: 50, resolveEngine: () => new Promise(() => {}), spawnFn: hanging });
+  assert.equal(noEngine, false, 'eine haengende Engine-Erkennung haelt den Preflight auf');
+
+  // Kommt die Engine erst NACH dem Zeitlimit, darf kein inspect mehr starten:
+  // die Funktion ist dann schon zurueck, und niemand beendet einen haengenden
+  // Prozess mehr - jede weitere Preflight-Abfrage liesse einen liegen (Review zu #1217).
+  let lateSpawns = 0;
+  const late = await mod.probeContainerRunning({
+    timeoutMs: 20,
+    resolveEngine: () => new Promise(done => setTimeout(() => done(engine), 60)),
+    spawnFn: (...args) => { lateSpawns++; return hanging(...args); },
+  });
+  assert.equal(late, false, 'eine zu spaete Engine-Erkennung muss als Zeitueberschreitung gelten');
+  await new Promise(done => setTimeout(done, 120));
+  assert.equal(lateSpawns, 0, 'nach dem Zeitlimit startet trotzdem ein inspect, den niemand mehr beendet');
+
+  // Der Normalfall bleibt: "running" auf stdout, Exit 0.
+  const answering = () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.exitCode = null;
+    child.kill = () => true;
+    queueMicrotask(() => {
+      child.stdout.emit('data', Buffer.from('running\n'));
+      child.exitCode = 0;
+      child.emit('close', 0);
+    });
+    return child;
+  };
+  assert.equal(await mod.probeContainerRunning({ timeoutMs: 1000, resolveEngine: async () => engine, spawnFn: answering }), true,
+    'ein laufender Container wird nicht mehr erkannt');
+
+  // Exportiert allein reicht nicht: die Route muss sie benutzen.
+  const src = readFileSync(new URL('../tools/installer/install-server.js', import.meta.url), 'utf8');
+  const at = src.indexOf("url.pathname === '/api/preflight'");
+  const route = src.slice(at, src.indexOf('\n  }\n', at));
+  assert.match(route, /await probeContainerRunning\(/, 'die Preflight-Route nutzt die begrenzte Abfrage nicht');
+  assert.doesNotMatch(route, /spawn\(/, 'die Preflight-Route startet inspect weiter selbst und ohne Zeitlimit');
+});
+
 // ── Static parity checks ─────────────────────────────────────────────────────
 
 test('install.html prüft Preflight und zeigt ein Hinweis-Banner', () => {
@@ -788,6 +855,59 @@ test('ein zweiter Lauf kann den Einfach-Pfad nicht ueber eine bestehende .env le
   // Und der Nutzer muss erfahren, warum die Karte tot ist.
   assert.match(html, /id="welcome-existing"/,
     'die Sperre braucht eine sichtbare Begruendung auf der Willkommensseite');
+});
+
+test('der Einfach-Pfad liest seine Sperre erst nach dem Preflight - beim Start und beim Speichern', () => {
+  // Die Sperre oben setzt erst die ANTWORT des Preflights. Bis dahin ist die
+  // Karte klickbar, und startFlow() wartete nicht: ein Klick in diesem Fenster
+  // landete trotz bestehender .env im Einfach-Pfad, dessen Speichern Host, Port,
+  // SESSION_SECURE und TRUST_PROXY hart darueberschrieb. Geprueft wird deshalb
+  // die Reihenfolge an beiden Tueren: erst warten, dann die Sperre lesen und
+  // umlenken, dann handeln.
+  const html = readFileSync(new URL('../tools/installer/install.html', import.meta.url), 'utf8');
+
+  const bodyFrom = (marker) => {
+    const at = html.indexOf(marker);
+    assert.notEqual(at, -1, `${marker} nicht gefunden`);
+    const open = html.indexOf('{', at + marker.length - 1);
+    let depth = 0;
+    for (let i = open; i < html.length; i++) {
+      if (html[i] === '{') depth++;
+      else if (html[i] === '}' && --depth === 0) return html.slice(open, i + 1);
+    }
+    return assert.fail(`${marker} ist nicht geschlossen`);
+  };
+
+  const start = bodyFrom('function startFlow(');
+  const waitStart = start.indexOf('await preflightDone');
+  const redirect = start.search(/if \(simpleLockedByEnv\) m = 'advanced'/);
+  const defaults = start.indexOf('applySimpleDefaults');
+  assert.notEqual(waitStart, -1, 'startFlow wartet nicht auf den Preflight');
+  assert.ok(redirect > waitStart,
+    'startFlow lenkt bei bestehender .env nicht nach dem Warten in den Erweitert-Pfad um');
+  assert.ok(defaults > redirect,
+    'startFlow setzt die Einfach-Defaults, bevor die Sperre entschieden hat');
+  // Das Warten oeffnet ein zweites Fenster (Review zu #1217): wer waehrenddessen
+  // "Erweitert" waehlt, ist sofort dort - und die haengende Einfach-Wahl rief
+  // danach trotzdem showStep(1) und warf ihn zurueck. Nur die LETZTE Wahl darf
+  // nach dem Warten weiterlaufen.
+  assert.match(html, /let flowRequest = 0;/, 'es gibt keinen Zaehler fuer die letzte Modus-Wahl');
+  const claim = start.indexOf('const request = ++flowRequest');
+  const stale = start.search(/if \(request !== flowRequest\) return;/);
+  assert.ok(claim !== -1 && claim < waitStart,
+    'startFlow vermerkt die Wahl nicht vor dem Warten');
+  assert.ok(stale > waitStart && stale < redirect,
+    'eine ueberholte Einfach-Wahl laeuft nach dem Warten weiter und springt zurueck');
+
+  const save = bodyFrom("$('simple-next').addEventListener('click', async () =>");
+  const write = save.indexOf("fetch('/api/save-env'");
+  const waitSave = save.indexOf('await preflightDone');
+  const refuse = save.search(/if \(simpleLockedByEnv\) \{ startFlow\('advanced'\); return; \}/);
+  assert.notEqual(write, -1, 'der Einfach-Pfad schreibt nicht mehr ueber /api/save-env - Guard veraltet?');
+  assert.ok(waitSave !== -1 && waitSave < write,
+    'das Speichern im Einfach-Pfad wartet nicht auf den Preflight');
+  assert.ok(refuse > waitSave && refuse < write,
+    'das Speichern im Einfach-Pfad bricht bei bestehender .env nicht vor dem Schreiben ab');
 });
 
 test('ein Rerun schreibt gueltige Compose-Syntax unveraendert zurueck', async () => {

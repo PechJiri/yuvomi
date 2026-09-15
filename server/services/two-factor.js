@@ -272,6 +272,10 @@ export function regenerateRecoveryCodes(db, userId) {
  * Familienverwaltung. Ohne diese Sicht ist die Pflicht blind: ein Admin
  * schaltete sie ein, ohne zu wissen, wen er damit vor eine Aufgabe stellt.
  *
+ * JEDES KONTO, NICHT NUR DIE MITGLIEDER (#1207): der zweite Faktor schuetzt
+ * Konten, nicht Mitgliedschaft. Die Admin-Uebersicht listet deshalb jedes
+ * Konto, und die Liste steht in der Allowlist des Guards.
+ *
  * Bewusst nur der Ja-Nein-Zustand, keine Zeitstempel und keine Zahl der
  * Wiederherstellungscodes - das geht auch einen Admin nichts an.
  *
@@ -285,7 +289,6 @@ export function householdOverview(db) {
            (t.confirmed_at IS NOT NULL)  AS enabled
       FROM users u
       LEFT JOIN user_totp t ON t.user_id = u.id
-     WHERE NOT EXISTS (SELECT 1 FROM housekeeping_workers hw WHERE hw.user_id = u.id)
      ORDER BY u.display_name
   `).all().map((row) => ({ ...row, enabled: row.enabled === 1 }));
 }

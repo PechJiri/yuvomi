@@ -223,14 +223,22 @@ in this schema points at `users.id`, and a second table would make every new fea
 
 ### Where the rule lives
 
-- `server/services/member-email.js` - `HOUSEHOLD_MEMBER_SQL`, the strict-sense member
-  predicate (a `users` row minus staff minus guests), written once and used by the picker and
-  the route.
-- `server/auth.js` - `access_scope`, resolved per account to `family` or `split_guest` by a
-  `CASE` over `split_expense_guest_users`.
-- `server/routes/family.js` (`GET /members`) and `server/services/two-factor.js`
-  (`householdOverview()`) - the member list and the household-wide 2FA overview, both
-  excluding staff with the same clause.
+- `server/services/household-members.js` - `householdMemberSql()`, the member predicate (a
+  `users` row minus staff minus guests), and `accessScopeSql()`, which resolves `access_scope`
+  per account to `family` or `split_guest`. The predicate has one form, decided in #1207: no
+  staff and no guests, in every list of members, and `npm run test:household-member-guard`
+  turns red when a new list reads `users` without it. Lists of accounts rather than members
+  stand in the guard's allowlist with a reason, among them user administration
+  (`GET /auth/users`, which no picker reads any more), sign-in, the permission matrix, API token
+  subjects, background jobs per account and the two-factor overview, which shows every account
+  because the second factor protects accounts, not membership.
+- Choosing follows listing (#1007, all or nothing): the routes that take people for these
+  lists - task assignees, calendar attendees, budget responsibles, schedule owners, reward
+  enrolment, the default assignee of a synced calendar and the Outlook account owner - refuse a
+  newly chosen non-member through `newNonMembers()`, while a reference already stored stays
+  valid, so an old record keeps its staff member or guest and still saves. Split expenses are
+  the one place guests belong: the candidates are members plus the guests of that group, and
+  adding a group member refuses staff only.
 - `server/routes/housekeeping.js` (`createWorkerUser`) - a worker is a `users` row with a
   random password, role `member`, family role `other`.
 - `server/services/oidc.js` - the `$oidc$` placeholder: "this account has no password" is a
@@ -240,8 +248,7 @@ in this schema points at `users.id`, and a second table would make every new fea
 
 "Can sign in" as an explicit state of the row, with a migration that classifies today's staff
 and guests; the Family page adding a person with a login as an option rather than a
-prerequisite; the one predicate replacing the three module-local answers. The order and the
-threads are in [ROADMAP.md](ROADMAP.md). A `persons` table, a second list-of-people query that
+prerequisite. The order and the threads are in [ROADMAP.md](ROADMAP.md). A `persons` table, a second list-of-people query that
 bypasses the predicate, or a per-pair visibility setting would each be this decision undone.
 
 ---
@@ -337,6 +344,17 @@ That request is open and welcome; it is about calendar events, which do carry as
 member. What this entry rules out is not a person-first view, but putting one module's data
 into another module's page to get one.
 
+The rule was reached a fourth time in September 2026, from household chores. #736 asked for a
+cleaning plan for households without a cleaning helper, and @Kyrodan's daily routines, in the
+same thread and in his wall-display vision in #913, asked for chores that reset, credit the
+person who did them and stay out of the calendar. Yuvomi already had two answers to "do this
+again some days after it was last done": the Housekeeping decay tasks (`frequency_days` counted
+from `last_completed`) and tasks with `recurrence_from_completion`. It is the same arithmetic,
+and only the task side carries assignees, points, a completion history and reminders. Growing
+the decay tasks into the chores feature would have meant building each of those a second time.
+Routines therefore become a kind of task, with their own tab in the tasks module; the decay
+tasks move into them, and Housekeeping keeps the helper side (#787). The first step is #1205.
+
 ### Where the rule lives
 
 - **The model:** migration 165 in `server/db.js` - `schedule_patterns` with `anchor_date` and
@@ -361,4 +379,6 @@ which trades one pattern row plus its overrides for roughly seven hundred rows p
 two years, and makes every edit a reconciliation. And placing an editor or a comparison view
 for schedule data inside the calendar because that is where people look first: the calendar
 renders schedule entries as a layer, it does not host them. A person-first view of the
-calendar's own events is a different question, asked in #670 and still open.
+calendar's own events is a different question, asked in #670 and still open. A second model
+for recurring household work next to tasks, whether as a module of its own or by giving the
+Housekeeping decay tasks people, points or a history of their own.

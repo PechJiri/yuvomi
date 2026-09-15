@@ -30,6 +30,7 @@ import { findPageFab } from '/utils/fab.js';
 import { emptyStateHTML, mountLoadError } from '/utils/empty-state.js';
 import { attachOverlay } from '/utils/overlay-history.js';
 import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderAvatarStack } from '/components/user-multi-select.js';
+import { withChosenPeople } from '/utils/people-picker.js';
 
 // --------------------------------------------------------
 // Konstanten
@@ -440,10 +441,11 @@ export async function render(container, { user }) {
     try {
       const [prefsRes, usersRes] = await Promise.all([
         api.get('/preferences'),
-        // Fuer den Zustaendigen-Picker (#1057). Faellt der Aufruf aus, bleibt die
-        // Liste leer und das Feld verschwindet - eine Buchung ohne Picker ist
-        // besser als ein Formular, das gar nicht aufgeht.
-        api.get('/auth/users').catch(() => ({ data: [] })),
+        // Fuer den Zustaendigen-Picker (#1057): nur Haushaltsmitglieder (#1207).
+        // Faellt der Aufruf aus, bleibt die Liste leer und das Feld verschwindet -
+        // eine Buchung ohne Picker ist besser als ein Formular, das gar nicht
+        // aufgeht. Ein Gast bekommt hier ein 403 und landet genau dort.
+        api.get('/family/members').catch(() => ({ data: [] })),
         loadBudgetMeta(),
       ]);
       state.currency = prefsRes.data?.currency ?? 'EUR';
@@ -844,7 +846,7 @@ function renderBody() {
           <button class="budget-account-chip" id="budget-clear-responsible-filter" type="button"
                   aria-label="${esc(t('budget.clearResponsibleFilter'))}">
             <i data-lucide="user-round" class="icon-sm" aria-hidden="true"></i>
-            <span>${esc(state.members.find((u) => u.id === state.responsibleFilterId)?.display_name ?? '')}</span>
+            <span>${esc(responsibleFilterLabel(state))}</span>
             <i data-lucide="x" class="icon-sm" aria-hidden="true"></i>
           </button>` : ''}
         </div>
@@ -915,7 +917,7 @@ function renderBody() {
     const respBtn = e.target.closest('[data-responsible]');
     if (respBtn) {
       const id = parseInt(respBtn.dataset.responsible, 10);
-      state.responsibleFilterId = state.responsibleFilterId === id ? null : id;
+      toggleResponsibleFilter(state, id);
       renderBody();
       return;
     }
@@ -2088,6 +2090,62 @@ function openCategoryManager() {
   });
 }
 
+/**
+ * Der Zustaendigen-Picker einer Buchung (#1057), als eigene Funktion, damit
+ * sich pruefen laesst, wann er erscheint und wen er anbietet.
+ */
+function responsiblePickerHtml({ members, entry, isEdit }) {
+  // Gezaehlt wird die ERGAENZTE Liste: nennt eine Buchung schon Personal oder
+  // einen Gast, gibt es auch mit einem Mitglied etwas zu sehen und zu entfernen.
+  const people = withChosenPeople(members, isEdit ? entry.responsible_users : []);
+  return people.length > 1 ? `<div class="form-group js-entry-field">
+      ${renderUserMultiSelect(people, isEdit ? (entry.responsible_users ?? []).map((u) => u.id) : [], 'bm-responsible', 'budget.responsibleLabel')}
+      <p class="form-hint">${esc(t('budget.responsibleHint'))}</p>
+      ${/* Der Weg von der Zuschreibung zur Forderung (#1057) - und er ist
+          * ausdruecklich ein Weg und keine Verschmelzung: hier entsteht nichts,
+          * dort bestaetigt die Person, was entsteht. Nur beim Bearbeiten, weil
+          * eine noch nicht gespeicherte Buchung nichts zu uebergeben hat. */ ''}
+      ${isEdit && (entry.responsible_users ?? []).length ? `
+      <button type="button" class="btn btn--secondary btn--sm" id="bm-to-split">
+        <i data-lucide="arrow-right-left" class="icon-sm" aria-hidden="true"></i>${esc(t('budget.handoverToSplit'))}
+      </button>` : ''}
+    </div>` : '';
+}
+
+/**
+ * Der Name auf dem Zustaendigen-Filterchip. Den Filter setzt ein Klick auf den
+ * Avatar-Stapel einer Buchung - der kann auch Hauspersonal oder einen Gast
+ * nennen, den die Mitgliederliste nicht kennt (#1207). Dann traegt der Chip
+ * den Namen aus der Buchung selbst statt eines leeren Etiketts.
+ */
+function responsibleFilterName(id, { members = [], entries = [] } = {}) {
+  const same = (person) => Number(person?.id) === Number(id);
+  return members.find(same)?.display_name
+    ?? entries.flatMap((entry) => entry.responsible_users ?? []).find(same)?.display_name
+    ?? '';
+}
+
+/**
+ * Setzt den Zustaendigen-Filter - oder hebt ihn auf, wenn dieselbe Person
+ * erneut gewaehlt wird. Der Name wird beim Setzen gemerkt: der Filter bleibt
+ * ueber einen Monatswechsel aktiv, und nennt im neuen Monat keine Buchung mehr
+ * Hauspersonal oder einen Gast, kennt ihn sonst niemand mehr - der Chip waere
+ * leer, die Liste gefiltert (#1207).
+ */
+function toggleResponsibleFilter(target, id) {
+  target.responsibleFilterId = target.responsibleFilterId === id ? null : id;
+  target.responsibleFilterCachedName = target.responsibleFilterId == null
+    ? ''
+    : responsibleFilterName(target.responsibleFilterId, target);
+}
+
+/** Die Beschriftung des aktiven Zustaendigen-Filterchips. */
+function responsibleFilterLabel(source) {
+  return responsibleFilterName(source.responsibleFilterId, source) || source.responsibleFilterCachedName || '';
+}
+
+export const __test = { responsiblePickerHtml, responsibleFilterName, toggleResponsibleFilter, responsibleFilterLabel };
+
 function openBudgetModal({ mode, entry = null, initialType = '' }) {
   const isEdit = mode === 'edit';
   const today  = todayKey();
@@ -2211,18 +2269,7 @@ function openBudgetModal({ mode, entry = null, initialType = '' }) {
         * Verschwindet im Solo-Haushalt: eine Zustaendigkeitsfrage mit genau
         * einer moeglichen Antwort ist ein Formularfeld ohne Frage (dieselbe
         * Regel wie in utils/household.js). */ ''}
-    ${state.members.length > 1 ? `<div class="form-group js-entry-field">
-      ${renderUserMultiSelect(state.members, isEdit ? (entry.responsible_users ?? []).map((u) => u.id) : [], 'bm-responsible', 'budget.responsibleLabel')}
-      <p class="form-hint">${esc(t('budget.responsibleHint'))}</p>
-      ${/* Der Weg von der Zuschreibung zur Forderung (#1057) - und er ist
-          * ausdruecklich ein Weg und keine Verschmelzung: hier entsteht nichts,
-          * dort bestaetigt die Person, was entsteht. Nur beim Bearbeiten, weil
-          * eine noch nicht gespeicherte Buchung nichts zu uebergeben hat. */ ''}
-      ${isEdit && (entry.responsible_users ?? []).length ? `
-      <button type="button" class="btn btn--secondary btn--sm" id="bm-to-split">
-        <i data-lucide="arrow-right-left" class="icon-sm" aria-hidden="true"></i>${esc(t('budget.handoverToSplit'))}
-      </button>` : ''}
-    </div>` : ''}
+    ${responsiblePickerHtml({ members: state.members, entry, isEdit })}
 
     <div class="js-entry-field">
       ${advancedSection(`

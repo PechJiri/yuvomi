@@ -37,7 +37,7 @@ import express from 'express';
 
 const dbmod = await import('../server/db.js');
 const db = dbmod.get();
-const { __test, disconnect } = await import('../server/services/google-calendar.js');
+const { __test, disconnect, sync, flushOutbound } = await import('../server/services/google-calendar.js');
 const { default: calendarRouter } = await import('../server/routes/calendar.js');
 
 db.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('admin','Admin','x','admin')").run();
@@ -1102,7 +1102,7 @@ app.use((req, _res, next) => {
 });
 app.use(express.json());
 app.use('/', calendarRouter);
-const server = app.listen(0);
+const server = app.listen(0, '127.0.0.1');
 const baseUrl = await new Promise((r) => server.on('listening', () => r(`http://127.0.0.1:${server.address().port}`)));
 test.after(() => server.close());
 
@@ -1486,4 +1486,242 @@ test('ein während des Patches gewählter und wieder verworfener Umzug verfällt
   assert.equal(__test.currentGoogleCalendarId(row), 'primary');
   assert.equal(row.outbound_move_to, null, 'gewählt ist der Kalender, in dem der Termin liegt');
   assert.equal(row.outbound_dirty, 0);
+});
+
+// ── Fehler, die nicht am Termin hängen ──────────────────────────────────────────
+// Vor Push und Umzug fragt der Lauf die Kalender-Metadaten ab (Schreibrecht, Zone).
+// Dieser Aufruf scheitert aus denselben Gründen wie jeder andere: Netz weg,
+// Token-Refresh, Ratenlimit. Ein solcher Fehler ist kein Kalender ohne Schreibrecht.
+// Verworfen, erreichte die Bearbeitung Google nie, und kein Inbound meldete es.
+
+function networkError() {
+  const err = new Error('getaddrinfo ENOTFOUND www.googleapis.com');
+  err.code = 'ENOTFOUND';
+  return err;
+}
+
+/** calendarList.get wirft für die genannten Kalender, die übrigen antworten normal. */
+function failMeta(calendar, ids, makeError) {
+  const originalGet = calendar.calendarList.get;
+  calendar.calendarList.get = async (params) => {
+    if (ids.includes(params.calendarId)) {
+      calendar.metaCalls.push(params.calendarId);
+      throw makeError();
+    }
+    return originalGet(params);
+  };
+  return calendar;
+}
+
+for (const [label, makeError] of [['503', () => apiError(503)], ['ohne HTTP-Status', networkError]]) {
+  test(`ein gescheiterter Metadaten-Abruf (${label}) lässt die Änderung vorgemerkt`, async () => {
+    reset();
+    const event = seedDirty({ title: 'Offline bearbeitet' }, `gev-meta-${label}`);
+
+    const calendar = failMeta(fakeCalendar({ calendars: writableCalendars() }), ['primary'], makeError);
+    assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+
+    assert.equal(calendar.patches.length, 0);
+    const row = reload(event.id);
+    assert.equal(row.outbound_dirty, 1, 'die Bearbeitung hat Google nicht erreicht');
+    assert.equal(row.outbound_attempts, 1);
+
+    const next = fakeCalendar({ calendars: writableCalendars() });
+    assert.equal(await __test.processPendingUpdates(next, {}), 1);
+    assert.equal(next.patches[0].requestBody.summary, 'Offline bearbeitet');
+    assert.equal(reload(event.id).outbound_dirty, 0);
+  });
+}
+
+test('ein dauerhaft scheiternder Metadaten-Abruf gibt nach MAX_OUTBOUND_ATTEMPTS auf', async () => {
+  reset();
+  const event = seedDirty({ title: 'Nie erreichbar' }, 'gev-meta-dead');
+
+  const calendar = failMeta(fakeCalendar({ calendars: writableCalendars() }), ['primary'], () => apiError(503));
+  for (let i = 0; i < __test.MAX_OUTBOUND_ATTEMPTS - 1; i++) {
+    await __test.processPendingUpdates(calendar, {});
+  }
+  assert.equal(reload(event.id).outbound_dirty, 1, 'Vorbedingung: bis zum letzten Versuch bleibt sie stehen');
+
+  await __test.processPendingUpdates(calendar, {});
+  assert.equal(calendar.patches.length, 0);
+  assert.equal(reload(event.id).outbound_dirty, 0);
+});
+
+test('ein gescheiterter Abruf des Zielkalenders lässt den Umzug vorgemerkt und patcht nicht in der Quelle', async () => {
+  reset();
+  const { before } = seedMove('primary', 'fam@g', 'gev-dest-meta');
+  db.prepare("UPDATE calendar_events SET title = 'Umzug mit Umbenennung' WHERE id = ?").run(before.id);
+  __test.markEventOutbound(before, reload(before.id));
+
+  const calendar = failMeta(
+    fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) }), ['fam@g'], () => apiError(503),
+  );
+  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+
+  assert.equal(calendar.moves.length, 0);
+  assert.equal(calendar.patches.length, 0, 'sonst stünde die Änderung im falschen Kalender');
+  const row = reload(before.id);
+  assert.equal(row.outbound_move_to, 'fam@g', 'der nächste Lauf versucht den Umzug erneut');
+  assert.equal(row.outbound_dirty, 1);
+  assert.equal(row.outbound_attempts, 1);
+  assert.equal(__test.currentGoogleCalendarId(row), 'primary');
+});
+
+test('ein während des Zielabrufs gewähltes Ziel fällt nicht mit dem unschreibbaren', async () => {
+  // fam@g ist nur lesbar, die Vormerkung dorthin fällt zu Recht. work@g kam während
+  // des Abrufs dazu und ist ein anderer Umzug.
+  reset();
+  const event = seedMirrored('gev-dest-reader-retarget');
+  await put(event.id, { target_google_calendar_id: 'fam@g' });
+
+  const calendar = fakeCalendar({
+    calendars: {
+      ...writableCalendars(['primary', 'work@g']),
+      ...writableCalendars(['fam@g'], { accessRole: 'reader' }),
+    },
+  });
+  const originalGet = calendar.calendarList.get;
+  calendar.calendarList.get = async (params) => {
+    if (params.calendarId === 'fam@g') await put(event.id, { target_google_calendar_id: 'work@g' });
+    return originalGet(params);
+  };
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.moves.length, 0);
+  const row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'primary');
+  assert.equal(row.outbound_move_to, 'work@g', 'der zuletzt gewählte Kalender steht weiter an');
+});
+
+test('ein während des scheiternden Umzugs gewähltes Ziel fällt nicht mit ihm', async () => {
+  // Google lehnt den Umzug nach fam@g ab (400, aufgeben). Während des Aufrufs hat der
+  // Nutzer work@g gewählt - das ist ein neuer Umzug, kein Teil des abgelehnten.
+  reset();
+  const event = seedMirrored('gev-move-fail-retarget');
+  await put(event.id, { target_google_calendar_id: 'fam@g' });
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g', 'work@g']),
+    onMove: async () => {
+      await put(event.id, { target_google_calendar_id: 'work@g' });
+      throw apiError(400);
+    },
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  let row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'primary');
+  assert.equal(row.outbound_move_to, 'work@g', 'der zuletzt gewählte Kalender steht weiter an');
+
+  const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g', 'work@g']) });
+  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.deepEqual(next.moves, [{ calendarId: 'primary', eventId: 'gev-move-fail-retarget', destination: 'work@g' }]);
+  row = reload(event.id);
+  assert.equal(__test.currentGoogleCalendarId(row), 'work@g');
+  assert.equal(row.outbound_move_to, null);
+});
+
+test('eine Bearbeitung während des scheiternden Umzugs gibt ihm seine Versuche zurück', async () => {
+  // Das Gegenstück zum scheiternden Patch nach dem Umzug: der Umzug stand auf seinem
+  // letzten Versuch, die Bearbeitung setzt den Zähler zurück. Aufgegeben wird nach
+  // dem Zähler, der jetzt gilt, nicht nach dem aus der Auswahl.
+  reset();
+  const event = seedMirrored('gev-move-fail-budget');
+  await put(event.id, { target_google_calendar_id: 'fam@g' });
+  db.prepare('UPDATE calendar_events SET outbound_attempts = ? WHERE id = ?')
+    .run(__test.MAX_OUTBOUND_ATTEMPTS - 1, event.id);
+
+  const calendar = fakeCalendar({
+    calendars: writableCalendars(['primary', 'fam@g']),
+    onMove: async () => {
+      await put(event.id, { title: 'Unterwegs umbenannt' });
+      throw apiError(503);
+    },
+  });
+  await __test.processPendingUpdates(calendar, {});
+
+  assert.equal(calendar.patches.length, 0);
+  const row = reload(event.id);
+  assert.equal(row.outbound_move_to, 'fam@g', 'der Umzug hat nach der Bearbeitung wieder Versuche');
+  assert.equal(row.outbound_dirty, 1);
+  assert.equal(row.outbound_attempts, 1);
+});
+
+// ── Zwei Durchgänge auf einmal ──────────────────────────────────────────────────
+//
+// Das Google-Gegenstück zu den Sperren-Tests in test-caldav-outbound.js. Der
+// Sofortversuch hinter jeder Schreibroute und der Sync-Lauf des Schedulers führen
+// dieselbe Buchhaltung über awaits hinweg; server/utils/sync-lock.js reiht sie
+// unter dem Schlüssel 'google' hintereinander. test-sync-lock.js prüft die Sperre
+// für sich - diese Tests prüfen, dass beide Google-Einstiege auch durch sie gehen.
+
+/** Ein Promise, dessen Ende der Test bestimmt - der Ersatz für den Netzaufruf. */
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+/** Dem Event-Loop mehrfach Luft geben, damit ein zweiter Durchgang wirklich liefe. */
+async function settle(times = 5) {
+  for (let i = 0; i < times; i++) await new Promise((resolve) => setImmediate(resolve));
+}
+
+/** Attrappe für einen ganzen Sync-Lauf: der liest vor dem Outbound die Farbpalette. */
+function syncCalendar(options) {
+  return { ...fakeCalendar(options), colors: { get: async () => ({ data: { event: {} } }) } };
+}
+
+test('ein Google-Sofortversuch wartet auf einen laufenden Sync-Lauf', async () => {
+  reset();
+  db.prepare('DELETE FROM google_calendar_selection').run();
+  __test.queueEventDeletion(insertGoogleEvent({ googleId: 'gev-lock-sync', target: 'primary' }));
+
+  const gate = deferred();
+  const running = syncCalendar({ onDelete: () => gate.promise });
+  const immediate = fakeCalendar();
+
+  const syncing = sync({ createCalendar: () => running });
+  await settle();
+  const flushing = flushOutbound({ createCalendar: () => immediate });
+  await settle();
+
+  try {
+    assert.equal(running.deletes.length, 1, 'der Sync-Lauf hängt in seinem DELETE');
+    assert.equal(immediate.deletes.length, 0, 'solange der Sync läuft, löscht der Sofortversuch nichts');
+  } finally {
+    // Auch wenn die Zusicherung fällt: der hängende Aufruf muss enden, sonst
+    // wartet die Suite auf einen Lauf, der nie zurückkehrt.
+    gate.resolve();
+    await Promise.allSettled([syncing, flushing]);
+  }
+
+  assert.equal(immediate.deletes.length, 0, 'danach ist nichts mehr offen: das DELETE ging genau einmal hinaus');
+  assert.equal(tombstones().length, 0);
+});
+
+test('ein zweiter Google-Sofortversuch arbeitet den Tombstone des ersten nicht mit ab', async () => {
+  reset();
+  __test.queueEventDeletion(insertGoogleEvent({ googleId: 'gev-lock-flush', target: 'primary' }));
+
+  const gate = deferred();
+  const first = fakeCalendar({ onDelete: () => gate.promise });
+  const second = fakeCalendar();
+
+  const running = flushOutbound({ createCalendar: () => first });
+  await settle();
+  const waiting = flushOutbound({ createCalendar: () => second });
+  await settle();
+
+  try {
+    assert.equal(first.deletes.length, 1, 'der erste Durchgang hängt in seinem DELETE');
+    assert.equal(second.deletes.length, 0, 'der zweite wartet, statt dasselbe Event noch einmal zu löschen');
+  } finally {
+    gate.resolve();
+    await Promise.allSettled([running, waiting]);
+  }
+
+  assert.equal(second.deletes.length, 0);
+  assert.equal(tombstones().length, 0);
 });

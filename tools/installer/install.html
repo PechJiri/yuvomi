@@ -673,11 +673,9 @@
             <div><b data-i18n="simple.itemBackupsTitle">Daily backups on</b><br><span data-i18n="simple.itemBackupsDesc">A local backup is kept every night.</span></div>
           </div>
         </div>
-        <!-- Dieselbe Warnung wie im Erweitert-Pfad (step-config). Sie fehlte hier,
-             obwohl gerade dieser Pfad die .env mit einem Klick überschreibt. -->
-        <div class="info-banner" id="simple-existing" style="display:none" data-i18n="config.existing">
-          Existing configuration detected: your current .env file will be backed up before saving.
-        </div>
+        <!-- Kein eigener Banner zur bestehenden .env: mit ihr ist dieser Pfad
+             gesperrt und lenkt in den Erweitert-Pfad um (startFlow), wo
+             #cfg-existing warnt. -->
         <div class="warn-banner" role="note">
           <span class="warn-icon" aria-hidden="true">&#x26A0;</span>
           <span data-i18n="simple.backupReminder">After setup, back up the generated .env file - it holds your only encryption keys.</span>
@@ -701,8 +699,9 @@
         <p data-i18n="config.subtitle">How will you access Yuvomi?</p>
       </div>
       <div class="card-body">
-        <div class="info-banner" id="cfg-existing" style="display:none" data-i18n="config.existing">
-          Existing configuration detected - your current .env file will be backed up before saving.
+        <div class="warn-banner" id="cfg-existing" role="note" style="display:none">
+          <span class="warn-icon" aria-hidden="true">&#x26A0;</span>
+          <span data-i18n="config.existing">Existing configuration detected - your current .env file will be backed up before saving.</span>
         </div>
         <!-- Wie #welcome-prereq: Text zur Laufzeit, kein data-i18n. -->
         <div class="error-banner" id="cfg-prereq" role="alert"></div>
@@ -1923,15 +1922,13 @@ const preflightDone = (async () => {
     const r = await fetch('/api/preflight');
     if (!r.ok) return;
     const d = await r.json();
-    // Beide Pfade warnen, nicht nur der erweiterte: der Einfach-Pfad läuft an
-    // step-config vorbei und zeigte die Warnung deshalb nie an.
     // Unabhaengig von envExists: ein laufender Container ist die schaerfere
     // Auskunft, denn der Speichern-Schritt startet ihn neu.
     if (d.containerRunning) $('welcome-running').style.display = 'block';
 
     if (d.envExists) {
-      $('cfg-existing').style.display = 'block';
-      $('simple-existing').style.display = 'block';
+      // flex, nicht block: .warn-banner stellt Icon und Text in eine Zeile.
+      $('cfg-existing').style.display = 'flex';
       // Und der Einfach-Pfad wird gesperrt. applySimpleDefaults() setzt host,
       // port, SESSION_SECURE='false' und TRUST_PROXY='loopback' hart, buildEnv()
       // schickt sie mit - der Rerun-Schutz des Servers bewahrt aber nur, was der
@@ -2213,7 +2210,25 @@ $('mode-simple').addEventListener('click', () => startFlow('simple'));
 $('mode-advanced').addEventListener('click', () => startFlow('advanced'));
 $('simple-to-advanced').addEventListener('click', () => startFlow('advanced'));
 
-function startFlow(m) {
+// Zaehlt die Modus-Wahlen. Nur die letzte darf nach dem Warten weiterlaufen.
+let flowRequest = 0;
+
+async function startFlow(m) {
+  // Die Sperre des Einfach-Pfads setzt erst die ANTWORT des Preflights, und
+  // bis dahin ist die Karte klickbar. Ein Klick in diesem Fenster landete
+  // trotz bestehender .env im Einfach-Pfad, dessen Speichern Host, Port und
+  // die Cookie-Sicherheit hart darueberschrieb. Deshalb erst warten, dann
+  // entscheiden - und bei bestehender .env dorthin, wo jeder dieser Werte
+  // sichtbar im Formular steht.
+  // Das Warten oeffnet selbst ein Fenster: wer waehrenddessen "Erweitert"
+  // waehlt, ist sofort dort. Die haengende Einfach-Wahl ist dann ueberholt und
+  // darf ihn nicht per showStep(1) zurueckwerfen.
+  const request = ++flowRequest;
+  if (m === 'simple') {
+    await preflightDone;
+    if (request !== flowRequest) return;
+    if (simpleLockedByEnv) m = 'advanced';
+  }
   mode = m;
   flow = FLOWS[m];
   applyStepCounters();
@@ -2824,6 +2839,10 @@ $('rev-next').addEventListener('click', async () => {
 // Einfach-Modus: Schlüssel sicherstellen, .env schreiben und direkt starten.
 let simpleConfirmed = false;
 $('simple-next').addEventListener('click', async () => {
+  // Zweite Tuer derselben Sperre: kaeme der Einfach-Pfad je an startFlow()
+  // vorbei, schreibt er trotzdem nicht ueber eine bestehende .env.
+  await preflightDone;
+  if (simpleLockedByEnv) { startFlow('advanced'); return; }
   const btn = $('simple-next');
   // Genauso irreversibel wie rev-next, also dieselbe Zwei-Klick-Bestätigung.
   // Dass der Laien-Pfad sie nicht hatte, drehte die Schutzlogik um: weniger

@@ -168,6 +168,10 @@ const INTENTIONALLY_NOT_IN_INSTALLER = {
   MCP_INTERNAL_BASE_URL: 'Betriebs-Feinjustage.',
   RATE_LIMIT_WINDOW_MS: 'Betriebs-Feinjustage.',
   RATE_LIMIT_MAX_ATTEMPTS: 'Betriebs-Feinjustage.',
+  BIND_ADDRESS:
+    'Nur fuer den Betrieb ohne Container: im Container muss die App auf allen Interfaces '
+    + 'lauschen, sonst erreicht das veroeffentlichte Port-Mapping sie nicht. Der Wizard erzeugt '
+    + 'ausschliesslich Container-Installationen, dort waere jeder gesetzte Wert ein Ausfall.',
   BACKUP_UPLOAD_LIMIT:
     'Betriebs-Feinjustage: Body-Limit fuer den Restore-Upload im Admin-UI, nur beim '
     + 'Zurueckspielen einer ueberdimensionierten Datenbank relevant.',
@@ -939,8 +943,12 @@ test('kein Deploy-Descriptor gibt einem UI-sperrenden Schlüssel einen nicht-lee
     for (const key of keys) {
       // ${KEY:-<default>} - alles ausser sofort schliessender Klammer ist ein Wert.
       for (const m of src.matchAll(new RegExp(`\\$\\{${key}:-([^}]*)\\}`, 'g'))) {
-        if (m[1].trim() === '') continue;
-        offenders.push(`${file.replace(/^\.\.\//, '')}: ${key} defaultet auf "${m[1]}"`);
+        // ROH, nicht getrimmt: die Regel ist ein LEERER Default. Die Services trimmen
+        // heute alle, bevor sie sperren - backup-webdav.js erst seit #1199, davor sperrte
+        // dort schon ein Leerzeichen. Ein Guard, der sich auf dieses Trimmen verlaesst,
+        // wird still wirkungslos, sobald ein Service es vergisst; gewollt ist Leerraum hier nie.
+        if (m[1] === '') continue;
+        offenders.push(`${file.replace(/^\.\.\//, '')}: ${key} defaultet auf ${JSON.stringify(m[1])}`);
       }
     }
   }
@@ -948,6 +956,123 @@ test('kein Deploy-Descriptor gibt einem UI-sperrenden Schlüssel einen nicht-lee
   assert.deepEqual(offenders.sort(), [],
     'Diese Defaults setzen eine env-Variable, die ein UI-Feld sperrt - der Nutzer kann das '
     + `Feld danach in den Einstellungen nicht mehr ändern:\n${offenders.join('\n')}`);
+});
+
+// Dieselbe Regel, eine Bauart weiter: die Unraid-Vorlage interpoliert nichts.
+// `templates/yuvomi.xml` zaehlt jede Variable als `<Config>` auf, und was dort im
+// `Default`-Attribut oder als Elementtext steht, fuellt Unraid beim Anlegen des
+// Containers vor - es landet also genauso in der Umgebung wie ein Compose-Default.
+// Die Suche nach `${KEY:-...}` oben sieht die Datei gar nicht (sie ist weder YAML
+// noch Quadlet), und genau dort standen bis fba63f6a sieben solche Werte, darunter
+// EMAIL_SMTP_PORT=587 und DOCUMENT_STORAGE_WEBDAV_ENABLED=false, das den Schalter in
+// der Oberflaeche sperrte. Gegen die Vorlage von vor fba63f6a meldet dieser Test
+// genau diese sieben Schluessel, je mit Default und mit Wert.
+test('die Unraid-Vorlage gibt keinem UI-sperrenden Schlüssel einen Wert vor', () => {
+  const keys = uiLockingEnvKeys();
+  // Auskommentierte Eintraege gibt es fuer Unraid nicht - sie duerfen weder als
+  // deklariert zaehlen noch in die Paritaetspruefung unten eingehen. Bewusst per
+  // indexOf statt per replace-Regex: CodeQL bewertet ein Kommentar-replace als
+  // unvollstaendige Bereinigung (ein unterminiertes "<!--" bliebe stehen), und hier
+  // gilt ein nicht geschlossener Kommentar ohnehin bis zum Dateiende.
+  const withoutComments = (src) => {
+    let out = '';
+    let pos = 0;
+    for (;;) {
+      const start = src.indexOf('<!--', pos);
+      if (start === -1) return out + src.slice(pos);
+      out += src.slice(pos, start);
+      const end = src.indexOf('-->', start + 4);
+      if (end === -1) return out;
+      pos = end + 3;
+    }
+  };
+  const xml = withoutComments(readFileSync(new URL('../templates/yuvomi.xml', import.meta.url), 'utf8'));
+
+  // Tag-Grenzen per Zeichenlauf statt per Regex: ein ">" in einem Attributwert
+  // (Description="Port > 0") ist gueltiges XML und darf den Tag nicht beenden.
+  const configEntries = (src) => {
+    const out = [];
+    let pos = 0;
+    for (;;) {
+      const start = src.indexOf('<Config', pos);
+      if (start === -1) return out;
+      pos = start + '<Config'.length;
+      if (pos < src.length && !/[\s/>]/.test(src[pos])) continue; // anderer Tagname, etwa <Configs
+      let i = pos;
+      let quote = '';
+      while (i < src.length && (quote || src[i] !== '>')) {
+        if (quote) { if (src[i] === quote) quote = ''; }
+        else if (src[i] === '"' || src[i] === "'") quote = src[i];
+        i += 1;
+      }
+      if (i >= src.length) return [...out, { attrs: src.slice(pos), text: '', broken: true }];
+      const selfClosing = src[i - 1] === '/';
+      const attrs = src.slice(pos, selfClosing ? i - 1 : i);
+      if (selfClosing) { out.push({ attrs, text: '' }); pos = i + 1; continue; }
+      // XML erlaubt Leerraum vor dem ">" des End-Tags (`</Config >`, auch ueber einen
+      // Zeilenumbruch); ein literales '</Config>' uebersaehe das und liefe in den naechsten Eintrag.
+      const closeTag = /<\/Config\s*>/g;
+      closeTag.lastIndex = i + 1;
+      const close = closeTag.exec(src);
+      if (close === null) return [...out, { attrs, text: '', broken: true }];
+      out.push({ attrs, text: src.slice(i + 1, close.index) });
+      pos = close.index + close[0].length;
+    }
+  };
+
+  // Attribute der Reihe nach lesen, damit ein "Target=" IN einem Beschreibungstext nicht
+  // zaehlt. Gueltiges XML erlaubt Leerraum um "=" und beide Anfuehrungszeichen. Was das
+  // Muster nicht lesen kann (etwa ein ungequotetes Default=587), bleibt als Rest stehen
+  // und wird gemeldet, statt als "kein Default" durchzugehen. Ein gescheitertes exec
+  // setzt lastIndex auf 0 zurueck, deshalb zaehlt das Ende des letzten Treffers.
+  const parseAttrs = (s) => {
+    const map = {};
+    const re = /\s*([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/y;
+    let end = 0;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      map[m[1]] = m[2] ?? m[3];
+      end = re.lastIndex;
+    }
+    return { map, rest: s.slice(end).trim() };
+  };
+
+  const entries = configEntries(xml);
+  // Liest der Scanner nicht jeden Eintrag vollstaendig, fehlt ein Teil der Pruefung still.
+  assert.equal(entries.length, (xml.match(/<Config[\s/>]/g) || []).length,
+    'Nicht jeder <Config>-Eintrag der Unraid-Vorlage wurde gelesen - die Pruefung laese nur einen Teil.');
+  const unreadable = entries
+    .map((e) => ({ e, parsed: parseAttrs(e.attrs) }))
+    .filter(({ e, parsed }) => e.broken || parsed.rest !== '')
+    .map(({ e, parsed }) => `${parsed.map.Target ?? '?'}: ${e.broken ? 'nicht geschlossen' : `unlesbar "${parsed.rest}"`}`);
+  assert.deepEqual(unreadable, [],
+    `Diese <Config>-Eintraege kann die Pruefung nicht sicher lesen:\n${unreadable.join('\n')}`);
+
+  const declared = new Set();
+  const offenders = [];
+  for (const { attrs, text } of entries) {
+    const { map } = parseAttrs(attrs);
+    const target = map.Target;
+    if (!keys.includes(target)) continue;
+    // Nur ein Variable-Eintrag wird zur Umgebungsvariable; derselbe Target als
+    // Path oder Port ist fuer Unraid-Nutzer nicht setzbar und gilt als fehlend.
+    if (map.Type !== 'Variable') continue;
+    declared.add(target);
+    // ROH vergleichen, nicht getrimmt - dieselbe Regel wie im Compose-Test oben: leer heisst
+    // leer. Dass die Services Leerraum heute beim Sperren ignorieren (backup-webdav.js erst
+    // seit #1199), ist kein Grund, ihn in der Vorlage zu dulden.
+    const def = map.Default ?? '';
+    if (def !== '') offenders.push(`${target}: Default=${JSON.stringify(def)}`);
+    if (text !== '') offenders.push(`${target}: Wert ${JSON.stringify(text)}`);
+  }
+
+  // Unraid hat keinen Fallback: ein fehlender Eintrag ist fuer Unraid-Nutzer nicht setzbar.
+  assert.deepEqual(keys.filter((k) => !declared.has(k)).sort(), [],
+    'Diese UI-sperrenden Schluessel fehlen in der Unraid-Vorlage.');
+
+  assert.deepEqual(offenders.sort(), [],
+    'Die Unraid-Vorlage fuellt diese UI-sperrenden Schluessel vor - jeder neue Container sperrt damit '
+    + `das Feld in den Einstellungen:\n${offenders.join('\n')}`);
 });
 
 test('der Dokument-Mount zielt auf DOCUMENT_STORAGE_LOCAL_PATH, nie auf einen festen Pfad', () => {

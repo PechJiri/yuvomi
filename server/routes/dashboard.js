@@ -16,6 +16,7 @@ import { listQuickLinksFor } from './quick-links.js';
 import { visibilityWhere } from '../services/visibility.js';
 import { resolveBudgetMode } from '../services/budget-visibility.js';
 import { hiddenModulesFor } from '../permissions.js';
+import { householdMemberSql } from '../services/household-members.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
 import { isAdminUser, serializeEvents } from './calendar/helpers.js';
 
@@ -437,7 +438,7 @@ router.get('/', (req, res) => {
   try {
     result.users = d.prepare(
       `SELECT id, display_name, avatar_color, avatar_data FROM users u
-       WHERE NOT EXISTS (SELECT 1 FROM housekeeping_workers hw WHERE hw.user_id = u.id)
+       WHERE ${householdMemberSql('u')}
        ORDER BY display_name`
     ).all();
   } catch (err) {
@@ -598,7 +599,7 @@ router.get('/', (req, res) => {
   // Belohnungen: Familien-Punktestand (Top 5 aktive Teilnehmer nach Ledger-Saldo)
   // plus offene Freigaben — ein glanceable Mini-Ranking für den Familienalltag.
   if (allows('rewards')) try {
-    const MEMBER_FILTER = 'NOT EXISTS (SELECT 1 FROM housekeeping_workers hw WHERE hw.user_id = u.id)';
+    const MEMBER_FILTER = householdMemberSql('u');
     const standings = d.prepare(`
       SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, u.family_role,
              COALESCE((SELECT SUM(delta) FROM reward_ledger l WHERE l.user_id = u.id), 0) AS balance
@@ -608,7 +609,9 @@ router.get('/', (req, res) => {
       ORDER BY balance DESC, u.display_name COLLATE NOCASE ASC
       LIMIT 5
     `).all();
-    const participantCount = d.prepare('SELECT COUNT(*) AS n FROM reward_participants WHERE enabled = 1').get().n;
+    // Dieselben Personen wie die Rangliste darueber (#1207): eine alte
+    // Einschreibung von Personal oder Gast bleibt stehen, zaehlt aber nicht.
+    const participantCount = d.prepare(`SELECT COUNT(*) AS n FROM reward_participants p JOIN users u ON u.id = p.user_id WHERE p.enabled = 1 AND ${householdMemberSql('u')}`).get().n;
     const pending = d.prepare("SELECT COUNT(*) AS n FROM reward_redemptions WHERE status = 'pending'").get().n;
     result.rewards = { standings, participantCount, pending };
   } catch (err) {

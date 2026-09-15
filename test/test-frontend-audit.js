@@ -5771,28 +5771,34 @@ test('die Touch-Zielgröße folgt DESIGN.md statt einer dritten Zahl', () => {
 });
 
 /**
- * Nicht-Text-Kontrast: gemessen, dokumentiert, bewusst offen.
+ * Nicht-Text-Kontrast: gemessen, entschieden, dokumentiert.
  *
- * Die Kanten der Bedienelemente erreichen die 3:1 aus WCAG 1.4.11 nicht. Der
- * Betreiber hat am 2026-07-30 entschieden, das vorerst nur zu dokumentieren
- * statt --color-border anzuheben - die Änderung ginge durch jedes Modul.
+ * Die Kanten der Bedienelemente erreichten die 3:1 aus WCAG 1.4.11 nicht. Der
+ * Betreiber hatte am 2026-07-30 entschieden, das nur zu dokumentieren; am
+ * 2026-09-15 fiel die Entscheidung fuer ein eigenes --color-border-control
+ * (#1230, Option A). Ob das Token die 3:1 HAELT, prueft
+ * "Feldkanten tragen --color-border-control" - dieser Guard haelt das WISSEN
+ * fest: warum es ein eigenes Token ist und nicht --color-border angehoben
+ * wurde, und auf welchen Gruenden es am knappsten steht. Verschwindet der
+ * Kommentar, verschwindet auch der Grund, und die naechste Aufraeumrunde legt
+ * beide Kanten wieder zusammen.
  *
- * Der Guard hält die MESSUNG fest, nicht den Fix: verschwindet der Kommentar,
- * verschwindet auch das Wissen, warum die Zahl so steht. Messwerte und Zielwert
- * sind mit dem HIG-Rollout (2026-08) neu erhoben worden - die alte Zahlenreihe
- * galt gegen die warme Prä-Redesign-Palette und wäre gegen die kühle
- * iOS-27-Rampe schlicht falsch.
+ * Bis #1230 hielt dieser Guard die OFFENE Messung fest (1,13 / 1,26 / 1,60:1,
+ * Zielwert #949494). Er war damit der erste, der beim Umsetzen rot wurde - zu
+ * Recht: eine Doku, die einen behobenen Befund als offen fuehrt, ist falsch.
  */
-test('der offene Nicht-Text-Kontrast bleibt an den Tokens dokumentiert', () => {
+test('der entschiedene Nicht-Text-Kontrast bleibt an den Tokens dokumentiert', () => {
   const tokens = read('../public/styles/tokens.css');
   const block = tokens.slice(0, tokens.indexOf('--color-border:'));
-  assert.match(block, /WCAG 1\.4\.11/, 'der Befund muss an --color-border dokumentiert bleiben');
-  assert.match(block, /1\.13:1/, 'der gemessene Ist-Wert auf dem Grouped-Grund gehört dazu');
-  assert.match(block, /1\.26:1/, 'der Wert auf --color-surface gehört dazu (Eingabefeld auf Weiß)');
-  assert.match(block, /1\.60:1/, 'der Dark-Wert gehört dazu');
-  assert.match(block, /#949494/, 'der Zielwert für 3:1 gegen die kühle Rampe gehört dazu, sonst muss ihn jeder neu ausrechnen');
-  assert.match(block, /nicht für dekorative Gruppierung/,
-    'die Abgrenzung Bedienelement gegen Kartenkante gehört dazu - der Critique warf beides zusammen');
+  assert.match(block, /WCAG 1\.4\.11/, 'der Befund muss an den Kanten-Tokens dokumentiert bleiben');
+  assert.match(block, /#1230/, 'der Vorgang, in dem entschieden wurde, gehoert dazu');
+  assert.match(block, /--color-border-control ist die\s+\*?\s*vorhandene Rampenstufe --neutral-500/,
+    'welcher Wert das Token ist und woher er kommt, gehoert dazu');
+  assert.match(block, /3,18 auf der Buehne/, 'der knappste helle Grund gehoert dazu');
+  assert.match(block, /3,86\s+\*?\s*auf -raised/, 'der knappste dunkle Grund gehoert dazu');
+  assert.match(block, /NUR FELDKANTEN/,
+    'die Abgrenzung Feldkante gegen Kartenkante gehoert dazu - der Critique warf beides zusammen');
+  assert.match(tokens, /--color-border-control:\s*var\(--neutral-500\)/, 'das Token selbst muss so stehen, wie der Kommentar es beschreibt');
 });
 
 /**
@@ -7408,6 +7414,520 @@ test('jede Regel, die Farbe UND Untergrund setzt, haelt ihr eigenes Paar', () =>
   const stale = [...COPAIR_CATEGORY.keys()].filter((needle) => !usedCategories.has(needle));
   assert.deepEqual(stale, [],
     'COPAIR_CATEGORY nennt Selektoren, die in keinem Stylesheet mehr ein Farbpaar bauen.');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Die Kante eines Eingabefelds haelt 3:1 (WCAG 1.4.11) - mit einem eigenen
+ * Token, nicht mit der Kartenkante
+ *
+ * Bis #1230 zogen die Felder ihre Ruhekante aus --color-border, derselben
+ * Stufe wie jede Karten- und Gruppenkante. Gerendert lag sie bei 1,26 bis
+ * 1,47:1 in beiden Themes, auf allen Flaechen (Login, Modals, Settings-Blaetter,
+ * Glas). Die Entscheidung (Ulas, 2026-09-15, Option A): ein eigenes
+ * --color-border-control = --neutral-500, NUR fuer Feldkanten; Trennlinien und
+ * Kartenkanten behalten --color-border.
+ *
+ * Zwei Zusagen, zwei Haelften:
+ *   1. das Token haelt 3:1 gegen jeden Grund, auf dem ein Feld gemessen stand,
+ *      in beiden Themes;
+ *   2. keine Feldregel zieht ihre Kante noch aus der Kartenkante. Welche Regel
+ *      ein Feld ist, entscheidet eine LISTE von Selektor-Fragmenten (`FIELD`:
+ *      input/select/textarea, .input, .form-input, `__input`, `__select`, die
+ *      Such-Huelle, die Quick-Add-Felder). Eine Liste laesst das naechste Feld
+ *      ungeprueft, deshalb steht ein NETZ dahinter: jede Regel, deren letztes
+ *      Glied `search`, `input`, `field`, `select` oder `textarea` im Namen
+ *      traegt und ihre Kante aus --color-border* zieht, muss entweder ein Feld
+ *      nach der Liste sein oder als BENANNTE Ausnahme mit Grund in
+ *      `NOT_A_FIELD` stehen - sonst ist der Guard rot. Eine Ausnahme, die keine
+ *      Regel mehr trifft, ist ebenfalls rot.
+ *
+ * Was das Netz nicht faengt: ein Feld ohne eines dieser Woerter im Namen. Der
+ * bewusst ausgenommene `.event-icon-picker__trigger` (ein Knopf, der einen
+ * Icon-Waehler oeffnet) traegt keins und liegt deshalb ausserhalb - ein
+ * Knopf identifiziert sich ueber Glyphe und Beschriftung, nicht ueber die
+ * Kante (WCAG 1.4.11 verlangt die Grenze nur, wo sie das Bedienelement
+ * erkennbar macht).
+ * ──────────────────────────────────────────────────────────────────────────── */
+test('Feldkanten tragen --color-border-control und halten 3:1 auf jedem Feldgrund', () => {
+  const { light, dark } = themeTokenMaps();
+  // Die Gruende, auf denen ein Feld in der Messung stand: Karte/Modal/Login
+  // (surface, surface-work), Settings-Blatt (surface-raised), Modal-Feldgrund
+  // (surface-2) und die Buehne (bg).
+  const GROUNDS = ['--color-surface', '--color-surface-work', '--color-surface-raised', '--color-surface-2', '--color-bg'];
+  const tokenFindings = [];
+  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+    const edge = resolveColor('--color-border-control', map);
+    assert.ok(/^#[0-9a-f]{6}$/i.test(edge ?? ''), `${theme}: --color-border-control loest nicht auf eine Hex-Farbe auf (${edge})`);
+    for (const ground of GROUNDS) {
+      const bg = resolveColor(ground, map);
+      assert.ok(/^#[0-9a-f]{6}$/i.test(bg ?? ''), `${theme}: ${ground} loest nicht auf eine Hex-Farbe auf (${bg})`);
+      const ratio = contrastRatio(edge, bg);
+      if (ratio + 0.005 < 3) tokenFindings.push(`${theme}: ${edge} auf ${ground} (${bg}) ${ratio.toFixed(2)}:1`);
+    }
+  }
+  assert.deepEqual(tokenFindings, [], 'Die Feldkante unterschreitet 3:1 (WCAG 1.4.11) auf einem Grund, auf dem Felder stehen.');
+
+  const FIELD = /(?:^|[\s>+~])(?:input|select|textarea)(?![\w-])|\.(?:input|form-input)(?![\w-])|__input(?![\w-])|search__control(?![\w-])|quick-add__(?:qty|cat)(?![\w-])|__select(?![\w-])/;
+  const NOT_A_TEXT_FIELD = /\[type="?(?:checkbox|radio|range|color|file|hidden)"?\]|::|:focus|:hover|:disabled|\[disabled\]|is-invalid|--invalid|--error/;
+  // Das Netz: Feldwoerter im Namen des letzten Glieds. Jede Regel, die es
+  // faengt und die keine Feldregel nach `FIELD` ist, braucht einen Eintrag
+  // hier - mit dem Grund, warum sie kein Eingabefeld ist.
+  const FIELD_WORD = /search|input|field|select|textarea/i;
+  const NOT_A_FIELD = new Map([
+    ['.more-sheet__search', 'Knopf im Feld-Look: oeffnet die Suche, nimmt keine Eingabe an; bewusst unveraendert (#1230)'],
+    ['.more-sheet__search:hover', 'Hover desselben Knopfs'],
+    ['.cal-search', 'Leiste der Kalendersuche; die Kante ist die Trennlinie unter der Leiste, nicht die des Feldes'],
+    ['.search-overlay__header', 'Kopf des Such-Overlays; Trennlinie zur Trefferliste'],
+    ['.search-overlay__panel', 'Flaeche des Such-Overlays ab Tablet-Breite; Kartenkante'],
+    ['.search-result + .search-result', 'Trennlinie zwischen zwei Treffern'],
+    ['.search-scope', 'Bereichs-Chip in der Suche; ein Knopf, kein Feld'],
+    ['.search-scope:hover', 'Hover desselben Chips'],
+    ['.documents-selectbar', 'Aktionsleiste der Mehrfachauswahl ("select" als Auswaehlen); Trennlinie'],
+    ['.rrule-fields', 'Gruppe der Wiederholungsfelder; Gruppenkante, die Felder darin tragen ihre eigene'],
+    ['.schedule-day-row-fields', 'Gruppe der Felder eines Wochentags; linke Gruppenlinie'],
+    ['.note-category-selection', 'Chip der gewaehlten Notiz-Kategorie; Knopf, kein Feld'],
+  ]);
+  const styles = new URL('../public/styles/', import.meta.url);
+  const offenders = [];
+  const unnamed = [];
+  const usedExceptions = new Set();
+  let controlEdges = 0;
+  for (const file of readdirSync(styles).filter((entry) => entry.endsWith('.css') && entry !== 'tokens.css')) {
+    for (const rule of eachRule(readFileSync(new URL(file, styles), 'utf8'))) {
+      const parts = rule.selector.split(',').map((s) => s.trim().replace(/\s+/g, ' '));
+      const lastOf = (s) => s.split(/\s+|>|\+|~/).filter(Boolean).pop() ?? '';
+      const fieldParts = parts.filter((s) => FIELD.test(` ${lastOf(s)}`) && !NOT_A_TEXT_FIELD.test(lastOf(s)));
+      const edges = [...rule.body.matchAll(/(?:^|;)\s*border(?:-color|-top|-bottom|-left|-right)?\s*:\s*([^;]+)/g)].map((m) => m[1]);
+      const cardEdge = edges.some((v) => /var\(\s*--color-border(?:-subtle|-strong)?\s*[,)]/.test(v));
+      if (fieldParts.length) {
+        if (edges.some((v) => /var\(\s*--color-border-control\s*\)/.test(v))) controlEdges += 1;
+        if (cardEdge) offenders.push(`${file}: ${fieldParts.join(', ')}${rule.at.length ? `  [${rule.at.join(' ')}]` : ''}`);
+      }
+      if (!cardEdge) continue;
+      for (const part of parts) {
+        if (fieldParts.includes(part) || !FIELD_WORD.test(lastOf(part))) continue;
+        if (NOT_A_FIELD.has(part)) usedExceptions.add(part);
+        else unnamed.push(`${file}: ${part}${rule.at.length ? `  [${rule.at.join(' ')}]` : ''}`);
+      }
+    }
+  }
+  assert.ok(controlEdges >= 10,
+    `Nur ${controlEdges} Feldregeln mit --color-border-control gefunden - der Selektor-Scan greift nicht mehr, der Guard misst nichts.`);
+  assert.deepEqual(offenders, [],
+    'Feldregeln, die ihre Ruhekante aus der Kartenkante ziehen (--color-border*). Ein Eingabefeld nimmt '
+    + '--color-border-control (3:1, WCAG 1.4.11); --color-border bleibt Trennlinien und Kartenkanten.');
+  assert.deepEqual(unnamed, [],
+    'Eine Regel mit Feldwort im Namen (search/input/field/select/textarea) zieht ihre Kante aus --color-border*, '
+    + 'ist aber weder ein Feld nach FIELD noch eine benannte Ausnahme in NOT_A_FIELD. Ist es ein Eingabefeld: '
+    + '--color-border-control. Ist es keins: in NOT_A_FIELD eintragen, mit Grund.');
+  const staleExceptions = [...NOT_A_FIELD.keys()].filter((key) => !usedExceptions.has(key));
+  assert.deepEqual(staleExceptions, [],
+    'NOT_A_FIELD nennt Selektoren, die keine Regel mit Kartenkante mehr treffen - Eintrag entfernen.');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Das Etikett einer Listenzeile haelt 4.5:1 auch in jedem Zustand, der es
+ * zuruecknimmt - gerechnet mit der Deckung, nicht nur mit der Farbe
+ *
+ * Der Farbpaar-Guard sieht `opacity` nicht: `.shopping-item--checked
+ * .list-row__tag` setzte nur `opacity: 0.6` und keine Farbe, baute also kein
+ * Paar und fiel durch jede Regel. Gerendert stand das Etikett eines
+ * abgehakten Postens bei 2,58:1 (light) und 3,71:1 (dark) auf seiner eigenen
+ * Pille (Kontrastmessung nach dem HIG-Redesign, 2026-09-15). Abgehakt ist ein
+ * Zustand, kein deaktiviertes Bedienelement - die Zeile laesst sich wieder
+ * aufmachen, die WCAG-Ausnahme fuer Deaktiviertes greift nicht. Dieselbe Zeile
+ * hat die Frage fuer `.item-meta` schon beantwortet: zurueckgenommen ueber
+ * --color-text-tertiary, nicht ueber Deckung.
+ *
+ * Gerechnet wird der Untergrund der Basisregel (die Pille), die Farbe der
+ * Zustandsregel oder ersatzweise der Basis und die Deckung der Zustandsregel.
+ * Die Deckung der ganzen Zeile gehoert nicht hierher: `.shopping-item--checked`
+ * dimmt seit #1230 gar nicht mehr ueber opacity (entschieden, Ulas
+ * 2026-09-15), und das halten "die abgehakte Einkaufszeile nimmt sich ueber
+ * Textfarben zurueck" und "zurueckgenommene Karten und Zeilen" weiter unten.
+ * ──────────────────────────────────────────────────────────────────────────── */
+test('das Etikett einer Listenzeile haelt 4.5:1 in jedem Zustand, der es zuruecknimmt', () => {
+  const { light, dark } = themeTokenMaps();
+  const resolveHex = (value, map) => {
+    const ref = String(value ?? '').trim().match(/^var\(\s*(--[\w-]+)\s*\)$/);
+    const hex = ref ? resolveColor(ref[1], map) : String(value ?? '').trim();
+    return /^#[0-9a-f]{6}$/i.test(hex ?? '') ? hex : null;
+  };
+  const declOf = (body, prop) => {
+    let found = null;
+    for (const m of body.matchAll(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'g'))) found = m[1].trim();
+    return found;
+  };
+
+  const styles = new URL('../public/styles/', import.meta.url);
+  const rules = readdirSync(styles)
+    .filter((entry) => entry.endsWith('.css') && entry !== 'tokens.css')
+    .flatMap((file) => [...eachRule(readFileSync(new URL(file, styles), 'utf8'))].map((rule) => ({ ...rule, file })));
+
+  const base = rules.find((rule) => rule.selector.trim() === '.list-row__tag');
+  assert.ok(base, 'Keine Basisregel `.list-row__tag` gefunden - der Guard misst nichts.');
+  const baseColor = declOf(base.body, 'color');
+  const baseBg = declOf(base.body, 'background-color') ?? declOf(base.body, 'background');
+
+  const states = rules.filter((rule) => rule !== base
+    && /\.list-row__tag\s*$/.test(rule.selector.trim())
+    && (declOf(rule.body, 'opacity') !== null || declOf(rule.body, 'color') !== null));
+  assert.ok(states.some((rule) => rule.selector.includes('--checked')),
+    'Die Zustandsregel des abgehakten Postens (`…--checked .list-row__tag`) fehlt - '
+    + 'umbenannt? Dann prueft dieser Guard seit dem Umbenennen nichts mehr.');
+
+  const findings = [];
+  for (const rule of states) {
+    const opacity = Number(declOf(rule.body, 'opacity') ?? 1);
+    for (const [theme, map] of [['light', light], ['dark', dark]]) {
+      const fg = resolveHex(declOf(rule.body, 'color') ?? baseColor, map);
+      const bg = resolveHex(baseBg, map);
+      assert.ok(fg && bg, `${theme}: Farbe oder Pille von ${rule.selector} laesst sich nicht aufloesen`);
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(fg.slice(i, i + 2), 16));
+      const ratio = contrastRatio(compositeColor(`rgba(${r}, ${g}, ${b}, ${opacity})`, bg), bg);
+      if (ratio + 0.005 < 4.5) {
+        findings.push(`${theme}: ${ratio.toFixed(2)}:1  ${fg} x ${opacity} auf ${bg}  ${rule.file}  ${rule.selector.trim()}`);
+      }
+    }
+  }
+  assert.deepEqual(findings, [],
+    'Ein Zustand nimmt das Etikett unter 4.5:1 zurueck. Zuruecknehmen ueber die Farbe '
+    + '(--color-text-tertiary), nicht ueber opacity - die Deckung multipliziert den Kontrast mit herunter.');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Die abgehakte Einkaufszeile nimmt sich ueber Textfarben zurueck, nicht ueber
+ * die Deckung (#1230)
+ *
+ * `.shopping-item--checked { opacity: 0.45 }` griff nur unter
+ * prefers-reduced-motion, weil stagger() sonst ein Inline-`opacity: 1`
+ * hinterliess. Genau diese Menschen sahen Name und Menge bei 1,99:1 (light)
+ * und 2,51:1 (dark). Seit stagger() aufraeumt, gaelte die Deckung fuer alle.
+ * Zwei Zusagen: keine Regel des Zustands dimmt ueber opacity, und jede
+ * Textfarbe, die er setzt, haelt 4.5:1 auf den Gruenden der Zeile.
+ * ──────────────────────────────────────────────────────────────────────────── */
+test('die abgehakte Einkaufszeile nimmt sich ueber Textfarben zurueck, nicht ueber opacity', () => {
+  const { light, dark } = themeTokenMaps();
+  const styles = new URL('../public/styles/', import.meta.url);
+  const stateRules = readdirSync(styles)
+    .filter((entry) => entry.endsWith('.css') && entry !== 'tokens.css')
+    .flatMap((file) => [...eachRule(readFileSync(new URL(file, styles), 'utf8'))].map((rule) => ({ ...rule, file })))
+    .filter((rule) => rule.selector.split(',').some((part) => /\.shopping-item--checked(?![\w-])/.test(part)));
+  assert.ok(stateRules.length >= 2,
+    `Nur ${stateRules.length} Regeln fuer .shopping-item--checked gefunden - umbenannt? Dann prueft dieser Guard nichts mehr.`);
+
+  const dimmed = stateRules.filter((rule) => {
+    let value = null;
+    for (const m of rule.body.matchAll(/(?:^|;)\s*opacity\s*:\s*([0-9.]+)/g)) value = Number(m[1]);
+    return value !== null && value < 1;
+  }).map((rule) => `${rule.file}: ${rule.selector.trim()}`);
+  assert.deepEqual(dimmed, [],
+    'Der abgehakte Posten dimmt ueber opacity. Die Deckung multipliziert den Kontrast jedes Textes der Zeile mit '
+    + 'herunter - zuruecknehmen ueber --color-text-secondary/-tertiary.');
+
+  const findings = [];
+  let colors = 0;
+  for (const rule of stateRules) {
+    const decl = [...rule.body.matchAll(/(?:^|;)\s*color\s*:\s*var\(\s*(--[\w-]+)\s*\)/g)].pop();
+    if (!decl) continue;
+    colors += 1;
+    for (const [theme, map] of [['light', light], ['dark', dark]]) {
+      const fg = resolveColor(decl[1], map);
+      for (const ground of ['--color-surface', '--color-surface-2']) {
+        const bg = resolveColor(ground, map);
+        const ratio = contrastRatio(fg, bg);
+        if (ratio + 0.005 < 4.5) findings.push(`${theme}: ${ratio.toFixed(2)}:1  ${rule.file}  ${rule.selector.trim()}  ${decl[1]} auf ${ground}`);
+      }
+    }
+  }
+  assert.ok(colors >= 2, `Nur ${colors} Textfarben im Zustand gefunden - der Guard misst nichts.`);
+  assert.deepEqual(findings, [], 'Eine Textfarbe des abgehakten Postens unterschreitet 4.5:1.');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Zurueckgenommene Karten und Zeilen dimmen nicht ueber opacity (#1230)
+ *
+ * Erledigte und abgelegte Aufgaben, archivierte Konten, pausierte und
+ * abgeschlossene Abos, inaktive Medikamente und Praemien, archivierte
+ * Abfallarten, pausierte Abfuhrtermine, bereits importierte Zeilen und
+ * erwartete Buchungsbetraege nahmen sich ueber `opacity: 0.55` bis `0.78`
+ * zurueck. Gerendert fiel damit JEDER Text der Karte unter 4.5:1, die
+ * Initialen der Avatare und die Zustands-Badges eingeschlossen: 1,65 bis
+ * 3,86:1 light, 2,40 bis 4,23:1 dark. Die Deckung multipliziert den Kontrast
+ * mit herunter; eine Stufe, bei der sekundaerer Text 4.5:1 haelt, liegt ueber
+ * 0.9 und dimmt nichts mehr.
+ *
+ * Die Entscheidung (Ulas, 2026-09-15): EIN Muster fuer alles Zurueckgenommene -
+ * Flaeche --color-surface-receded, Kante --color-border-receded, Sekundaertext
+ * --color-text-receded (tokens.css), Badges und Initialen voll. Die erwartete
+ * Buchung behaelt ihre Einnahme-/Ausgabefarbe; das Badge markiert die Zeile.
+ *
+ * WELCHE REGEL EIN ZUSTAND IST, ENTSCHEIDET EINE WORTLISTE - und das steht
+ * hier so, weil es so ist. Ein Selektor verraet nicht, ob `--out` "leer" oder
+ * "ausgeblendet" heisst; gezaehlt wird jede Regel mit einem dieser
+ * Zustandswoerter als Modifikator (`--done`, `--archived`, ...) oder als
+ * `.is-inactive` IRGENDWO im Selektor, auf jeder Klasse - nicht eine Liste von
+ * Karten. Ein NEUES Zustandswort muss hier eingetragen werden, sonst sieht der
+ * Guard es nicht.
+ *
+ * BEWUSST NICHT IN DER LISTE, gemessen am 2026-09-15 (#1230), jeweils mit
+ * Grund - wer eines davon aufnimmt, macht den Guard rot, ohne dass ein
+ * Verstoss vorliegt:
+ *   `.is-disabled`, `.is-locked`  deaktivierte bzw. gesperrte Bedienelemente,
+ *                                 die WCAG 1.4.3 ausnimmt;
+ *   `.pantry-row--out`            dimmt nur den Namen (0.65), gerendert
+ *                                 5,34:1 light / 5,20:1 dark;
+ *   `.note-md-check.is-checked`   dimmt nur den Text des Punkts (0.65),
+ *                                 gerendert 5,26:1 light / 4,63:1 dark.
+ * Ausgenommen ist ausserdem, was kein Zustand eines Datensatzes ist: echte
+ * deaktivierte Bedienelemente (`:disabled`) und die Drag-Geister von SortableJS.
+ *
+ * DIE DECKUNG WIRD GELESEN, NICHT NUR DIE ZAHL: `opacity: 60%` ist dieselbe
+ * Deckung wie `0.6`, und ein `var(--x)` wird ueber die Tokens aufgeloest. Was
+ * sich nicht aufloesen laesst (ein Modul-Token, `calc()`), zaehlt als Verstoss -
+ * ein Guard, der Unlesbares durchwinkt, prueft nur die Schreibweise.
+ * ──────────────────────────────────────────────────────────────────────────── */
+const RECEDED_STATE = /--(?:done|checked|archived|inactive|completed|disabled|paused|exists|pending|settled|ended|expired|cancelled|canceled|dismissed|resolved|redeemed|fulfilled)(?![\w-])|\.is-inactive(?![\w-])/;
+const RECEDED_EXEMPT = /:disabled|\[disabled\]|sortable-/;
+
+test('zurueckgenommene Karten und Zeilen dimmen nicht ueber opacity, und ihre Textfarben halten 4.5:1', () => {
+  const { light, dark } = themeTokenMaps();
+  const STATE = RECEDED_STATE;
+  // Deckung einer Deklaration in beiden Themes: Zahl, Prozent oder var() mit
+  // optionalem Rueckfall. NaN heisst "nicht lesbar" und zaehlt als Verstoss.
+  const opacityIn = (raw, map, depth = 0) => {
+    const v = String(raw).trim().replace(/\s*!important$/i, '');
+    const ref = v.match(/^var\(\s*(--[\w-]+)\s*(?:,\s*(.+))?\)$/);
+    if (ref) {
+      const next = map.get(ref[1]) ?? ref[2];
+      return next === undefined || depth > 12 ? Number.NaN : opacityIn(next, map, depth + 1);
+    }
+    const pct = v.match(/^(\d*\.?\d+)%$/);
+    if (pct) return Number(pct[1]) / 100;
+    return /^\d*\.?\d+$/.test(v) ? Number(v) : Number.NaN;
+  };
+  const EXEMPT = /:disabled|\[disabled\]|sortable-/;
+  const styles = new URL('../public/styles/', import.meta.url);
+  const dimmed = [];
+  const weakText = [];
+  let stateRules = 0;
+  let colors = 0;
+
+  for (const file of readdirSync(styles).filter((entry) => entry.endsWith('.css') && entry !== 'tokens.css')) {
+    for (const rule of eachRule(readFileSync(new URL(file, styles), 'utf8'))) {
+      const parts = rule.selector.split(',').map((s) => s.trim()).filter((s) => STATE.test(s) && !EXEMPT.test(s));
+      if (!parts.length) continue;
+      stateRules += 1;
+      const where = `${file}: ${parts.join(', ')}${rule.at.length ? `  [${rule.at.join(' ')}]` : ''}`;
+
+      const opacityDecl = [...rule.body.matchAll(/(?:^|;)\s*opacity\s*:\s*([^;]+)/g)].pop();
+      if (opacityDecl) {
+        const values = [light, dark].map((map) => opacityIn(opacityDecl[1], map));
+        if (values.some((value) => Number.isNaN(value))) {
+          dimmed.push(`${where}  opacity ${opacityDecl[1].trim()} (nicht aufloesbar)`);
+        } else if (Math.min(...values) < 1) {
+          dimmed.push(`${where}  opacity ${opacityDecl[1].trim()} (= ${Math.min(...values)})`);
+        }
+      }
+
+      const decl = [...rule.body.matchAll(/(?:^|;)\s*color\s*:\s*var\(\s*(--[\w-]+)\s*\)/g)].pop();
+      if (!decl) continue;
+      // Deaktiviert ist vom Standard ausgenommen (WCAG 1.4.3) - dieselbe
+      // Kategorie wie oben, nur an der Farbe statt am Selektor erkannt.
+      if (decl[1] === '--color-text-disabled') continue;
+      // Eine Regel, die ihre EIGENE Flaeche setzt (`.swipe-reveal--done`: Tinte
+      // auf Gruen), steht nicht auf surface - ihr Paar prueft "jede Regel, die
+      // Farbe UND Untergrund setzt, haelt ihr eigenes Paar" weiter oben.
+      if (/(?:^|;)\s*background(?:-color)?\s*:/.test(rule.body)) continue;
+      for (const [theme, map] of [['light', light], ['dark', dark]]) {
+        const fg = resolveColor(decl[1], map);
+        if (!/^#[0-9a-f]{6}$/i.test(fg ?? '')) continue;
+        colors += 1;
+        for (const ground of ['--color-surface', '--color-surface-2']) {
+          const ratio = contrastRatio(fg, resolveColor(ground, map));
+          if (ratio + 0.005 < 4.5) weakText.push(`${theme}: ${ratio.toFixed(2)}:1  ${where}  ${decl[1]} auf ${ground}`);
+        }
+      }
+    }
+  }
+
+  assert.ok(stateRules >= 20,
+    `Nur ${stateRules} Zustandsregeln gefunden - der Selektor-Scan greift nicht mehr, der Guard misst nichts.`);
+  assert.ok(colors >= 10, `Nur ${colors} aufloesbare Textfarben in Zustandsregeln - der Guard misst nichts.`);
+  assert.deepEqual(dimmed, [],
+    'Ein Zustand dimmt seine Karte oder Zeile ueber opacity. Das zieht jeden Text darin unter 4.5:1, Badges '
+    + 'und Initialen eingeschlossen. Zuruecknehmen ueber --color-surface-receded, --color-border-receded und '
+    + '--color-text-receded (tokens.css).');
+  assert.deepEqual(weakText, [], 'Eine Textfarbe in einer Zustandsregel unterschreitet 4.5:1 auf surface oder surface-2.');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Keine spezifischere Regel ueberschreibt eine zurueckgenommene Zustandsregel
+ *
+ * Der Guard darueber prueft, was eine Zustandsregel SAGT - nicht, ob sie
+ * GILT. Auf /tasks gewann `.tasks-page .task-card` aus glass.css (0-2-0) gegen
+ * `.task-card--done` (0-1-0), obwohl tasks.css spaeter laedt: erledigte und
+ * abgelegte Listenkarten behielten --color-surface-work statt der
+ * zurueckgenommenen Flaeche, in beiden Themes. Und `.kanban-card:hover` (0-2-0)
+ * gab der erledigten Kanban-Karte beim Zeigen ihren Schatten zurueck - sie hob
+ * sich wie eine aktive (Codex an #1230).
+ *
+ * WIE DIE KASKADE HIER GERECHNET WIRD: eine Regel, deren letztes Glied dieselbe
+ * Karten- bzw. Zeilenklasse traegt, gewinnt, wenn ihre Spezifitaet hoeher ist
+ * oder bei Gleichstand spaeter laedt. Die Ladereihenfolge ist die der
+ * `<link>`-Tags in index.html (global), danach das Seitenstylesheet, das der
+ * Router ans Ende haengt. Zwei Seitenstylesheets sind nie gleichzeitig geladen
+ * und konkurrieren nicht. Modifikatoren derselben Klasse (`.due-date--overdue`)
+ * sind andere Zustaende, nicht dasselbe Element im selben Zustand.
+ *
+ * WELCHE ZUSTANDSREGELN: die des Zuruecknehmen-Musters, also jede Regel mit
+ * Zustandswort im Selektor, die ein `--color-*-receded`-Token setzt. Ein
+ * abgehakter Unteraufgaben-Haken oder eine gruene Wischflaeche ist ein anderer
+ * Zustand mit eigenem Hover und gehoert nicht hierher.
+ *
+ * WELCHE WETTBEWERBER: jede Regel, deren letztes Glied nur Klassen traegt, die
+ * am selben Element sitzen koennen. Welche das sind, sagen die
+ * `class="..."`-Vorlagen in public/ - `.waste-schedule-row` steht dort zusammen
+ * mit `list-row` und `waste-row`, und deren `:hover` uebernahm die Flaeche der
+ * pausierten Zeile, ohne dass eine Regel `.waste-schedule-row` hiess.
+ *
+ * AUCH HOVER, FOKUS UND AKTIV: die zurueckgenommene Flaeche, Kante und Farbe
+ * bleiben unter dem Zeiger stehen (Entscheidung zu #1230). ABGEDECKT ist ein
+ * Wettbewerber nur durch eine Zustandsregel mit denselben Pseudoklassen
+ * (`.kanban-card--done:hover` gegen `.kanban-card:hover`), die dieselbe
+ * Eigenschaft setzt und ihn schlaegt.
+ * ──────────────────────────────────────────────────────────────────────────── */
+test('keine spezifischere Regel ueberschreibt eine zurueckgenommene Zustandsregel', () => {
+  const html = read('../public/index.html');
+  const globals = [...html.matchAll(/href="\/styles\/([\w-]+\.css)"/g)].map((m) => m[1]);
+  assert.ok(globals.includes('glass.css') && globals.includes('layout.css'),
+    'index.html nennt glass.css/layout.css nicht mehr als Stylesheets - die Ladereihenfolge ist nicht mehr lesbar.');
+  const loadRank = (file) => (globals.includes(file) ? globals.indexOf(file) : globals.length);
+
+  const stripNot = (s) => s.replace(/:not\((?:[^()]|\([^()]*\))*\)/g, '');
+  const specificity = (sel) => {
+    let a = 0; let b = 0; let c = 0;
+    let s = sel.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '');
+    s = s.replace(/:(?:is|not|has)\(((?:[^()]|\([^()]*\))*)\)/g, (_, inner) => {
+      const best = inner.split(',').map(specificity)
+        .sort((x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2]).pop();
+      a += best[0]; b += best[1]; c += best[2];
+      return '';
+    });
+    a += (s.match(/#[\w-]+/g) || []).length;
+    b += (s.match(/\.[\w-]+|\[[^\]]*\]|:(?!:)[\w-]+(?:\([^)]*\))?/g) || []).length;
+    c += (s.match(/(?:^|[\s>+~])[a-z][\w-]*|::[\w-]+/gi) || []).length;
+    return [a, b, c];
+  };
+  const PROPS = { background: 'background', 'background-color': 'background', border: 'border-color', 'border-color': 'border-color', 'box-shadow': 'box-shadow', color: 'color', opacity: 'opacity' };
+  const propsOf = (body) => new Set([...body.matchAll(/(?:^|;)\s*([\w-]+)\s*:/g)].map((m) => PROPS[m[1]]).filter(Boolean));
+  const lastCompound = (s) => s.trim().split(/\s+|>|\+|~/).filter(Boolean).pop() ?? '';
+  const GESTURE = /:(?:hover|focus-within|focus-visible|active)(?![\w-])/g;
+  const gestures = (compound) => new Set(stripNot(compound).match(GESTURE) ?? []);
+
+  const styles = new URL('../public/styles/', import.meta.url);
+  const rules = [];
+  const cssClasses = new Set();
+  for (const file of readdirSync(styles).filter((entry) => entry.endsWith('.css') && entry !== 'tokens.css')) {
+    let index = 0;
+    for (const rule of eachRule(readFileSync(new URL(file, styles), 'utf8'))) {
+      for (const part of rule.selector.split(',').map((s) => s.trim())) {
+        rules.push({ file, index, part, at: rule.at, body: rule.body, props: propsOf(rule.body), spec: specificity(part), last: lastCompound(part) });
+        for (const cls of part.match(/\.[a-z][\w-]*/gi) ?? []) cssClasses.add(cls.slice(1));
+      }
+      index += 1;
+    }
+  }
+
+  // Mitklassen aus den Vorlagen: jede `class="..."`-Stelle in public/, die die
+  // Zustandsklasse nennt, liefert die Klassen, die am selben Element sitzen.
+  const templateSources = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'vendor' || entry.name === 'styles') continue;
+      const url = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+      if (entry.isDirectory()) walk(url);
+      else if (entry.name.endsWith('.js')) templateSources.push(readFileSync(url, 'utf8'));
+    }
+  };
+  walk(new URL('../public/', import.meta.url));
+  const coClassesOf = (stateClass) => {
+    const name = stateClass.replace(/^\./, '');
+    const found = new Set();
+    for (const src of templateSources) {
+      for (const m of src.matchAll(/class="([^"]*)"/g)) {
+        if (!m[1].includes(name)) continue;
+        for (const token of m[1].match(/[a-z][a-z0-9]*(?:[-_]{1,2}[a-z0-9]+)*/gi) ?? []) {
+          if (cssClasses.has(token) && !RECEDED_STATE.test(`.${token}`)) found.add(`.${token}`);
+        }
+      }
+    }
+    return found;
+  };
+  const beats = (x, y) => {
+    const d = x.spec[0] - y.spec[0] || x.spec[1] - y.spec[1] || x.spec[2] - y.spec[2];
+    if (d !== 0) return d > 0;
+    return loadRank(x.file) - loadRank(y.file) > 0 || (x.file === y.file && x.index > y.index);
+  };
+  const coLoaded = (x, y) => x.file === y.file || globals.includes(x.file) || globals.includes(y.file);
+
+  const allStates = rules.filter((r) => RECEDED_STATE.test(r.part) && !RECEDED_EXEMPT.test(r.part) && r.props.size && !r.last.includes('::'));
+  const states = allStates.filter((r) => /var\(\s*--color-(?:surface|border|text)-receded\s*\)/.test(r.body));
+  const offenders = new Set();
+  let compared = 0;
+  let expanded = 0;
+  for (const state of states) {
+    const classes = stripNot(state.last).match(/\.[\w-]+/g) ?? [];
+    const stateClass = classes.find((cls) => RECEDED_STATE.test(cls));
+    const base = stateClass ? stateClass.replace(/--[\w-]+$/, '') : classes.find((cls) => !/^\.is-/.test(cls));
+    if (!base) continue;
+    // Klassen, die am Element des Zustands sitzen koennen: die Basis, die
+    // uebrigen Klassen des letzten Glieds und - sitzt der Zustand dort - die
+    // Mitklassen aus den Vorlagen.
+    const onElement = new Set([base, ...classes.filter((cls) => !RECEDED_STATE.test(cls))]);
+    if (stateClass) {
+      const fromTemplates = coClassesOf(stateClass);
+      if (fromTemplates.size) expanded += 1;
+      for (const cls of fromTemplates) onElement.add(cls);
+    }
+    // Die Familie: alle Zustandsregeln fuer dasselbe Element im selben Zustand.
+    // Sitzt der Zustand im letzten Glied, ist es genau diese Zustandsklasse
+    // (`.budget-account--archived` enthaelt `.budget-account` nicht als eigene
+    // Klasse); sitzt er an einem Vorfahren, dieselbe Zielklasse unter demselben
+    // Zustandswort.
+    const marker = (state.part.match(RECEDED_STATE) ?? [''])[0];
+    const family = allStates.filter((s) => {
+      const own = stripNot(s.last).match(/\.[\w-]+/g) ?? [];
+      return stateClass ? own.includes(stateClass) : (s.part.includes(marker) && own.includes(base));
+    });
+    for (const other of rules) {
+      if (RECEDED_STATE.test(other.part) || RECEDED_EXEMPT.test(other.part) || other.last.includes('::')) continue;
+      if (!coLoaded(state, other)) continue;
+      const otherClasses = stripNot(other.last).match(/\.[\w-]+/g) ?? [];
+      if (!otherClasses.length || !otherClasses.every((cls) => onElement.has(cls))) continue;
+      const otherGestures = gestures(other.last);
+      for (const prop of [...other.props].filter((p) => state.props.has(p))) {
+        compared += 1;
+        // Eine Zustandsregel schuetzt, wenn sie IMMER gilt, wo der Wettbewerber
+        // gilt: ihre Pseudoklassen sind eine Teilmenge seiner. Das nackte
+        // `.x--done` gilt auch unter dem Zeiger und schlaegt ein gleich
+        // spezifisches, frueher stehendes `.x:hover`; `.x--done:hover` gilt
+        // nicht bei `:focus-within` und schuetzt dort nicht.
+        const guards = family.filter((s) => s.props.has(prop) && [...gestures(s.last)].every((g) => otherGestures.has(g)));
+        if (guards.some((s) => !beats(other, s))) continue;
+        offenders.add(`${state.file}: ${state.part} [${state.spec}]  <-  ${other.file}: ${other.part} [${other.spec}]${other.at.length ? ` @${other.at.join(' ')}` : ''}  ${prop}`);
+      }
+    }
+  }
+  assert.ok(states.length >= 12, `Nur ${states.length} Zustandsregeln des Zuruecknehmen-Musters gefunden - der Scan greift nicht mehr.`);
+  assert.ok(compared >= 10, `Nur ${compared} Wettbewerber verglichen - der Guard misst nichts.`);
+  // Die meisten Vorlagen tragen nur Basis + Zustand; gezaehlt wird deshalb, ob
+  // die Zustandsklasse ueberhaupt in einer Vorlage gefunden wurde.
+  assert.ok(expanded >= 6, `Nur ${expanded} Zustandsregeln fanden ihre Vorlage in public/ - die Vorlagen-Suche greift nicht mehr.`);
+  assert.deepEqual([...offenders].sort(), [],
+    'Eine spezifischere (oder gleich spezifische, spaeter ladende) Regel ueberschreibt eine zurueckgenommene '
+    + 'Zustandsregel bei derselben Eigenschaft. Den Zustandsselektor so qualifizieren, dass er gewinnt '
+    + '(ohne !important), oder eine Zustandsregel mit derselben Pseudoklasse ergaenzen.');
 });
 
 test('module accents stay readable as text on the page background in both themes', () => {

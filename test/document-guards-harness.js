@@ -17,9 +17,10 @@
  * Alle drei fand ein Reviewer. Beim naechsten Mal ist kein Reviewer da.
  *
  * ABGRENZUNG ZU `npm test`: diese Suite haengt bewusst NICHT in der
- * netzfreien Kette. Sie braucht einen Serverprozess und einen Browser; die
- * uebrige Testinfrastruktur importiert Route-Handler direkt gegen
- * In-Memory-SQLite und soll das bleiben. Der Suite-Registry-Guard
+ * netzfreien Kette. Sie braucht einen eigenen Serverprozess und einen Browser;
+ * die uebrige Testinfrastruktur laeuft in EINEM Prozess gegen echtes SQLite -
+ * wo sie Routen ueber HTTP prueft, lauscht der Server im Testprozess selbst auf
+ * einem lokalen Port - und soll das bleiben. Der Suite-Registry-Guard
  * (test-suite-chain.js) kennt diese Zweiteilung als REGEL: eine Suite, deren
  * Datei `puppeteer` importiert, haengt in `test:document-guards` statt in
  * `test`. Keine Namensausnahme.
@@ -208,6 +209,7 @@ function startServer(dbPath, port) {
       NODE_ENV: 'development',
       DB_PATH: dbPath,
       PORT: String(port),
+      BIND_ADDRESS: '127.0.0.1',
       BASE_URL: `http://127.0.0.1:${port}`,
       SESSION_SECRET: 'document-guards-secret-0123456789abcdef',
       // Der Login-Limiter laesst fuenf Versuche pro Minute zu. Das ist fuer die

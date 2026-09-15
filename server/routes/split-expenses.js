@@ -14,6 +14,7 @@ import { sendDocumentDeletionConflict } from '../services/document-deletion-lock
 import { buildSplits, decorateMoney, minorToDecimal, parseMoneyToMinor, simplifyDebts } from '../services/split-expenses.js';
 import { CURRENCY_CODES } from '../../public/utils/currency-codes.js';
 import { syncBirthdayArtifacts } from '../services/birthdays.js';
+import { householdMemberSql, newNonMembers, staffMessage } from '../services/household-members.js';
 import { todayKey } from '../utils/timezone.js';
 
 const log = createLogger('SplitExpenses');
@@ -460,6 +461,11 @@ router.post('/groups', (req, res) => {
     // ist hier noch nicht sinnvoll (das Frontend bietet den Editor erst im
     // Bearbeiten-Dialog). Nur die Methode wird direkt übernommen.
     const defaultMethod = SPLIT_METHODS.includes(req.body.default_split_method) ? req.body.default_split_method : 'equal';
+    // Wer anlegt, wird Owner der Gruppe - dieselbe Regel wie beim Hinzufuegen
+    // (#1207): ein angemeldetes Konto, das weder Haushaltsmitglied noch Gast
+    // ist, bekommt keine neue Mitgliedschaft.
+    const staff = newNonMembers([userId(req)], { guestsAllowed: true });
+    if (staff.length) return res.status(400).json({ error: staffMessage(staff), code: 400 });
     const result = db.transaction(() => {
       const created = db.get().prepare(`
         INSERT INTO expense_groups (name, description, type, default_currency, default_split_method, created_by)
@@ -585,6 +591,10 @@ router.get('/groups/:id/member-candidates', (req, res) => {
     const groupId = Number(req.params.id);
     if (!requireGroupAccess(groupId, req)) return res.status(404).json({ error: 'Group not found.', code: 404 });
     if (isSplitGuest(req)) return res.status(403).json({ error: 'Not authorized.', code: 403 });
+    // Haushaltsmitglieder, dazu die Gaeste DIESER Gruppe (#1207). Ein Gast
+    // existiert fuer geteilte Ausgaben: er gehoert zu der Gruppe, fuer die er
+    // angelegt wurde, und zu jeder, in der er schon Mitglied ist. Gaeste
+    // anderer Gruppen bietet die Auswahl nicht an.
     const people = db.get().prepare(`
       SELECT 'user' AS source, u.id AS user_id, NULL AS contact_id, u.display_name, u.username,
              u.avatar_color, u.family_role, c.phone, c.email, b.birth_date,
@@ -593,10 +603,37 @@ router.get('/groups/:id/member-candidates', (req, res) => {
       FROM users u
       LEFT JOIN contacts c ON c.family_user_id = u.id
       LEFT JOIN birthdays b ON b.family_user_id = u.id
-      LEFT JOIN expense_group_members gm ON gm.group_id = ? AND gm.user_id = u.id
-      WHERE NOT EXISTS (SELECT 1 FROM housekeeping_workers hw WHERE hw.user_id = u.id)
-      ORDER BY u.display_name COLLATE NOCASE ASC
-    `).all(groupId);
+      LEFT JOIN expense_group_members gm ON gm.group_id = @groupId AND gm.user_id = u.id
+      WHERE ${householdMemberSql('u')}
+      UNION ALL
+      SELECT 'user' AS source, u.id AS user_id, NULL AS contact_id, u.display_name, u.username,
+             u.avatar_color, u.family_role, c.phone, c.email, b.birth_date,
+             CASE WHEN gm.user_id IS NULL THEN 0 ELSE 1 END AS in_group,
+             gm.role AS group_role
+      FROM split_expense_guest_users g
+      JOIN users u ON u.id = g.user_id
+      LEFT JOIN contacts c ON c.family_user_id = u.id
+      LEFT JOIN birthdays b ON b.family_user_id = u.id
+      LEFT JOIN expense_group_members gm ON gm.group_id = @groupId AND gm.user_id = u.id
+      WHERE g.group_id = @groupId OR gm.user_id IS NOT NULL
+      UNION ALL
+      -- Wer schon Mitglied dieser Gruppe ist, ohne Haushaltsmitglied oder Gast
+      -- zu sein (Hauspersonal aus der Zeit vor #1207): neu hinzufuegen laesst
+      -- sich so jemand nicht mehr, aber der Editor muss die Mitgliedschaft
+      -- zeigen, damit sie sich beenden laesst.
+      SELECT 'user' AS source, u.id AS user_id, NULL AS contact_id, u.display_name, u.username,
+             u.avatar_color, u.family_role, c.phone, c.email, b.birth_date,
+             1 AS in_group,
+             gm.role AS group_role
+      FROM expense_group_members gm
+      JOIN users u ON u.id = gm.user_id
+      LEFT JOIN contacts c ON c.family_user_id = u.id
+      LEFT JOIN birthdays b ON b.family_user_id = u.id
+      WHERE gm.group_id = @groupId
+        AND NOT (${householdMemberSql('u')})
+        AND NOT EXISTS (SELECT 1 FROM split_expense_guest_users sg WHERE sg.user_id = u.id)
+      ORDER BY display_name COLLATE NOCASE ASC
+    `).all({ groupId });
     const contacts = db.get().prepare(`
       SELECT 'contact' AS source, NULL AS user_id, c.id AS contact_id, c.name AS display_name,
              NULL AS username, '#2563EB' AS avatar_color, 'other' AS family_role,
@@ -625,6 +662,11 @@ router.post('/groups/:id/members', async (req, res) => {
     if (!memberUserId) return res.status(400).json({ error: 'user_id or contact_id is required.', code: 400 });
     const exists = db.get().prepare('SELECT 1 FROM users WHERE id = ?').get(memberUserId);
     if (!exists) return res.status(404).json({ error: 'User not found.', code: 404 });
+    // Mitglieder und Gaeste, aber kein Hauspersonal (#1207). Eine bestehende
+    // Mitgliedschaft bleibt gueltig und laesst sich weiter aendern.
+    const already = db.get().prepare('SELECT 1 FROM expense_group_members WHERE group_id = ? AND user_id = ?').get(groupId, memberUserId);
+    const staff = newNonMembers([memberUserId], { stored: already ? [memberUserId] : [], guestsAllowed: true });
+    if (staff.length) return res.status(400).json({ error: staffMessage(staff), code: 400 });
     db.get().prepare(`
       INSERT INTO expense_group_members (group_id, user_id, role, invited_by)
       VALUES (?, ?, ?, ?)
