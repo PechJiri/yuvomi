@@ -23,16 +23,34 @@ test('weekly chart distinguishes absent records and captured goals', async () =>
     assert.ok(await page.$eval('.fasting-stat strong', (el) => parseFloat(getComputedStyle(el).fontSize) >= 20), 'metric values use Title 3 or larger');
     const data = await page.evaluate(async () => {
       const { api } = await import('/api.js');
-      const end = new Date(), start = new Date(end.getTime() - 18 * 3600000);
-      await api.post('/health/fasting', { start_at: start.toISOString(), end_at: end.toISOString(), start_tzid: 'UTC', goal_minutes: 960, acknowledge_safety: true });
+      const stats = (await api.get('/health/fasting/stats')).data;
+      const { zonedFields, wallTimeInstant } = await import('/utils/timezone.js');
+      const now = zonedFields(new Date(), stats.display_tzid);
+      const previous = new Date(Date.UTC(now.year, now.month - 1, now.day) - 86400000);
+      const date = `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, '0')}-${String(previous.getUTCDate()).padStart(2, '0')}`;
+      await api.post('/health/fasting', {
+        start_at: wallTimeInstant(`${date}T10:00:00`, stats.display_tzid),
+        end_at: wallTimeInstant(`${date}T11:00:00`, stats.display_tzid),
+        start_tzid: stats.display_tzid, goal_minutes: 60, acknowledge_safety: true,
+      });
+      await api.post('/health/fasting', {
+        start_at: wallTimeInstant(`${date}T12:00:00`, stats.display_tzid),
+        end_at: wallTimeInstant(`${date}T13:00:00`, stats.display_tzid),
+        start_tzid: stats.display_tzid, goal_minutes: null, acknowledge_safety: true,
+      });
       await api.put('/health/fasting/settings', { default_goal_minutes: 1200 });
       return (await api.get('/health/fasting/stats')).data;
     });
     await gotoRoute(page, '/health/fasting');
     await page.waitForSelector('.fasting-week__goal');
-    assert.equal(data.weekly.find((day) => day.hasRecord).goalMinutes, 960);
-    assert.match(await page.$eval('.fasting-week', (el) => el.textContent), /18 h/);
-    assert.match(await page.$eval('.fasting-week', (el) => el.textContent), /Zaznamenaný cíl: 16 h/);
+    const mixedDay = data.weekly.find((day) => day.hasRecord);
+    assert.equal(mixedDay.count, 2);
+    assert.equal(mixedDay.goalMinutes, 60);
+    assert.equal(mixedDay.goalCount, 1);
+    const weeklyText = await page.$eval('.fasting-week', (el) => el.textContent);
+    assert.match(weeklyText, /2 h/);
+    assert.match(weeklyText, /Zaznamenaný cíl: 1 h/);
+    assert.match(weeklyText, /Cíl zaznamenán u 1 z 2 půstů/);
     const baselines = await page.$$eval('.fasting-week__track', (els) => els.map((el) => el.getBoundingClientRect().bottom));
     assert.ok(Math.max(...baselines) - Math.min(...baselines) <= 1, 'Wrapped labels must not move the chart baseline');
     await captureFastingViewport(page, '.fasting-stats', 'mobile-cs-stats');

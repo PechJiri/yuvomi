@@ -39,7 +39,9 @@ test('fasting clients receive concrete lifecycle schemas, revision transports an
   }
   assert.ok(!paths['/api/v1/health/fasting/stats'].get.parameters.some((p) => p.name === 'now'));
   assert.match(paths['/api/v1/health/fasting/stats'].get.description, /allTime\/year\/last30Days summaries \{count,totalMinutes,averageMinutes\}/);
-  assert.match(paths['/api/v1/health/fasting/stats'].get.description, /Statistics dates and calendar windows consistently use the household display zone/);
+  assert.match(paths['/api/v1/health/fasting/stats'].get.description, /Statistics, history and CSV date filters use the household display time zone/);
+  assert.match(paths['/api/v1/health/fasting/history'].get.description, /Date filters select completion dates in the household display time zone/);
+  assert.match(paths['/api/v1/health/export/fasting'].get.description, /same household display-zone completion-date filters as history/);
   assert.ok(paths['/api/v1/health/export/fasting'].get.responses[200].content['text/csv']);
 });
 const indexSrc = readFileSync(new URL('index.js', pathsDir), 'utf8');

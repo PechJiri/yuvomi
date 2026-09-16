@@ -1,4 +1,7 @@
-export function fastingDateKey(value, timeZone = 'UTC') {
+export function fastingDateKey(value, timeZone) {
+  if (typeof timeZone !== 'string' || !timeZone.trim()) {
+    throw new TypeError('A timeZone is required to derive a fasting calendar date.');
+  }
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -34,8 +37,8 @@ export function parseFastingDateRange(from, to, fail) {
   return parsed;
 }
 
-export function rowMatchesFastingDateRange(row, range) {
+export function rowMatchesFastingDateRange(row, range, timeZone) {
   if (!range.from && !range.to) return true;
-  const key = fastingDateKey(row.end_at, row.start_tzid || 'UTC');
+  const key = fastingDateKey(row.end_at, timeZone);
   return !!key && (!range.from || key >= range.from) && (!range.to || key <= range.to);
 }

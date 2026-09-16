@@ -244,31 +244,61 @@ test('family readers see shared records but not private fasting preferences or a
   assert.equal((await call('GET', '/fasting/state?user_id=' + userB)).body.data.settings, null, 'sparse settings do not expose a second read path');
 });
 
-test('history and export filter inclusive recorded-zone completion dates', async () => {
+test('history, pages and CSV filter inclusive household-zone completion dates', async () => {
   const id = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('dates', 'Dates', 'x', 'member')").run().lastInsertRowid;
   database.prepare("INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access) VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow')").run(String(id));
   viewer = id;
-  for (const [start, end, zone, goal] of [
-    ['2026-09-12T06:00:00Z', '2026-09-12T22:30:00Z', 'Europe/Prague', 960],
-    ['2026-09-12T23:30:00Z', '2026-09-13T06:30:00Z', 'America/Los_Angeles', null],
-  ]) {
-    assert.equal((await call('POST', '/fasting', { start_at: start, end_at: end, start_tzid: zone, goal_minutes: goal, acknowledge_safety: true })).status, 201);
+  const previousZone = database.prepare("SELECT value FROM sync_config WHERE key = 'household_timezone'").get();
+  try {
+    database.prepare("INSERT INTO sync_config (key, value) VALUES ('household_timezone', 'America/Los_Angeles') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    const records = [];
+    for (const [start, zone, note] of [
+      ['2026-09-13T04:00:00Z', 'Pacific/Kiritimati', 'Kiritimati capture'],
+      ['2026-09-13T01:00:00Z', 'Europe/Prague', 'Prague capture'],
+    ]) {
+      const created = await call('POST', '/fasting', {
+        start_at: start, end_at: zone === 'Pacific/Kiritimati' ? '2026-09-13T06:30:00Z' : '2026-09-13T03:00:00Z', start_tzid: zone,
+        goal_minutes: 60, note, acknowledge_safety: true,
+      });
+      assert.equal(created.status, 201);
+      records.push(created.body.data);
+    }
+
+    // Both captured zones call these Sep 13, while the household calendar calls
+    // both completions Sep 12. Every history surface follows the latter.
+    const first = await call('GET', '/fasting/history?from=2026-09-12&to=2026-09-12&limit=1');
+    assert.equal(first.status, 200);
+    assert.equal(first.body.data.length, 1);
+    assert.equal(first.body.has_more, true);
+    const cursor = first.body.next_cursor;
+    const second = await call('GET', `/fasting/history?from=2026-09-12&to=2026-09-12&limit=1&before_at=${encodeURIComponent(cursor.before_at)}&before_id=${cursor.before_id}`);
+    assert.equal(second.body.data.length, 1);
+    assert.equal(second.body.has_more, false);
+    assert.deepEqual(new Set([...first.body.data, ...second.body.data].map((row) => row.id)), new Set(records.map((row) => row.id)));
+
+    const alias = await call('GET', '/fasting?from=2026-09-12&to=2026-09-12');
+    assert.deepEqual(new Set(alias.body.data.map((row) => row.id)), new Set(records.map((row) => row.id)));
+    const csvResponse = await fetch(`${base}/export/fasting?from=2026-09-12&to=2026-09-12`);
+    assert.equal(csvResponse.status, 200);
+    const csv = (await csvResponse.text()).replace(/^\ufeff/, '');
+    assert.equal(csv.trim().split('\n').length, 3);
+    assert.match(csv, /Kiritimati capture/);
+    assert.match(csv, /Prague capture/);
+
+    const nextHouseholdDay = await call('GET', '/fasting/history?from=2026-09-13&to=2026-09-13');
+    assert.deepEqual(nextHouseholdDay.body.data, []);
+    const emptyCsv = await (await fetch(`${base}/export/fasting?from=2026-09-13&to=2026-09-13`)).text();
+    assert.equal(emptyCsv.replace(/^\ufeff/, '').trim().split('\n').length, 1);
+
+    for (const query of ['from=2026-02-30', 'to=2026-09', 'from=2026-09-14&to=2026-09-13']) {
+      const response = await call('GET', `/fasting/history?${query}`);
+      assert.equal(response.status, 400);
+      assert.equal(response.body.reason, 'FASTING_DATE_RANGE_INVALID');
+    }
+  } finally {
+    if (previousZone) database.prepare("UPDATE sync_config SET value = ? WHERE key = 'household_timezone'").run(previousZone.value);
+    else database.prepare("DELETE FROM sync_config WHERE key = 'household_timezone'").run();
   }
-  const local14 = await call('GET', '/fasting/history?from=2026-09-13&to=2026-09-13');
-  assert.equal(local14.status, 200);
-  assert.deepEqual(local14.body.data.map((row) => row.start_tzid), ['Europe/Prague']);
-  const local13 = await call('GET', '/fasting/history?from=2026-09-12&to=2026-09-12');
-  assert.deepEqual(local13.body.data.map((row) => row.start_tzid), ['America/Los_Angeles']);
-  for (const query of ['from=2026-02-30', 'to=2026-09', 'from=2026-09-14&to=2026-09-13']) {
-    const response = await call('GET', `/fasting/history?${query}`);
-    assert.equal(response.status, 400);
-    assert.equal(response.body.reason, 'FASTING_DATE_RANGE_INVALID');
-  }
-  const csvResponse = await fetch(`${base}/export/fasting?from=2026-09-13&to=2026-09-13`);
-  const csv = await csvResponse.text();
-  assert.equal(csv.trim().split('\n').length, 2);
-  assert.equal(csv.replace(/^\ufeff/, '').split('\n')[0], '"start_at","end_at","start_tzid","duration_minutes","goal_minutes","goal_reached","rating","note","visibility"');
-  assert.match(csv, /,"960","true",/);
 });
 
 test('filtered history preserves cursor has-more and family visibility', async () => {

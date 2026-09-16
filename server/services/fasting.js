@@ -187,6 +187,7 @@ export function getFastingHistory(database, actor, subjectId = Number(actor?.id)
   const beforeAt = hasCursor ? parseInstant(options.beforeAt, 'before_at') : null;
   const invalidRange = () => fail(400, 'FASTING_DATE_RANGE_INVALID', 'from and to must be valid YYYY-MM-DD dates with from no later than to.');
   const range = parseFastingDateRange(options.from, options.to, invalidRange);
+  const zone = range.from || range.to ? householdTimeZone(database) : null;
   const sql = `SELECT * FROM health_fasts WHERE ${visibleFilter(database, actorId, subject)}
     AND end_at IS NOT NULL ${hasCursor ? 'AND (start_at < ? OR (start_at = ? AND id < ?))' : ''}
     ORDER BY start_at DESC, id DESC`;
@@ -197,7 +198,7 @@ export function getFastingHistory(database, actor, subjectId = Number(actor?.id)
   } else {
     rows = [];
     for (const row of database.prepare(sql).iterate(...params)) {
-      if (!rowMatchesFastingDateRange(row, range)) continue;
+      if (!rowMatchesFastingDateRange(row, range, zone)) continue;
       rows.push(row);
       if (rows.length === limit + 1) break;
     }
@@ -213,10 +214,11 @@ export function getAllFastingHistory(database, actor, subjectId = Number(actor?.
   ensureSubject(database, actorId, Number(subjectId), { read: true });
   const invalidRange = () => fail(400, 'FASTING_DATE_RANGE_INVALID', 'from and to must be valid YYYY-MM-DD dates with from no later than to.');
   const range = parseFastingDateRange(options.from, options.to, invalidRange);
+  const zone = range.from || range.to ? householdTimeZone(database) : null;
   const rows = [];
   for (const row of database.prepare(`SELECT * FROM health_fasts WHERE ${visibleFilter(database, actorId, Number(subjectId))}
     AND end_at IS NOT NULL ORDER BY start_at DESC, id DESC`).iterate(Number(subjectId))) {
-    if (rowMatchesFastingDateRange(row, range)) rows.push(row);
+    if (rowMatchesFastingDateRange(row, range, zone)) rows.push(row);
   }
   return rows;
 }
@@ -254,8 +256,7 @@ export function getFastingStats(database, actor, subjectId = Number(actor?.id), 
   const today = fastingDateKey(now, zone);
   const currentYear = today.slice(0, 4);
   const windowStart = shiftDateKey(today, -29);
-  // All aggregate periods and chart labels share the household display
-  // calendar. History filters intentionally keep their recorded-zone behavior.
+  // All calendar views of completed records share the household display zone.
   const completionKey = (row) => fastingDateKey(row.end_at, zone);
   const yearRows = rows.filter((row) => completionKey(row)?.slice(0, 4) === currentYear);
   const last30Rows = rows.filter((row) => {

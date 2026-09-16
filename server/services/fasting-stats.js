@@ -1,5 +1,6 @@
 /** Pure server-side fasting summaries; resource use scales with record count. */
 import { fastingDateKey } from './fasting-dates.js';
+import { shiftDateKey } from '../utils/timezone.js';
 
 const DAY = 24 * 60;
 
@@ -12,14 +13,21 @@ function duration(row) {
     : null;
 }
 
-export function dateKeyInZone(value, timeZone = 'UTC') {
+export function dateKeyInZone(value, timeZone) {
+  requireTimeZone(timeZone);
   return fastingDateKey(value, timeZone);
 }
 
-function addDays(key, amount) {
-  const date = new Date(`${key}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + amount);
-  return date.toISOString().slice(0, 10);
+function requireTimeZone(timeZone) {
+  if (typeof timeZone !== 'string' || !timeZone.trim()) {
+    throw new TypeError('A display timeZone is required for fasting calendar calculations.');
+  }
+}
+
+function requireDateKey(dateKey, name) {
+  if (typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    throw new TypeError(`A YYYY-MM-DD ${name} is required for fasting calendar calculations.`);
+  }
 }
 
 export function summarizeFastingRows(rows = []) {
@@ -45,20 +53,16 @@ function completionDay(value, formatter) {
   return calendarDay(year, Number(parts.month), Number(parts.day));
 }
 
-export function fastingStreaks(rows = [], { today = dateKeyInZone(new Date()), timeZone = null } = {}) {
+export function fastingStreaks(rows = [], { today, timeZone } = {}) {
+  requireDateKey(today, 'today');
+  requireTimeZone(timeZone);
   // One inclusive interval per qualifying record. Actual fast duration is
   // deliberately unbounded, so neither memory nor work may grow per day.
   const intervals = [];
-  const formatters = new Map();
+  const formatter = new Intl.DateTimeFormat('en-US', { timeZone, calendar: 'gregory', numberingSystem: 'latn', era: 'short', year: 'numeric', month: 'numeric', day: 'numeric' });
   for (const row of rows) {
     const elapsed = duration(row);
     if (elapsed && row?.goal_minutes !== null && row?.goal_minutes !== undefined && elapsed.milliseconds >= Number(row.goal_minutes) * 60000) {
-      const zone = timeZone || row.start_tzid || 'UTC';
-      let formatter = formatters.get(zone);
-      if (!formatter) {
-        formatter = new Intl.DateTimeFormat('en-US', { timeZone: zone, calendar: 'gregory', numberingSystem: 'latn', era: 'short', year: 'numeric', month: 'numeric', day: 'numeric' });
-        formatters.set(zone, formatter);
-      }
       const end = completionDay(row.end_at, formatter);
       intervals.push([end - Math.ceil(elapsed.milliseconds / (DAY * 60000)) + 1, end]);
     }
@@ -82,19 +86,34 @@ export function fastingStreaks(rows = [], { today = dateKeyInZone(new Date()), t
   return { current, longest };
 }
 
-export function weeklyFastingSeries(rows = [], { endDate = dateKeyInZone(new Date()), timeZone = null } = {}) {
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = addDays(endDate, index - 6);
-    const matches = rows.map((row) => ({ row, elapsed: duration(row) }))
-      .filter(({ row, elapsed }) => elapsed && dateKeyInZone(row.end_at, timeZone || row.start_tzid || 'UTC') === date);
-    const goals = matches.map(({ row }) => row.goal_minutes).filter((goal) => goal !== null && goal !== undefined).map(Number);
+export function weeklyFastingSeries(rows = [], { endDate, timeZone } = {}) {
+  requireDateKey(endDate, 'endDate');
+  requireTimeZone(timeZone);
+  const dates = Array.from({ length: 7 }, (_, index) => shiftDateKey(endDate, index - 6));
+  const buckets = new Map(dates.map((date) => [date, {
+    count: 0, totalMinutes: 0, goalMinutes: 0, goalCount: 0,
+  }]));
+  for (const row of rows) {
+    const elapsed = duration(row);
+    const date = elapsed ? dateKeyInZone(row.end_at, timeZone) : null;
+    const bucket = buckets.get(date);
+    if (!bucket) continue;
+    bucket.count += 1;
+    bucket.totalMinutes += elapsed.minutes;
+    if (row.goal_minutes !== null && row.goal_minutes !== undefined) {
+      bucket.goalMinutes += Number(row.goal_minutes);
+      bucket.goalCount += 1;
+    }
+  }
+  return dates.map((date) => {
+    const bucket = buckets.get(date);
     return {
       date,
-      count: matches.length,
-      totalMinutes: matches.reduce((sum, { elapsed }) => sum + elapsed.minutes, 0),
-      goalMinutes: goals.length ? goals.reduce((sum, goal) => sum + goal, 0) : null,
-      goalCount: goals.length,
-      hasRecord: matches.length > 0,
+      count: bucket.count,
+      totalMinutes: bucket.totalMinutes,
+      goalMinutes: bucket.goalCount ? bucket.goalMinutes : null,
+      goalCount: bucket.goalCount,
+      hasRecord: bucket.count > 0,
     };
   });
 }

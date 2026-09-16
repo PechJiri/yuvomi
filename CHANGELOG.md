@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `done_by_user_id` for this; it has to be a household member, and it only applies to the transition
   into done. (#1205)
 
+- **Fasting insights summarize completed records and captured goals.** Calendar windows,
+  interval-based streaks, weekly actual/goal values, and history/CSV date filters use the
+  household display time zone consistently. Calculations remain bounded for very long intervals.
+
 ### Fixed
 
 - **The task board shows all four of its columns, and each one can be folded away.** The board

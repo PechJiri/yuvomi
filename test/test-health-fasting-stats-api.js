@@ -44,7 +44,6 @@ test('fasting stats are exposed as scoped summaries and streaks', async () => {
   assert.equal(created.status, 201);
   const response = await call('GET', '/fasting/stats');
   assert.equal(response.status, 200);
-  assert.ok(response.body.data.allTime.count >= 1);
   assert.equal(response.body.data.allTime.count, 1);
   assert.equal(typeof response.body.data.currentStreak, 'number');
   assert.equal(response.body.data.weekly.length, 7);
@@ -121,10 +120,11 @@ test('stats use one household calendar at the date line for records captured in 
   const id = database.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES ('stats-date-line', 'Date line', 'x', 'member')").run().lastInsertRowid;
   database.prepare("INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access) VALUES ('user', ?, 'capability', 'health_use_fasting', 'allow')").run(String(id));
   const previousZone = database.prepare("SELECT value FROM sync_config WHERE key = 'household_timezone'").get();
+  const previousViewer = viewer;
   try {
     database.prepare("INSERT INTO sync_config (key, value) VALUES ('household_timezone', 'America/Los_Angeles') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
-    database.prepare(`INSERT INTO health_fasts (user_id, start_at, end_at, start_tzid, goal_minutes)
-      VALUES (?, '2026-12-31T15:00:00.000Z', '2026-12-31T16:00:00.000Z', 'Pacific/Kiritimati', 60)`).run(id);
+    const fastId = database.prepare(`INSERT INTO health_fasts (user_id, start_at, end_at, start_tzid, goal_minutes)
+      VALUES (?, '2026-12-31T15:00:00.000Z', '2026-12-31T16:00:00.000Z', 'Pacific/Kiritimati', 60)`).run(id).lastInsertRowid;
     const { getFastingStats } = await import('../server/services/fasting.js');
     const stats = getFastingStats(database, { id }, id, new Date('2026-12-31T16:00:00.000Z'));
     assert.equal(stats.today, '2026-12-31');
@@ -134,7 +134,15 @@ test('stats use one household calendar at the date line for records captured in 
     assert.deepEqual(stats.weekly.at(-1), {
       date: '2026-12-31', count: 1, totalMinutes: 60, goalMinutes: 60, goalCount: 1, hasRecord: true,
     });
+    viewer = id;
+    const history = await call('GET', '/fasting/history?from=2026-12-31&to=2026-12-31');
+    assert.deepEqual(history.body.data.map((row) => row.id), [fastId]);
+    const nextHouseholdDay = await call('GET', '/fasting/history?from=2027-01-01&to=2027-01-01');
+    assert.deepEqual(nextHouseholdDay.body.data, []);
+    const csv = await (await fetch(`${base}/export/fasting?from=2026-12-31&to=2026-12-31`)).text();
+    assert.equal(csv.replace(/^\ufeff/, '').trim().split('\n').length, 2);
   } finally {
+    viewer = previousViewer;
     if (previousZone) database.prepare("UPDATE sync_config SET value = ? WHERE key = 'household_timezone'").run(previousZone.value);
     else database.prepare("DELETE FROM sync_config WHERE key = 'household_timezone'").run();
   }

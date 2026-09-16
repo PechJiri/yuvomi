@@ -3046,7 +3046,7 @@ or benefits from longer fasting. Active metadata shows recorded-zone start/targe
 History uses keyset pages (default 10, maximum 100), ordered by start_at DESC,
 id DESC. Both before_at and before_id come from next_cursor. GET /fasting aliases
 /fasting/history. user_id/from/to apply to history and CSV; from/to are inclusive
-YYYY-MM-DD completion dates in each record's captured zone. Invalid/reversed dates
+YYYY-MM-DD completion dates in the household display time zone. Invalid/reversed dates
 return 400 FASTING_DATE_RANGE_INVALID. CSV columns are start_at,end_at,start_tzid,
 duration_minutes,goal_minutes,goal_reached,rating,note,visibility, with spreadsheet
 formula-safe escaping. Revision conflicts return numeric code 409 and separate
@@ -3056,9 +3056,8 @@ FASTING_ACK_REQUIRED. POST retries use Idempotency-Key. API data is not SW-cache
 
 Fasting insights use completed records only. All-time/calendar-year/rolling-30-day
 summaries contain count, totalMinutes and averageMinutes. Aggregate completion dates,
-calendar boundaries, streaks and weekly buckets consistently use household
-display_tzid; history and CSV date filters continue to use each record's captured
-zone. A completed
+calendar boundaries, streaks, weekly buckets, and history/CSV date filters consistently
+use household display_tzid. A completed
 fast reaching its captured goal credits ceil(actual duration / 24 hours) dates
 ending on completion. Overlapping credits count once; interval merging avoids
 per-day allocation. Current streak ends today/yesterday; longest is historical.
