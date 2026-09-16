@@ -3990,7 +3990,21 @@
             "finishedHint": "Das Ende ist gespeichert. Du kannst Zeiten anpassen und eine Bewertung oder Notiz ergänzen.",
             "rangeError": "Das Ende muss nach dem Beginn liegen und darf nicht in der Zukunft liegen.",
             "elapsed": "Fastenzeit",
-            "sinceLast": "Seit dem letzten Fasten"
+            "sinceLast": "Seit dem letzten Fasten",
+            "noRecord": "Kein Eintrag",
+            "goalCoverage": "Ziele für {{records}} von {{total}} Einträgen erfasst",
+            "chartLegend": "Tatsächliche Dauer (links) und erfasstes Ziel (rechts); die Werte sind Summen je Abschlusstag.",
+            "capturedGoal": "Aufgezeichnetes Ziel",
+            "statsTitle": "Statistik",
+            "statsCount": "Fasten insgesamt",
+            "statsTotal": "Gesamtdauer",
+            "statsAverage": "Durchschnitt",
+            "statsCurrentStreak": "Aktuelle Serie",
+            "statsLongestStreak": "Längste Serie",
+            "statsWeekly": "Fasten der letzten sieben Tage",
+            "allTime": "Gesamter Zeitraum",
+            "thisYear": "Dieses Jahr",
+            "last30Days": "Letzte 30 Tage"
         },
         "tabs": {
             "overview": "Übersicht",

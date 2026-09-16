@@ -3990,7 +3990,21 @@
             "finishedHint": "A befejezés mentve. Módosíthatod az időpontokat, és értékelést vagy megjegyzést adhatsz hozzá.",
             "rangeError": "A végnek a kezdet után kell lennie, és nem lehet a jövőben.",
             "elapsed": "Böjt időtartama",
-            "sinceLast": "Az utolsó böjt óta"
+            "sinceLast": "Az utolsó böjt óta",
+            "noRecord": "Nincs bejegyzés",
+            "goalCoverage": "{{total}} böjtből {{records}} esetében van rögzített cél",
+            "chartLegend": "Tényleges időtartam (balra) és rögzített cél (jobbra); az értékek a befejezés dátuma szerinti összegek.",
+            "capturedGoal": "Rögzített cél",
+            "statsTitle": "Statisztikák",
+            "statsCount": "Böjtök összesen",
+            "statsTotal": "Teljes időtartam",
+            "statsAverage": "Átlag",
+            "statsCurrentStreak": "Jelenlegi sorozat",
+            "statsLongestStreak": "Leghosszabb sorozat",
+            "statsWeekly": "Böjtök az elmúlt hét napban",
+            "allTime": "Teljes előzmény",
+            "thisYear": "Idén",
+            "last30Days": "Utolsó 30 nap"
         },
         "tabs": {
             "overview": "Áttekintés",

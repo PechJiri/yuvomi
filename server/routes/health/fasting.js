@@ -3,6 +3,7 @@ import * as db from '../../db.js';
 import {
   acknowledgeSafety, createFast, finishFast, updateFast, deleteFast,
   getFastingState, updateFastingSettings, FastingError,
+  getFastingStats,
   getFastingHistory, getAllFastingHistory,
 } from '../../services/fasting.js';
 import { fastingToCsv } from '../../services/fasting-export.js';
@@ -57,6 +58,10 @@ function history(req, res) {
   } catch (error) { return sendError(res, error); }
 }
 router.get('/fasting/history', history);
+
+router.get('/fasting/stats', (req, res) => {
+  try { return res.json({ data: getFastingStats(db.get(), { id: viewerId(req) }, subject(req)) }); } catch (error) { return sendError(res, error); }
+});
 
 router.get('/fasting', history);
 

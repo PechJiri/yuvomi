@@ -267,6 +267,7 @@ const PAGE_MODULES = [
   '/pages/rewards.js',
   '/pages/health.js',
   '/pages/health-fasting.js',
+  '/pages/health-fasting-insights.js',
   '/pages/settings.js',
   '/pages/login.js',
   '/pages/pair-display.js',

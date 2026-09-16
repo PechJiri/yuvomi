@@ -3990,7 +3990,21 @@
             "finishedHint": "Waktu selesai disimpan. Anda dapat mengubah waktu dan menambah penilaian atau catatan.",
             "rangeError": "Waktu selesai harus setelah mulai dan tidak boleh di masa depan.",
             "elapsed": "Waktu puasa",
-            "sinceLast": "Sejak puasa terakhir"
+            "sinceLast": "Sejak puasa terakhir",
+            "noRecord": "Tidak ada catatan",
+            "goalCoverage": "Target tercatat untuk {{records}} dari {{total}} puasa",
+            "chartLegend": "Durasi aktual (kiri) dan target tercatat (kanan); nilai adalah jumlah untuk tiap tanggal selesai.",
+            "capturedGoal": "Target tercatat",
+            "statsTitle": "Statistik",
+            "statsCount": "Total puasa",
+            "statsTotal": "Durasi total",
+            "statsAverage": "Rata-rata",
+            "statsCurrentStreak": "Rangkaian saat ini",
+            "statsLongestStreak": "Rangkaian terpanjang",
+            "statsWeekly": "Puasa dalam tujuh hari terakhir",
+            "allTime": "Seluruh riwayat",
+            "thisYear": "Tahun ini",
+            "last30Days": "30 hari terakhir"
         },
         "tabs": {
             "overview": "Ringkasan",

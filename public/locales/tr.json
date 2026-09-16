@@ -3990,7 +3990,21 @@
             "finishedHint": "Bitiş kaydedildi. Saatleri düzenleyebilir, puan veya not ekleyebilirsiniz.",
             "rangeError": "Bitiş başlangıçtan sonra olmalı ve gelecekte olmamalıdır.",
             "elapsed": "Oruç süresi",
-            "sinceLast": "Son oruçtan bu yana"
+            "sinceLast": "Son oruçtan bu yana",
+            "noRecord": "Kayıt yok",
+            "goalCoverage": "{{total}} orucun {{records}} tanesi için hedef kaydedildi",
+            "chartLegend": "Gerçek süre (solda) ve kaydedilen hedef (sağda); değerler her tamamlanma tarihinin toplamlarıdır.",
+            "capturedGoal": "Kaydedilen hedef",
+            "statsTitle": "İstatistikler",
+            "statsCount": "Toplam oruç",
+            "statsTotal": "Toplam süre",
+            "statsAverage": "Ortalama",
+            "statsCurrentStreak": "Mevcut seri",
+            "statsLongestStreak": "En uzun seri",
+            "statsWeekly": "Son yedi gündeki oruçlar",
+            "allTime": "Tüm geçmiş",
+            "thisYear": "Bu yıl",
+            "last30Days": "Son 30 gün"
         },
         "tabs": {
             "overview": "Genel bakış",

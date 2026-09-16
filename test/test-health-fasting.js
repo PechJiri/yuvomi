@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fastingHelpHtml } from '../public/components/fasting-help.js';
+import { renderFastingStats } from '../public/pages/health-fasting-insights.js';
 import {
   normalizeGoalHours,
   fastingTimerModel,
@@ -20,6 +21,13 @@ test('help markup remains importable without a DOM and escapes labels with uniqu
   assert.match(first, /&lt;Goal&gt;/);
   assert.match(first, /data-lucide="info"/);
   assert.notEqual(first.match(/id="([^"]+)"/)[1], second.match(/id="([^"]+)"/)[1]);
+});
+
+test('insights transport errors leave an explicit fallback instead of hiding the journal', () => {
+  assert.equal(renderFastingStats(null), '');
+  const fallback = renderFastingStats(null, { error: true });
+  assert.match(fallback, /role="status"/);
+  assert.match(fallback, /fasting-stats/);
 });
 
 test('goal normalization accepts whole hours 1 through 336 and null', () => {

@@ -3054,6 +3054,18 @@ reason FASTING_REVISION_CONFLICT, FASTING_ACTIVE_EXISTS or FASTING_OVERLAP; curr
 contains a conflicting row where available. Missing acknowledgement returns
 FASTING_ACK_REQUIRED. POST retries use Idempotency-Key. API data is not SW-cached.
 
+Fasting insights use completed records only. All-time/calendar-year/rolling-30-day
+summaries contain count, totalMinutes and averageMinutes. Aggregate completion dates,
+calendar boundaries, streaks and weekly buckets consistently use household
+display_tzid; history and CSV date filters continue to use each record's captured
+zone. A completed
+fast reaching its captured goal credits ceil(actual duration / 24 hours) dates
+ending on completion. Overlapping credits count once; interval merging avoids
+per-day allocation. Current streak ends today/yesterday; longest is historical.
+Weekly buckets contain date,count,totalMinutes,nullable summed goalMinutes,
+goalCount,hasRecord. Missing days differ from completed sub-minute records; the
+chart shows actual/captured-goal values and partial goal coverage.
+
 **`health_vitals`** — one row per measurement.
 
 | Column | Type | Constraint |

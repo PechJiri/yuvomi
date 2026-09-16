@@ -3990,7 +3990,21 @@
             "finishedHint": "Koniec zapisano. Możesz zmienić godziny oraz dodać ocenę lub notatkę.",
             "rangeError": "Koniec musi być po początku i nie może być w przyszłości.",
             "elapsed": "Czas postu",
-            "sinceLast": "Od ostatniego postu"
+            "sinceLast": "Od ostatniego postu",
+            "noRecord": "Brak wpisu",
+            "goalCoverage": "Zapisano cele dla {{records}} z {{total}} postów",
+            "chartLegend": "Rzeczywisty czas (po lewej) i zapisany cel (po prawej); wartości są sumami dla każdej daty zakończenia.",
+            "capturedGoal": "Zapisany cel",
+            "statsTitle": "Statystyki",
+            "statsCount": "Łączna liczba postów",
+            "statsTotal": "Łączny czas",
+            "statsAverage": "Średnia",
+            "statsCurrentStreak": "Bieżąca seria",
+            "statsLongestStreak": "Najdłuższa seria",
+            "statsWeekly": "Posty z ostatnich siedmiu dni",
+            "allTime": "Cała historia",
+            "thisYear": "Ten rok",
+            "last30Days": "Ostatnie 30 dni"
         },
         "tabs": {
             "overview": "Przegląd",

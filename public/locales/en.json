@@ -3990,7 +3990,21 @@
             "finishedHint": "The end is saved. You can adjust the times and add a rating or note.",
             "rangeError": "The end must be after the start and not in the future.",
             "elapsed": "Fasting time",
-            "sinceLast": "Since your last fast"
+            "sinceLast": "Since your last fast",
+            "noRecord": "No record",
+            "goalCoverage": "Goals recorded for {{records}} of {{total}} fasts",
+            "chartLegend": "Actual duration (left) and recorded goal (right); values are totals for each completion date.",
+            "capturedGoal": "Recorded goal",
+            "statsTitle": "Statistics",
+            "statsCount": "Total fasts",
+            "statsTotal": "Total duration",
+            "statsAverage": "Average",
+            "statsCurrentStreak": "Current streak",
+            "statsLongestStreak": "Longest streak",
+            "statsWeekly": "Fasts in the last seven days",
+            "allTime": "All time",
+            "thisYear": "This year",
+            "last30Days": "Last 30 days"
         },
         "tabs": {
             "overview": "Overview",

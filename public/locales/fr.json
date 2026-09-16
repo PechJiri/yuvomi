@@ -3990,7 +3990,21 @@
             "finishedHint": "La fin est enregistrée. Vous pouvez ajuster les heures et ajouter une évaluation ou une note.",
             "rangeError": "La fin doit suivre le début et ne pas être dans le futur.",
             "elapsed": "Durée du jeûne",
-            "sinceLast": "Depuis le dernier jeûne"
+            "sinceLast": "Depuis le dernier jeûne",
+            "noRecord": "Aucune entrée",
+            "goalCoverage": "Objectifs enregistrés pour {{records}} jeûnes sur {{total}}",
+            "chartLegend": "Durée réelle (à gauche) et objectif enregistré (à droite) ; les valeurs sont des totaux par date de fin.",
+            "capturedGoal": "Objectif enregistré",
+            "statsTitle": "Statistiques",
+            "statsCount": "Nombre total de jeûnes",
+            "statsTotal": "Durée totale",
+            "statsAverage": "Moyenne",
+            "statsCurrentStreak": "Série actuelle",
+            "statsLongestStreak": "Série la plus longue",
+            "statsWeekly": "Jeûnes des sept derniers jours",
+            "allTime": "Tout l’historique",
+            "thisYear": "Cette année",
+            "last30Days": "30 derniers jours"
         },
         "tabs": {
             "overview": "Aperçu",

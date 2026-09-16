@@ -3990,7 +3990,21 @@
             "finishedHint": "O fim está salvo. Você pode ajustar os horários e adicionar uma avaliação ou nota.",
             "rangeError": "O fim deve ser depois do início e não pode estar no futuro.",
             "elapsed": "Tempo de jejum",
-            "sinceLast": "Desde o último jejum"
+            "sinceLast": "Desde o último jejum",
+            "noRecord": "Nenhum registro",
+            "goalCoverage": "Metas registradas para {{records}} de {{total}} jejuns",
+            "chartLegend": "Duração real (esquerda) e meta registrada (direita); os valores são totais por data de conclusão.",
+            "capturedGoal": "Meta registrada",
+            "statsTitle": "Estatísticas",
+            "statsCount": "Total de jejuns",
+            "statsTotal": "Duração total",
+            "statsAverage": "Média",
+            "statsCurrentStreak": "Sequência atual",
+            "statsLongestStreak": "Sequência mais longa",
+            "statsWeekly": "Jejuns dos últimos sete dias",
+            "allTime": "Todo o histórico",
+            "thisYear": "Este ano",
+            "last30Days": "Últimos 30 dias"
         },
         "tabs": {
             "overview": "Visão geral",

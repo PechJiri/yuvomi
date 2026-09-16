@@ -8,6 +8,7 @@ import { openModal, refocusAfterRender } from '/components/modal.js';
 import { moduleAccess } from '/permissions.js';
 import { scheduleUndoableDelete } from '/utils/ux.js';
 import { fastingEducationMarkup } from '/components/fasting-dial.js';
+import { renderFastingStats } from '/pages/health-fasting-insights.js';
 import { fastingPreferencesHtml, wireFastingPreferences, startFasting, finishFasting, openFastingCreator, openFastingEditor, startFastingClock, fastingClockSwitchHtml, fastingStamp, fastingError, requireFastingWrite } from '/components/fasting-controls.js';
 
 const panels = new WeakMap();
@@ -75,8 +76,9 @@ async function refresh(view) {
   const current = () => view.root.isConnected && view.generation === generation && view.subject === subject;
   const q = query(view);
   try {
-    const [stateResult, membersResult, filtered] = await Promise.all([
+    const [stateResult, statsResult, membersResult, filtered] = await Promise.all([
       api.get(`/health/fasting/state${q}`),
+      api.get(`/health/fasting/stats${q}`).catch(() => ({ data: null, error: true })),
       view.members.length ? null : api.get('/family/members'),
       view.from || view.to ? api.get(`/health/fasting/history${q}`) : null,
     ]);
@@ -93,7 +95,7 @@ async function refresh(view) {
     view.stop?.();
     shell(view);
     view.root.querySelector('[data-fasting-load-error]').replaceChildren();
-    renderBody(view);
+    renderBody(view, statsResult.data, statsResult.error === true);
   } catch {
     if (!current()) return;
     if (!view.members.length) {
@@ -108,7 +110,7 @@ async function refresh(view) {
   }
 }
 
-function renderBody(view) {
+function renderBody(view, stats, statsError = false) {
   const { root, state } = view;
   const writable = view.subject === view.self && state.canWrite && moduleAccess('health') === 'write';
   const active = state.active, last = state.history?.[0];
@@ -124,6 +126,7 @@ function renderBody(view) {
     ${state.settings?.zone_mode === 'educational' ? fastingEducationMarkup() : ''}
   </section>
   ${writable ? `<div class="fasting-card" data-fasting-preferences>${fastingPreferencesHtml(state.settings || {})}</div>` : ''}
+  ${renderFastingStats(stats, { error: statsError })}
   <section id="history"><div class="fasting-card__heading"><h3 class="u-section-title">${esc(t('health.fasting.history'))}</h3><a href="/api/v1/health/export/fasting${esc(query(view))}" class="btn btn--secondary btn--sm" download>${esc(t('health.fasting.export'))}</a>${writable ? `<button class="btn btn--secondary" data-fasting-backfill>${esc(t('health.fasting.backfill'))}</button>` : ''}</div>
     ${filtersMarkup(view)}
     <div class="fasting-card" data-fasting-history></div><div class="fasting-history-more"><button class="btn btn--secondary" type="button" data-fasting-more ${view.more ? '' : 'hidden'}>${esc(t('health.fasting.loadMore'))}</button><p class="form-hint" role="alert" data-fasting-history-error></p></div>

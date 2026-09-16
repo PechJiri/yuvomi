@@ -3990,7 +3990,21 @@
             "finishedHint": "La fine è salvata. Puoi modificare gli orari e aggiungere una valutazione o nota.",
             "rangeError": "La fine deve seguire l’inizio e non essere nel futuro.",
             "elapsed": "Tempo di digiuno",
-            "sinceLast": "Dall’ultimo digiuno"
+            "sinceLast": "Dall’ultimo digiuno",
+            "noRecord": "Nessuna registrazione",
+            "goalCoverage": "Obiettivi registrati per {{records}} digiuni su {{total}}",
+            "chartLegend": "Durata effettiva (sinistra) e obiettivo registrato (destra); i valori sono totali per ciascuna data di conclusione.",
+            "capturedGoal": "Obiettivo registrato",
+            "statsTitle": "Statistiche",
+            "statsCount": "Digiuni totali",
+            "statsTotal": "Durata totale",
+            "statsAverage": "Media",
+            "statsCurrentStreak": "Serie attuale",
+            "statsLongestStreak": "Serie più lunga",
+            "statsWeekly": "Digiuni negli ultimi sette giorni",
+            "allTime": "Tutto lo storico",
+            "thisYear": "Quest’anno",
+            "last30Days": "Ultimi 30 giorni"
         },
         "tabs": {
             "overview": "Panoramica",

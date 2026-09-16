@@ -3990,7 +3990,21 @@
             "finishedHint": "Đã lưu thời điểm kết thúc. Bạn có thể sửa thời gian, thêm đánh giá hoặc ghi chú.",
             "rangeError": "Kết thúc phải sau bắt đầu và không được ở tương lai.",
             "elapsed": "Thời gian nhịn ăn",
-            "sinceLast": "Từ lần nhịn ăn trước"
+            "sinceLast": "Từ lần nhịn ăn trước",
+            "noRecord": "Không có bản ghi",
+            "goalCoverage": "Đã ghi mục tiêu cho {{records}} trong {{total}} lần nhịn ăn",
+            "chartLegend": "Thời lượng thực tế (trái) và mục tiêu đã ghi (phải); các giá trị là tổng theo từng ngày hoàn thành.",
+            "capturedGoal": "Mục tiêu đã ghi",
+            "statsTitle": "Thống kê",
+            "statsCount": "Tổng số lần nhịn ăn",
+            "statsTotal": "Tổng thời lượng",
+            "statsAverage": "Trung bình",
+            "statsCurrentStreak": "Chuỗi hiện tại",
+            "statsLongestStreak": "Chuỗi dài nhất",
+            "statsWeekly": "Lần nhịn ăn trong bảy ngày qua",
+            "allTime": "Toàn bộ lịch sử",
+            "thisYear": "Năm nay",
+            "last30Days": "30 ngày qua"
         },
         "tabs": {
             "overview": "Tổng quan",

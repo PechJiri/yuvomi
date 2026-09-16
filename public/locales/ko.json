@@ -3990,7 +3990,21 @@
             "finishedHint": "종료 시간이 저장되었습니다. 시간을 조정하고 평가나 메모를 추가할 수 있습니다.",
             "rangeError": "종료는 시작 이후여야 하며 미래일 수 없습니다.",
             "elapsed": "단식 시간",
-            "sinceLast": "마지막 단식 이후"
+            "sinceLast": "마지막 단식 이후",
+            "noRecord": "기록 없음",
+            "goalCoverage": "단식 {{total}}회 중 {{records}}회에 목표가 기록됨",
+            "chartLegend": "실제 시간(왼쪽)과 기록된 목표(오른쪽)이며, 값은 완료일별 합계입니다.",
+            "capturedGoal": "기록된 목표",
+            "statsTitle": "통계",
+            "statsCount": "총 단식 횟수",
+            "statsTotal": "총 기간",
+            "statsAverage": "평균",
+            "statsCurrentStreak": "현재 연속 기록",
+            "statsLongestStreak": "최장 연속 기록",
+            "statsWeekly": "지난 7일 단식",
+            "allTime": "전체 기록",
+            "thisYear": "올해",
+            "last30Days": "최근 30일"
         },
         "tabs": {
             "overview": "개요",

@@ -3990,7 +3990,21 @@
             "finishedHint": "終了時刻を保存しました。時刻を調整し、評価やメモを追加できます。",
             "rangeError": "終了は開始より後で、未来の時刻ではない必要があります。",
             "elapsed": "断食時間",
-            "sinceLast": "前回の断食から"
+            "sinceLast": "前回の断食から",
+            "noRecord": "記録なし",
+            "goalCoverage": "{{total}}回の断食のうち{{records}}回に目標が記録されています",
+            "chartLegend": "実際の時間（左）と記録された目標（右）。値は完了日ごとの合計です。",
+            "capturedGoal": "記録された目標",
+            "statsTitle": "統計",
+            "statsCount": "断食の合計",
+            "statsTotal": "合計時間",
+            "statsAverage": "平均",
+            "statsCurrentStreak": "現在の連続日数",
+            "statsLongestStreak": "最長の連続日数",
+            "statsWeekly": "過去7日間の断食",
+            "allTime": "全期間",
+            "thisYear": "今年",
+            "last30Days": "過去30日間"
         },
         "tabs": {
             "overview": "概要",

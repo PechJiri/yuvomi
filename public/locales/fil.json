@@ -3990,7 +3990,21 @@
             "finishedHint": "Nai-save ang pagtatapos. Maaari mong baguhin ang oras at magdagdag ng marka o tala.",
             "rangeError": "Dapat pagkatapos ng simula ang pagtatapos at hindi nasa hinaharap.",
             "elapsed": "Tagal ng pag-aayuno",
-            "sinceLast": "Mula sa huling pag-aayuno"
+            "sinceLast": "Mula sa huling pag-aayuno",
+            "noRecord": "Walang tala",
+            "goalCoverage": "May naitalang layunin para sa {{records}} sa {{total}} pag-aayuno",
+            "chartLegend": "Aktuwal na tagal (kaliwa) at naitalang layunin (kanan); ang mga halaga ay kabuuan sa bawat petsa ng pagtatapos.",
+            "capturedGoal": "Naitalang layunin",
+            "statsTitle": "Mga istatistika",
+            "statsCount": "Kabuuang pag-aayuno",
+            "statsTotal": "Kabuuang tagal",
+            "statsAverage": "Karaniwan",
+            "statsCurrentStreak": "Kasalukuyang serye",
+            "statsLongestStreak": "Pinakamahabang serye",
+            "statsWeekly": "Mga pag-aayuno sa nakaraang pitong araw",
+            "allTime": "Buong kasaysayan",
+            "thisYear": "Ngayong taon",
+            "last30Days": "Huling 30 araw"
         },
         "tabs": {
             "overview": "Pangkalahatang-tanaw",

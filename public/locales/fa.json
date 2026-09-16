@@ -3990,7 +3990,21 @@
             "finishedHint": "پایان ذخیره شد. می‌توانید زمان‌ها را ویرایش و امتیاز یا یادداشت اضافه کنید.",
             "rangeError": "پایان باید پس از شروع باشد و در آینده نباشد.",
             "elapsed": "مدت روزه",
-            "sinceLast": "از آخرین روزه"
+            "sinceLast": "از آخرین روزه",
+            "noRecord": "بدون سابقه",
+            "goalCoverage": "برای {{records}} مورد از {{total}} روزه هدف ثبت شده است",
+            "chartLegend": "مدت واقعی (چپ) و هدف ثبت‌شده (راست)؛ مقادیر، مجموع هر تاریخ پایان هستند.",
+            "capturedGoal": "هدف ثبت‌شده",
+            "statsTitle": "آمار",
+            "statsCount": "مجموع روزه‌ها",
+            "statsTotal": "مدت کل",
+            "statsAverage": "میانگین",
+            "statsCurrentStreak": "توالی فعلی",
+            "statsLongestStreak": "طولانی‌ترین توالی",
+            "statsWeekly": "روزه‌های هفت روز گذشته",
+            "allTime": "همه سوابق",
+            "thisYear": "امسال",
+            "last30Days": "۳۰ روز اخیر"
         },
         "tabs": {
             "overview": "نمای کلی",

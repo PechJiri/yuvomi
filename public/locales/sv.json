@@ -3990,7 +3990,21 @@
             "finishedHint": "Slutet har sparats. Du kan ändra tiderna och lägga till betyg eller anteckning.",
             "rangeError": "Slutet måste vara efter starten och får inte ligga i framtiden.",
             "elapsed": "Fastetid",
-            "sinceLast": "Sedan senaste fastan"
+            "sinceLast": "Sedan senaste fastan",
+            "noRecord": "Ingen registrering",
+            "goalCoverage": "Mål registrerade för {{records}} av {{total}} fastor",
+            "chartLegend": "Faktisk längd (vänster) och registrerat mål (höger); värdena är summor per slutdatum.",
+            "capturedGoal": "Registrerat mål",
+            "statsTitle": "Statistik",
+            "statsCount": "Totalt antal fastor",
+            "statsTotal": "Total varaktighet",
+            "statsAverage": "Genomsnitt",
+            "statsCurrentStreak": "Aktuell serie",
+            "statsLongestStreak": "Längsta serie",
+            "statsWeekly": "Fastor under de senaste sju dagarna",
+            "allTime": "Hela historiken",
+            "thisYear": "I år",
+            "last30Days": "Senaste 30 dagarna"
         },
         "tabs": {
             "overview": "Översikt",

@@ -3990,7 +3990,21 @@
             "finishedHint": "Konec půstu je uložen. Časy můžete upravit a přidat hodnocení nebo poznámku.",
             "rangeError": "Konec musí být po začátku a nesmí být v budoucnosti.",
             "elapsed": "Doba půstu",
-            "sinceLast": "Od posledního půstu"
+            "sinceLast": "Od posledního půstu",
+            "noRecord": "Bez záznamu",
+            "goalCoverage": "Cíl zaznamenán u {{records}} z {{total}} půstů",
+            "chartLegend": "Skutečná délka (vlevo) a zaznamenaný cíl (vpravo); hodnoty jsou součty za den dokončení.",
+            "capturedGoal": "Zaznamenaný cíl",
+            "statsTitle": "Statistiky",
+            "statsCount": "Celkem půstů",
+            "statsTotal": "Celková délka",
+            "statsAverage": "Průměr",
+            "statsCurrentStreak": "Aktuální série",
+            "statsLongestStreak": "Nejdelší série",
+            "statsWeekly": "Půsty za posledních sedm dní",
+            "allTime": "Celá historie",
+            "thisYear": "Tento rok",
+            "last30Days": "Posledních 30 dní"
         },
         "tabs": {
             "overview": "Přehled",

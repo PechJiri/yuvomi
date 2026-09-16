@@ -3990,7 +3990,21 @@
             "finishedHint": "Het einde is opgeslagen. Je kunt de tijden aanpassen en een beoordeling of notitie toevoegen.",
             "rangeError": "Het einde moet na het begin liggen en mag niet in de toekomst liggen.",
             "elapsed": "Vastentijd",
-            "sinceLast": "Sinds het laatste vasten"
+            "sinceLast": "Sinds het laatste vasten",
+            "noRecord": "Geen registratie",
+            "goalCoverage": "Doelen vastgelegd voor {{records}} van {{total}} vastenperioden",
+            "chartLegend": "Werkelijke duur (links) en vastgelegd doel (rechts); de waarden zijn totalen per einddatum.",
+            "capturedGoal": "Vastgelegd doel",
+            "statsTitle": "Statistieken",
+            "statsCount": "Totaal aantal vasten",
+            "statsTotal": "Totale duur",
+            "statsAverage": "Gemiddelde",
+            "statsCurrentStreak": "Huidige reeks",
+            "statsLongestStreak": "Langste reeks",
+            "statsWeekly": "Vasten in de afgelopen zeven dagen",
+            "allTime": "Volledige geschiedenis",
+            "thisYear": "Dit jaar",
+            "last30Days": "Afgelopen 30 dagen"
         },
         "tabs": {
             "overview": "Overzicht",

@@ -3990,7 +3990,21 @@
             "finishedHint": "El final está guardado. Puedes ajustar las horas y añadir una valoración o nota.",
             "rangeError": "El final debe ser posterior al inicio y no estar en el futuro.",
             "elapsed": "Tiempo de ayuno",
-            "sinceLast": "Desde el último ayuno"
+            "sinceLast": "Desde el último ayuno",
+            "noRecord": "Sin registro",
+            "goalCoverage": "Objetivos registrados para {{records}} de {{total}} ayunos",
+            "chartLegend": "Duración real (izquierda) y objetivo registrado (derecha); los valores son totales por fecha de finalización.",
+            "capturedGoal": "Objetivo registrado",
+            "statsTitle": "Estadísticas",
+            "statsCount": "Ayunos totales",
+            "statsTotal": "Duración total",
+            "statsAverage": "Promedio",
+            "statsCurrentStreak": "Racha actual",
+            "statsLongestStreak": "Racha más larga",
+            "statsWeekly": "Ayunos de los últimos siete días",
+            "allTime": "Todo el historial",
+            "thisYear": "Este año",
+            "last30Days": "Últimos 30 días"
         },
         "tabs": {
             "overview": "Resumen",

@@ -3990,7 +3990,21 @@
             "finishedHint": "结束时间已保存。您可以调整时间并添加评分或备注。",
             "rangeError": "结束时间必须晚于开始时间，且不能在未来。",
             "elapsed": "断食时间",
-            "sinceLast": "距上次断食"
+            "sinceLast": "距上次断食",
+            "noRecord": "无记录",
+            "goalCoverage": "{{total}}次断食中有{{records}}次记录了目标",
+            "chartLegend": "实际时长（左）和记录的目标（右）；数值为每个完成日期的总计。",
+            "capturedGoal": "记录的目标",
+            "statsTitle": "统计",
+            "statsCount": "断食总次数",
+            "statsTotal": "总时长",
+            "statsAverage": "平均值",
+            "statsCurrentStreak": "当前连续记录",
+            "statsLongestStreak": "最长连续记录",
+            "statsWeekly": "过去七天的断食",
+            "allTime": "全部历史",
+            "thisYear": "今年",
+            "last30Days": "最近30天"
         },
         "tabs": {
             "overview": "概览",
