@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fastingHelpHtml } from '../public/components/fasting-help.js';
-import { renderFastingStats } from '../public/pages/health-fasting-insights.js';
+import { renderFastingStats } from '../public/components/health-fasting-insights.js';
 import {
   normalizeGoalHours,
   fastingTimerModel,

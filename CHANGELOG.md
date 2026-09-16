@@ -278,11 +278,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every member by default and an admin can switch it off per family role or person.
   Yuvomi records fasting and does not provide medical advice.
 
-- **Fasting insights summarize completed records and captured goals.**
-  Calendar windows, interval-based streaks and weekly actual/goal values use the
-  household display time zone consistently; history and CSV filters retain each
-  record's captured zone. Calculations remain bounded for very long intervals.
-
 - **A calendar's default assignee can now be applied to the events it already imported** (#1154).
   Until now the mapping only reached events that arrived after it was set, so the first thing
   anyone saw after mapping a calendar was a list of unassigned events. Settings → Sync gains a

@@ -47,10 +47,11 @@ test('weekly chart distinguishes absent records and captured goals', async () =>
     assert.equal(mixedDay.count, 2);
     assert.equal(mixedDay.goalMinutes, 60);
     assert.equal(mixedDay.goalCount, 1);
-    const weeklyText = await page.$eval('.fasting-week', (el) => el.textContent);
-    assert.match(weeklyText, /2 h/);
-    assert.match(weeklyText, /Zaznamenaný cíl: 1 h/);
-    assert.match(weeklyText, /Cíl zaznamenán u 1 z 2 půstů/);
+    const mixedDayValue = await page.$$eval('.fasting-week__day', (days, date) => days.find((day) => day.querySelector('time')?.dateTime === date)?.querySelector(':scope > span:first-child')?.textContent.trim() || '', mixedDay.date);
+    const mixedDayText = await page.$$eval('.fasting-week__day', (days, date) => days.find((day) => day.querySelector('time')?.dateTime === date)?.textContent || '', mixedDay.date);
+    assert.equal(mixedDayValue, '2 h');
+    assert.match(mixedDayText, /Zaznamenaný cíl: 1 h/);
+    assert.match(mixedDayText, /Cíl zaznamenán u 1 z 2 půstů/);
     const baselines = await page.$$eval('.fasting-week__track', (els) => els.map((el) => el.getBoundingClientRect().bottom));
     assert.ok(Math.max(...baselines) - Math.min(...baselines) <= 1, 'Wrapped labels must not move the chart baseline');
     await captureFastingViewport(page, '.fasting-stats', 'mobile-cs-stats');
@@ -63,13 +64,26 @@ test('weekly dates and values remain visible for every bucket', async () => {
   try {
     await harness.reset();
     const page = await openPage(harness, { locale: 'cs' });
-    await page.evaluate(async () => {
+    const seededDate = await page.evaluate(async () => {
       const { api } = await import('/api.js');
-      await api.post('/health/fasting', { start_at: '2025-01-01T06:00:00Z', end_at: '2025-01-01T08:00:00Z', start_tzid: 'UTC', acknowledge_safety: true });
+      const stats = (await api.get('/health/fasting/stats')).data;
+      const { zonedFields, wallTimeInstant } = await import('/utils/timezone.js');
+      const now = zonedFields(new Date(), stats.display_tzid);
+      const previous = new Date(Date.UTC(now.year, now.month - 1, now.day) - 86400000);
+      const date = `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, '0')}-${String(previous.getUTCDate()).padStart(2, '0')}`;
+      await api.post('/health/fasting', {
+        start_at: wallTimeInstant(`${date}T06:00:00`, stats.display_tzid),
+        end_at: wallTimeInstant(`${date}T08:00:00`, stats.display_tzid),
+        start_tzid: stats.display_tzid,
+        acknowledge_safety: true,
+      });
+      return date;
     });
     await gotoRoute(page, '/health/fasting'); await page.waitForSelector('.fasting-week__day');
     assert.equal(await page.$$eval('.fasting-week__day time', (els) => els.filter((el) => el.textContent.trim()).length), 7);
     assert.equal(await page.$$eval('.fasting-week__day > span:first-child', (els) => els.filter((el) => el.textContent.trim()).length), 7);
+    const seededDayValue = await page.$$eval('.fasting-week__day', (days, date) => days.find((day) => day.querySelector('time')?.dateTime === date)?.querySelector(':scope > span:first-child')?.textContent.trim() || '', seededDate);
+    assert.equal(seededDayValue, '2 h');
   } finally { await harness.close(); }
 });
 

@@ -1,7 +1,7 @@
 import { resolvePermissions } from '../permissions.js';
 import { summarizeFastingRows, fastingStreaks, weeklyFastingSeries } from './fasting-stats.js';
 import { fastingDateKey, parseFastingDateRange, rowMatchesFastingDateRange } from './fasting-dates.js';
-import { householdTimeZone, shiftDateKey } from '../utils/timezone.js';
+import { householdTimeZone, shiftDateKey, todayKey } from '../utils/timezone.js';
 
 export class FastingError extends Error {
   constructor(status, reason, message, current = undefined) {
@@ -187,7 +187,7 @@ export function getFastingHistory(database, actor, subjectId = Number(actor?.id)
   const beforeAt = hasCursor ? parseInstant(options.beforeAt, 'before_at') : null;
   const invalidRange = () => fail(400, 'FASTING_DATE_RANGE_INVALID', 'from and to must be valid YYYY-MM-DD dates with from no later than to.');
   const range = parseFastingDateRange(options.from, options.to, invalidRange);
-  const zone = range.from || range.to ? householdTimeZone(database) : null;
+  const zone = householdTimeZone(database);
   const sql = `SELECT * FROM health_fasts WHERE ${visibleFilter(database, actorId, subject)}
     AND end_at IS NOT NULL ${hasCursor ? 'AND (start_at < ? OR (start_at = ? AND id < ?))' : ''}
     ORDER BY start_at DESC, id DESC`;
@@ -214,7 +214,7 @@ export function getAllFastingHistory(database, actor, subjectId = Number(actor?.
   ensureSubject(database, actorId, Number(subjectId), { read: true });
   const invalidRange = () => fail(400, 'FASTING_DATE_RANGE_INVALID', 'from and to must be valid YYYY-MM-DD dates with from no later than to.');
   const range = parseFastingDateRange(options.from, options.to, invalidRange);
-  const zone = range.from || range.to ? householdTimeZone(database) : null;
+  const zone = householdTimeZone(database);
   const rows = [];
   for (const row of database.prepare(`SELECT * FROM health_fasts WHERE ${visibleFilter(database, actorId, Number(subjectId))}
     AND end_at IS NOT NULL ORDER BY start_at DESC, id DESC`).iterate(Number(subjectId))) {
@@ -253,7 +253,7 @@ export function getFastingState(database, actor, subjectId = Number(actor?.id)) 
 export function getFastingStats(database, actor, subjectId = Number(actor?.id), now = new Date()) {
   const rows = getAllFastingHistory(database, actor, subjectId);
   const zone = householdTimeZone(database);
-  const today = fastingDateKey(now, zone);
+  const today = todayKey(database, now);
   const currentYear = today.slice(0, 4);
   const windowStart = shiftDateKey(today, -29);
   // All calendar views of completed records share the household display zone.

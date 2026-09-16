@@ -1,6 +1,4 @@
-/** Completed-record insights; isolated from journal lifecycle controls. */
-// Delegated panel composition: dashboard, supplied by the Health page.
-// data-composition="dashboard"
+/** Completed-record insights, shared by the Health fasting view. */
 import { t, formatDayMonth } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { formatFastingDuration } from '/utils/health-fasting.js';

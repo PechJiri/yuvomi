@@ -11,6 +11,107 @@ const fill = (page, selector, value) => page.$eval(selector, (el, next) => {
   el.value = next; el.dispatchEvent(new Event('change', { bubbles: true }));
 }, value);
 
+test('history filters name the household calendar used for completion dates', async () => {
+  const harness = await startHarness();
+  try {
+    await harness.reset();
+    const page = await openPage(harness, { locale: 'cs' });
+    await gotoRoute(page, '/health/fasting');
+    await page.waitForSelector('[data-fasting-filter-zone]');
+    const state = (await call(page, 'get', '/health/fasting/state')).data;
+    const hint = await page.$eval('[data-fasting-filter-zone]', (el) => el.textContent.trim());
+    assert.match(hint, /Časové pásmo domácnosti/);
+    assert.match(hint, new RegExp(state.display_tzid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  } finally { await harness.close(); }
+});
+
+test('filter and preference refreshes reuse insights while page resume refreshes them', async () => {
+  const harness = await startHarness();
+  try {
+    await harness.reset();
+    const page = await openPage(harness, { locale: 'cs' });
+    await gotoRoute(page, '/health/fasting');
+    await page.waitForSelector('[data-fasting-filters]');
+    await page.evaluate(async () => {
+      const { api } = await import('/api.js');
+      const get = api.get;
+      window.fastingRestoreStatsGet = () => { api.get = get; };
+      window.fastingStatsRequests = 0;
+      window.fastingStateRequests = 0;
+      api.get = async (path, ...args) => {
+        if (path.includes('/fasting/stats')) window.fastingStatsRequests++;
+        if (path.includes('/fasting/state')) window.fastingStateRequests++;
+        return get(path, ...args);
+      };
+    });
+    await page.click('[data-fasting-filters] [type="submit"]');
+    await page.waitForFunction(() => window.fastingStateRequests >= 1);
+    assert.equal(await page.evaluate(() => window.fastingStatsRequests), 0);
+    await page.select('[data-fasting-clock-default]', 'elapsed');
+    await page.waitForFunction(() => window.fastingStateRequests >= 2);
+    assert.equal(await page.evaluate(() => window.fastingStatsRequests), 0);
+    await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+    await page.waitForFunction(() => window.fastingStateRequests >= 3 && window.fastingStatsRequests >= 1);
+    assert.equal(await page.evaluate(() => window.fastingStatsRequests), 1);
+    await page.evaluate(() => window.fastingRestoreStatsGet());
+  } finally { await harness.close(); }
+});
+
+test('a failed insights refresh remains retryable on the next ordinary refresh', async () => {
+  const harness = await startHarness();
+  try {
+    await harness.reset();
+    const page = await openPage(harness, { locale: 'cs' });
+    await gotoRoute(page, '/health/fasting');
+    await page.waitForSelector('[data-fasting-filters]');
+    await page.evaluate(async () => {
+      const { api } = await import('/api.js');
+      const get = api.get;
+      window.fastingStatsRequests = 0;
+      api.get = async (path, ...args) => {
+        if (path.includes('/fasting/stats')) {
+          window.fastingStatsRequests++;
+          if (window.fastingStatsRequests === 1) throw new Error('simulated stats failure');
+        }
+        return get(path, ...args);
+      };
+    });
+    await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+    await page.waitForFunction(() => window.fastingStatsRequests === 1);
+    await page.waitForSelector('.fasting-stats [role="status"]');
+    await page.click('[data-fasting-filters] [type="submit"]');
+    await page.waitForFunction(() => window.fastingStatsRequests === 2);
+  } finally { await harness.close(); }
+});
+
+test('an ordinary refresh cannot cancel record-driven insights invalidation', async () => {
+  const harness = await startHarness();
+  try {
+    await harness.reset();
+    const page = await openPage(harness, { locale: 'cs' });
+    await gotoRoute(page, '/health/fasting');
+    await page.waitForSelector('[data-fasting-filters]');
+    await page.evaluate(async () => {
+      const { api } = await import('/api.js');
+      const get = api.get;
+      window.fastingStatsRequests = 0;
+      api.get = (path, ...args) => {
+        if (!path.includes('/fasting/stats')) return get(path, ...args);
+        window.fastingStatsRequests++;
+        if (window.fastingStatsRequests > 1) return get(path, ...args);
+        return new Promise((resolve, reject) => {
+          window.releaseFastingStats = () => get(path, ...args).then(resolve, reject);
+        });
+      };
+    });
+    await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+    await page.waitForFunction(() => window.fastingStatsRequests === 1);
+    await page.click('[data-fasting-filters] [type="submit"]');
+    await page.waitForFunction(() => window.fastingStatsRequests === 2);
+    await page.evaluate(() => window.releaseFastingStats());
+  } finally { await harness.close(); }
+});
+
 test('retired clock writes cannot repaint another subject or a refreshed same-root clock', async () => {
   const harness = await startHarness();
   try {
