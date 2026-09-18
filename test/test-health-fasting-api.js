@@ -282,6 +282,8 @@ test('history, pages and CSV filter inclusive household-zone completion dates', 
     assert.equal(csvResponse.status, 200);
     const csv = (await csvResponse.text()).replace(/^\ufeff/, '');
     assert.equal(csv.trim().split('\n').length, 3);
+    assert.equal(csv.split('\n')[0], '"start_at","end_at","start_tzid","duration_minutes","goal_minutes","goal_reached","rating","note","visibility"');
+    assert.match(csv, /,"60","true",/);
     assert.match(csv, /Kiritimati capture/);
     assert.match(csv, /Prague capture/);
 

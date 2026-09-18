@@ -20,6 +20,7 @@ test('history filters name the household calendar used for completion dates', as
     await page.waitForSelector('[data-fasting-filter-zone]');
     const state = (await call(page, 'get', '/health/fasting/state')).data;
     const hint = await page.$eval('[data-fasting-filter-zone]', (el) => el.textContent.trim());
+    assert.match(hint, /Dokončeno od.*Dokončeno do/);
     assert.match(hint, /Časové pásmo domácnosti/);
     assert.match(hint, new RegExp(state.display_tzid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   } finally { await harness.close(); }

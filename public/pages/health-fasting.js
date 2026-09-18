@@ -3,7 +3,7 @@
 import { api } from '/api.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
-import { formatFastingDuration } from '/utils/health-fasting.js';
+import { fastingCompletionCalendarHint, fastingHistoryQuery, fastingStatsQuery, formatFastingDuration, shouldLoadFastingStats } from '/utils/health-fasting.js';
 import { openModal, refocusAfterRender } from '/components/modal.js';
 import { moduleAccess } from '/permissions.js';
 import { scheduleUndoableDelete } from '/utils/ux.js';
@@ -29,15 +29,6 @@ export async function mountFasting(root, { userId } = {}) {
   await refresh(view, { refreshStats: true });
 }
 
-function query(view, cursor = null) {
-  const params = new URLSearchParams();
-  if (view.subject && view.subject !== view.self) params.set('user_id', view.subject);
-  if (view.from) params.set('from', view.from);
-  if (view.to) params.set('to', view.to);
-  if (cursor) { params.set('before_at', cursor.before_at); params.set('before_id', cursor.before_id); }
-  return params.size ? `?${params}` : '';
-}
-
 function shell(view) {
   const el = view.root.querySelector('[data-fasting-shell]');
   el.replaceChildren();
@@ -58,7 +49,8 @@ function shell(view) {
 }
 
 function filtersMarkup(view) {
-  const zone = view.displayTzid ? `<p class="form-hint" data-fasting-filter-zone>${esc(t('settings.timezoneLabel'))}: ${esc(view.displayTzid)}</p>` : '';
+  const zoneHint = fastingCompletionCalendarHint(view.displayTzid);
+  const zone = zoneHint ? `<p class="form-hint" data-fasting-filter-zone>${esc(zoneHint)}</p>` : '';
   return `<form class="fasting-history-filters" data-fasting-filters><label class="form-label">${esc(t('health.fasting.completedFrom'))}<input class="form-input" type="date" data-fasting-from value="${esc(view.from)}"></label><label class="form-label">${esc(t('health.fasting.completedTo'))}<input class="form-input" type="date" data-fasting-to value="${esc(view.to)}"></label><button type="submit" class="btn btn--secondary">${esc(t('health.fasting.applyFilter'))}</button>${zone}<p class="form-hint" role="alert" data-fasting-filter-error></p></form>`;
 }
 
@@ -79,14 +71,15 @@ async function refresh(view, { refreshStats = false } = {}) {
   }
   const generation = ++view.generation, subject = view.subject;
   const current = () => view.root.isConnected && view.generation === generation && view.subject === subject;
-  const q = query(view);
+  const historyQuery = fastingHistoryQuery(view);
+  const statsQuery = fastingStatsQuery(view);
   try {
-    const loadStats = view.stats === undefined || view.statsError;
+    const loadStats = shouldLoadFastingStats(view.stats, view.statsError);
     const [stateResult, statsResult, membersResult, filtered] = await Promise.all([
-      api.get(`/health/fasting/state${q}`),
-      loadStats ? api.get(`/health/fasting/stats${q}`).catch(() => ({ data: null, error: true })) : null,
+      api.get(`/health/fasting/state${historyQuery}`),
+      loadStats ? api.get(`/health/fasting/stats${statsQuery}`).catch(() => ({ data: null, error: true })) : null,
       view.members.length ? null : api.get('/family/members'),
-      view.from || view.to ? api.get(`/health/fasting/history${q}`) : null,
+      view.from || view.to ? api.get(`/health/fasting/history${historyQuery}`) : null,
     ]);
     if (!current()) return;
     const state = stateResult.data;
@@ -138,7 +131,7 @@ function renderBody(view, stats, statsError = false) {
   </section>
   ${writable ? `<div class="fasting-card" data-fasting-preferences>${fastingPreferencesHtml(state.settings || {})}</div>` : ''}
   ${renderFastingStats(stats, { error: statsError })}
-  <section id="history"><div class="fasting-card__heading"><h3 class="u-section-title">${esc(t('health.fasting.history'))}</h3><a href="/api/v1/health/export/fasting${esc(query(view))}" class="btn btn--secondary btn--sm" download>${esc(t('health.fasting.export'))}</a>${writable ? `<button class="btn btn--secondary" data-fasting-backfill>${esc(t('health.fasting.backfill'))}</button>` : ''}</div>
+  <section id="history"><div class="fasting-card__heading"><h3 class="u-section-title">${esc(t('health.fasting.history'))}</h3><a href="/api/v1/health/export/fasting${esc(fastingHistoryQuery(view))}" class="btn btn--secondary btn--sm" download>${esc(t('health.fasting.export'))}</a>${writable ? `<button class="btn btn--secondary" data-fasting-backfill>${esc(t('health.fasting.backfill'))}</button>` : ''}</div>
     ${filtersMarkup(view)}
     <div class="fasting-card" data-fasting-history></div><div class="fasting-history-more"><button class="btn btn--secondary" type="button" data-fasting-more ${view.more ? '' : 'hidden'}>${esc(t('health.fasting.loadMore'))}</button><p class="form-hint" role="alert" data-fasting-history-error></p></div>
   </section>`);
@@ -169,7 +162,7 @@ function renderBody(view, stats, statsError = false) {
     if (!view.cursor || button.disabled) return;
     button.disabled = true;
     try {
-      const response = await api.get(`/health/fasting/history${query(view, view.cursor)}`);
+      const response = await api.get(`/health/fasting/history${fastingHistoryQuery(view, view.cursor)}`);
       if (!root.isConnected || generation !== view.generation) return;
       const seen = new Set(view.rows.map((row) => row.id));
       view.rows.push(...response.data.filter((row) => !seen.has(row.id)));

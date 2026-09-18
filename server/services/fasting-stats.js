@@ -1,5 +1,5 @@
 /** Pure server-side fasting summaries; resource use scales with record count. */
-import { fastingDateKey } from './fasting-dates.js';
+import { fastingDateKeyFactory } from './fasting-dates.js';
 import { shiftDateKey } from '../utils/timezone.js';
 
 const DAY = 24 * 60;
@@ -15,7 +15,7 @@ function duration(row) {
 
 export function dateKeyInZone(value, timeZone) {
   requireTimeZone(timeZone);
-  return fastingDateKey(value, timeZone);
+  return fastingDateKeyFactory(timeZone)(value);
 }
 
 function requireTimeZone(timeZone) {
@@ -93,9 +93,10 @@ export function weeklyFastingSeries(rows = [], { endDate, timeZone } = {}) {
   const buckets = new Map(dates.map((date) => [date, {
     count: 0, totalMinutes: 0, goalMinutes: 0, goalCount: 0,
   }]));
+  const dateKey = fastingDateKeyFactory(timeZone);
   for (const row of rows) {
     const elapsed = duration(row);
-    const date = elapsed ? dateKeyInZone(row.end_at, timeZone) : null;
+    const date = elapsed ? dateKey(row.end_at) : null;
     const bucket = buckets.get(date);
     if (!bucket) continue;
     bucket.count += 1;

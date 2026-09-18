@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fasting insights summarize completed records and captured goals.** Calendar windows,
   interval-based streaks, weekly actual/goal values, and history/CSV date filters use the
   household display time zone consistently. Calculations remain bounded for very long intervals.
+  (#1178)
 
 ### Fixed
 

@@ -20,7 +20,9 @@ Die bestehende Fasting-HTTP-Suite startet ihren Express-Router in-process auf ei
 isolierten Loopback-Port und einer temporaeren Testdatenbank; sie benoetigt keinen
 externen Dienst. Die Browser-Suiten nutzen den vorhandenen Puppeteer-Harness mit
 isoliertem Seed/Reset und laufen unter `test:document-guards`, ausserhalb von
-`npm test`. Journal und Auswertung haben getrennte Browserdateien;
+`npm test`. Die drei Browserdateien laufen bewusst nacheinander, damit nicht mehrere
+Chromium-Instanzen um dieselben Maschinenressourcen konkurrieren. Journal und
+Auswertung haben getrennte Browserdateien;
 die gemeinsame Akzeptanzsuite sichert die Journal-Steuerelemente gegen Regressionen.
 Abgedeckt werden mobile/Desktop-Ansichten, Datum/DST, Familien-Lesezugriff,
 Undo/Revisionen, Offline-Resume und die geteilten Steuerelemente. Screenshots lassen

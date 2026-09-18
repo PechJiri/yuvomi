@@ -1,20 +1,27 @@
-export function fastingDateKey(value, timeZone) {
+export function fastingDateKeyFactory(timeZone) {
   if (typeof timeZone !== 'string' || !timeZone.trim()) {
     throw new TypeError('A timeZone is required to derive a fasting calendar date.');
   }
-  const date = value instanceof Date ? value : new Date(value);
-  if (!Number.isFinite(date.getTime())) return null;
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone,
     calendar: 'gregory',
     numberingSystem: 'latn',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(date);
-  const map = Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
-  const year = String(Number(map.year)).padStart(4, '0');
-  return `${year}-${map.month}-${map.day}`;
+  });
+  return (value) => {
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isFinite(date.getTime())) return null;
+    const parts = formatter.formatToParts(date);
+    const map = Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
+    const year = String(Number(map.year)).padStart(4, '0');
+    return `${year}-${map.month}-${map.day}`;
+  };
+}
+
+export function fastingDateKey(value, timeZone) {
+  return fastingDateKeyFactory(timeZone)(value);
 }
 
 export function parseFastingDateRange(from, to, fail) {
@@ -37,8 +44,8 @@ export function parseFastingDateRange(from, to, fail) {
   return parsed;
 }
 
-export function rowMatchesFastingDateRange(row, range, timeZone) {
+export function rowMatchesFastingDateRange(row, range, timeZone, dateKey = fastingDateKeyFactory(timeZone)) {
   if (!range.from && !range.to) return true;
-  const key = fastingDateKey(row.end_at, timeZone);
+  const key = dateKey(row.end_at);
   return !!key && (!range.from || key >= range.from) && (!range.to || key <= range.to);
 }

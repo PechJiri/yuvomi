@@ -12,7 +12,25 @@ import {
   fastingDisplayModel,
   fastingServerDate,
   fastingServerClock,
+  fastingCompletionCalendarHint,
+  fastingHistoryQuery,
+  fastingStatsQuery,
+  shouldLoadFastingStats,
 } from '../public/utils/health-fasting.js';
+
+test('journal filters stay out of stats requests and completion hints name their calendar', () => {
+  const view = { self: 1, subject: 2, from: '2026-09-01', to: '2026-09-30' };
+  assert.equal(fastingHistoryQuery(view), '?user_id=2&from=2026-09-01&to=2026-09-30');
+  assert.equal(fastingStatsQuery(view), '?user_id=2');
+  assert.equal(fastingCompletionCalendarHint('Europe/Prague'), 'health.fasting.completedFrom / health.fasting.completedTo: settings.timezoneLabel — Europe/Prague');
+  assert.equal(fastingCompletionCalendarHint(''), '');
+});
+
+test('insights reload only when absent or after a failed request', () => {
+  assert.equal(shouldLoadFastingStats(undefined, false), true);
+  assert.equal(shouldLoadFastingStats(null, true), true);
+  assert.equal(shouldLoadFastingStats({ currentStreak: 2 }, false), false);
+});
 
 test('help markup remains importable without a DOM and escapes labels with unique associations', () => {
   const first = fastingHelpHtml('<Goal>', ['Full guidance']), second = fastingHelpHtml('Goal', ['Full guidance']);

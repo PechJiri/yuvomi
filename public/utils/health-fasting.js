@@ -1,11 +1,42 @@
 /** Pure fasting timer and dial calculations shared by the page and tests. */
-import { getNumberFormat } from '../i18n.js';
+import { getNumberFormat, t } from '../i18n.js';
 
 const MAX_GOAL_HOURS = 14 * 24;
 const MINUTE = 60 * 1000;
 const DAY_MINUTES = 24 * 60;
 
 export const FASTING_PRESETS = Object.freeze([12, 14, 15, 16, 18, 20, 23]);
+
+function fastingSubjectParams(view) {
+  const params = new URLSearchParams();
+  if (view.subject && view.subject !== view.self) params.set('user_id', view.subject);
+  return params;
+}
+
+export function fastingHistoryQuery(view, cursor = null) {
+  const params = fastingSubjectParams(view);
+  if (view.from) params.set('from', view.from);
+  if (view.to) params.set('to', view.to);
+  if (cursor) {
+    params.set('before_at', cursor.before_at);
+    params.set('before_id', cursor.before_id);
+  }
+  return params.size ? `?${params}` : '';
+}
+
+export function fastingStatsQuery(view) {
+  const params = fastingSubjectParams(view);
+  return params.size ? `?${params}` : '';
+}
+
+export function shouldLoadFastingStats(stats, statsError = false) {
+  return stats === undefined || statsError;
+}
+
+export function fastingCompletionCalendarHint(timeZone) {
+  if (!timeZone) return '';
+  return `${t('health.fasting.completedFrom')} / ${t('health.fasting.completedTo')}: ${t('settings.timezoneLabel')} — ${timeZone}`;
+}
 
 /**
  * Completed-entry forms must use the authoritative server clock. Falling back

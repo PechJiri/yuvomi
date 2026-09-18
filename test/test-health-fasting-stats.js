@@ -28,19 +28,6 @@ test('streak and weekly completion dates use one explicit display zone across re
   assert.deepEqual(series.at(-1), { date: '2026-09-13', count: 2, totalMinutes: 1920, goalMinutes: 1920, goalCount: 2, hasRecord: true });
 });
 
-test('insights can use one display zone consistently across records', () => {
-  const sameInstant = '2026-09-13T22:30:00.000Z';
-  const records = [
-    { start_at: '2026-09-13T06:30:00.000Z', end_at: sameInstant, goal_minutes: 960, start_tzid: 'Europe/Prague' },
-    { start_at: '2026-09-13T06:30:00.000Z', end_at: sameInstant, goal_minutes: 960, start_tzid: 'Pacific/Kiritimati' },
-  ];
-  assert.deepEqual(fastingStreaks(records, { today: '2026-09-13', timeZone: 'America/Los_Angeles' }), { current: 1, longest: 1 });
-  const series = weeklyFastingSeries(records, { endDate: '2026-09-13', timeZone: 'America/Los_Angeles' });
-  assert.deepEqual(series.at(-1), {
-    date: '2026-09-13', count: 2, totalMinutes: 1920, goalMinutes: 1920, goalCount: 2, hasRecord: true,
-  });
-});
-
 test('summaries count sub-minute records and weekly series distinguishes no record and no goal', () => {
   const rows = [
     { id: 1, start_at: '2026-09-13T10:00:00.000Z', end_at: '2026-09-13T10:00:30.000Z', goal_minutes: null, start_tzid: 'UTC' },
