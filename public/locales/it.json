@@ -3993,6 +3993,7 @@
             "sinceLast": "Dall’ultimo digiuno",
             "noRecord": "Nessuna registrazione",
             "goalCoverage": "Obiettivi registrati per {{records}} digiuni su {{total}}",
+            "goalCoverage_one": "Obiettivo registrato per {{records}} digiuno su {{total}}",
             "chartLegend": "Durata effettiva (sinistra) e obiettivo registrato (destra); i valori sono totali per ciascuna data di conclusione.",
             "capturedGoal": "Obiettivo registrato",
             "statsTitle": "Statistiche",

@@ -3993,6 +3993,7 @@
             "sinceLast": "Sinds het laatste vasten",
             "noRecord": "Geen registratie",
             "goalCoverage": "Doelen vastgelegd voor {{records}} van {{total}} vastenperioden",
+            "goalCoverage_one": "Doel vastgelegd voor {{records}} van {{total}} vastenperioden",
             "chartLegend": "Werkelijke duur (links) en vastgelegd doel (rechts); de waarden zijn totalen per einddatum.",
             "capturedGoal": "Vastgelegd doel",
             "statsTitle": "Statistieken",

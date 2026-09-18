@@ -3993,6 +3993,7 @@
             "sinceLast": "前回の断食から",
             "noRecord": "記録なし",
             "goalCoverage": "{{total}}回の断食のうち{{records}}回に目標が記録されています",
+            "goalCoverage_one": "{{total}}回の断食のうち{{records}}回に目標が記録されています",
             "chartLegend": "実際の時間（左）と記録された目標（右）。値は完了日ごとの合計です。",
             "capturedGoal": "記録された目標",
             "statsTitle": "統計",

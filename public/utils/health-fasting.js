@@ -35,7 +35,7 @@ export function shouldLoadFastingStats(stats, statsError = false) {
 
 export function fastingCompletionCalendarHint(timeZone) {
   if (!timeZone) return '';
-  return `${t('health.fasting.completedFrom')} / ${t('health.fasting.completedTo')}: ${t('settings.timezoneLabel')} — ${timeZone}`;
+  return `${t('health.fasting.completedFrom')} / ${t('health.fasting.completedTo')}: ${t('settings.timezoneLabel')} - ${timeZone}`;
 }
 
 /**

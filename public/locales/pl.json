@@ -3993,6 +3993,7 @@
             "sinceLast": "Od ostatniego postu",
             "noRecord": "Brak wpisu",
             "goalCoverage": "Zapisano cele dla {{records}} z {{total}} postów",
+            "goalCoverage_one": "Zapisano cel dla {{records}} z {{total}} postów",
             "chartLegend": "Rzeczywisty czas (po lewej) i zapisany cel (po prawej); wartości są sumami dla każdej daty zakończenia.",
             "capturedGoal": "Zapisany cel",
             "statsTitle": "Statystyki",

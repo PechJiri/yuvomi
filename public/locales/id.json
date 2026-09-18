@@ -3993,6 +3993,7 @@
             "sinceLast": "Sejak puasa terakhir",
             "noRecord": "Tidak ada catatan",
             "goalCoverage": "Target tercatat untuk {{records}} dari {{total}} puasa",
+            "goalCoverage_one": "Target tercatat untuk {{records}} dari {{total}} puasa",
             "chartLegend": "Durasi aktual (kiri) dan target tercatat (kanan); nilai adalah jumlah untuk tiap tanggal selesai.",
             "capturedGoal": "Target tercatat",
             "statsTitle": "Statistik",

@@ -3993,6 +3993,7 @@
             "sinceLast": "마지막 단식 이후",
             "noRecord": "기록 없음",
             "goalCoverage": "단식 {{total}}회 중 {{records}}회에 목표가 기록됨",
+            "goalCoverage_one": "단식 {{total}}회 중 {{records}}회에 목표가 기록됨",
             "chartLegend": "실제 시간(왼쪽)과 기록된 목표(오른쪽)이며, 값은 완료일별 합계입니다.",
             "capturedGoal": "기록된 목표",
             "statsTitle": "통계",

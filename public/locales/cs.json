@@ -3993,6 +3993,7 @@
             "sinceLast": "Od posledního půstu",
             "noRecord": "Bez záznamu",
             "goalCoverage": "Cíl zaznamenán u {{records}} z {{total}} půstů",
+            "goalCoverage_one": "Cíl zaznamenán u {{records}} z {{total}} půstů",
             "chartLegend": "Skutečná délka (vlevo) a zaznamenaný cíl (vpravo); hodnoty jsou součty za den dokončení.",
             "capturedGoal": "Zaznamenaný cíl",
             "statsTitle": "Statistiky",

@@ -3993,6 +3993,7 @@
             "sinceLast": "Son oruçtan bu yana",
             "noRecord": "Kayıt yok",
             "goalCoverage": "{{total}} orucun {{records}} tanesi için hedef kaydedildi",
+            "goalCoverage_one": "{{total}} orucun {{records}} tanesi için hedef kaydedildi",
             "chartLegend": "Gerçek süre (solda) ve kaydedilen hedef (sağda); değerler her tamamlanma tarihinin toplamlarıdır.",
             "capturedGoal": "Kaydedilen hedef",
             "statsTitle": "İstatistikler",

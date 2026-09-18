@@ -61,6 +61,18 @@ test('Englisch: Singular und Plural je nach count', async () => {
   assert.equal(t('settings.calendarImport.success', { count: 4 }), '4 events imported.');
 });
 
+test('Fasting-Zielabdeckung flektiert nach erfassten Zielen, nicht nach allen Fasten', async () => {
+  await setLocale('en');
+  assert.equal(
+    t('health.fasting.goalCoverage', { count: 1, records: 1, total: 2 }),
+    'Goal recorded for 1 of 2 fasts',
+  );
+  assert.equal(
+    t('health.fasting.goalCoverage', { count: 2, records: 2, total: 3 }),
+    'Goals recorded for 2 of 3 fasts',
+  );
+});
+
 test('Kalender-Override-Bestätigung lokalisiert genau den bestätigten count', async () => {
   await setLocale('de');
   assert.equal(

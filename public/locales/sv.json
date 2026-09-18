@@ -3993,6 +3993,7 @@
             "sinceLast": "Sedan senaste fastan",
             "noRecord": "Ingen registrering",
             "goalCoverage": "Mål registrerade för {{records}} av {{total}} fastor",
+            "goalCoverage_one": "Mål registrerat för {{records}} av {{total}} fastor",
             "chartLegend": "Faktisk längd (vänster) och registrerat mål (höger); värdena är summor per slutdatum.",
             "capturedGoal": "Registrerat mål",
             "statsTitle": "Statistik",

@@ -3993,6 +3993,7 @@
             "sinceLast": "Mula sa huling pag-aayuno",
             "noRecord": "Walang tala",
             "goalCoverage": "May naitalang layunin para sa {{records}} sa {{total}} pag-aayuno",
+            "goalCoverage_one": "May naitalang layunin para sa {{records}} sa {{total}} pag-aayuno",
             "chartLegend": "Aktuwal na tagal (kaliwa) at naitalang layunin (kanan); ang mga halaga ay kabuuan sa bawat petsa ng pagtatapos.",
             "capturedGoal": "Naitalang layunin",
             "statsTitle": "Mga istatistika",

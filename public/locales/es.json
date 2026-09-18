@@ -3993,6 +3993,7 @@
             "sinceLast": "Desde el último ayuno",
             "noRecord": "Sin registro",
             "goalCoverage": "Objetivos registrados para {{records}} de {{total}} ayunos",
+            "goalCoverage_one": "Objetivo registrado para {{records}} de {{total}} ayunos",
             "chartLegend": "Duración real (izquierda) y objetivo registrado (derecha); los valores son totales por fecha de finalización.",
             "capturedGoal": "Objetivo registrado",
             "statsTitle": "Estadísticas",

@@ -3993,6 +3993,7 @@
             "sinceLast": "Since your last fast",
             "noRecord": "No record",
             "goalCoverage": "Goals recorded for {{records}} of {{total}} fasts",
+            "goalCoverage_one": "Goal recorded for {{records}} of {{total}} fasts",
             "chartLegend": "Actual duration (left) and recorded goal (right); values are totals for each completion date.",
             "capturedGoal": "Recorded goal",
             "statsTitle": "Statistics",

@@ -11,7 +11,7 @@ function goalLabel(bucket) {
 
 function goalCoverage(bucket) {
   if (!bucket.goalCount || bucket.goalCount >= bucket.count) return '';
-  return t('health.fasting.goalCoverage', { count: bucket.count, records: bucket.goalCount, total: bucket.count });
+  return t('health.fasting.goalCoverage', { count: bucket.goalCount, records: bucket.goalCount, total: bucket.count });
 }
 
 function renderWeeklyBucket(bucket, max) {

@@ -3993,6 +3993,7 @@
             "sinceLast": "Depuis le dernier jeûne",
             "noRecord": "Aucune entrée",
             "goalCoverage": "Objectifs enregistrés pour {{records}} jeûnes sur {{total}}",
+            "goalCoverage_one": "Objectif enregistré pour {{records}} jeûne sur {{total}}",
             "chartLegend": "Durée réelle (à gauche) et objectif enregistré (à droite) ; les valeurs sont des totaux par date de fin.",
             "capturedGoal": "Objectif enregistré",
             "statsTitle": "Statistiques",

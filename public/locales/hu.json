@@ -3993,6 +3993,7 @@
             "sinceLast": "Az utolsó böjt óta",
             "noRecord": "Nincs bejegyzés",
             "goalCoverage": "{{total}} böjtből {{records}} esetében van rögzített cél",
+            "goalCoverage_one": "{{total}} böjtből {{records}} esetében van rögzített cél",
             "chartLegend": "Tényleges időtartam (balra) és rögzített cél (jobbra); az értékek a befejezés dátuma szerinti összegek.",
             "capturedGoal": "Rögzített cél",
             "statsTitle": "Statisztikák",

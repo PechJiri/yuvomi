@@ -3993,6 +3993,7 @@
             "sinceLast": "Desde o último jejum",
             "noRecord": "Nenhum registro",
             "goalCoverage": "Metas registradas para {{records}} de {{total}} jejuns",
+            "goalCoverage_one": "Meta registrada para {{records}} de {{total}} jejuns",
             "chartLegend": "Duração real (esquerda) e meta registrada (direita); os valores são totais por data de conclusão.",
             "capturedGoal": "Meta registrada",
             "statsTitle": "Estatísticas",

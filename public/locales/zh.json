@@ -3993,6 +3993,7 @@
             "sinceLast": "距上次断食",
             "noRecord": "无记录",
             "goalCoverage": "{{total}}次断食中有{{records}}次记录了目标",
+            "goalCoverage_one": "{{total}}次断食中有{{records}}次记录了目标",
             "chartLegend": "实际时长（左）和记录的目标（右）；数值为每个完成日期的总计。",
             "capturedGoal": "记录的目标",
             "statsTitle": "统计",

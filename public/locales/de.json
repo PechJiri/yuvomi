@@ -3993,6 +3993,7 @@
             "sinceLast": "Seit dem letzten Fasten",
             "noRecord": "Kein Eintrag",
             "goalCoverage": "Ziele für {{records}} von {{total}} Einträgen erfasst",
+            "goalCoverage_one": "Ziel für {{records}} von {{total}} Einträgen erfasst",
             "chartLegend": "Tatsächliche Dauer (links) und erfasstes Ziel (rechts); die Werte sind Summen je Abschlusstag.",
             "capturedGoal": "Aufgezeichnetes Ziel",
             "statsTitle": "Statistik",

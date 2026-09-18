@@ -3993,6 +3993,7 @@
             "sinceLast": "از آخرین روزه",
             "noRecord": "بدون سابقه",
             "goalCoverage": "برای {{records}} مورد از {{total}} روزه هدف ثبت شده است",
+            "goalCoverage_one": "برای {{records}} مورد از {{total}} روزه هدف ثبت شده است",
             "chartLegend": "مدت واقعی (چپ) و هدف ثبت‌شده (راست)؛ مقادیر، مجموع هر تاریخ پایان هستند.",
             "capturedGoal": "هدف ثبت‌شده",
             "statsTitle": "آمار",
